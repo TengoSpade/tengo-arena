@@ -15,6 +15,7 @@ export function ShortcutSheet({ open, onClose }: { open: boolean; onClose: () =>
     [t('shortcuts.continue'), ['Space']],
     [t('shortcuts.screens1'), ['1', '2', '3']],
     [t('shortcuts.screens2'), ['4', '5', '6', '7']],
+    [t('shortcuts.saves'), ['S']],
     [t('shortcuts.search'), ['Ctrl', 'K']],
     [t('shortcuts.back'), ['Esc']],
     [t('shortcuts.save'), ['Ctrl', 'S']],
@@ -26,6 +27,9 @@ export function ShortcutSheet({ open, onClose }: { open: boolean; onClose: () =>
     [t('shortcuts.captainKeys'), ['C', 'V']],
     [t('shortcuts.presetKeys'), ['P', 'E']],
     [t('shortcuts.fighters'), ['[', ']']],
+    [t('shortcuts.rounds'), ['Alt', '0–5']],
+    [t('shortcuts.roundStep'), ['[', ']']],
+    [t('shortcuts.reports'), ['←', '→']],
     [t('shortcuts.sheet'), ['?']],
   ];
   if (import.meta.env.DEV) rows.push([t('shortcuts.debug'), ['`']]);

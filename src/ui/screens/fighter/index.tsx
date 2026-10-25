@@ -762,7 +762,18 @@ function CareerTable({ f, view, state, content }: { f: Fighter; view: FighterVie
       subtitle={T.careerSub}
       body="flush"
       testId="career"
-      footer={<span>{format(T.careerFooter, { matches: c.matches, rw: c.roundsWon, rl: c.roundsStarted - c.roundsWon, downs: c.downsInflicted, titles: c.titles })}</span>}
+      footer={
+        <span>
+          {format(T.careerFooter, {
+            matches: formatInt(c.matches),
+            rw: formatInt(c.roundsWon),
+            // Rounds started minus rounds won, never below 0 (older saves can lag the round counters).
+            rl: formatInt(Math.max(0, c.roundsStarted - c.roundsWon)),
+            downs: formatInt(c.downsInflicted),
+            titles: c.titles > 0 ? format(T.careerTitles, { n: c.titles }) : T.careerNoTitles,
+          })}
+        </span>
+      }
     >
       <DataTable<CareerRow>
         label={T.career}

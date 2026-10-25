@@ -193,7 +193,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
         'alt+ArrowLeft': () => goBack(),
       };
       if (onToggleDebug) map['`'] = onToggleDebug;
-      for (const n of NAV_ITEMS) if (n.key) map[n.key] = () => navigate(n.href);
+      for (const n of [...NAV_ITEMS, ...NAV_FOOTER]) if (n.key) map[n.key] = () => navigate(n.href);
       return map;
     };
     return installShortcuts(global);
@@ -226,11 +226,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
             <a key={n.id} class="sidenav__item" href={n.href} aria-current={owner === n.id ? 'page' : undefined} {...tipAttrs(collapsed ? t(n.label) : null)}>
               <Icon name={n.icon} />
               <span class="sidenav__label">{t(n.label)}</span>
-              {n.id === 'saves' && (
-                <span class="sidenav__key" title="Ctrl S">
-                  S
-                </span>
-              )}
+              {n.key && <span class="sidenav__key">{n.key.toUpperCase()}</span>}
             </a>
           ))}
           <button

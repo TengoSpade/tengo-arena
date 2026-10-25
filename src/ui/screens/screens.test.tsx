@@ -162,6 +162,28 @@ describe('Home', () => {
     expect(wing.querySelectorAll('tbody tr[data-zone="qualify"]')).toHaveLength(4);
   });
 
+  it('does not tick the lineup with 4 of 5 places or an empty roster', () => {
+    const { store } = createTestStore({ weekIndex: 1 });
+    const state = structuredClone(store.game.value!);
+    const c = club(state);
+    c.lineup.fighters = c.lineup.fighters.slice(0, 4);
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const items = [...screen.getByTestId('preseason-checklist').querySelectorAll('li')];
+    const lineup = items.find((li) => li.textContent!.startsWith('Lineup'))!;
+    expect(lineup.textContent).toBe('Lineup: 4 of 5 places filled');
+    expect(lineup.getAttribute('data-state')).toBe('warn');
+    cleanup();
+    const empty = structuredClone(store.game.value!);
+    for (const f of Object.values(empty.fighters)) if (f.clubId === club(empty).id) f.clubId = null;
+    club(empty).lineup.fighters = [];
+    store.replaceWorld(empty);
+    mount(<HomeScreen params={{}} />, store);
+    const texts = [...screen.getByTestId('preseason-checklist').querySelectorAll('li')].map((li) => [li.textContent, li.getAttribute('data-state')]);
+    expect(texts).toContainEqual(['Roster 0 of ' + texts.find((x) => x[0]!.startsWith('Roster'))![0]!.split(' of ')[1]!.split(':')[0] + ': sign 5 more to field five', 'bad']);
+    expect(texts.find((x) => x[0]!.startsWith('Lineup'))![1]).toBe('warn');
+  });
+
   it('shows the preseason checklist when there is no fixture', () => {
     const { store } = createTestStore({ weekIndex: 1 });
     mount(<HomeScreen params={{}} />, store);

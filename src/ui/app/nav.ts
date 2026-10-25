@@ -22,7 +22,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 ];
 
 export const NAV_FOOTER: readonly NavItem[] = [
-  { id: 'saves', label: 'nav.saves', icon: 'save', href: '#/saves' },
+  { id: 'saves', label: 'nav.saves', icon: 'save', href: '#/saves', key: 's' },
   { id: 'settings', label: 'nav.settings', icon: 'settings', href: '#/settings' },
 ];
 

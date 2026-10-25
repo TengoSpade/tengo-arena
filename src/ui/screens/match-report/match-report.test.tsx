@@ -109,7 +109,7 @@ describe('Match report screen', () => {
     expect(within(panel).getAllByTestId('recap-card')).toHaveLength(5);
   });
 
-  it('filters by round with the tabs and the number keys', () => {
+  it('filters by round with the tabs, Alt+digits and [ ]', () => {
     const world = makeSampleWorld(kit, 'mid');
     const id = lastPlayed(world.state);
     cleanup();
@@ -118,9 +118,13 @@ describe('Match report screen', () => {
     expect(screen.getByTestId('panel-box').textContent).toContain('Round 2 · downs, falls and HP left');
     const momentsPanel = screen.getByTestId('panel-moments');
     expect(momentsPanel.querySelectorAll('.timeline__round')).toHaveLength(1);
-    fireEvent.keyDown(document.body, { key: '0' });
+    fireEvent.keyDown(document.body, { key: '0', altKey: true });
     expect(screen.getByTestId('panel-box').textContent).toContain('Whole match');
-    fireEvent.keyDown(document.body, { key: '1' });
+    fireEvent.keyDown(document.body, { key: '1', altKey: true });
+    expect(screen.getByRole('tab', { name: /Round 1/ }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(document.body, { key: ']' });
+    expect(screen.getByRole('tab', { name: /Round 2/ }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(document.body, { key: '[' });
     expect(screen.getByRole('tab', { name: /Round 1/ }).getAttribute('aria-selected')).toBe('true');
   });
 

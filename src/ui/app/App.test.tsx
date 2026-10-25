@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/preact';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetToasts } from '../components';
 import { createTestStore } from '../debug/test-store';
@@ -79,6 +79,15 @@ describe('App', () => {
     expect(autos.some((m) => m.weekIndex === week + 1)).toBe(true);
     updateSettings({ pacing: DEFAULT_SETTINGS.pacing });
   }, 20_000);
+
+  it('opens Save / Load with S, as the side navigation shows', async () => {
+    const { store } = createTestStore({ world: 'dev', weekIndex: 11 });
+    navigate('#/home');
+    render(<App store={store} />);
+    await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy());
+    fireEvent.keyDown(document.body, { key: 's' });
+    await waitFor(() => expect(location.hash).toBe('#/saves'));
+  });
 
   it('routes a career without a club to the club select', async () => {
     const { store } = createTestStore({ world: 'dev', playerClubId: null });

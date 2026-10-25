@@ -344,13 +344,31 @@ function StyleTile({ ctx, club }: { ctx: ClubContext; club: Club }) {
 
 // ---- Preseason (no fixture this week) ---------------------------------------------------------------
 
+/** What keeps the lineup from being match-ready: places, fitness, captain, presets (null = ready). */
+function lineupReadiness(ctx: ClubContext): { problem: string | null } {
+  const { club, engine, state } = ctx;
+  const entries = club.lineup.fighters;
+  const fit = entries.filter((e) => {
+    const f = state.fighters[e.fighterId];
+    return f && f.clubId === club.id && safeView(() => engine.isFit(f), !(f.injury && f.injury.weeksOut > 0));
+  }).length;
+  if (entries.length < 5) return { problem: format(T.checkLineupPlaces, { n: entries.length }) };
+  if (fit < 5) return { problem: format(T.checkLineupUnfit, { n: 5 - fit }) };
+  if (!club.captainId) return { problem: T.checkLineupCaptain };
+  if (entries.some((e) => !club.lineup.tactics[e.fighterId])) return { problem: T.checkLineupPresets };
+  return { problem: null };
+}
+
 function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const { state, content, tier, roster } = ctx;
   // Integrator (WP5): during the season-end step weekIndex is W + 1 (core/model calendar), which has no week def.
   const week = content.weeks.list.find((w) => w.index === state.calendar.weekIndex) ?? content.weekByIndex(content.weeks.list.length);
   const over = roster.length - ctx.rosterCap;
   const ending = roster.filter((f) => contractEnds(f.contract, state.calendar.season).final).length;
-  const lineupOk = store.blockers.value.filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')).length === 0;
+  // Checked from the lineup itself: preseason weeks have no fixture, so there are no lineup blockers to read.
+  const lineup = lineupReadiness(ctx);
+  const lineupOk = lineup.problem === null && store.blockers.value.filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')).length === 0;
+  const short = roster.length < 5;
   const bill = ctx.finance?.wageBill ?? ctx.wageBill ?? 0;
   const budget = ctx.finance?.wageBudgetPerWeek ?? 0;
   return (
@@ -365,12 +383,16 @@ function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
         <li data-state={budget > 0 && bill > budget ? 'bad' : undefined}>
           {format(T.checkBudget, { bill: formatMoney(bill, { perWeek: true }), budget: formatMoney(budget, { perWeek: true }) })}
         </li>
-        <li data-state={over > 0 ? 'bad' : undefined}>
-          {over > 0 ? format(T.checkRosterOver, { n: roster.length, cap: ctx.rosterCap, over }) : format(T.checkRoster, { n: roster.length, cap: ctx.rosterCap })}
+        <li data-state={over > 0 || short ? 'bad' : undefined}>
+          {over > 0
+            ? format(T.checkRosterOver, { n: roster.length, cap: ctx.rosterCap, over })
+            : short
+              ? format(T.checkRosterShort, { n: roster.length, cap: ctx.rosterCap, need: 5 - roster.length })
+              : format(T.checkRoster, { n: roster.length, cap: ctx.rosterCap })}
         </li>
         {week.index === 1 && <li data-state="warn">{T.checkTrials}</li>}
         <li data-state={ending > 0 ? 'warn' : undefined}>{format(T.checkContracts, { n: ending })}</li>
-        <li data-state={lineupOk ? undefined : 'warn'}>{lineupOk ? T.checkLineup : T.checkLineupMissing}</li>
+        <li data-state={lineupOk ? undefined : 'warn'}>{lineupOk ? T.checkLineup : (lineup.problem ?? T.checkLineupMissing)}</li>
       </ul>
     </Panel>
   );
@@ -630,7 +652,7 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
       testId="availability"
     >
       {list.length === 0 ? (
-        <Empty compact icon="check" title={T.allFit} />
+        roster.length === 0 ? <Empty compact icon="squad" title={T.noRoster} /> : <Empty compact icon="check" title={T.allFit} />
       ) : (
         <table class="data-table data-table--compact" aria-label={T.availability}>
           <tbody>

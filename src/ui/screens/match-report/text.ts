@@ -64,7 +64,7 @@ export const REPORT_TEXT = {
   'tabs.label': 'Rounds',
   'tabs.whole': 'Whole match',
   'tabs.round': 'Round {n}',
-  'tabs.hint': '0 whole match · 1–{n} rounds · ← → other reports',
+  'tabs.hint': 'Alt+0 whole match · Alt+1–{n} or [ ] rounds · ← → other reports',
   'why.title': 'What decided it',
   'why.subtitle': 'From the rule counters: what fired, what never fired, and what it did',
   'why.won': 'Won {score} on downs: {inflicted} inflicted, {suffered} suffered.',
