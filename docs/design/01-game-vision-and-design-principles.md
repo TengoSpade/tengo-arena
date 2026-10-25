@@ -7,7 +7,7 @@
 | Game / working title | Arena League |
 | Design owner | The project owner. Agents draft; only the owner approves design decisions (G1) |
 | Document version / updated | v0.2 / 2026-10-25 |
-| Status | Draft. Documents 01–04 are written for M1; the three 03 drafts and the 04 draft are merged. Document 05 is still being finalized (see "How to use") |
+| Status | Draft. All five documents are written for M1, and every phase-2 draft is merged (05 §9.2 reproduced verbatim from the architect). No independent handoff review has run (§8.6) |
 | Current build target | M1 "Season MVP" (O14). The package as a whole specifies every owner-required feature through M7 and the first release |
 | Package location | `arena-league/docs/design/`, the destination the owner chose. The template's `tengo-` folder prefix is not applied |
 
@@ -23,7 +23,7 @@ This package replaces the separately planned `design.md` and `plan.md`. Document
 | 4 | [Art direction and presentation](04-art-direction-and-presentation.md) | Visual identity, match reports, arena viewer, management UI, feedback, audio |
 | 5 | [Technical design principles and build plan](05-technical-design-principles-and-build-plan.md) | Sim/render separation, determinism, data, saves, milestones M1–M7, verification |
 
-**Drafting phases.** Phase 1 wrote 01, 02 and 03 §1–2. Phase 2 drafted 03 in three parts (`_drafts/03-combat.md`, `03-fighter-lifecycle.md`, `03-league-economy.md`). Those drafts are merged into 03 v0.2, and `_drafts/04-presentation.md` into 04 v0.2; all are kept only until the milestone commit and have no authority. `_drafts/05-technical.md` is still being finalized and is not merged. The mockups in `docs/design/mockups/` and the design system in `src/ui/styles/` are the approved EXAMPLE visual references (04 §2 ref-001). Content data lives in `content/default/`, which 03 declares the source of truth for numbers. Where a later draft conflicts with 01–03, record the conflict in the change record and in §8, and ask the owner or apply an existing delegation. Never resolve it silently.
+**Drafting phases.** Phase 1 wrote 01, 02 and 03 §1–2. Phase 2 drafted 03 in three parts (`_drafts/03-combat.md`, `03-fighter-lifecycle.md`, `03-league-economy.md`). Those drafts are merged into 03 v0.2, and `_drafts/04-presentation.md` into 04 v0.2; all are kept only until the milestone commit and have no authority. `_drafts/05-technical.md` is installed as 05 v0.2, with its §9.2 work packages unchanged because coding agents are executing against them. The mockups in `docs/design/mockups/` and the design system in `src/ui/styles/` are the approved EXAMPLE visual references (04 §2 ref-001). Content data lives in `content/default/`, which 03 declares the source of truth for numbers. Where a later draft conflicts with 01–03, record the conflict in the change record and in §8, and ask the owner or apply an existing delegation. Never resolve it silently.
 
 ### Meaning of specification labels
 
@@ -53,7 +53,7 @@ The owning document in the table above is the source of truth for its subject. O
 | research.md Part D (§5a, traits and captains) and `research-notes/06` | Evidence for O5 and O6; its D3 recommendations are reflected in the 03 trait and captaincy specs (PROPOSED) | Not approved |
 | `docs/research-notes/01–05` | Supporting evidence | Not approved |
 | `content/default/*.json` | Source of truth for **values** under 03's rules. Values were edited at the merge to match D-A and D-C (change record). A disagreement between 03 and the data is a defect to report | Values PROPOSED · TUNABLE |
-| Phase-2 drafts in `docs/design/_drafts/` | The 03 and 04 drafts are merged and have no further authority. The 05 draft is a proposal until merged. Code is never design authority | Not approved |
+| Phase-2 drafts in `docs/design/_drafts/` | All drafts (03, 04, 05) are merged and have no further authority; they are kept until the milestone commit. Code is never design authority; 05 §9.2 governs who may change which code | Not approved |
 | `docs/design/mockups/` and `src/ui/styles/` (tokens, base, components) | Approved EXAMPLE visual references and the primary visual anchor for 04 (ref-001): layout, palette, type, components. Sample data is EXAMPLE; where their wording differs from 04, 04 governs | Orchestrator instruction 2026-10-25; owner confirmation in Q26 |
 | Tengo templates, guide and references | Structure and process only | n/a |
 
@@ -85,6 +85,7 @@ The owning document in the table above is the source of truth for its subject. O
 | Milestones (a)–(g) replaced by M1–M7 with M1 as target (O14) | Owner goal: "a working version where I can progress a full season" | 01 §5; 02 §2; 03 §2; 05 §9 | Owner goal 2026-10-25 |
 | v0.2: the three 03 drafts merged into 03 §3–10. D-A to D-I recorded (§8.2). open-005, 014, 019, 024, 025, 027, 028 and 029 settled by delegation; open-006, 007 (M1 part), 011, 012 and 013 settled in 03 as PROPOSED. New items open-030 and open-031. New sys-id sys-chemistry. 02 reconciled. The owner questions consolidated into §8.5 | Orchestrator instruction to merge without pausing (owner goal) | 01 §4–§8; 02 §1–§9; 03 all | D-A to D-I delegated; the rest awaits the owner |
 | v0.2: the 04 draft merged into 04 and reconciled with 01–03 (screen names, calendar labels, offer timing, money ladder, wings and the Reckoning bracket, pacing presets). The UI designer's OC-3 to OC-6 recorded as D-J to D-M; OC-1, OC-2 and OC-7 to OC-10 as Q26 and Q27. Pacing presets moved from M7 to M1 (D-L) | Orchestrator instruction | 01 §5, §7, §8; 02 §2, §3, §7; 04 all | D-J to D-M delegated; the rest awaits the owner |
+| v0.2: the architect's 05 draft installed as 05 and reconciled with 01–04: the delegated decisions D-A to D-M are mapped to their technical consequences; references to the 03 drafts resolve to the merged 03; the 05 §9 milestone table agrees with 01 §5 (patron in M6, pacing presets in M1, fonts in M7). §9.2 work packages and contracts unchanged | Orchestrator instruction | 05 all; 01 §8.5–8.6; 03 §10 | Technical decisions tech-001–014 by the architect; design items await the owner |
 | v0.2 content value edits (structure and keys unchanged): `development.json` developmentClock.usageFloor 0.2 → 0; training.emphasisBonus 0.25 → 0.2; training.offEmphasisPenalty 0.15 → 0.2; training.bodyWearReduction 0.2 → 0 (all D-A); generation.worldGen.freeAgentsPerClub 1.5 → 2.5 (D-C); the doc strings of training, decline.\_mentalDeclineNote (D-B), chemistry (D-D) and captaincy.aiPolicy (D-I). `economy.json` patron.enabledByDefault true → false and its doc string (D-C). `leagues.json` generationShifts.worldGenFreeAgentsPerClub note resolved (D-C). `combat.json` \_doc notes millimetre positions (D-E) | Make the data agree with the merged rules | content/default | D-A, D-B, D-C, D-D, D-E, D-I |
 
 ## 1. Central player promise
@@ -620,12 +621,13 @@ M1 uses fonts already installed on Windows (Palatino Linotype for display, Segoe
 | Document / section | Coverage | Outstanding decision IDs | Blocks which milestone? |
 | --- | --- | --- | --- |
 | 01 vision | Drafting: complete for M1, reconciled with 03 and 04 v0.2 | Q1–Q16, Q23–Q26 | M1 handoff approval |
-| 02 flow | Drafting: complete for M1, reconciled with 03 v0.2 | Q3–Q5, Q10, Q11, Q15, Q16 | M1 |
-| 03 systems | Drafting: complete for M1 (merged); later systems summarized in §3.5 | Q1–Q8, Q11–Q15 | M1 |
+| 02 flow | Drafting: complete for M1, reconciled with 03, 04 and 05 v0.2 | Q3–Q5, Q10, Q11, Q15, Q16, Q24, Q25 | M1 |
+| 03 systems | Drafting: complete for M1 (merged from three drafts); later systems summarized in §3.5 | Q1–Q8, Q11–Q15 | M1 |
 | 04 presentation | Drafting: complete for M1 (merged from the UI designer's draft, reconciled with 01–03) | Q4, Q23–Q27 | M1 |
-| 05 technical | Template; phase-2 draft being finalized by the architect, not merged | open-016, open-017; D-E must be reflected | M1 |
+| 05 technical | Drafting: complete for M1 (installed from the architect's phase-B draft; D-A to D-M reflected; §9.2 work packages in execution by coding agents) | Q16 (saves), Q21 (open-015), Q22 (open-017) | M1 |
 
-- **Current target milestone:** M1 "Season MVP" (O14).
+- **Current target milestone:** M1 "Season MVP" (O14). Coding agents are building it from 05 §9.2.
+- **Independent handoff review:** **not yet run.** All five documents are now drafted for M1, but neither the local consistency audit (readiness rubric) nor the fresh-reader review of `references/independent-review.md` has been done, so the package is not "ready for specification review" (§8.6).
 - **Working files:** `docs/design/01-…05-` (linked above); drafts in `docs/design/_drafts/` (03 drafts merged, kept until the milestone commit); content in `content/default/`.
 - **Last question number:** Q27, drafted but not asked. To keep the numbering continuous, Q23–Q25 sit in batch A, Q26 in batch B and Q27 in batch C.
 - **Delegated design freedom:** the owner's goal instruction not to pause for questions, exercised through D-A to D-M and recorded in §8.2. Every other choice is PROPOSED or OPEN (G1).
@@ -633,7 +635,7 @@ M1 uses fonts already installed on Windows (Palatino Linotype for display, Segoe
 
 ### 8.6 Independent review record
 
-Not run. The package awaits the 05 merge, a local consistency audit (readiness rubric) and then an independent fresh-reader review of the five documents. No review result exists for v0.2.
+Not run. All five documents are merged for v0.2. The package awaits a local consistency audit (readiness rubric) and then an independent fresh-reader review given only the five documents, the content files and the visual references. No review result exists for v0.2; readiness state: drafting.
 
 ## Completion check
 

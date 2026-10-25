@@ -1362,7 +1362,7 @@ All values come from the current `economy.json` and `leagues.json`.
 **Linked to document 01 §8:** the delegated decisions D-A to D-I await owner confirmation (01 §8.5, batch A). The PROPOSED rules still open for the owner are: lifecycle C-2 (dwarves shorter-lived) and C-13 (debut floor 16) as open-030; C-7 (permanent scars), C-8 (career-ending only when At risk) and C-14 (a knock misses the next match) as open-031; C-6 (trait roll) within open-012; C-11 (captain-change costs) and C-12 (poor captains hurt) within open-011; open-002, open-006, open-010, open-011, open-012, open-013, open-016, open-019, open-024 (adopted under D-G), open-026 and open-027; and P-02 to P-06, P-09 to P-11, P-17, P-18, P-20 and P-22 as merged. Later milestones: §3.5. Each is a Q item in 01 §8.5.
 
 **Follow-ups for other documents (not design decisions):**
-- Document 05 must change "distances in centimetres" to D-E's millimetre sim positions, and must implement the precomputed retirement tables, the loader conversions and the validators of §6.
+- Document 05 v0.2 encodes D-E (tech-014, millimetre sim positions), the precomputed retirement tables (§2 determinism rules), the loader conversions and the validators of §6 (05 §4).
 - Document 04 v0.2 specifies the surfaces named in §3 (merged from the UI designer's draft): the match report, lineup screen (presets, rows, captain and vice-captain, injury odds, chemistry, XP bars and trend), finance screen, offer dialog, market list and compare view, embargo banner, captain panel, fighter card (age bar with race zones, cap ticks, wear hatching, trait chips by kind), season development report, the color rules, and the icon keys of §6.
 
 **Completion check:**

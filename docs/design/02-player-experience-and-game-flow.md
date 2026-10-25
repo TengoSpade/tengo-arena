@@ -1,6 +1,6 @@
 # Arena League — player experience and game flow
 
-> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.2 · 2026-10-25 · Lead designer. Reconciled with document 03 v0.2 (the merged system specs). Not approved for implementation. Only owner requirements and decisions are REQUIRED. Decisions D-A to D-I are DELEGATED, binding pending the owner's confirmation. Everything else is PROPOSED or OPEN (document 01 §8). This document covers M1 "Season MVP" in full and tags what later milestones add.
+> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.2 · 2026-10-25 · Lead designer. Reconciled with document 03 v0.2 (the merged system specs). Not approved for implementation. Only owner requirements and decisions are REQUIRED. Decisions D-A to D-M are DELEGATED, binding pending the owner's confirmation. Screen names and presentation are in document 04 v0.2. Everything else is PROPOSED or OPEN (document 01 §8). This document covers M1 "Season MVP" in full and tags what later milestones add.
 > Follow the labels, scope, glossary, and authority rules in [document 01](01-game-vision-and-design-principles.md).
 > This document owns the player's journey and state transitions. Detailed mechanics belong in [document 03](03-gameplay-systems-and-content.md); presentation belongs in [document 04](04-art-direction-and-presentation.md).
 
@@ -60,7 +60,7 @@
 - **M4:** fog of war (P-12), the baseline report (O4), and scout hiring and assignments in steps 3, 4 and 6.
 - **M5:** academy enrollment in step 4, committed at step 5; call-ups during matchweeks; graduation in step 10.
 - **M6:** more league regions; cups inserted as extra fixtures; club-to-club transfer windows with deadline day (P-09); a patron with goals and job security (open-007).
-- **M7:** difficulty sliders, season modifiers announced at P1, pacing presets.
+- **M7:** difficulty sliders, season modifiers announced at P1. (Pacing presets are already in M1, D-L.)
 
 ## 3. States and transitions
 
@@ -70,7 +70,7 @@
 | --- | --- | --- | --- | --- |
 | flow-state-001 title | Start, continue or load a career; settings; quit | Launch, or returning to the title | New career → flow-state-002. Continue/Load → the state stored in the save. Quit → exit | Settings (stored separately from careers, 05) |
 | flow-state-002 new-career | Name, seed, pick a club, optional rename and colors. From M7, difficulty and hardcore (P-14, P-11) | New career from the title | Start career → flow-state-003 at P1. Back → flow-state-001, with nothing created | Career configuration |
-| flow-state-003 hub | The club's home in every week: digest, roster, lineup, market, contracts, finances, tables, fixtures, calendar. From M4 scouting, from M5 academy, from M6 transfers | Start career, week processing, Continue after a match report, or Begin next season | Continue → week processing, or → flow-state-004 if the week's own fixture is unplayed. Kick off at the end of P4 → MW1. After TW3 → season-end processing → flow-state-007. Menu → flow-state-009 | Everything in the career |
+| flow-state-003 hub | The club's home in every week: digest, roster, lineup, market, contracts, finances, tables, fixtures, calendar. From M4 scouting, from M5 academy, from M6 transfers | Start career, week processing, Continue after a match report, or Begin next season | Continue → week processing, or → flow-state-004 if the week's own fixture is unplayed (under the Streamlined pacing preset, Continue plays the match with the current valid lineup unless a stop reason applies, D-L). Kick off at the end of P4 → MW1. After TW3 → season-end processing → flow-state-007. Menu → flow-state-009 | Everything in the career |
 | flow-state-004 lineup | Choose 5, captain and vice-captain, rows and presets (from M3, rule lists); see the opponent's published lineup | Continue or Play in a week with an unplayed own fixture | Play match → flow-state-005. Back → flow-state-003 with the draft kept | The lineup draft |
 | flow-state-005 match | M1: the headless simulation runs (a brief progress indicator, no input). From M2: a live fight with running, paused and between-rounds substates (P-01; from M3, edits between rounds) | Play match | Match decided → flow-state-006 | The locked lineup and the round results so far |
 | flow-state-006 match-report | Read results, recaps, injuries and XP. From M2: replay | Match decided | Continue → week processing → flow-state-003 | The committed match result |
@@ -82,7 +82,7 @@
 
 **Season-end processing** (DELEGATED, D-C; full order in 03 sys-calendar): (1) Reckoning complete and titles recorded; (2) prizes; (3) promotion and relegation; (4) prestige; (5) from M5, academy graduation; (6) aging and development with the age held during the season, then age +1; (7) retirements; (8) contract expiries; (9) off-season recovery of 8 injury weeks; (10) from M4, knowledge decay; (11) from M6, patron review; (12) free agents unsigned at two consecutive season ends leave; (13) next-season setup (tiers, wing draw and fixtures, caps, drop clause, grants, parachute, budgets, rookies); (14) the AI phase (trials signings, cap relief, opening offers, captains, D-I); (15) autosave, then the review screens. AI clubs go through the same steps (P-04). The step is not a week: it pays no wages and does not count toward debt weeks.
 
-**Consequential transitions**
+**Consequential transitions** (confirmation policy, DELEGATED D-M: one consequence dialog only for binding actions; reversible settings apply at once with Undo; a free-agent offer can be withdrawn until week processing, so it needs no extra confirmation)
 
 | Transition | Prerequisites | Commit point | Cancel / back | Repeated input | Interruption | Invalid → message |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -209,7 +209,7 @@
   - From M4: true stats, potential and traits sit behind knowledge (R3, O4, P-12); opponents' rules are revealed only by scouting, beyond the style tag and the last lineup (P-13); there is never an outcome forecast.
   - Always available: own contracts, the ledger, standings, fixtures, the cause of every recorded event, and the odds of every risk the player chooses (injury, retirement).
 - **When complexity is introduced:** M1 starts with roster, presets and money. Scouting, the academy, cups and transfers arrive with their milestones. Within a career, the first preseason shows the core actions, and the digest introduces further screens when they first become relevant (document 04).
-- **Pressure and downtime:** management has no wall-clock pressure. Pressure comes from the calendar: offers answered each week, contracts expiring at season end, the top-4 and 8th-place lines. From M2, fights run in real time, with free pause and auto-pause (P-01). Pacing presets arrive in M7; until then the game stops every week.
+- **Pressure and downtime:** management has no wall-clock pressure. Pressure comes from the calendar: offers answered each week, contracts expiring at season end, the top-4 and 8th-place lines. From M2, fights run in real time, with free pause and auto-pause (P-01). **Pacing presets** (DELEGATED, D-L, in M1): Thorough stops for every lineup and report; Balanced (default) stops at every lineup and opens the report only after a loss or an injury; Streamlined plays on with the current valid lineup and stops only for blockers, injuries in the lineup, answered offers, contract deadlines and season events; Custom chooses per stop reason. A preset never changes a result.
 - **Pause / stopping points:** any management screen, especially after a match report and at season end.
 - **Returning after an absence:** Continue lands on the hub with a "since you were away" panel: the last 3 results, the next fixture, wing position, pending offers and decisions, and budget status.
 
@@ -250,7 +250,7 @@ N/A for every planned milestone and the first release: single player, offline (P
 
 ## 10. Open decisions and completion check
 
-Linked to the register in document 01 §8, where the owner questions are Q1–Q22: delegated decisions D-A to D-I (Q1–Q8); open-001 (Q9); open-026 and open-027 (Q10); the M1 proposed defaults and open-010 (Q11); open-011 (Q12); open-012 (Q13); open-030 and open-031 (Q14); open-002, open-006 and open-013 (Q15); open-016 (Q16); later milestones (Q17–Q22).
+Linked to the register in document 01 §8, where the owner questions are Q1–Q27: delegated decisions D-A to D-I (Q1–Q8); open-001 (Q9); open-026 and open-027 (Q10); the M1 proposed defaults and open-010 (Q11); open-011 (Q12); open-012 (Q13); open-030 and open-031 (Q14); open-002, open-006 and open-013 (Q15); open-016 (Q16); the UI decisions D-J, D-L and D-M (Q23–Q25), D-K (with Q4) and the remaining UI items (Q26); later milestones (Q17–Q22, Q27).
 
 - [x] A reader can follow the complete M1 loop without inventing transitions (subject to the OPEN working assumptions named above).
 - [x] Success, failure, cancellation and interruption paths are specified.
