@@ -24,6 +24,7 @@ import { usePlayerClub, type ClubContext } from '../store/views';
 import { t } from '../text';
 import { continueModel, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
+import { marketViewRequest } from './intents';
 import { SimulatingPanel } from './overlays';
 import { quickSaveOrAsk } from './save-intent';
 import type * as Palettes from './palettes';
@@ -47,7 +48,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const routeId = route?.id ?? null;
   const [sheet, setSheet] = useState(false);
   const [search, setSearch] = useState(false);
-  const [confirm, setConfirm] = useState<'kick-off' | 'season-end' | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmVariant | null>(null);
   const [simulating, setSimulating] = useState<number | null>(null);
   const s = settings.value;
 
@@ -157,13 +158,22 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
         setConfirm(a.variant);
         return;
       case 'season-end': {
-        const res = await store.finishSeason();
-        if (res.ok) navigate('#/season-review');
+        // Contracts that end now and were not renewed: say so before the step lets them go.
+        if (expiringUnrenewed(ctx).length > 0) {
+          setConfirm('expiring');
+          return;
+        }
+        await runSeasonEnd();
         return;
       }
       case 'none':
         return;
     }
+  };
+
+  const runSeasonEnd = async () => {
+    const res = await store.finishSeason();
+    if (res.ok) navigate('#/season-review');
   };
 
   const quickSave = () => quickSaveOrAsk(store);
@@ -261,6 +271,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
           setConfirm(null);
           if (v === 'kick-off') await advance(false);
           else if (v === 'season-end') await advanceToSeasonEnd();
+          else if (v === 'expiring') await runSeasonEnd();
         }}
       />
     </div>
@@ -434,7 +445,16 @@ function TopbarStats({ ctx }: { ctx: ClubContext }) {
   );
 }
 
-// ---- Commit dialogs of Continue (Kick off season, Advance to season end) --------------------------
+// ---- Commit dialogs of Continue (Kick off season, Advance to season end, expiring contracts) -------
+
+type ConfirmVariant = 'kick-off' | 'season-end' | 'expiring';
+
+/** Player fighters whose contract ends with this season, not renewed and not retiring. */
+function expiringUnrenewed(ctx: ClubContext | null) {
+  if (!ctx) return [];
+  const season = ctx.state.calendar.season;
+  return ctx.roster.filter((f) => f.contract && f.contract.endSeason <= season && !f.contract.next && !f.finalSeason);
+}
 
 function ContinueConfirm({
   variant,
@@ -442,12 +462,52 @@ function ContinueConfirm({
   onClose,
   onConfirm,
 }: {
-  variant: 'kick-off' | 'season-end' | null;
+  variant: ConfirmVariant | null;
   ctx: ClubContext | null;
   onClose: () => void;
   onConfirm: () => void;
 }) {
   const kick = variant === 'kick-off';
+  if (variant === 'expiring') {
+    const expiring = expiringUnrenewed(ctx);
+    const renew = () => {
+      onClose();
+      marketViewRequest.value = 'renewals';
+      navigate('#/market');
+    };
+    return (
+      <Modal
+        open
+        onClose={onClose}
+        title={t('continue.expiringTitle', { n: expiring.length })}
+        icon="contract"
+        size="narrow"
+        onEnter={renew}
+        testId="expiring-confirm"
+        footer={
+          <>
+            <button class="btn" type="button" onClick={onConfirm} data-testid="expiring-continue">
+              {t('continue.expiringAnyway')}
+            </button>
+            <button class="btn btn--primary" type="button" onClick={renew} data-autofocus>
+              {t('continue.expiringRenew')} <kbd>Enter</kbd>
+            </button>
+          </>
+        }
+      >
+        <div class="l-stack">
+          <p class="u-sm">{t('continue.expiringText')}</p>
+          <ul class="checklist" role="list">
+            {expiring.map((f) => (
+              <li key={f.id} data-state="warn">
+                {f.name.full} · {formatMoney(f.contract!.wagePerWeek, { perWeek: true })}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Modal>
+    );
+  }
   return (
     <Modal
       open={variant !== null}

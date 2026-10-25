@@ -7,10 +7,11 @@
  */
 import { useMemo, useRef, useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { marketViewRequest } from '../../app/intents';
 import { useShortcuts } from '../../app/shortcuts';
 import type { ContentDB } from '../../../core/content';
 import type { Fighter, FighterId, GameState, Offer } from '../../../core/model';
-import { DataTable, Icon, PageHeader, Panel, showToast, type Column } from '../../components';
+import { DataTable, Icon, PageHeader, Panel, showToast, tipAttrs, type Column } from '../../components';
 import type { GameStore } from '../../store';
 import { useWp7Engine, type Wp7Engine } from '../league/lib/engine';
 import { fmtMoney } from '../league/lib/format';
@@ -75,7 +76,12 @@ function rowMatches(r: MarketRow, f: Filters, content: ContentDB, m: ClubMarket)
 function Market({ career }: { career: Career }) {
   const { store, game, content, club } = career;
   const engine = useWp7Engine();
-  const [view, setView] = useState<View>('agents');
+  // Another screen may ask for a view (the expiring-contracts dialog opens Renewals).
+  const [view, setView] = useState<View>(() => {
+    const asked = marketViewRequest.value;
+    marketViewRequest.value = null;
+    return asked ?? 'agents';
+  });
   const [filters, setFilters] = useState<Filters>(() => defaultFilters(content));
   const [selected, setSelected] = useState<string | null>(null);
   const [compare, setCompare] = useState<FighterId[]>([]);
@@ -892,7 +898,14 @@ function RenewalsTable({
       header: <span class="u-sr-only">{t('col.action')}</span>,
       class: 'cell-tight',
       cell: (r) => (
-        <button class="btn btn--sm" type="button" aria-disabled={r.patience <= 0 ? 'true' : undefined} onClick={() => r.patience > 0 && onRenew(r.fighter.id)} data-testid="renew-button">
+        <button
+          class="btn btn--sm"
+          type="button"
+          aria-disabled={r.patience <= 0 ? 'true' : undefined}
+          {...tipAttrs(r.patience <= 0 ? t('disabled.patience') : t('tip.renewOpen'))}
+          onClick={() => r.patience > 0 && onRenew(r.fighter.id)}
+          data-testid="renew-button"
+        >
           {t('action.renew')}
         </button>
       ),
@@ -954,7 +967,13 @@ function RookiesTable({
       header: <span class="u-sr-only">{t('col.action')}</span>,
       class: 'cell-tight',
       cell: (r) => (
-        <button class="btn btn--sm" type="button" onClick={() => onSign(r.fighter.id)} aria-disabled={market.embargo ? 'true' : undefined}>
+        <button
+          class="btn btn--sm"
+          type="button"
+          onClick={() => onSign(r.fighter.id)}
+          aria-disabled={market.embargo ? 'true' : undefined}
+          {...tipAttrs(market.embargo ? t('err.embargo.trials') : null)}
+        >
           {t('action.sign')}
         </button>
       ),

@@ -15,6 +15,7 @@ import { BracketView, storedBracket } from '../league/Bracket';
 import { StandingsTable, type Zones } from '../league/StandingsTable';
 import { Crest, clubName } from '../league/lib/club';
 import { useWp7Engine } from '../league/lib/engine';
+import { attributeDeltaList, type DevelopmentSummaryRow } from '../../store/engine';
 import { fmtMoney, fmtPctBp, ordinal } from '../league/lib/format';
 import { reckoningCompetition, rosterOf } from '../league/lib/season';
 import { go, href, useCareer, type Career } from '../league/lib/store';
@@ -356,6 +357,8 @@ function MoneyStep({ game, content, record, report, career }: { game: GameState;
 }
 
 interface DevRow {
+  /** Core's season-end summary for this fighter, when the build has developmentSummary. */
+  dev: DevelopmentSummaryRow | null;
   fighter: Fighter;
   rating: number | null;
   potential: number | null;
@@ -365,12 +368,22 @@ interface DevRow {
   prev: FighterSeasonRow | null;
 }
 
+/** Rating change over the season: core's summary, else this season's history row against last season's. */
+function ratingChange(r: DevRow): number | null {
+  if (r.dev) return r.dev.ratingAfter - r.dev.ratingBefore;
+  return r.row && r.prev ? r.row.rating - r.prev.rating : null;
+}
+
 function DevelopmentStep({ game, content, record, clubId }: { game: GameState; content: ContentDB; record: SeasonRecord; clubId: ClubId }) {
   const engine = useWp7Engine();
   const roster = rosterOf(game, clubId);
+  // Core's season-end development summary when the build has it; else the fighters' history rows.
+  const summary = tryView(() => engine.developmentSummary?.(game, record.season) ?? null);
+  const byId = new Map((summary.ok && summary.value ? summary.value : []).map((d) => [d.fighterId, d]));
   const rows: DevRow[] = roster.map((f) => {
     const v = tryView(() => engine.fighterView(game, f.id, content));
     return {
+      dev: byId.get(f.id) ?? null,
       fighter: f,
       rating: v.ok ? v.value.rating : null,
       potential: v.ok ? v.value.potential : null,
@@ -400,31 +413,53 @@ function DevelopmentStep({ game, content, record, clubId }: { game: GameState; c
       header: t('col.age'),
       sortValue: (r) => r.humanAge ?? r.fighter.age,
       cellAttrs: (r): Record<string, string> => (r.humanAge !== null ? { 'data-tip': t('ageTip', { human: r.humanAge }) } : {}),
-      cell: (r) => (
-        <span>
-          {t('age', { race: content.races.get(r.fighter.raceId)?.name ?? '', age: r.fighter.age })} <Delta value={1} />
-        </span>
-      ),
+      cell: (r) =>
+        r.dev ? (
+          <span>{t('ageChange', { race: content.races.get(r.fighter.raceId)?.name ?? '', before: r.dev.ageBefore, after: r.dev.ageAfter })}</span>
+        ) : (
+          <span>
+            {t('age', { race: content.races.get(r.fighter.raceId)?.name ?? '', age: r.fighter.age })} <Delta value={1} />
+          </span>
+        ),
     },
     {
       id: 'rating',
       header: t('col.rating'),
       align: 'num',
-      sortValue: (r) => r.row?.rating ?? r.rating ?? 0,
-      cell: (r) => (r.row?.rating ?? r.rating) !== null ? <RatingPill value={(r.row?.rating ?? r.rating)!} /> : '—',
+      sortValue: (r) => r.dev?.ratingAfter ?? r.row?.rating ?? r.rating ?? 0,
+      cell: (r) => {
+        const v = r.dev?.ratingAfter ?? r.row?.rating ?? r.rating;
+        return v !== null && v !== undefined ? <RatingPill value={v} /> : '—';
+      },
     },
     {
       id: 'change',
       header: t('col.change'),
       align: 'num',
-      sortValue: (r) => (r.row && r.prev ? r.row.rating - r.prev.rating : 0),
-      cell: (r) => (r.row && r.prev ? <Delta value={r.row.rating - r.prev.rating} /> : <span class="u-faint">—</span>),
+      sortValue: (r) => ratingChange(r) ?? 0,
+      cellAttrs: (r): Record<string, string> => (r.dev ? { 'data-tip': t('change.tip', { before: r.dev.ratingBefore, after: r.dev.ratingAfter }) } : {}),
+      cell: (r) => {
+        const d = ratingChange(r);
+        return d === null ? <span class="u-faint">—</span> : d === 0 ? <span class="u-faint">0</span> : <Delta value={d} />;
+      },
     },
     {
       id: 'attributes',
       header: t('col.attributes'),
       class: 'col-mid',
       cell: (r) => {
+        if (r.dev) {
+          // The notable changes inline (largest first), every change in the tooltip.
+          const list = attributeDeltaList(r.dev);
+          if (list.length === 0) return <span class="u-faint">{t('attr.none')}</span>;
+          const word = (d: { statId: string; delta: number }) => `${statName(d.statId)} ${d.delta > 0 ? '+' : '−'}${Math.abs(d.delta)}`;
+          return (
+            <span data-tip={list.map(word).join(' · ')} class="review-attrs">
+              {list.slice(0, 3).map(word).join(' · ')}
+              {list.length > 3 && <span class="u-faint"> {t('attr.more', { n: list.length - 3 })}</span>}
+            </span>
+          );
+        }
         if (!r.row || !r.prev) return <span class="u-faint">—</span>;
         const changes = Object.entries(r.row.stats)
           .map(([id, v]) => ({ id, d: v - (r.prev!.stats[id as never] ?? v) }))
@@ -440,7 +475,21 @@ function DevelopmentStep({ game, content, record, clubId }: { game: GameState; c
         );
       },
     },
-    { id: 'potential', header: t('col.potential'), class: 'col-mid', sortValue: (r) => r.potential ?? 0, cell: (r) => (r.potential !== null ? <Stars potential={r.potential} /> : '—') },
+    {
+      id: 'potential',
+      header: t('col.potential'),
+      class: 'col-mid',
+      sortValue: (r) => r.potential ?? 0,
+      cell: (r) =>
+        r.potential !== null ? (
+          <span class="l-cluster l-cluster--xs">
+            <Stars potential={r.potential} />
+            {r.dev?.potentialChange ? <Delta value={r.dev.potentialChange} tip={t('potential.tip')} /> : null}
+          </span>
+        ) : (
+          '—'
+        ),
+    },
     {
       id: 'trend',
       header: t('col.trend'),

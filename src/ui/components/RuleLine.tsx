@@ -12,6 +12,8 @@ export interface RuleLineParts {
   target: string;
   only?: string | null;
   prefer?: string | null;
+  /** False when the action ends in a preposition ("Stay with"): the target follows without ON. */
+  joinOn?: boolean;
 }
 
 export function RuleLine({ parts, preset = true }: { parts: RuleLineParts; preset?: boolean }) {
@@ -24,7 +26,13 @@ export function RuleLine({ parts, preset = true }: { parts: RuleLineParts; prese
           <span class="rule__v">{c}</span>
         </Fragment>
       ))}{' '}
-      <span class="rule__kw">then</span> <span class="rule__v">{parts.action}</span> <span class="rule__kw">on</span> <span class="rule__v">{parts.target}</span>
+      <span class="rule__kw">then</span> <span class="rule__v">{parts.action}</span>{' '}
+      {parts.joinOn !== false && (
+        <>
+          <span class="rule__kw">on</span>{' '}
+        </>
+      )}
+      <span class="rule__v">{parts.target}</span>
       {parts.only && (
         <>
           {' '}
