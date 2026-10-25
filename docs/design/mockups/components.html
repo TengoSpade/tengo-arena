@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Component sheet · Arena League mockup</title>
+<link rel="stylesheet" href="../../../src/ui/styles/tokens.css">
+<link rel="stylesheet" href="../../../src/ui/styles/base.css">
+<link rel="stylesheet" href="../../../src/ui/styles/components.css">
+<style>
+  /* Sheet-only layout */
+  .sheet-bar { position: sticky; top: 0; z-index: var(--z-nav); display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--page-gutter); background: var(--c-surface-0); border-bottom: 1px solid var(--c-border); }
+  .sheet { max-width: 92rem; margin: 0 auto; padding: var(--sp-6) var(--page-gutter) var(--sp-16); }
+  .sheet h2 { font-family: var(--font-display); font-size: var(--fs-xl); margin: var(--sp-8) 0 var(--sp-3); }
+  .sheet h2:first-child { margin-top: 0; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--sp-2); }
+  .swatch { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2); border: 1px solid var(--c-border); border-radius: var(--r-md); background: var(--c-surface-1); font-size: var(--fs-xs); }
+  .swatch__chip { width: 2rem; height: 2rem; border-radius: var(--r-sm); background: var(--swatch); box-shadow: inset 0 0 0 1px rgba(127,127,127,.25); flex: none; }
+  .swatch code { display: block; color: var(--c-text-muted); font-size: .72rem; }
+  .demo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+  .static-tip { position: relative; opacity: 1; transform: none; pointer-events: auto; }
+  .type-sample { display: grid; grid-template-columns: 9rem 1fr; gap: var(--sp-2) var(--sp-4); align-items: baseline; }
+</style>
+</head>
+<body>
+  <div class="sheet-bar">
+    <a class="btn btn--ghost btn--sm" href="index.html"><span class="icon" data-icon="chevron-left" aria-hidden="true"></span>Mockups</a>
+    <strong class="u-display u-lg">Component sheet</strong>
+    <span class="u-xs u-faint">src/ui/styles · tokens.css, base.css, components.css</span>
+    <div class="l-push l-cluster">
+      <label class="u-xs u-muted" for="cvd">Color vision</label>
+      <span class="select-wrap"><select class="select select--sm" id="cvd" style="width:11rem"><option value="none">Typical</option><option value="deutan">Deuteranopia (sim)</option><option value="protan">Protanopia (sim)</option><option value="tritan">Tritanopia (sim)</option><option value="gray">Grayscale</option></select></span>
+      <button class="btn btn--sm" type="button" data-action="theme"><span class="icon" data-icon="sun" aria-hidden="true"></span>Theme</button>
+    </div>
+  </div>
+
+  <main class="main">
+  <div class="sheet">
+    <h2>Color tokens</h2>
+    <div class="swatches">
+      <div class="swatch" data-swatch="--c-bg"><span class="swatch__chip"></span><span>bg<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-surface-1"><span class="swatch__chip"></span><span>surface-1<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-surface-2"><span class="swatch__chip"></span><span>surface-2<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-surface-3"><span class="swatch__chip"></span><span>surface-3<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-border-strong"><span class="swatch__chip"></span><span>border-strong<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-text"><span class="swatch__chip"></span><span>text<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-text-muted"><span class="swatch__chip"></span><span>text-muted<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-text-faint"><span class="swatch__chip"></span><span>text-faint<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-accent"><span class="swatch__chip"></span><span>accent (brass)<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-accent-text"><span class="swatch__chip"></span><span>accent-text<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-good"><span class="swatch__chip"></span><span>good<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-bad"><span class="swatch__chip"></span><span>bad<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-warn"><span class="swatch__chip"></span><span>warn<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-info"><span class="swatch__chip"></span><span>info<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-role-tank"><span class="swatch__chip"></span><span>role-tank<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-role-melee"><span class="swatch__chip"></span><span>role-melee<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-role-ranged"><span class="swatch__chip"></span><span>role-ranged<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-role-controller"><span class="swatch__chip"></span><span>role-controller<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-role-healer"><span class="swatch__chip"></span><span>role-healer<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-band-4"><span class="swatch__chip"></span><span>band-4 (elite)<code data-swatch-value></code></span></div>
+    </div>
+
+    <h2>Type</h2>
+    <div class="panel"><div class="panel__body type-sample">
+      <span class="u-caps">4xl · display</span><span class="u-display" style="font-size:var(--fs-4xl);font-weight:700;line-height:1">2 – 1</span>
+      <span class="u-caps">2xl · display</span><span class="u-display" style="font-size:var(--fs-2xl);font-weight:700">Thornwick Wardens</span>
+      <span class="u-caps">xl · ui</span><span style="font-size:var(--fs-xl);font-weight:600">Matchweek 7 digest</span>
+      <span class="u-caps">md · body</span><span>Cracked ribs from round 2. Seren Ilvane took his lineup place.</span>
+      <span class="u-caps">sm · table</span><span class="u-sm u-num">2,685 ts · 62 · 9–6 · +3 · 0:38</span>
+      <span class="u-caps">xs · caption</span><span class="u-caps">Panel title · column header</span>
+      <span class="u-caps">mono · trace</span><span class="u-mono u-sm">R1 · tick 540 · skipped (Suture cooldown 2.1 s)</span>
+    </div></div>
+
+    <h2>Roles (glyph first, color second)</h2>
+    <div class="demo-row">
+      <span class="role-badge" data-role="tank"><i class="role-glyph"></i>Tank</span>
+      <span class="role-badge" data-role="melee"><i class="role-glyph"></i>Melee DPS</span>
+      <span class="role-badge" data-role="ranged"><i class="role-glyph"></i>Ranged DPS</span>
+      <span class="role-badge" data-role="controller"><i class="role-glyph"></i>Controller</span>
+      <span class="role-badge" data-role="healer"><i class="role-glyph"></i>Healer</span>
+      <span class="class-tag" data-tip="Hybrid: Tank and Healer"><span><i class="role-glyph" data-role="tank"></i><i class="role-glyph" data-role="healer"></i></span>Vowknight <span class="class-tag__hybrid">hybrid</span></span>
+      <span class="l-cluster"><i class="role-glyph role-glyph--xl" data-role="tank"></i><i class="role-glyph role-glyph--xl" data-role="melee"></i><i class="role-glyph role-glyph--xl" data-role="ranged"></i><i class="role-glyph role-glyph--xl" data-role="controller"></i><i class="role-glyph role-glyph--xl" data-role="healer"></i></span>
+      <span class="l-cluster"><span class="portrait" data-role="tank" data-race="human"></span><span class="portrait" data-role="ranged" data-race="elf"></span><span class="portrait" data-role="healer" data-race="dwarf"></span><span class="portrait" data-role="melee" data-race="orc"></span></span>
+    </div>
+
+    <h2>Ratings, stats, potential</h2>
+    <div class="l-grid">
+      <div class="panel span-6"><div class="panel__body l-stack">
+        <div class="demo-row">
+          <span class="rating" data-band="1">34</span><span class="rating" data-band="2">48</span><span class="rating" data-band="3">62</span><span class="rating" data-band="4">74</span>
+          <span class="rating rating--lg" data-band="3">62</span><span class="rating rating--lg" data-band="4">77</span>
+          <span class="rating rating--range" data-band="3" data-tip="M4 fuzzy rating: 55–66 from the baseline report">55–66</span>
+          <span class="stat-num" data-band="1">4</span><span class="stat-num" data-band="2">9</span><span class="stat-num" data-band="3">14</span><span class="stat-num" data-band="4">18</span>
+        </div>
+        <div class="demo-row">
+          <span class="stars" data-tip="3.5 stars"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--half"></i><i class="star star--empty"></i></span>
+          <span class="stars" data-tip="M4: 3 sure stars, 1 unsure"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--unsure"></i><i class="star star--empty"></i></span>
+          <span class="form"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="-">–</i></span>
+          <span class="delta delta--up">2</span><span class="delta delta--down">1</span><span class="delta delta--flat">0</span>
+          <span class="captain-mark"><span class="u-sr-only">Captain</span></span><span class="tag tag--outline">VC</span>
+          <span class="row-mark" data-row="front">Front</span><span class="row-mark" data-row="back">Back</span><span class="row-mark" data-row="bench">Reserve</span>
+          <span class="zone-mark zone-mark--up"></span><span class="zone-mark zone-mark--down"></span>
+        </div>
+      </div></div>
+      <div class="panel span-6"><div class="panel__body stat-list">
+        <div class="stat-bar" data-band="2" style="--v:7"><span class="stat-bar__label">Pace</span><span class="stat-bar__track"><span class="stat-bar__fill"></span></span><span class="stat-bar__value">7</span><span class="stat-bar__delta"><span class="delta delta--down">1</span></span></div>
+        <div class="stat-bar" data-band="3" style="--v:13"><span class="stat-bar__label">Awareness</span><span class="stat-bar__track"><span class="stat-bar__fill"></span></span><span class="stat-bar__value">13</span><span class="stat-bar__delta"><span class="delta delta--flat">0</span></span></div>
+        <div class="stat-bar" data-band="4" style="--v:17"><span class="stat-bar__label">Leadership</span><span class="stat-bar__track"><span class="stat-bar__fill"></span></span><span class="stat-bar__value">17</span><span class="stat-bar__delta"><span class="delta delta--up">1</span></span></div>
+        <div class="stat-bar" data-band="2" style="--v:9;--peak:11;--cap:12" data-tip="Wear: Agility fell from 11 to 9 with age (hatched). Tick = ceiling 12."><span class="stat-bar__label">Agility (wear)</span><span class="stat-bar__track"><span class="stat-bar__fill"></span><span class="stat-bar__wear"></span><span class="stat-bar__cap"></span></span><span class="stat-bar__value">9</span><span class="stat-bar__delta"><span class="delta delta--down">2</span></span></div>
+        <div class="stat-bar" data-band="3" style="--v:11;--max:16" data-tip="M4 fuzzy attribute: 11–16 from a scout report (hatched = uncertain)"><span class="stat-bar__label">Strength (M4)</span><span class="stat-bar__track"><span class="stat-bar__fill"></span><span class="stat-bar__range"></span></span><span class="stat-bar__value">11–16</span><span class="stat-bar__delta"></span></div>
+      </div></div>
+    </div>
+
+    <h2>Traits (shape + glyph + color)</h2>
+    <div class="trait-list">
+      <span class="trait"><span class="trait__icon"></span>Guard-First</span>
+      <span class="trait"><span class="trait__icon"></span>Quick Study</span>
+      <span class="trait trait--neg"><span class="trait__icon"></span>Hot Blood</span>
+      <span class="trait trait--rare"><span class="trait__icon"></span>Wore the Armband</span>
+      <span class="trait trait--hidden" data-tip="M4: unrevealed trait"><span class="trait__icon"></span>Unknown trait</span>
+      <span class="trait-dots"><span class="trait__icon" data-polarity="rare"></span><span class="trait__icon" data-polarity="pos"></span><span class="trait__icon" data-polarity="neg"></span></span>
+    </div>
+
+    <h2>Actions and inputs</h2>
+    <div class="l-stack">
+      <div class="demo-row">
+        <button class="btn btn--primary" type="button">Send offer <kbd>Enter</kbd></button>
+        <button class="btn" type="button">Review lineup</button>
+        <button class="btn btn--ghost" type="button">Mark all read</button>
+        <button class="btn btn--danger" type="button">Release</button>
+        <button class="btn btn--sm" type="button">Small</button>
+        <button class="btn btn--icon" type="button" aria-label="Settings"><span class="icon" data-icon="settings" aria-hidden="true"></span></button>
+        <button class="btn" type="button" aria-disabled="true">Disabled</button>
+        <a class="continue" href="#"><span class="continue__text"><span class="continue__main">Continue</span><span class="continue__sub">Lineup at Leechguard</span></span><kbd>Space</kbd></a>
+        <a class="continue" href="#" data-state="blocked"><span class="icon" data-icon="warning" aria-hidden="true"></span><span class="continue__text"><span class="continue__main">Decide first</span><span class="continue__sub">Roster over cap (13 / 12)</span></span><kbd>Space</kbd></a>
+      </div>
+      <div class="demo-row">
+        <span class="input-icon" style="width:14rem"><span class="icon" data-icon="search" aria-hidden="true"></span><input class="input" placeholder="Search"></span>
+        <span class="select-wrap" style="width:12rem"><select class="select"><option>Balanced</option></select></span>
+        <label class="check"><input type="checkbox" checked>Human</label>
+        <label class="l-row u-sm"><input class="switch" type="checkbox" role="switch" checked>Reduce motion</label>
+        <button class="chip" type="button" aria-pressed="true">All <span class="chip__count">11</span></button>
+        <button class="chip" type="button" aria-pressed="false">Injured <span class="chip__count">1</span></button>
+        <button class="role-toggle" type="button" data-role="healer" aria-pressed="true"><i class="role-glyph"></i>Healer</button>
+        <div class="segmented" role="group"><button type="button" aria-pressed="true">Overall</button><button type="button" aria-pressed="false">Home</button><button type="button" aria-pressed="false">Away</button></div>
+      </div>
+      <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true" type="button">Overview</button><button class="tab" role="tab" aria-selected="false" tabindex="-1" type="button">Tactics <span class="tab__count">5</span></button><button class="tab" role="tab" aria-selected="false" tabindex="-1" type="button">Career</button></div>
+    </div>
+
+    <h2>Meters and money</h2>
+    <div class="l-grid">
+      <div class="panel span-4"><div class="panel__body l-stack l-stack--sm">
+        <div class="l-row u-sm"><span class="u-muted">Wage bill</span><span class="l-push u-num"><strong>2,685</strong> / 2,960</span></div>
+        <div class="meter" style="--v:.8875" data-state="warn"><div class="meter__fill"></div><div class="meter__mark" style="--at:1"></div></div>
+        <div class="meter" style="--v:.45" data-state="good"><div class="meter__fill"></div></div>
+        <div class="progress" style="--v:.78;--from:.7"><div class="progress__fill"></div><div class="progress__gain"></div></div>
+        <span class="capmeter"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-reserved"></i></span>
+        <span class="willing" data-level="3"><span class="willing__pips"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i></span>Keen</span>
+      </div></div>
+      <div class="panel span-8"><div class="panel__body tile-row" style="--tiles:4">
+        <div class="stat-tile"><span class="stat-tile__label">Balance</span><span class="stat-tile__value">11,840 <small>ts</small></span><span class="stat-tile__sub"><span class="delta delta--up">1,552</span> last week</span></div>
+        <div class="stat-tile"><span class="stat-tile__label">Gate</span><span class="stat-tile__value">3,950 <small>ts</small></span><span class="stat-tile__sub">last home match</span></div>
+        <div class="stat-tile"><span class="stat-tile__label">Reckoning</span><span class="stat-tile__value">15,000 <small>ts</small></span><span class="stat-tile__sub">champion prize</span></div>
+        <div class="stat-tile"><span class="stat-tile__label">Season end</span><span class="stat-tile__value">13,100 <small>ts</small></span><span class="stat-tile__sub">projected, before prizes</span></div>
+      </div></div>
+    </div>
+
+    <h2>Feedback</h2>
+    <div class="l-grid">
+      <div class="span-6 l-stack l-stack--sm">
+        <div class="callout"><span class="icon" data-icon="info" aria-hidden="true"></span><div><div class="callout__title">Projection, not a forecast</div><div class="callout__text">Info callout.</div></div></div>
+        <div class="callout callout--good"><span class="icon" data-icon="check" aria-hidden="true"></span><div><div class="callout__title">He will accept</div><div class="callout__text">Good callout.</div></div></div>
+        <div class="callout callout--warn"><span class="icon" data-icon="warning" aria-hidden="true"></span><div><div class="callout__title">Contract ends this season</div><div class="callout__text">Warning callout.</div></div></div>
+        <div class="callout callout--bad"><span class="icon" data-icon="injury" aria-hidden="true"></span><div><div class="callout__title">Out for 2 weeks</div><div class="callout__text">Bad callout.</div></div></div>
+        <div class="banner" style="border-radius:var(--r-md)"><span class="icon" data-icon="warning" aria-hidden="true"></span><strong>Spending embargo</strong><span class="u-muted">Balance −2,300 ts. New contracts above the tier minimum (110 ts) are refused.</span><a class="l-push" href="#">Finances</a></div>
+      </div>
+      <div class="span-6 l-stack l-stack--sm" style="align-items:flex-start">
+        <div class="toast toast--good" style="animation:none"><span class="icon" data-icon="check" aria-hidden="true"></span><div class="toast__text"><div class="toast__title">Preset changed</div><div class="toast__sub">Seren Ilvane: Lockdown</div></div><button class="btn btn--sm btn--ghost" type="button"><span class="icon" data-icon="undo" aria-hidden="true"></span>Undo <kbd>Ctrl Z</kbd></button></div>
+        <div class="toast toast--bad" style="animation:none"><span class="icon" data-icon="warning" aria-hidden="true"></span><div class="toast__text"><div class="toast__title">Roster full (12 / 12)</div><div class="toast__sub">Release a fighter first.</div></div></div>
+        <div class="tooltip static-tip" data-open>
+          <div class="tooltip__kicker">Temperament · Negative · opposite of Still Water</div>
+          <div class="tooltip__title"><span class="trait trait--neg"><span class="trait__icon"></span>Hot Blood</span></div>
+          <div class="tooltip__body"><strong>−2 Composure</strong>, captaincy −8. In fights <strong>+8% damage</strong> below 50% HP.</div>
+          <dl class="tooltip__rows"><dt>Composure</dt><dd>14 → 12</dd><dt class="is-total">Captaincy</dt><dd class="is-total">−8</dd></dl>
+          <div class="tooltip__meta">Innate · source: exact (M1)</div>
+        </div>
+        <button class="btn" type="button" data-toast="Saved to slot 1" data-toast-sub="Season 3, matchweek 7" data-toast-kind="good">Fire a toast</button>
+      </div>
+    </div>
+
+    <h2>Empty, loading and timeline</h2>
+    <div class="l-grid">
+      <div class="panel span-4"><div class="empty"><span class="empty__icon"><span class="icon" data-icon="injury" aria-hidden="true"></span></span><span class="empty__title">No injuries</span><span class="empty__text">Everyone is fit for matchweek 7.</span></div></div>
+      <div class="panel span-4"><div class="panel__body l-stack l-stack--sm"><span class="u-caps">Simulating match…</span><div class="skeleton" style="height:1.2rem"></div><div class="skeleton" style="height:1.2rem;width:70%"></div><div class="skeleton" style="height:1.2rem;width:85%"></div></div></div>
+      <div class="panel span-4"><div class="panel__body panel__body--tight"><ol class="timeline">
+        <li class="timeline__round">Round 3 · won 0:31</li>
+        <li class="timeline__item" data-side="us" data-event="rule"><span class="timeline__time">0:05</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Brannoc rings Clangor</div><div class="timeline__text">via R1 · 2 enemies taunted</div></div></li>
+        <li class="timeline__item" data-side="them" data-event="injury"><span class="timeline__time">0:14</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Thrag downed and injured</div></div></li>
+        <li class="timeline__item" data-side="us" data-event="down"><span class="timeline__time">0:22</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Mira downs Rinna Sook</div></div></li>
+      </ol></div></div>
+    </div>
+
+    <h2>Rule sentence</h2>
+    <div class="panel"><div class="panel__body"><span class="rule"><span class="rule__id rule__id--preset">R1</span> <span class="rule__kw">If</span> <span class="rule__v">an ally (or self) is below 40% HP</span> <span class="rule__kw">then</span> <span class="rule__v">Suture</span> <span class="rule__kw">on</span> <span class="rule__v">lowest-HP ally</span></span></div></div>
+  </div>
+  </main>
+<script src="mockups.js"></script>
+</body>
+</html>

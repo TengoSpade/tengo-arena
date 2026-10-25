@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home · Arena League mockup</title>
+<link rel="stylesheet" href="../../../src/ui/styles/tokens.css">
+<link rel="stylesheet" href="../../../src/ui/styles/base.css">
+<link rel="stylesheet" href="../../../src/ui/styles/components.css">
+</head>
+<body>
+<div class="app">
+  <!-- ===== Top bar: club, calendar, money, Continue (shared by every hub screen) ===== -->
+  <header class="topbar">
+    <a class="topbar__club" href="home.html">
+      <span class="crest crest--md" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true">TW</span>
+      <span class="topbar__club-text"><span class="topbar__club-name">Thornwick Wardens</span><span class="topbar__club-tier">Banner Circuit · Tier 2</span></span>
+    </a>
+    <div class="topbar__group">
+      <div class="topbar__stat" tabindex="0" data-tip="Season 3, matchweek 7 of 16. The Reckoning (8-club tournament) follows matchweek 16."><span class="topbar__stat-label">Season 3</span><span class="topbar__stat-value">Matchweek 7</span></div>
+      <div class="topbar__divider"></div>
+      <div class="topbar__stat" tabindex="0" data-tip-ref="tip-balance"><span class="topbar__stat-label">Balance</span><span class="topbar__stat-value">11,840 ts</span></div>
+      <div class="topbar__stat topbar__stat--optional" tabindex="0" data-tip-ref="tip-wages"><span class="topbar__stat-label">Wages / week</span><span class="topbar__stat-value">2,685 ts</span></div>
+      <div class="topbar__stat topbar__stat--optional" tabindex="0" data-tip="Roster 11 of 12, the Tier 2 cap. Academy fighters (from M5) and hired blades do not count."><span class="topbar__stat-label">Roster</span><span class="topbar__stat-value">11 / 12</span></div>
+      <div class="topbar__stat" tabindex="0" data-tip="2nd of 8 in the Dawn Wing, 3rd in the tier table. The top 4 of each wing reach the Reckoning."><span class="topbar__stat-label">Standing</span><span class="topbar__stat-value">2nd · 11 pts</span></div>
+    </div>
+    <div class="topbar__actions">
+      <button class="search-trigger" type="button" data-toast="Search (Ctrl K)" data-toast-sub="Mockup: a quick-jump palette for fighters, clubs, classes and screens." data-toast-kind="info"><span class="icon" data-icon="search" aria-hidden="true"></span><span class="search-trigger__label">Search fighters, clubs, classes</span><kbd>Ctrl K</kbd></button>
+      <button class="icon-btn" type="button" aria-label="Digest: 2 items need action" data-tip="2 digest items need action"><span class="icon" data-icon="bell" aria-hidden="true"></span><span class="icon-btn__badge">2</span></button>
+      <button class="icon-btn" type="button" data-action="theme" aria-label="Switch light or dark theme" data-tip="Theme: dark or light"><span class="icon" data-icon="sun" aria-hidden="true"></span></button>
+      <button class="icon-btn" type="button" data-open-modal="shortcuts" aria-label="Keyboard shortcuts" data-tip="Keyboard shortcuts (?)"><span class="icon" data-icon="keyboard" aria-hidden="true"></span></button>
+      <a class="continue" href="squad.html" data-tip="Opens the lineup for this week's match. Nothing is committed until you press Play match.">
+        <span class="continue__text"><span class="continue__main">Continue</span><span class="continue__sub">Lineup at Mireford Leechguard</span></span>
+        <kbd>Space</kbd>
+      </a>
+    </div>
+  </header>
+
+  <!-- ===== Side navigation (number keys 1-7) ===== -->
+  <nav class="sidenav" aria-label="Main">
+    <a class="sidenav__item" href="home.html" data-key="1" aria-current="page"><span class="icon" data-icon="home" aria-hidden="true"></span><span class="sidenav__label">Home</span><span class="sidenav__badge" aria-label="2 need action">2</span></a>
+    <a class="sidenav__item" href="squad.html" data-key="2"><span class="icon" data-icon="squad" aria-hidden="true"></span><span class="sidenav__label">Squad</span><span class="sidenav__key">2</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="3"><span class="icon" data-icon="fixtures" aria-hidden="true"></span><span class="sidenav__label">Fixtures</span><span class="sidenav__key">3</span></a>
+    <a class="sidenav__item" href="league.html" data-key="4"><span class="icon" data-icon="league" aria-hidden="true"></span><span class="sidenav__label">League</span><span class="sidenav__key">4</span></a>
+    <a class="sidenav__item" href="market.html" data-key="5"><span class="icon" data-icon="market" aria-hidden="true"></span><span class="sidenav__label">Market</span><span class="sidenav__key">5</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="6"><span class="icon" data-icon="finances" aria-hidden="true"></span><span class="sidenav__label">Finances</span><span class="sidenav__key">6</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="7"><span class="icon" data-icon="codex" aria-hidden="true"></span><span class="sidenav__label">Class codex</span><span class="sidenav__key">7</span></a>
+    <div class="sidenav__footer">
+      <a class="sidenav__item" href="index.html#specified"><span class="icon" data-icon="save" aria-hidden="true"></span><span class="sidenav__label">Save / Load</span><span class="sidenav__key" title="Ctrl S">S</span></a>
+      <a class="sidenav__item" href="index.html#specified"><span class="icon" data-icon="settings" aria-hidden="true"></span><span class="sidenav__label">Settings</span></a>
+    </div>
+  </nav>
+
+  <main class="main" id="main">
+    <div class="page">
+      <header class="page-header">
+        <div class="page-header__text">
+          <span class="page-header__eyebrow">Season 3 · Banner Circuit · Dawn Wing</span>
+          <h1 class="page-header__title">Matchweek 7</h1>
+          <div class="page-header__meta"><span>2nd of 8 in the Dawn Wing, 11 pts from 6 matches</span><span class="sep-dot"></span><span>Reckoning cut: top 4 of the wing</span><span class="sep-dot"></span><span>10 matchweeks left</span></div>
+        </div>
+        <div class="page-header__actions">
+          <a class="btn btn--ghost" href="match-report.html"><span class="icon" data-icon="scroll" aria-hidden="true"></span>Last report</a>
+          <button class="btn btn--ghost" type="button" data-toast="Saved to slot 1" data-toast-sub="Season 3, matchweek 7" data-toast-kind="good"><span class="icon" data-icon="save" aria-hidden="true"></span>Save <kbd>Ctrl S</kbd></button>
+        </div>
+      </header>
+
+      <div class="l-grid">
+        <!-- ===== Main column ===== -->
+        <div class="span-8 l-stack">
+
+          <!-- Next fixture -->
+          <section class="panel panel--hero" aria-labelledby="h-fixture">
+            <header class="panel__header">
+              <h2 class="panel__title" id="h-fixture"><span class="icon" data-icon="swords" aria-hidden="true"></span>Next fixture</h2>
+              <span class="panel__subtitle">League · Best of 3</span>
+              <div class="panel__actions">
+                <a class="btn btn--sm" href="league.html" data-hotkey="o"><span class="icon" data-icon="eye" aria-hidden="true"></span>Opponent <kbd>O</kbd></a>
+                <a class="btn btn--sm" href="squad.html" data-hotkey="l"><span class="icon" data-icon="squad" aria-hidden="true"></span>Lineup <kbd>L</kbd></a>
+              </div>
+            </header>
+
+            <div class="fixture">
+              <div class="fixture__side">
+                <span class="crest crest--xl" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true">TW</span>
+                <div class="fixture__club">
+                  <span class="fixture__name">Thornwick Wardens</span>
+                  <span class="fixture__record" data-tip="Played 6, won 4, lost 2. Rounds 9 won, 6 lost.">2nd · 4–2 · 11 pts</span>
+                  <span class="form" aria-label="Last five: loss, win, loss, win, win"><i class="form__r" data-r="L" data-tip="MW2 at Lanternmouth Wickwardens, lost 0–2">L</i><i class="form__r" data-r="W" data-tip="MW3 vs Ropesend Anchorfists, won 2–0">W</i><i class="form__r" data-r="L" data-tip="MW4 at Keelwick Tarhands, lost 1–2">L</i><i class="form__r" data-r="W" data-tip="MW5 vs Gullhaven Ropebinders (cross-wing), won 2–1">W</i><i class="form__r" data-r="W" data-tip="MW6 vs Cinderpan Cinderjacks, won 2–1">W</i></span>
+                </div>
+              </div>
+              <div class="fixture__center">
+                <span class="fixture__kind">Matchweek 7</span>
+                <span class="fixture__vs">vs</span>
+                <span class="fixture__venue">Away · The Sump, Mireford</span>
+              </div>
+              <div class="fixture__side fixture__side--away">
+                <span class="crest crest--xl" style="--crest-a:#4A1F6E;--crest-b:#EADCF2" aria-hidden="true">ML</span>
+                <div class="fixture__club">
+                  <span class="fixture__name">Mireford Leechguard</span>
+                  <span class="fixture__record" data-tip="Played 6, won 2, lost 4. Rounds 5 won, 8 lost.">7th · 2–4 · 7 pts</span>
+                  <span class="form" aria-label="Last five: loss, loss, win, win, loss"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L" data-tip="MW6, lost 0–2">L</i></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel-section panel__body panel__body--tight">
+              <div class="tile-row" style="grid-template-columns:1.1fr 1.1fr .9fr">
+                <div class="stat-tile">
+                  <span class="stat-tile__label">Our lineup</span>
+                  <span class="l-cluster l-cluster--xs l-cluster--nowrap" aria-label="Front: tank, melee. Back: ranged, controller, healer">
+                    <span class="row-mark" data-row="front">Front</span>
+                    <i class="role-glyph role-glyph--lg" data-role="tank" data-tip="Brannoc Hale · Gongbearer (Tank) · Captain"></i>
+                    <i class="role-glyph role-glyph--lg" data-role="melee" data-tip="Kael Dunmere · Headsman (Melee DPS)"></i>
+                    <span class="row-mark" data-row="back" style="margin-left:.4rem">Back</span>
+                    <i class="role-glyph role-glyph--lg" data-role="ranged" data-tip="Mira Quillon · Longeye (Ranged DPS)"></i>
+                    <i class="role-glyph role-glyph--lg" data-role="controller" data-tip="Seren Ilvane · Rimebinder (Controller)"></i>
+                    <i class="role-glyph role-glyph--lg" data-role="healer" data-tip="Ysolde Varn · Chirurgeon (Healer)"></i>
+                  </span>
+                  <span class="stat-tile__sub"><span class="u-good">Ready</span> · Seren replaces injured Thrag</span>
+                </div>
+                <div class="stat-tile">
+                  <span class="stat-tile__label">Their last lineup</span>
+                  <span class="l-cluster l-cluster--xs l-cluster--nowrap" aria-label="Front: tank, melee. Back: ranged, ranged, controller">
+                    <span class="row-mark" data-row="front">Front</span>
+                    <i class="role-glyph role-glyph--lg" data-role="tank" data-tip="Garrow Pike · Oathguard (Tank) · 57"></i>
+                    <i class="role-glyph role-glyph--lg" data-role="melee" data-tip="Wynn Ashdown · Gutterknife (Melee DPS) · 53"></i>
+                    <span class="row-mark" data-row="back" style="margin-left:.4rem">Back</span>
+                    <i class="role-glyph role-glyph--lg" data-role="ranged" data-tip="Edda Thorn · Thunderhand (Ranged DPS) · 63"></i>
+                    <i class="role-glyph role-glyph--lg" data-role="ranged" data-tip="Corin Hask · Longeye (Ranged DPS) · 55"></i>
+                    <i class="role-glyph role-glyph--lg" data-role="controller" data-tip="Mabli Fenn · Snaresetter (Controller) · 51"></i>
+                  </span>
+                  <span class="stat-tile__sub">No healer · mean rating 56</span>
+                </div>
+                <div class="stat-tile">
+                  <span class="stat-tile__label">Their style</span>
+                  <span class="l-cluster l-cluster--xs"><span class="tag tag--info" data-tip="Style tag from their last 3 lineups and presets. Never a forecast.">Ranged pressure</span><span class="tag tag--outline" data-tip="AI manager personality, from 03-league-economy">Old hands</span></span>
+                  <span class="stat-tile__sub" data-tip="Edda Thorn: 7 downs in her last 2 matches">Threat: Edda Thorn, Thunderhand 63</span>
+                </div>
+              </div>
+            </div>
+
+            <footer class="panel__footer">
+              <span class="icon" data-icon="fixtures" aria-hidden="true"></span>
+              <span>Then: MW8 vs Sealsfoot Nightrowers (4th) · MW9 at Fenhollow Peatcutters (8th) · MW10 vs Lanternmouth Wickwardens (1st)</span>
+              <a class="l-push" href="index.html#specified">All fixtures</a>
+            </footer>
+          </section>
+
+          <!-- Digest -->
+          <section class="panel" aria-labelledby="h-digest">
+            <header class="panel__header">
+              <h2 class="panel__title" id="h-digest"><span class="icon" data-icon="mail" aria-hidden="true"></span>This week</h2>
+              <span class="panel__subtitle" data-tip="Notification budget: at most 6 digest items a week; routine items are grouped.">6 items · 2 need action</span>
+              <div class="panel__actions">
+                <button class="btn btn--sm btn--ghost" type="button">Mark all read</button>
+              </div>
+            </header>
+            <div class="tabs tabs--inset" role="tablist" aria-label="Digest filter">
+              <button class="tab" role="tab" aria-selected="true" type="button">All <span class="tab__count">6</span></button>
+              <button class="tab" role="tab" aria-selected="false" tabindex="-1" type="button">Needs action <span class="tab__count">2</span></button>
+              <button class="tab" role="tab" aria-selected="false" tabindex="-1" type="button">Results</button>
+              <button class="tab" role="tab" aria-selected="false" tabindex="-1" type="button">Squad</button>
+              <button class="tab" role="tab" aria-selected="false" tabindex="-1" type="button">Market</button>
+            </div>
+            <ul class="digest" role="list">
+              <li class="digest__item" data-kind="medical" data-unread>
+                <span class="digest__icon"><span class="icon" data-icon="injury" aria-hidden="true"></span></span>
+                <div class="digest__main">
+                  <div class="digest__title"><span>Thrag Ironjaw is out for 2 weeks</span><span class="tag tag--bad">Needs action</span></div>
+                  <div class="digest__text">Cracked ribs from round 2 against the Cinderjacks. Seren Ilvane took his lineup place (back row).</div>
+                </div>
+                <div class="digest__actions"><a class="btn btn--sm" href="squad.html">Review lineup</a></div>
+              </li>
+              <li class="digest__item" data-kind="contract" data-unread>
+                <span class="digest__icon"><span class="icon" data-icon="contract" aria-hidden="true"></span></span>
+                <div class="digest__main">
+                  <div class="digest__title"><span>2 contracts end this season</span><span class="tag tag--warn">Needs action</span></div>
+                  <div class="digest__text">Odessa Crane (Cantor, 49) and Dorrin Ashbeard (Phalanx Sergeant, 51). Unrenewed fighters leave at season end.</div>
+                </div>
+                <div class="digest__actions"><a class="btn btn--sm" href="squad.html">Renewals</a></div>
+              </li>
+              <li class="digest__item" data-kind="result">
+                <span class="digest__icon"><span class="icon" data-icon="swords" aria-hidden="true"></span></span>
+                <div class="digest__main">
+                  <div class="digest__title"><span>Won 2–1 against Cinderpan Cinderjacks</span></div>
+                  <div class="digest__text">MVP Mira Quillon (5 downs). Round 2 lost in overtime after their Snaresetter trapped Ysolde.</div>
+                </div>
+                <div class="digest__actions"><a class="btn btn--sm btn--ghost" href="match-report.html">Report</a><button class="btn btn--sm btn--ghost btn--icon" type="button" data-done aria-label="Mark done" data-tip="Mark done"><span class="icon" data-icon="check" aria-hidden="true"></span></button></div>
+              </li>
+              <li class="digest__item" data-kind="league">
+                <span class="digest__icon"><span class="icon" data-icon="league" aria-hidden="true"></span></span>
+                <div class="digest__main">
+                  <div class="digest__title"><span>Up to 2nd in the Dawn Wing</span></div>
+                  <div class="digest__text">Lanternmouth Wickwardens lead on 15 pts. Gullhaven Ropebinders, beaten by us in matchweek 5, lead the Dusk Wing.</div>
+                </div>
+                <div class="digest__actions"><a class="btn btn--sm btn--ghost" href="league.html">Standings</a></div>
+              </li>
+              <li class="digest__item" data-kind="market">
+                <span class="digest__icon"><span class="icon" data-icon="market" aria-hidden="true"></span></span>
+                <div class="digest__main">
+                  <div class="digest__title"><span>New free agent: Lio Farrow</span></div>
+                  <div class="digest__text">Hexmonger (Controller), human, 23 · rating 58, potential 70 · asks 230 ts/wk for 3 seasons.</div>
+                </div>
+                <div class="digest__actions"><a class="btn btn--sm btn--ghost" href="market.html">View</a></div>
+              </li>
+              <li class="digest__item" data-kind="development">
+                <span class="digest__icon"><span class="icon" data-icon="level-up" aria-hidden="true"></span></span>
+                <div class="digest__main">
+                  <div class="digest__title"><span>Mira Quillon: Precision 14 → 15</span></div>
+                  <div class="digest__text">Rating 64 → 65 from match XP. Potential 71.</div>
+                </div>
+                <div class="digest__actions"><a class="btn btn--sm btn--ghost" href="fighter.html">Profile</a></div>
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <!-- ===== Side column ===== -->
+        <div class="span-4 l-stack">
+          <section class="panel" aria-labelledby="h-club">
+            <header class="panel__header">
+              <h2 class="panel__title" id="h-club"><span class="icon" data-icon="coins" aria-hidden="true"></span>Club</h2>
+              <div class="panel__actions"><a class="btn btn--sm btn--ghost" href="index.html#specified">Finances <kbd>6</kbd></a></div>
+            </header>
+            <div class="panel__body l-stack">
+              <div class="tile-row" style="--tiles:2">
+                <div class="stat-tile" tabindex="0" data-tip-ref="tip-balance">
+                  <span class="stat-tile__label">Balance</span>
+                  <span class="stat-tile__value">11,840 <small>ts</small></span>
+                  <span class="stat-tile__sub"><span class="delta delta--up">1,552</span> last week (home)</span>
+                </div>
+                <div class="stat-tile" tabindex="0" data-tip="Away week: no gate. Sponsor retainer 817 minus wages 2,685 and operating costs 530.">
+                  <span class="stat-tile__label">This week</span>
+                  <span class="stat-tile__value">−2,398 <small>ts</small></span>
+                  <span class="stat-tile__sub">projected, away (no gate)</span>
+                </div>
+              </div>
+              <div class="l-stack l-stack--xs" tabindex="0" data-tip-ref="tip-wages">
+                <div class="l-row u-sm"><span class="u-muted">Wage bill</span><span class="l-push u-num"><strong>2,685</strong> <span class="u-muted">/ 2,960 ts per week</span></span></div>
+                <div class="meter" style="--v:.907" data-state="warn"><div class="meter__fill"></div><div class="meter__mark" style="--at:1"></div></div>
+                <div class="u-xs u-faint">91% of the wage budget · 275 ts/wk headroom</div>
+              </div>
+              <div class="l-row u-sm" tabindex="0" data-tip="Roster 11 of 12 (Tier 2 cap). Promotion to Tier 1 raises it to 14.">
+                <span class="u-muted">Roster</span>
+                <span class="capmeter" aria-hidden="true"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i><i></i></span>
+                <span class="l-push u-num"><strong>11</strong> <span class="u-muted">/ 12 · 1 free</span></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="h-avail">
+            <header class="panel__header">
+              <h2 class="panel__title" id="h-avail"><span class="icon" data-icon="injury" aria-hidden="true"></span>Availability</h2>
+              <span class="panel__subtitle">10 fit · 1 injured</span>
+            </header>
+            <div class="panel__body panel__body--flush">
+              <table class="data-table data-table--compact">
+                <tbody>
+                  <tr>
+                    <td class="cell-fill"><span class="entity"><span class="portrait portrait--xs is-injured" data-role="melee" data-race="orc"></span><a class="entity__name" href="fighter.html">Thrag Ironjaw</a></span></td>
+                    <td><span class="tag tag--bad"><span class="icon" data-icon="injury" aria-hidden="true"></span>Cracked ribs</span></td>
+                    <td class="cell-num" data-tip="Back for matchweek 9">2 wk</td>
+                  </tr>
+                  <tr>
+                    <td class="cell-fill"><span class="entity"><span class="portrait portrait--xs" data-role="healer" data-race="human"></span><a class="entity__name" href="fighter.html">Odessa Crane</a></span></td>
+                    <td><span class="tag tag--warn"><span class="icon" data-icon="contract" aria-hidden="true"></span>Expires S3</span></td>
+                    <td class="cell-num u-muted">235 ts</td>
+                  </tr>
+                  <tr>
+                    <td class="cell-fill"><span class="entity"><span class="portrait portrait--xs" data-role="tank" data-race="dwarf"></span><a class="entity__name" href="fighter.html">Dorrin Ashbeard</a></span></td>
+                    <td><span class="tag tag--warn"><span class="icon" data-icon="contract" aria-hidden="true"></span>Expires S3</span></td>
+                    <td class="cell-num u-muted">200 ts</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="h-table">
+            <header class="panel__header">
+              <h2 class="panel__title" id="h-table"><span class="icon" data-icon="league" aria-hidden="true"></span>Dawn Wing</h2>
+              <div class="panel__actions"><a class="btn btn--sm btn--ghost" href="league.html">Full table <kbd>4</kbd></a></div>
+            </header>
+            <div class="panel__body panel__body--flush">
+              <table class="data-table data-table--compact">
+                <thead>
+                  <tr><th class="cell-tight">#</th><th>Club</th><th class="cell-num">P</th><th class="cell-num" data-tip="Round difference">RD</th><th class="cell-num">Pts</th></tr>
+                </thead>
+                <tbody>
+                  <tr data-zone="qualify"><td>1</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#E8A521;--crest-b:#4A1020" aria-hidden="true"></span><span class="entity__name">Lanternmouth Wickwardens</span></span></td><td class="cell-num">6</td><td class="cell-num">+8</td><td class="cell-num cell-strong">15</td></tr>
+                  <tr data-zone="qualify" class="is-us"><td>2</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true"></span><span class="entity__name">Thornwick Wardens</span></span></td><td class="cell-num">6</td><td class="cell-num">+3</td><td class="cell-num cell-strong">11</td></tr>
+                  <tr data-zone="qualify"><td>3</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#A3420F;--crest-b:#E4E7EA" aria-hidden="true"></span><span class="entity__name">Cinderpan Cinderjacks</span></span></td><td class="cell-num">6</td><td class="cell-num">+2</td><td class="cell-num cell-strong">10</td></tr>
+                  <tr data-zone="qualify" class="is-cut"><td>4</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#B9BEF2;--crest-b:#2A123F" aria-hidden="true"></span><span class="entity__name">Sealsfoot Nightrowers</span></span></td><td class="cell-num">6</td><td class="cell-num">+1</td><td class="cell-num cell-strong">10</td></tr>
+                  <tr><td>5</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#D63A2E;--crest-b:#121212" aria-hidden="true"></span><span class="entity__name">Keelwick Tarhands</span></span></td><td class="cell-num">6</td><td class="cell-num">+1</td><td class="cell-num cell-strong">10</td></tr>
+                  <tr><td>6</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#8494A3;--crest-b:#4A1414" aria-hidden="true"></span><span class="entity__name">Ropesend Anchorfists</span></span></td><td class="cell-num">6</td><td class="cell-num">+1</td><td class="cell-num cell-strong">9</td></tr>
+                  <tr class="is-cut--bad"><td>7</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#4A1F6E;--crest-b:#EADCF2" aria-hidden="true"></span><span class="entity__name">Mireford Leechguard</span> <span class="tag tag--accent">Next</span></span></td><td class="cell-num">6</td><td class="cell-num">−3</td><td class="cell-num cell-strong">7</td></tr>
+                  <tr data-zone="relegate"><td>8</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#B8378A;--crest-b:#D7F0C2" aria-hidden="true"></span><span class="entity__name">Fenhollow Peatcutters</span></span></td><td class="cell-num">6</td><td class="cell-num">−6</td><td class="cell-num cell-strong">5</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <footer class="panel__footer"><span class="legend__item"><span class="legend__swatch" style="--swatch:var(--c-accent)"></span>Top 4: Reckoning</span><span class="legend__item"><span class="legend__swatch legend__swatch--hatch"></span>8th: relegated</span></footer>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ===== Tooltip templates ===== -->
+<template id="tip-balance">
+  <div class="tooltip__kicker">Balance</div>
+  <div class="tooltip__title">11,840 ts</div>
+  <dl class="tooltip__rows">
+    <dt>Carried from season 2</dt><dd>6,150</dd>
+    <dt>Central grant, first half (P1)</dt><dd>+17,000</dd>
+    <dt>Sponsor retainer, 10 weeks</dt><dd>+8,170</dd>
+    <dt>Home gates (4)</dt><dd>+15,400</dd>
+    <dt>Wages, 10 weeks</dt><dd>−26,850</dd>
+    <dt>Operating costs, 10 weeks</dt><dd>−5,300</dd>
+    <dt>Signing costs (2)</dt><dd>−2,730</dd>
+    <dt class="is-total">Now</dt><dd class="is-total">11,840</dd>
+  </dl>
+  <div class="tooltip__meta">Second grant half (+17,000) arrives after MW8 · projected at season end before prizes: about 13,100 ts · Source: club ledger</div>
+</template>
+<template id="tip-wages">
+  <div class="tooltip__kicker">Wage bill</div>
+  <div class="tooltip__title">2,685 ts per week</div>
+  <div class="tooltip__body">11 contracts. The Banner Circuit wage budget this season is <strong>2,960 ts</strong> a week. An offer above the headroom is refused.</div>
+  <dl class="tooltip__rows">
+    <dt>Top earner: Brannoc Hale</dt><dd>360</dd>
+    <dt>Lineup (5)</dt><dd>1,580</dd>
+    <dt>Reserves (6)</dt><dd>1,105</dd>
+  </dl>
+  <div class="tooltip__meta">Paid at every week processing, preseason and tournament weeks included</div>
+</template>
+
+<!-- ===== Shortcut sheet (? key) ===== -->
+<dialog class="modal" id="shortcuts" aria-labelledby="sc-title">
+  <header class="modal__header">
+    <span class="icon icon--lg" data-icon="keyboard" aria-hidden="true"></span>
+    <h2 class="modal__title" id="sc-title">Keyboard shortcuts</h2>
+    <button class="icon-btn modal__close" type="button" data-close aria-label="Close"><span class="icon" data-icon="close" aria-hidden="true"></span></button>
+  </header>
+  <div class="modal__body">
+    <dl class="shortcut-list">
+      <div><dt>Continue / Play match</dt><dd><kbd>Space</kbd></dd></div>
+      <div><dt>Home · Squad · Fixtures</dt><dd><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dd></div>
+      <div><dt>League · Market · Finances · Codex</dt><dd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd></dd></div>
+      <div><dt>Search anything</dt><dd><kbd>Ctrl</kbd><kbd>K</kbd></dd></div>
+      <div><dt>Back / close</dt><dd><kbd>Esc</kbd></dd></div>
+      <div><dt>Save</dt><dd><kbd>Ctrl</kbd><kbd>S</kbd></dd></div>
+      <div><dt>Undo last change</dt><dd><kbd>Ctrl</kbd><kbd>Z</kbd></dd></div>
+      <div><dt>Pin a tooltip</dt><dd><kbd>Shift</kbd></dd></div>
+      <div><dt>Move in a table</dt><dd><kbd>↑</kbd><kbd>↓</kbd></dd></div>
+      <div><dt>Open the selected row</dt><dd><kbd>Enter</kbd></dd></div>
+      <div><dt>Previous / next fighter</dt><dd><kbd>[</kbd><kbd>]</kbd></dd></div>
+      <div><dt>This sheet</dt><dd><kbd>?</kbd></dd></div>
+    </dl>
+  </div>
+  <footer class="modal__footer"><span class="modal__footer-note">Every shortcut can be rebound in Settings · Controls.</span><button class="btn" type="button" data-close>Close <kbd>Esc</kbd></button></footer>
+</dialog>
+
+<script src="mockups.js"></script>
+</body>
+</html>

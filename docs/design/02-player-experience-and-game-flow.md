@@ -1,0 +1,260 @@
+# Arena League — player experience and game flow
+
+> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.2 · 2026-10-25 · Lead designer. Reconciled with document 03 v0.2 (the merged system specs). Not approved for implementation. Only owner requirements and decisions are REQUIRED. Decisions D-A to D-I are DELEGATED, binding pending the owner's confirmation. Everything else is PROPOSED or OPEN (document 01 §8). This document covers M1 "Season MVP" in full and tags what later milestones add.
+> Follow the labels, scope, glossary, and authority rules in [document 01](01-game-vision-and-design-principles.md).
+> This document owns the player's journey and state transitions. Detailed mechanics belong in [document 03](03-gameplay-systems-and-content.md); presentation belongs in [document 04](04-art-direction-and-presentation.md).
+
+| Field | Value |
+| --- | --- |
+| Game / version / updated | Arena League / v0.2 / 2026-10-25 |
+| Status / design owner | Draft, not reviewed / the project owner |
+| Milestone covered | M1 "Season MVP" (current target, O14). Later milestones M2–M7 are tagged per section |
+
+**Reading rule.** Each statement carries its label and ID. Untagged prose follows its section's status line. A "working assumption" is the recommendation of an OPEN item, used so that the flow is complete; it is not approved. Numbers quoted here come from 03 and the content files, which hold the working values.
+
+## 1. The experience at three scales
+
+**Status:** the structure is REQUIRED where it cites R/O IDs and DELEGATED where it cites D-IDs. Durations and the shape of the match are PROPOSED (P-02).
+
+| Scale | Repeating sequence | Meaningful decision | Reward / feedback | Typical duration |
+| --- | --- | --- | --- | --- |
+| **Fight, round and match** | M1 (O12): lock the lineup → the match is simulated headlessly → read the match report round by round. From M2: watch live, pause to inspect, spend up to 2 calls per round (P-01). From M3: edit rules between rounds | Before the match: which 5 fighters, who captains and vice-captains (O6), which row each starts in (P-03), which preset each runs (O14), and the chemistry this gives (D-D). From M2: when to spend a call. From M3: which rule to change after a lost round | The round and match result; per-fighter recaps with damage, healing, downs and their causes, rule-fire counts and rules that never fired (P-22); XP; injuries with their odds | A fight lasts about 20–45 s of sim time (P-02). Reading an M1 report takes about 1 minute; a watched match with edits 5–10 minutes |
+| **Matchweek** | Read the digest → act on what changed (injuries, offers answered, rival offers, expiring contracts, Watch or embargo) → set the lineup and presets → play the match → read results and standings → Continue | Who plays (it is also who develops, D-A) and who rests; which free agents to bid for and at what wage and length, knowing offers are answered at week processing; whether to renew an expiring contract; whether spending fits the wage budget (O10, D-C). From M4: where scouts go | Movement in the wing and tier tables, money, trends, injuries; the next opponent's published lineup and presets | 1–4 minutes of management outside the match (vis-006) |
+| **Season and career** | P1 Trials Day (rookies) → P2–P4 market, renewals, captain, presets, training emphasis → Kick off → 16 matches, MW1–MW16, in the club's wing (O9, D-C) → the Reckoning for the top 4 of each wing (TW1–TW3) → season end (promotion and relegation, prestige, aging and development, retirements, contract expiries, new rookies; from M5 academy graduation) → next season, without end (P-10) | Which fighters to build around as they age at race-specific rates (O11, D-B); how to share rounds among prospects; when to let veterans go; which rookies to sign; whether to push for promotion or consolidate; from M5, who studies in the academy | Promotion through the Reckoning or the Shield, prize money, fighters reaching their potential, records; the turnover of each season end | A season of 23 weeks takes 2–4 hours at default pacing (PROPOSED · TUNABLE, vis-007). The career is endless |
+
+**Primary loop in one sentence:** read the week's digest, make the roster and money decisions it calls for, lock a lineup of five with their presets (later their own rules), see the match play out, learn from the report, and advance the week.
+
+**Why the player wants another cycle:** every week has a fixture, against a known rival. The top-4 line and the 8th-place line of the wing table are always in play. Fighters are always mid-arc: a rookie close to a breakout, a veteran near decline, a contract about to expire, a trait about to fade or be earned. Each season end resolves several of these stories at once and opens new ones (rookies, a new tier, a new wing draw).
+
+**How the loop changes with mastery:** M1 mastery is choosing classes, presets, rows and captains that cover each other, reading reports for counters, sharing rounds so that prospects develop, and pricing contracts against the wage budget. Later mastery adds watching and calling at the right moment (M2), writing rule lists that exploit an opponent's style (M3), finding undervalued fighters through scouting (M4) and timing academy terms with aging curves (M5). Routine weeks get faster as the player trusts the defaults.
+
+## 2. First playable journey: one full M1 season
+
+**Status:** REQUIRED in outline (O14 lists the M1 contents). The league, market and money steps are DELEGATED (D-C). Other step details are PROPOSED or OPEN working assumptions as tagged. Screen layouts belong to document 04.
+
+| Step | Situation and information shown | Player action / decision | Observable result | Next step |
+| --- | --- | --- | --- | --- |
+| 1 | Title screen: New career, Continue (the latest save; disabled when none exists), Load, Settings, Quit | New career | The new-career screen opens | 2 |
+| 2 | New career: manager name; world seed (random by default, can be typed to reproduce a world; round seeds derived from it are never shown, P-05); Saltmarch's three Circuits and their 48 clubs. Each club card shows tier and wing, prestige, season budget and wage budget (O10, D-C), mean roster rating, captain, cap (14 / 12 / 10, O2) and the AI personality it would otherwise have. Muster Circuit clubs are marked "Recommended for a first career" | Pick any club; optional rename and two club colors (PROPOSED); confirm **Start career** | The world is generated: 48 clubs with rosters at 90% of cap, contracts and a pool of 120 free agents (D-C). An autosave is written (open-016). The preseason hub opens at week P1 | 3 |
+| 3 | **P1, Trials Day.** The digest shows the season budget and wage budget, the first grant installment, roster against cap (e.g. 9/10), the club's share of the season's rookies (exclusive this week, D-H), the free-agent list with rival-offer counts, contracts expiring this season, final-season announcements, and the fixture list with the club's wing | Sign or ignore trials rookies (they answer at once, with no signing cost); open the roster or market | A signed rookie joins at once and can play from MW1. Unsigned rookies enter the pool at the P1 processing | 4 |
+| 4 | Preseason weeks P1–P4 (D-C). Exact stats, potential, pace and traits are visible for every fighter in M1 (open-026) | Make offers to free agents (wage and length within the wage budget; signing cost from the balance; each offer reserves a roster place and wage room until it is answered); renew or release fighters; set the club captain and vice-captain (O6); choose a preset (O14) and a training emphasis (D-A) for each fighter; **Continue** to advance one week | At week processing every free agent picks the best acceptable offer; the digest reports signings, counters and refusals, and rival clubs' signings. Every Continue advances exactly one week | 4 again until P4 ends, then 5 |
+| 5 | End of P4: the **Kick off** summary. Checks: roster ≤ cap (a relegated club may release down to the cap without payout); at least 5 fit fighters or the hired-blade rule (open-006); budget status. From M5, academy enrollments and fees | Confirm Kick off | The preseason commit point (§3). From M5, enrollment fees are charged and enrollment locks. The hub opens at matchweek 1 | 6 |
+| 6 | Matchweek hub: digest (injuries, results, offers, warnings) and the next fixture, with the opponent's position, published lineup and presets (open-026), and home or away | Open the lineup screen: 5 fighters, captain and vice-captain, a row and a preset each. It is pre-filled from the previous lineup with unavailable fighters replaced. The screen shows chemistry, each fighter's injury odds, season XP and trend, with inline validation | The lineup is a draft until it is locked | 7 |
+| 7 | Lineup screen | **Play match.** This locks lineup, captain, rows and presets for the whole match (open-010) | The match is simulated headlessly (O12). The match report opens: score (e.g. 2–1) and points, each round's winner, duration and end reason, a key-event timeline (downs with cause, interrupts, rallies, overtime), per-fighter recaps, injuries with their pre-match odds, and XP (P-22) | 8 |
+| 8 | Match report | Read; open any fighter; **Continue** | Week processing (§3): every other fixture is simulated, standings update, income and wages are booked, injuries count down, free agents decide, AI clubs act, and the next digest appears | 6 for the next matchweek, or 9 after MW16 |
+| 9 | Final wing and tier tables, with the top-4 line in each wing and the Shield winner marked | If the club is in the top 4 of its wing: play the Reckoning quarterfinal and semifinal (best-of-3, the higher seed at home) and the final (best-of-5 at the Charterhall) as in steps 6–8. If not, or once eliminated: **Advance to season end**, which processes the remaining Reckoning weeks in one step after a confirmation | Reckoning results and prizes by round reached; the champion and the Shield winner are announced | 10 |
+| 10 | Season-end review, read-only screens in order: final tables, promotion and relegation (the Reckoning champion and Shield winner go up; each wing's 8th goes down); table and Reckoning prizes; prestige change; the season development report (age +1, stat changes by race curve, potential reached; O11, D-A); retirements; contract expiries; the new season's wing draw, cap and budgets | Read each screen; **Begin next season** | The season-end processing (03 sys-calendar) has already been applied before the review is shown. An autosave is written | 3, for season 2. The journey is endless (flow-019) |
+
+**Unsuccessful paths (M1):**
+
+- **Losing matches** costs points, form-driven gate income and sponsor win bonuses, and moves the club down the wing table. Finishing 5th or lower in the wing means no Reckoning. Finishing 8th in the wing relegates the club (tier 3 clubs cannot be relegated). Relegation cuts the roster cap by 2 (O2) and softens the landing with a −20% drop clause on wages, parachute money and payout-free cap-relief releases (D-C).
+- **Benching a prospect** stops his development entirely (D-A). The lineup screen shows his season XP bar and trend, so the cost is visible before the match.
+- **Injuries** remove fighters for weeks, or rarely leave a permanent scar (P-11). Only a fighter shown as At risk can suffer a career-ending injury (open-031). If fewer than 5 fit fighters remain, hired blades fill the lineup (open-006).
+- **Running out of money** brings Watch, then an embargo, then a Registry advance against next season's grant (D-C). Matches are always played. §6 gives the full ladder.
+- **Quitting** at any management screen resumes from the latest save (§3, open-016). Quitting without saving loses only the progress since the last autosave, which is at most one week.
+- **Finishing the available content** never happens: seasons repeat with new rookies, aging, wing draws and tier movement (P-10). The career ends only when the player abandons it, or from M6 when a dismissed manager declines every job offer (open-007).
+
+**What later milestones add to this journey** (open-021, working assumption):
+- **M2:** step 7 offers Watch (a live PixiJS fight at 1x/2x/4x with pause, the inspector and calls, P-01) or Simulate (open-020). Any played match can be watched as a replay.
+- **M3:** rule editing from the roster and lineup screens, between-round edits, the sandbox and tactics challenges.
+- **M4:** fog of war (P-12), the baseline report (O4), and scout hiring and assignments in steps 3, 4 and 6.
+- **M5:** academy enrollment in step 4, committed at step 5; call-ups during matchweeks; graduation in step 10.
+- **M6:** more league regions; cups inserted as extra fixtures; club-to-club transfer windows with deadline day (P-09); a patron with goals and job security (open-007).
+- **M7:** difficulty sliders, season modifiers announced at P1, pacing presets.
+
+## 3. States and transitions
+
+**Status:** the states are REQUIRED where they implement O3, O9, O12, O14 and R7. The calendar and processing orders are DELEGATED (D-C; 03 sys-calendar). Commit points are PROPOSED (P-05, P-20) or OPEN working assumptions (open-003, open-016) as tagged. Persistence guarantees are owned by document 05.
+
+| State ID | Player goal and available actions | Entry condition | Exit trigger and destination | State carried forward |
+| --- | --- | --- | --- | --- |
+| flow-state-001 title | Start, continue or load a career; settings; quit | Launch, or returning to the title | New career → flow-state-002. Continue/Load → the state stored in the save. Quit → exit | Settings (stored separately from careers, 05) |
+| flow-state-002 new-career | Name, seed, pick a club, optional rename and colors. From M7, difficulty and hardcore (P-14, P-11) | New career from the title | Start career → flow-state-003 at P1. Back → flow-state-001, with nothing created | Career configuration |
+| flow-state-003 hub | The club's home in every week: digest, roster, lineup, market, contracts, finances, tables, fixtures, calendar. From M4 scouting, from M5 academy, from M6 transfers | Start career, week processing, Continue after a match report, or Begin next season | Continue → week processing, or → flow-state-004 if the week's own fixture is unplayed. Kick off at the end of P4 → MW1. After TW3 → season-end processing → flow-state-007. Menu → flow-state-009 | Everything in the career |
+| flow-state-004 lineup | Choose 5, captain and vice-captain, rows and presets (from M3, rule lists); see the opponent's published lineup | Continue or Play in a week with an unplayed own fixture | Play match → flow-state-005. Back → flow-state-003 with the draft kept | The lineup draft |
+| flow-state-005 match | M1: the headless simulation runs (a brief progress indicator, no input). From M2: a live fight with running, paused and between-rounds substates (P-01; from M3, edits between rounds) | Play match | Match decided → flow-state-006 | The locked lineup and the round results so far |
+| flow-state-006 match-report | Read results, recaps, injuries and XP. From M2: replay | Match decided | Continue → week processing → flow-state-003 | The committed match result |
+| flow-state-007 season-end | Read-only review of the committed season-end processing | The season-end step completes | Begin next season → flow-state-003 at the next P1. From M6: dismissal → flow-state-008 | The new season's world |
+| flow-state-008 job-offers (M6) | Accept one of 1–3 offers, or end the career (open-007) | Patron patience reaches 0 | Accept → flow-state-003 at the new club. End career → flow-state-001 (the save is kept, read-only) | Career record, manager identity |
+| flow-state-009 menu | Save, load, settings, quit to the title | The menu key or button on any management screen; from M2 also while a fight is paused | Resume → the previous state | — |
+
+**Week processing** (a transient step, not a state; DELEGATED, D-C): it requires that the week's own fixture is played or that the club has no fixture. In the fixed order of 03 sys-calendar it then: simulates every other fixture of the week with the same headless sim (P-04, open-015); records results, XP and injury rolls; counts down injuries and statuses; books income and costs; updates the financial status; resolves free-agent offers; runs every AI club's action phase; tops up the free-agent pool; then writes an autosave (open-016) and shows the next digest. Its randomness is seeded and committed here (P-05).
+
+**Season-end processing** (DELEGATED, D-C; full order in 03 sys-calendar): (1) Reckoning complete and titles recorded; (2) prizes; (3) promotion and relegation; (4) prestige; (5) from M5, academy graduation; (6) aging and development with the age held during the season, then age +1; (7) retirements; (8) contract expiries; (9) off-season recovery of 8 injury weeks; (10) from M4, knowledge decay; (11) from M6, patron review; (12) free agents unsigned at two consecutive season ends leave; (13) next-season setup (tiers, wing draw and fixtures, caps, drop clause, grants, parachute, budgets, rookies); (14) the AI phase (trials signings, cap relief, opening offers, captains, D-I); (15) autosave, then the review screens. AI clubs go through the same steps (P-04). The step is not a week: it pays no wages and does not count toward debt weeks.
+
+**Consequential transitions**
+
+| Transition | Prerequisites | Commit point | Cancel / back | Repeated input | Interruption | Invalid → message |
+| --- | --- | --- | --- | --- | --- | --- |
+| Start career | A club is picked and a name entered | On confirm: the world is generated and an autosave written | Back before confirming | The button disables after the first press | Before the first autosave, nothing exists to resume | No club picked → "Pick a club to manage" |
+| Continue (advance one week) | The own fixture is played, or there is none this week. No blocking decision pending | When week processing starts; it commits atomically for all clubs | None after confirming | Exactly one week per press; presses during processing are ignored | Resumes from the last autosave, the start of the week (open-016) | A blocking decision → "Decide first: [item]", with a link to it |
+| Kick off (end of P4) | Roster ≤ cap (O2); at least 5 fit fighters or the hired-blade rule (open-006). From M5: enrollments ≤ capacity | On confirm. From M5, enrollment fees are charged and enrollment locks for the season (O3) | Back to the hub until confirmed | Single commit | As Continue | Over cap → "Roster over cap: release N fighters" (cap relief pays no payout) |
+| Make a free-agent offer | Roster + pending offers < cap (O2); the wage fits the wage budget and the signing cost fits the balance (D-C); no embargo, or the offer meets the embargo rule; at most 6 pending offers, 1 per fighter; the fighter still deals with the club | Submission reserves the place, the wage room and the signing cost. **The fighter answers at week processing** (D-C): he signs with the best acceptable offer, counters, or refuses | Withdraw any time before the processing; the reservation is released | One pending offer per fighter; resubmitting replaces it | A pending offer survives a save; the answer arrives at the next processing | Full → "Roster full with pending offers (9 + 1 of 10)"; budget → "Over wage budget by 12 per week"; cash → "Signing cost 1,620 exceeds balance" |
+| Sign a trials rookie | P1; the rookie is in the club's trials share; cap, wage budget and no embargo | On confirm, at once, with no signing cost | Not reversible except by a release | Single commit | Persists with the next autosave | As for offers |
+| Renew a contract | The contract is in its final season; the fighter still deals with the club | On confirm: answered at once (accept, counter or refuse); the new terms start at next-season setup | Withdraw before confirming | Up to 3 offers per season; each refusal costs patience | As above | Refused → the reason (e.g. "asks 345; your offer is 92% of it") |
+| Release a fighter | The fighter is on the roster, outside a match | On confirm: the contract ends and the payout (50% of the remaining wages; 0 under cap relief) is charged at once | The confirmation dialog states the payout | Single commit | As above | — (a release is never blocked by money) |
+| Set captain, vice-captain, presets or training emphasis | Outside a match; vice-captain ≠ captain | Immediate. Captain changes are evaluated at the next lineup lock (Snubbed or Passed Over, 03 sys-captaincy), so changing back before that lock costs nothing | Change again at any time outside a match | Idempotent | Saved with the career | Vice equal to captain → "Choose a different vice-captain" |
+| Play match (lineup lock) | 5 eligible fighters (on the roster at the start of the week and fit), or hired blades; a captain; a row and a preset each | On Play: lineup, captain, rows and tactics are fixed for the match (open-010) | Back from the lineup screen until Play | Single commit | M1: the result is committed with the match and saved by the next autosave. From M2: quitting mid-fight resumes at the same tick (open-016) | Fewer than 5 eligible → hired blades; no captain → "Choose a captain" |
+| Call (M2) | Fight paused; calls remain this round (2 per side, P-01) | When issued; it counts against the budget even if it has no effect | None after issue | Each confirm is one call; the button disables at 0 | Logged with the fight for resume and replay | No calls left → "No calls left this round" |
+| Match result | The match is decided | When the deciding round ends: points, gate, win bonus, prizes, XP, injuries; from M4, contact knowledge | None. Results are saved once played; reloading cannot reroll them (P-05) | — | Committed results survive any later quit | — |
+| Academy enrollment (M5) | Preseason, or the week the fighter was signed (O3, open-003); capacity; no embargo | Preseason: drafted, committed at Kick off. Mid-season signing: on confirm | Preseason drafts editable until Kick off | One enrollment per fighter per season | — | After Kick off → "Academy enrollment is closed until next preseason (except fighters signed this matchweek)" |
+| Academy call-up (M5) | A matchweek; roster + pending < cap | On confirm. Irreversible for the season (O3). The dialog states that the fighter gains no XP unless played, academy development stops, and he cannot return this season | Cancel in the dialog | Single commit | — | Full → "Roster full: free a place before calling up" |
+| Advance to season end | Not in the Reckoning, or eliminated | On confirm: the remaining weeks are processed in order, then the season-end step | Cancel in the dialog | Single commit | Resumes from the last week's autosave | — |
+| Season end | TW3 processed | As one block, in the order above, before the review screens are shown | None. The review is read-only | — | Autosave after the block; an interruption during it resumes at its start (05) | — |
+| Save / load | Any management screen (R7, open-016) | Save writes a complete career; load replaces the session after confirmation | Cancel before confirming | A second save to the same slot overwrites after confirmation | An interrupted write never corrupts the previous save (05 §5) | Damaged or incompatible save → a clear message; never a partial career |
+
+## 4. Goals, activities, and outcomes
+
+**Status:** REQUIRED where IDs are cited; DELEGATED (D-C) for points, qualification, promotion and prizes.
+
+| Activity type | Player goal | Success condition | Failure / partial success | Reward or consequence | Milestone |
+| --- | --- | --- | --- | --- | --- |
+| Round (fight) | Win the round | The other side has no fighter standing, or the tiebreak chain at the 75 s cap favors this side (03 sys-fight-sim) | Lost round | Counts toward the match; XP for the fighters who started it | M1 |
+| Match | Win the best-of-3 (Reckoning final best-of-5) | 2 rounds won (3 in a best-of-5) | 1–2 or 0–2 loss | League points 3/2/1/0 for 2–0/2–1/1–2/0–2; gate for the home club (open-013); sponsor win bonus; XP; injury risk | M1 |
+| Regular season | Finish as high as possible | Top 4 of the wing → the Reckoning; tier-table first → the Shield and promotion | 5th–7th of the wing: no Reckoning; 8th: relegation | Table prize by tier rank; prestige; next season's tier, cap and budget | M1 |
+| The Reckoning | Win the quarterfinal, semifinal and final | Win the final (champion; promoted unless in tier 1) | Elimination in a round | Prize by the furthest round reached; the qualification bonus; prestige; titles in the record | M1 |
+| Free-agent offer | Strengthen the roster within cap and budget | The fighter picks the club's offer at week processing | A counter (one more chance at the counter price), a refusal (patience −1), or a rival club's better offer | Roster, wage commitment and signing cost | M1 |
+| Trials Day | Sign the right rookies from the club's share | The rookie accepts at once | The rookie is ignored and enters the pool | A cheap young fighter with potential | M1 |
+| Contract renewal | Keep a fighter past his expiry | The fighter agrees | He refuses three times, and leaves at season end as a free agent | Wage commitment from next season | M1 |
+| Lineup, captain, preset and emphasis choices | Field the best counter and develop the right fighters | The match result; the season development report | — | Feedback through the match report, trend and season report | M1 |
+| Budget stewardship | Finish the season within budget and solvent | Balance ≥ 0 | Embargo; Registry advance (D-C) | Savings become extra wage room next season (up to 25% of SB) | M1 |
+| Tactics challenge | Solve a rule puzzle | The challenge's win condition | Retry freely | A preset for the library | M3 |
+| Scouting assignment | Learn the truth about targets | Report delivered after its weeks | A partial report if recalled early | Knowledge | M4 |
+| Academy term | Develop a fighter | Graduation gains within the shown range (open-004) | Under-delivery; call-up (O3) | Stats, potential, abilities or traits (R5) | M5 |
+| Cup run; transfers; patron goals | Win cups, trade, meet directives | Per 03 §3.5 | — | Prize, prestige, patience (open-007) | M6 |
+
+- **Activity selection:** the calendar fixes the fixtures. Everything else is the player's choice in the hub. There is no matchmaking.
+- **Availability / unlocks:** the free-agent market is open every week; Trials Day is P1; renewals are possible in a contract's final season; tiers change through promotion and relegation. From M3, advanced rule vocabulary unlocks through staff, academy and scouting (P-07). No content is locked behind payment (P-15).
+- **Optional objectives:** none in M1. The economy draft's patron goal was rejected for M1 (D-C). From M6, patron directives are shown at P1 with their rewards (P-10).
+- **Replay policy:** seasons repeat with the same structure. Difficulty comes from tier movement, aging and AI clubs that keep improving (P-04). From M2, past matches can be replayed as viewings only; replays never change saved results (P-13).
+- **Ending / completion:** a match ends when it is decided, a season after season end. The career has no ending (P-10).
+- **After completion:** Begin next season. Records and the career history persist.
+
+## 5. Progression, rewards, and resources
+
+**Status:** REQUIRED where IDs are cited; DELEGATED where D-IDs are cited. Values are PROPOSED · TUNABLE; the rules are in 03.
+
+| What changes | How it is earned / unlocked | Player choice | Limit / reset | Why it improves play |
+| --- | --- | --- | --- | --- |
+| Fighter rating and stats | XP only from rounds started (O3, D-A); usage = season XP ÷ 360, capped at 1; growth toward potential at the race-scaled rate; mentoring by a good captain | Who plays; training emphasis (Body, Mind or Balanced, which redistributes growth without adding to it, D-A) | Capped by potential. Physical stats wear after the race-scaled peak; mental stats only from human-age 60 (O11, D-B) | Lineup choices become development choices (pillar 5) |
+| Potential | Fixed at generation; scars lower it (P-12); from M5 the academy can raise it (R5) | From M5, the program type | 1–100 | Prospects are bets with stakes |
+| Traits | Rolled at generation (O5); earned or suffered through play (Sand-Wise, Title-Tested, scars); some flaws fade or are cured under visible conditions | Who plays; captain grade; emphasis | At most 4 rolled and 8 in total | Fighters become individuals |
+| Captaincy | CQ from leadership, composure, experience, seniority, standing and traits (O6) | Who is captain and vice-captain | Grade A–E; changes cost Snubbed or Passed Over | Reliability in fights, mentoring, chemistry |
+| Lineup chemistry | Traits, the captain's grade and captaincy statuses (D-D) | Lineup and captain choice | −5 to +5, worth up to ±2 composure | A social channel without a morale meter |
+| Rule slots and vocabulary (M3) | Slots 4 → 8 with career rounds, 10–12 through traits (P-07) | Which fighters carry complex lists | Per fighter | Ties development to tactics |
+| Club tier and prestige | Promotion (Reckoning champion or Shield) and relegation (8th in a wing); prestige from finish, Reckoning run and movement | Push or consolidate | 3 tiers; prestige 0–100 with reversion toward the tier base | Prestige, money, cap and opposition rise together (O2) |
+| Roster cap and academy capacity | Tier (O2) | — | 14 / 12 / 10 | Promotion means room for depth |
+| Knowledge (M4) | Scout assignments, facing fighters, time at the club (open-008) | Where scouts go | Slow decay (P-19) | Information advantage (pillar 3) |
+| Records | Results, titles, careers | — | — | Identity and long-save goals (P-10) |
+
+**Economy** (O10; DELEGATED, D-C):
+
+| Resource | Main sources | Main sinks | Player-facing purpose | Shortage consequence | Detailed rule |
+| --- | --- | --- | --- | --- | --- |
+| Gold (balance, shown as tessels) | Central grant (50% at P1, 50% at MW8); sponsor retainer (weekly); sponsor win and qualification bonuses; gate at home fixtures; table prize and Reckoning prize; promotion grant; parachute after relegation | Weekly wages; weekly operating cost; signing costs (10% of guaranteed wages); release payouts (50% of remaining wages); hired blades | Every signing competes with every other use of money | Watch, then embargo, then a Registry advance against later grants. Fixtures are always played | 03 sys-finance, sys-contracts |
+| Season budget (SB) and wage budget (WB) | Fixed at next-season setup from the tier's grant, sponsor, projected gate and part of savings | Wage commitments (the commitment rule) | Sets how ambitious the season can be | New commitments are refused when they would exceed WB | 03 sys-finance |
+| Roster places | Tier cap (O2) | Signings, pending offers, rookies, call-ups | Depth against wages | Offers refused at the cap | 03 sys-roster |
+| Rounds (playing time) | 16 matches plus the Reckoning, about 2.5 rounds each | Shared among the roster | Who wins now against who develops (D-A) | A benched fighter does not develop | 03 sys-development |
+| Academy places (M5) | Tier capacity (O2) | Enrollments | Development against availability | Enrollment refused at capacity | 03 §3.5 |
+| Scout time (M4) | Each scout's weeks | Assignments | Focus against spread | No new reports | 03 §3.5 |
+| Calls (M2) | 2 per round (P-01) | Interventions | Timing | No calls left this round | 03 §3.5 |
+| Focus (in fight) | Full at each round start, 2.5 per second | Abilities | Makes rule order an economic choice (P-07) | Abilities unavailable | 03 sys-combat-stats |
+
+**Progression pacing checkpoints (PROPOSED):** the first session (about 60–90 minutes) covers Trials Day, the preseason market and the first 3–5 matchweeks: the player's first signing battle, first preset change and first injury. Early mastery comes by the end of season 1: the player reads reports for counters, has shared rounds among prospects, and has kept or lost a fighter at contract expiry. In the midgame (seasons 2–5) rookies break out, promotion pushes begin, and the first veterans decline and retire. In the endgame (Crown Circuit) the player chases Reckoning titles and maintains a dynasty through aging and wage growth.
+
+**Nature of progression (PROPOSED):** power rises within the tier quality bands (03 §1), so tactics stay decisive (pillar 1). Progression mainly opens alternatives (more classes and races on the roster, later rule vocabulary) and raises stakes (higher tiers). There are no cosmetic unlocks or paid items (P-15).
+
+## 6. Failure, recovery, and player commitment
+
+**Status:** REQUIRED where IDs are cited; DELEGATED (D-C) for the money ladder; OPEN working assumptions as tagged.
+
+- **What can be lost:** matches, points, placings and tier; money; development (for fighters who do not play, D-A); fighters through injuries (P-11), retirement (O11), contract expiry, or from M6 sale; in hardcore, death (P-11, M7). From M6, the manager's job.
+- **What persists:** the career, every committed result, fighters' histories and records. Saves restore exactly what was saved (R7, open-016).
+- **Recovery path:** a bad season costs a tier and money, but never the ability to play. Fixtures always happen. Short-handed lineups are filled with hired blades (open-006). Free agents at the tier-minimum wage are always available, because the pool is topped up to its floors (D-H). Rookies arrive every season. Grants and sponsor money arrive every season (O10, D-C).
+- **Running out of money** (DELEGATED, D-C):
+  1. **Watch:** a warning when the balance, plus the next 4 weeks' scheduled income minus wages and costs, would go below 0.
+  2. **Embargo**, from any week processing that ends below 0: no offer or renewal above the tier-minimum wage; free-agent offers only at the tier minimum, for 1 season, with no signing cost, and only while the club has fewer than 5 fit fighters; no trials signings; a banner on every hub screen. It lifts at the first processing that ends at 0 or above.
+  3. **Registry advance** after 8 consecutive processings below 0: the balance returns to 0, the debt is deducted from later grants (at most 30% of each), and prestige falls by 5.
+  4. From M6, debt and missed directives also lower patron patience, which can lead to dismissal and job offers.
+
+  Clubs never fold. AI clubs follow the same ladder (P-04).
+- **Retreat / abandonment:** there is no forfeit in M1. From M2, a retreat call concedes a round (P-01). The player may end a career from the menu, and the save remains loadable.
+- **Retry behavior:** none for committed results (P-05). Loading an earlier save and replaying with identical inputs reproduces the same results (open-016). From M2 replays and from M3 the sandbox allow experiments that never change saved results (P-13).
+- **Respec / reversal:** presets, captain, vice-captain, rows and training emphasis can change freely between matches; a captain change only costs something across a lineup lock. From M3, rules are freely editable outside fights. Contracts are binding, and release costs a payout. Academy terms are fixed for the season, and a call-up cannot be reversed (O3).
+- **Unwinnable or exhausted state:** none exists. Every season brings grants, rookies and a fresh wing draw, and the hired-blade rule and the journeyman top-up guarantee a playable lineup. From M6, a dismissed manager always receives at least one offer (open-007).
+- **Difficulty / assistance:** M1 has one default difficulty. From M7: sliders for AI quality, economy and scouting accuracy, capped catch-up worth less than winning (P-14), and an opt-in hardcore mode (P-11).
+
+## 7. Learning, information, and pacing
+
+**Status:** REQUIRED where IDs are cited; PROPOSED or OPEN as tagged.
+
+- **What a new player must understand first:**
+  - Five fighters fight automatically, and each class has a role (Tank, Melee DPS, Ranged DPS, Controller or Healer; O8).
+  - Each fighter follows a preset (O14), and the captain steadies the lineup (O6).
+  - The top 4 of each wing reach the Reckoning, and the 8th is relegated (O9, D-C).
+  - Money comes as a season budget, and every week costs wages (O10).
+  - Only fighters who play get better (D-A).
+- **How the game teaches them:**
+  - Short contextual hints appear at the first occurrence of each screen, dismissible globally.
+  - Every preset has a plain-language summary, for example "Guards the most-threatened ally, then fights the nearest enemy".
+  - The first match report highlights one cause of the result.
+  - The offer dialog shows the wage room after signing and the signing cost. The lineup screen shows injury odds, XP bars, trend and chemistry. Validation explains itself inline (O13).
+- **How tactics are introduced across milestones (P-07, P-22):**
+  - *M1:* choose among each class's 2–3 presets, and read in reports which preset rules fired and which never did.
+  - *M2:* watch rule badges live, pause to see why a rule fired or was skipped, and spend a call.
+  - *M3:* open a preset as an editable starting point; make a first edit between rounds when the recap points to a rule that never fired; optional tactics challenges teach conditions, selectors, Only and Prefer, cooldowns and ordering; lint flags mistakes.
+- **What remains hidden and why:**
+  - In M1, exact stats, potential, pace and traits are visible (open-026).
+  - Hidden in every milestone: round seeds (P-05) and AI clubs' private intentions, including the amounts of rival offers (only their count is shown).
+  - From M4: true stats, potential and traits sit behind knowledge (R3, O4, P-12); opponents' rules are revealed only by scouting, beyond the style tag and the last lineup (P-13); there is never an outcome forecast.
+  - Always available: own contracts, the ledger, standings, fixtures, the cause of every recorded event, and the odds of every risk the player chooses (injury, retirement).
+- **When complexity is introduced:** M1 starts with roster, presets and money. Scouting, the academy, cups and transfers arrive with their milestones. Within a career, the first preseason shows the core actions, and the digest introduces further screens when they first become relevant (document 04).
+- **Pressure and downtime:** management has no wall-clock pressure. Pressure comes from the calendar: offers answered each week, contracts expiring at season end, the top-4 and 8th-place lines. From M2, fights run in real time, with free pause and auto-pause (P-01). Pacing presets arrive in M7; until then the game stops every week.
+- **Pause / stopping points:** any management screen, especially after a match report and at season end.
+- **Returning after an absence:** Continue lands on the hub with a "since you were away" panel: the last 3 results, the next fixture, wing position, pending offers and decisions, and budget status.
+
+Document 04 owns exact presentation; document 03 owns hidden versus visible mechanical information.
+
+## 8. Multiplayer journey
+
+N/A for every planned milestone and the first release: single player, offline (P-15). Sharing tactics export codes from M3 (P-21) is not multiplayer. FUTURE: asynchronous "ghost club" play with normalized stats (P-15). It needs an owner decision and its own design, and save and tactics formats should not preclude it (05).
+
+## 9. End-to-end acceptance scenarios
+
+**Status:** proposed acceptance requirements. None has been run. Scenarios that rest on an OPEN item test its working assumption and must change if the owner decides otherwise. 03 §9 holds the mechanical cases (le-, cmb-, dev- and others).
+
+| ID | Given | When | Then | Milestone |
+| --- | --- | --- | --- | --- |
+| flow-001 | A clean launch with no saves | The player starts a new career with world seed 20261025, picks a Muster Circuit club, signs one trials rookie, selects a preset per fighter, advances P1–P4, kicks off and plays MW1 | The match report shows a best-of-3 result (2–0, 2–1, 1–2 or 0–2) with every round's winner, duration and end reason. The wing table credits 3/2/1/0 points. The other 23 fixtures of the Circuits' MW1 are listed. The hub shows MW2 | M1 |
+| flow-002 | A career at MW1 | The player plays MW1–MW16, then the Reckoning (or misses it, or is eliminated), and the season end runs | The review shows final tables with promotion and relegation (Reckoning champion and Shield up; each wing's 8th down), prizes, +1 year of age for every fighter, development changes, retirements, contract expiries and new rookies. P1 of season 2 begins with a new wing draw and the cap of the club's new tier | M1 |
+| flow-003 | An autosave at the start of MW5 | The player plays the MW5 match, loads that autosave, and replays it with an identical lineup, captain, rows and presets | The second match report is identical: round winners, durations in ticks, final HP of every fighter, and the event log (P-05, open-016) | M1 |
+| flow-004 | A Muster club with 9/10 rostered and 1 pending offer in P2 | The player tries a second offer | Refused with "Roster full with pending offers (9 + 1 of 10)"; no gold, roster or offer changes (O2, D-C) | M1 |
+| flow-005 | A Banner club with 12 roster fighters that finishes 8th in its wing | Season end completes and the player reaches the end of P4 | P1 shows 12/10 with a cap-relief allowance of 2. Kick off is blocked with "Roster over cap: release 2 fighters". After 2 releases, which pay no payout, Kick off proceeds (O2, open-002, D-C) | M1 |
+| flow-006 | Only 4 fit roster fighters at lineup lock | The player presses Play match | One hired blade fills the fifth place, rated at the tier band minimum, in the first missing role among Tank, Healer and Melee DPS. He is labelled in the lineup and the report, is paid the tier-minimum wage for that week, and leaves afterwards. The roster count is unchanged (open-006) | M1 |
+| flow-007 | A Muster club (prestige 20) at balance 300 before MW10, wage bill 900, away that week | MW10 processes, then MW11 (home, a win) | After MW10 the balance is −497 and the embargo banner appears; an offer at 150 is refused because the tier minimum is 60. After MW11 the balance is 306 and the embargo lifts. Fixtures were played throughout (D-C; 03 le-018) | M1 |
+| flow-008 | A manual save at the MW7 hub with 2 pending offers | The player quits to desktop, relaunches and loads it | The same week, roster, contracts, finances, standings, presets, captain, pending offers and decisions are restored, and the offers are answered at the next processing (R7) | M1 |
+| flow-009 | A fighter whose contract ends this season was not renewed | Season end completes | The fighter is a free agent in P1, in the market with his former club recorded, and any club, including the former one, may offer | M1 |
+| flow-010 | The club finishes 5th or lower in its wing | MW16 processes | The hub offers "Advance to season end". On confirmation, TW1–TW3 are processed (their results visible), then the season end and its review | M1 |
+| flow-011 | The world after 3 consecutive seasons played by Continue alone (default lineups and presets) | Season 4 begins | No crash or blocked state. Every club has a roster within its cap and at least 5 fighters; the free-agent pool meets its floors; rookies arrived each P1 (P-10, D-H, vis-008 smoke) | M1 |
+| flow-012 | A free agent with ask 360 for the player's club and 360 for a Crown club where he would not start | The player offers 360 for 2 seasons, the Crown club 375, and the week processes | He signs with the player's club (scores 10,500 against 10,416). The Crown club's digest says "signed with [club]" (D-C; 03 le-013) | M1 |
+| flow-013 | A rookie on the player's roster who starts no rounds all season | Season end | His season XP is 0 and his stats do not grow; he still ages. The season report shows usage 0% and "potential reached" unchanged (D-A) | M1 |
+| flow-014 | A played match from MW3 | The player watches its replay in the viewer at 1x, 2x and 4x, pausing several times | The viewed round winners, durations and event log match the stored headless result exactly (T4, vis-009) | M2 |
+| flow-015 | A live fight paused at 12.0 s with 2 calls left | The player issues "focus target: their Healer" and resumes | The call counter shows 1. Subsequent target choices trace to the call in the inspector. A replay reproduces the call at the same tick (P-01) | M2 |
+| flow-016 | A live fight in progress | The player quits to desktop and reloads | The fight resumes paused at the same tick, with the calls already made applied (open-016) | M2 |
+| flow-017 | Round 1 lost, and the recap shows that rule 3 of the healer never fired | The player edits that rule between rounds and starts round 2 | Round 2 uses the edited rule, and the recap shows its fire count (P-01, P-22) | M3 |
+| flow-018 | A target fighter with a baseline report showing "Might 6–15" (O4) | A scout whose region of expertise matches the fighter's completes a 3-week assignment | The ranges are narrower than the baseline, the source shows the scout and week, and the knowledge meter rises (R3) | M4 |
+| flow-019 | MW1 has started | The player tries to enroll a roster fighter in the academy | Refused with "Academy enrollment is closed until next preseason (except fighters signed this matchweek)" (O3) | M5 |
+| flow-020 | Academy fighter F, enrolled at Kick off | F is called up in MW6 and never fielded through season end | F gains 0 XP from matches and no academy development after MW6, cannot be re-enrolled until the next preseason, and keeps the development accrued before the call-up (O3; open-003) | M5 |
+| flow-021 | Patron patience reaches 0 at season end | The review completes | The job-offers screen lists 1–3 clubs, at least one guaranteed. Accepting starts P1 at the new club. Declining all ends the career and keeps the save loadable (open-007) | M6 |
+| flow-022 | Any career | Seasons 1, 2 and 3 complete | Each season end leads to the next P1; there is no final ending screen (P-10) | M1 |
+
+## 10. Open decisions and completion check
+
+Linked to the register in document 01 §8, where the owner questions are Q1–Q22: delegated decisions D-A to D-I (Q1–Q8); open-001 (Q9); open-026 and open-027 (Q10); the M1 proposed defaults and open-010 (Q11); open-011 (Q12); open-012 (Q13); open-030 and open-031 (Q14); open-002, open-006 and open-013 (Q15); open-016 (Q16); later milestones (Q17–Q22).
+
+- [x] A reader can follow the complete M1 loop without inventing transitions (subject to the OPEN working assumptions named above).
+- [x] Success, failure, cancellation and interruption paths are specified.
+- [x] Rewards and costs have explicit commit points (offers at week processing, renewals and trials rookies at once, results at match end, season end as a block).
+- [x] Persistent, temporary and reset state are distinguishable (persistence details in 05).
+- [x] Activities and progression support the player promise.
+- [x] Long-term features are labeled by milestone separately from M1 requirements.

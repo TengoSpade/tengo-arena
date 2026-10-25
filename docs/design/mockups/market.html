@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market · Arena League mockup</title>
+<link rel="stylesheet" href="../../../src/ui/styles/tokens.css">
+<link rel="stylesheet" href="../../../src/ui/styles/base.css">
+<link rel="stylesheet" href="../../../src/ui/styles/components.css">
+</head>
+<body>
+<div class="app">
+  <!-- ===== Top bar: club, calendar, money, Continue (shared by every hub screen) ===== -->
+  <header class="topbar">
+    <a class="topbar__club" href="home.html">
+      <span class="crest crest--md" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true">TW</span>
+      <span class="topbar__club-text"><span class="topbar__club-name">Thornwick Wardens</span><span class="topbar__club-tier">Banner Circuit · Tier 2</span></span>
+    </a>
+    <div class="topbar__group">
+      <div class="topbar__stat" tabindex="0" data-tip="Season 3, matchweek 7 of 16. The Reckoning (8-club tournament) follows matchweek 16."><span class="topbar__stat-label">Season 3</span><span class="topbar__stat-value">Matchweek 7</span></div>
+      <div class="topbar__divider"></div>
+      <div class="topbar__stat" tabindex="0" data-tip-ref="tip-balance"><span class="topbar__stat-label">Balance</span><span class="topbar__stat-value">11,840 ts</span></div>
+      <div class="topbar__stat topbar__stat--optional" tabindex="0" data-tip-ref="tip-wages"><span class="topbar__stat-label">Wages / week</span><span class="topbar__stat-value">2,685 ts</span></div>
+      <div class="topbar__stat topbar__stat--optional" tabindex="0" data-tip="Roster 11 of 12, the Tier 2 cap. Academy fighters (from M5) and hired blades do not count."><span class="topbar__stat-label">Roster</span><span class="topbar__stat-value">11 / 12</span></div>
+      <div class="topbar__stat" tabindex="0" data-tip="2nd of 8 in the Dawn Wing, 3rd in the tier table. The top 4 of each wing reach the Reckoning."><span class="topbar__stat-label">Standing</span><span class="topbar__stat-value">2nd · 11 pts</span></div>
+    </div>
+    <div class="topbar__actions">
+      <button class="search-trigger" type="button" data-toast="Search (Ctrl K)" data-toast-sub="Mockup: a quick-jump palette for fighters, clubs, classes and screens." data-toast-kind="info"><span class="icon" data-icon="search" aria-hidden="true"></span><span class="search-trigger__label">Search fighters, clubs, classes</span><kbd>Ctrl K</kbd></button>
+      <button class="icon-btn" type="button" aria-label="Digest: 2 items need action" data-tip="2 digest items need action"><span class="icon" data-icon="bell" aria-hidden="true"></span><span class="icon-btn__badge">2</span></button>
+      <button class="icon-btn" type="button" data-action="theme" aria-label="Switch light or dark theme" data-tip="Theme: dark or light"><span class="icon" data-icon="sun" aria-hidden="true"></span></button>
+      <button class="icon-btn" type="button" data-open-modal="shortcuts" aria-label="Keyboard shortcuts" data-tip="Keyboard shortcuts (?)"><span class="icon" data-icon="keyboard" aria-hidden="true"></span></button>
+      <a class="continue" href="squad.html" data-tip="Opens the lineup for this week's match. Nothing is committed until you press Play match.">
+        <span class="continue__text"><span class="continue__main">Continue</span><span class="continue__sub">Lineup at Mireford Leechguard</span></span>
+        <kbd>Space</kbd>
+      </a>
+    </div>
+  </header>
+
+  <!-- ===== Side navigation (number keys 1-7) ===== -->
+  <nav class="sidenav" aria-label="Main">
+    <a class="sidenav__item" href="home.html" data-key="1"><span class="icon" data-icon="home" aria-hidden="true"></span><span class="sidenav__label">Home</span><span class="sidenav__badge" aria-label="2 need action">2</span></a>
+    <a class="sidenav__item" href="squad.html" data-key="2"><span class="icon" data-icon="squad" aria-hidden="true"></span><span class="sidenav__label">Squad</span><span class="sidenav__key">2</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="3"><span class="icon" data-icon="fixtures" aria-hidden="true"></span><span class="sidenav__label">Fixtures</span><span class="sidenav__key">3</span></a>
+    <a class="sidenav__item" href="league.html" data-key="4"><span class="icon" data-icon="league" aria-hidden="true"></span><span class="sidenav__label">League</span><span class="sidenav__key">4</span></a>
+    <a class="sidenav__item" href="market.html" data-key="5" aria-current="page"><span class="icon" data-icon="market" aria-hidden="true"></span><span class="sidenav__label">Market</span><span class="sidenav__key">5</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="6"><span class="icon" data-icon="finances" aria-hidden="true"></span><span class="sidenav__label">Finances</span><span class="sidenav__key">6</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="7"><span class="icon" data-icon="codex" aria-hidden="true"></span><span class="sidenav__label">Class codex</span><span class="sidenav__key">7</span></a>
+    <div class="sidenav__footer">
+      <a class="sidenav__item" href="index.html#specified"><span class="icon" data-icon="save" aria-hidden="true"></span><span class="sidenav__label">Save / Load</span><span class="sidenav__key" title="Ctrl S">S</span></a>
+      <a class="sidenav__item" href="index.html#specified"><span class="icon" data-icon="settings" aria-hidden="true"></span><span class="sidenav__label">Settings</span></a>
+    </div>
+  </nav>
+
+  <main class="main" id="main">
+    <div class="page">
+      <header class="page-header">
+        <div class="page-header__text">
+          <span class="page-header__eyebrow">Free agents · signable any week</span>
+          <h1 class="page-header__title">Market</h1>
+          <div class="page-header__meta"><span>47 free agents · 3 new this week</span><span class="sep-dot"></span><span data-tip="Roster 11 of 12 (Tier 2 cap)">Roster 11 / 12 · 1 place</span><span class="sep-dot"></span><span data-tip-ref="tip-headroom">Wage headroom 275 ts / week</span></div>
+        </div>
+        <div class="page-header__actions">
+          <div class="segmented" role="group" aria-label="Market view">
+            <button type="button" aria-pressed="true">Free agents</button>
+            <button type="button" aria-pressed="false" data-tip="Trials-day rookies appear here in preseason">Rookies</button>
+            <button type="button" aria-pressed="false">Shortlist <span class="u-faint">4</span></button>
+          </div>
+        </div>
+      </header>
+
+      <div class="l-split" style="--split-side:16.5rem">
+        <!-- ===== Filters ===== -->
+        <aside class="panel" aria-labelledby="h-filters">
+          <header class="panel__header">
+            <h2 class="panel__title" id="h-filters"><span class="icon" data-icon="filter" aria-hidden="true"></span>Filters</h2>
+            <div class="panel__actions"><button class="btn btn--sm btn--ghost" type="button">Reset</button></div>
+          </header>
+          <div class="filters">
+            <div class="filter-group">
+              <span class="input-icon"><span class="icon" data-icon="search" aria-hidden="true"></span><input class="input input--sm" type="search" placeholder="Name, class or trait" aria-label="Search free agents"></span>
+            </div>
+            <div class="filter-group">
+              <span class="filter-group__label"><span>Role</span><span class="u-faint">hybrids match either role</span></span>
+              <div class="l-cluster l-cluster--xs">
+                <button class="role-toggle" type="button" data-role="tank" aria-pressed="false" data-toggle><i class="role-glyph"></i>Tank</button>
+                <button class="role-toggle" type="button" data-role="melee" aria-pressed="false" data-toggle><i class="role-glyph"></i>Melee</button>
+                <button class="role-toggle" type="button" data-role="ranged" aria-pressed="false" data-toggle><i class="role-glyph"></i>Ranged</button>
+                <button class="role-toggle" type="button" data-role="controller" aria-pressed="true" data-toggle><i class="role-glyph"></i>Controller</button>
+                <button class="role-toggle" type="button" data-role="healer" aria-pressed="false" data-toggle><i class="role-glyph"></i>Healer</button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <label class="filter-group__label" for="f-class">Class</label>
+              <span class="select-wrap"><select class="select select--sm" id="f-class"><option>Any controller class (6 + 6 hybrids)</option><option>Rimebinder</option><option>Hexmonger</option><option>Galeshaper</option><option>Hushweaver</option><option>Dreamthief</option><option>Snaresetter</option><option>Gaoler (hybrid)</option><option>Harpooner (hybrid)</option><option>Netcaster (hybrid)</option><option>Skullslinger (hybrid)</option><option>Undertow Mystic (hybrid)</option><option>Hourglass Sage (hybrid)</option></select></span>
+            </div>
+            <div class="filter-group">
+              <span class="filter-group__label">Race</span>
+              <div class="l-cluster">
+                <label class="check"><input type="checkbox" checked>Human</label>
+                <label class="check"><input type="checkbox" checked>Elf</label>
+                <label class="check"><input type="checkbox" checked>Dwarf</label>
+                <label class="check"><input type="checkbox" checked>Orc</label>
+                <label class="check"><input type="checkbox" checked>Ashkin</label>
+              </div>
+            </div>
+            <div class="filter-group">
+              <span class="filter-group__label"><span>Age</span><span class="u-num">18 – 36</span></span>
+              <div class="l-row"><input class="input input--sm u-num" value="18" aria-label="Minimum age" style="width:4rem"><span class="u-faint">to</span><input class="input input--sm u-num" value="36" aria-label="Maximum age" style="width:4rem"></div>
+            </div>
+            <div class="filter-group">
+              <span class="filter-group__label"><span>Minimum rating</span><strong class="u-num">40</strong></span>
+              <input class="range" type="range" min="1" max="100" value="40" aria-label="Minimum rating">
+            </div>
+            <div class="filter-group">
+              <label class="l-row u-sm"><input class="switch" type="checkbox" role="switch" checked><span>Fits wage headroom</span><span class="l-push u-faint u-num">≤ 275</span></label>
+              <label class="l-row u-sm"><input class="switch" type="checkbox" role="switch"><span>No negative traits</span></label>
+              <label class="l-row u-sm"><input class="switch" type="checkbox" role="switch"><span>Only new this week</span></label>
+            </div>
+          </div>
+        </aside>
+
+        <!-- ===== Results ===== -->
+        <div class="l-stack" style="min-width:0">
+          <section class="panel" aria-labelledby="h-results">
+            <header class="panel__header">
+              <h2 class="panel__title" id="h-results"><span class="icon" data-icon="market" aria-hidden="true"></span>Controllers</h2>
+              <span class="panel__subtitle">7 of 47 · wage filter shows 1 over budget for reference</span>
+              <div class="panel__actions">
+                <span class="u-xs u-faint">Compare with</span>
+                <span class="select-wrap"><select class="select select--sm" aria-label="Compare against"><option>Seren Ilvane · Rimebinder 55</option><option>Isra Moonvale · Skullslinger 52</option></select></span>
+              </div>
+            </header>
+            <div class="table-wrap">
+              <table class="data-table data-table--dense" data-sortable>
+                <thead>
+                  <tr>
+                    <th class="cell-tight"><span class="u-sr-only">Compare</span></th>
+                    <th><button class="th-sort" type="button">Fighter</button></th>
+                    <th><button class="th-sort" type="button">Class</button></th>
+                    <th class="col-mid"><button class="th-sort" type="button">Race · Age</button></th>
+                    <th class="cell-num" aria-sort="descending"><button class="th-sort" type="button">Rating</button></th>
+                    <th><button class="th-sort" type="button">Potential</button></th>
+                    <th>Traits</th>
+                    <th class="cell-num"><button class="th-sort" type="button">Asks / wk</button></th>
+                    <th><button class="th-sort" type="button">Willing</button></th>
+                    <th class="cell-tight"><span class="u-sr-only">Action</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><input type="checkbox" data-compare aria-label="Compare Marga Flint" checked style="accent-color:var(--c-accent)"></td>
+                    <td data-sort="Marga Flint"><span class="entity"><span class="portrait portrait--xs" data-role="controller" data-race="dwarf"></span><span class="entity__name">Marga Flint</span></span></td>
+                    <td data-sort="Rimebinder"><span class="class-tag"><i class="role-glyph" data-role="controller"></i>Rimebinder</span></td>
+                    <td class="col-mid" data-sort="33">Dwarf · 33</td>
+                    <td class="cell-num" data-sort="61"><span class="rating" data-band="3">61</span></td>
+                    <td data-sort="62"><span class="stars" data-tip="Potential 62 · 3 stars"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--empty"></i><i class="star star--empty"></i></span></td>
+                    <td><span class="trait-dots"><span class="trait__icon" data-polarity="pos" data-tip="Needle Sight · physique"></span><span class="trait__icon" data-polarity="pos" data-tip="Bellows Chest · physique"></span><span class="trait__icon" data-polarity="neg" data-tip="Showboat · temperament"></span></span></td>
+                    <td class="cell-num" data-sort="270" data-tip="Ask from rating, age, traits and greed (03-league-economy wage formula)">270</td>
+                    <td data-sort="2"><span class="willing" data-level="2" data-tip="Open: likely to accept an offer at his ask; a rival club may outbid you before week processing."><span class="willing__pips"><i class="is-on"></i><i class="is-on"></i><i></i></span><span class="col-mid">Open</span></span></td>
+                    <td><button class="btn btn--sm" type="button" data-open-modal="offer">Offer</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" data-compare aria-label="Compare Hesk Murrow" style="accent-color:var(--c-accent)"></td>
+                    <td data-sort="Hesk Murrow"><span class="entity"><span class="portrait portrait--xs" data-role="controller" data-race="orc"></span><span class="entity__name">Hesk Murrow</span></span></td>
+                    <td data-sort="Galeshaper"><span class="class-tag"><i class="role-glyph" data-role="controller"></i>Galeshaper</span></td>
+                    <td class="col-mid" data-sort="30">Orc · 30</td>
+                    <td class="cell-num" data-sort="60"><span class="rating" data-band="3">60</span></td>
+                    <td data-sort="61"><span class="stars" data-tip="Potential 61 · 3 stars"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--empty"></i><i class="star star--empty"></i></span></td>
+                    <td><span class="trait-dots"><span class="trait__icon" data-polarity="pos" data-tip="Broad Frame · physique"></span><span class="trait__icon" data-polarity="neg" data-tip="Hot Blood · temperament"></span></span></td>
+                    <td class="cell-num" data-sort="250">250</td>
+                    <td data-sort="2"><span class="willing" data-level="2"><span class="willing__pips"><i class="is-on"></i><i class="is-on"></i><i></i></span><span class="col-mid">Open</span></span></td>
+                    <td><button class="btn btn--sm" type="button" data-open-modal="offer">Offer</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" data-compare aria-label="Compare Edda Brook" style="accent-color:var(--c-accent)"></td>
+                    <td data-sort="Edda Brook"><span class="entity"><span class="portrait portrait--xs" data-role="melee" data-race="human"></span><span class="entity__name">Edda Brook</span></span></td>
+                    <td data-sort="Netcaster"><span class="class-tag" data-tip="Hybrid: Melee DPS and Controller"><span><i class="role-glyph" data-role="melee"></i><i class="role-glyph" data-role="controller"></i></span>Netcaster</span></td>
+                    <td class="col-mid" data-sort="27">Human · 27</td>
+                    <td class="cell-num" data-sort="59"><span class="rating" data-band="3">59</span></td>
+                    <td data-sort="64"><span class="stars" data-tip="Potential 64 · 3 stars"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--empty"></i><i class="star star--empty"></i></span></td>
+                    <td><span class="trait-dots"><span class="trait__icon" data-polarity="pos" data-tip="Whipcord · physique"></span><span class="trait__icon" data-polarity="pos" data-tip="Smells Blood · fighting style"></span></span></td>
+                    <td class="cell-num" data-sort="245">245</td>
+                    <td data-sort="2"><span class="willing" data-level="2"><span class="willing__pips"><i class="is-on"></i><i class="is-on"></i><i></i></span><span class="col-mid">Open</span></span></td>
+                    <td><button class="btn btn--sm" type="button" data-open-modal="offer">Offer</button></td>
+                  </tr>
+                  <tr aria-selected="true">
+                    <td><input type="checkbox" data-compare aria-label="Compare Lio Farrow" checked style="accent-color:var(--c-accent)"></td>
+                    <td data-sort="Lio Farrow"><span class="entity"><span class="portrait portrait--xs" data-role="controller" data-race="human"></span><span class="entity__name">Lio Farrow</span><span class="tag tag--info">New</span></span></td>
+                    <td data-sort="Hexmonger"><span class="class-tag"><i class="role-glyph" data-role="controller"></i>Hexmonger</span></td>
+                    <td class="col-mid" data-sort="23">Human · 23</td>
+                    <td class="cell-num" data-sort="58"><span class="rating" data-band="3">58</span></td>
+                    <td data-sort="70"><span class="stars" data-tip="Potential 70 · 3.5 stars"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--half"></i><i class="star star--empty"></i></span></td>
+                    <td><span class="trait-dots"><span class="trait__icon" data-polarity="pos" data-tip="Quick Study · mind"></span><span class="trait__icon" data-polarity="pos" data-tip="Still Water · temperament"></span></span></td>
+                    <td class="cell-num" data-sort="230">230</td>
+                    <td data-sort="3"><span class="willing" data-level="3" data-tip="Keen: accepts an offer at or above his ask unless a better one arrives this week."><span class="willing__pips"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i></span><span class="col-mid">Keen</span></span></td>
+                    <td><button class="btn btn--sm btn--primary" type="button" data-open-modal="offer">Offer</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" data-compare aria-label="Compare Tobin Reed" style="accent-color:var(--c-accent)"></td>
+                    <td data-sort="Tobin Reed"><span class="entity"><span class="portrait portrait--xs" data-role="controller" data-race="human"></span><span class="entity__name">Tobin Reed</span></span></td>
+                    <td data-sort="Hushweaver"><span class="class-tag"><i class="role-glyph" data-role="controller"></i>Hushweaver</span></td>
+                    <td class="col-mid" data-sort="31">Human · 31</td>
+                    <td class="cell-num" data-sort="54"><span class="rating" data-band="2">54</span></td>
+                    <td data-sort="55"><span class="stars" data-tip="Potential 55 · 3 stars"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--empty"></i><i class="star star--empty"></i></span></td>
+                    <td><span class="trait-dots"><span class="trait__icon" data-polarity="pos" data-tip="Regimented · mind"></span><span class="trait__icon" data-polarity="pos" data-tip="Good Company · temperament"></span></span></td>
+                    <td class="cell-num" data-sort="180">180</td>
+                    <td data-sort="3"><span class="willing" data-level="3"><span class="willing__pips"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i></span><span class="col-mid">Keen</span></span></td>
+                    <td><button class="btn btn--sm" type="button" data-open-modal="offer">Offer</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox" data-compare aria-label="Compare Kesh Varr" style="accent-color:var(--c-accent)"></td>
+                    <td data-sort="Kesh Varr"><span class="entity"><span class="portrait portrait--xs" data-role="controller" data-race="orc"></span><span class="entity__name">Kesh Varr</span></span></td>
+                    <td data-sort="Hexmonger"><span class="class-tag"><i class="role-glyph" data-role="controller"></i>Hexmonger</span></td>
+                    <td class="col-mid" data-sort="19">Orc · 19</td>
+                    <td class="cell-num" data-sort="44"><span class="rating" data-band="2">44</span></td>
+                    <td data-sort="76"><span class="stars" data-tip="Potential 76 · 4 stars"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--empty"></i></span></td>
+                    <td><span class="trait-dots"><span class="trait__icon" data-polarity="pos" data-tip="Late Ripener · mind"></span><span class="trait__icon" data-polarity="neg" data-tip="Green Nerves · mind"></span></span></td>
+                    <td class="cell-num" data-sort="115">115</td>
+                    <td data-sort="3"><span class="willing" data-level="3"><span class="willing__pips"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i></span><span class="col-mid">Keen</span></span></td>
+                    <td><button class="btn btn--sm" type="button" data-open-modal="offer">Offer</button></td>
+                  </tr>
+                  <tr class="is-dimmed">
+                    <td><input type="checkbox" data-compare aria-label="Compare Aveline Sorrow" style="accent-color:var(--c-accent)"></td>
+                    <td data-sort="Aveline Sorrow"><span class="entity"><span class="portrait portrait--xs" data-role="controller" data-race="elf"></span><span class="entity__name">Aveline Sorrow</span></span></td>
+                    <td data-sort="Dreamthief"><span class="class-tag"><i class="role-glyph" data-role="controller"></i>Dreamthief</span></td>
+                    <td class="col-mid" data-sort="36">Elf · 36</td>
+                    <td class="cell-num" data-sort="57"><span class="rating" data-band="3">57</span></td>
+                    <td data-sort="81"><span class="stars" data-tip="Potential 81 · 4 stars"><i class="star"></i><i class="star"></i><i class="star"></i><i class="star"></i><i class="star star--empty"></i></span></td>
+                    <td><span class="trait-dots"><span class="trait__icon" data-polarity="rare" data-tip="Title-Tested · acquired · storied"></span><span class="trait__icon" data-polarity="pos" data-tip="Rallying Voice · leadership"></span></span></td>
+                    <td class="cell-num" data-sort="395"><span class="tag tag--warn" data-tip="120 ts over your wage headroom. The offer would be refused (wage budget).">395</span></td>
+                    <td data-sort="1"><span class="willing" data-level="1" data-tip="Reluctant: prefers a Crown Circuit club; asks above market."><span class="willing__pips"><i class="is-on"></i><i></i><i></i></span><span class="col-mid">Reluctant</span></span></td>
+                    <td><button class="btn btn--sm" type="button" aria-disabled="true">Offer</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="compare-tray">
+              <span class="icon" data-icon="compare" aria-hidden="true"></span>
+              <span class="u-sm"><strong data-compare-count>2</strong> selected · compared with Seren Ilvane (your Rimebinder)</span>
+              <span class="l-push u-xs u-faint">Select up to 3</span>
+              <button class="btn btn--sm" type="button" data-open-modal="compare" data-compare-needs>Compare <kbd>C</kbd></button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ===== Tooltip templates and dialogs (shell first, then page) ===== -->
+<template id="tip-balance">
+  <div class="tooltip__kicker">Balance</div>
+  <div class="tooltip__title">11,840 ts</div>
+  <dl class="tooltip__rows">
+    <dt>Carried from season 2</dt><dd>6,150</dd>
+    <dt>Central grant, first half (P1)</dt><dd>+17,000</dd>
+    <dt>Sponsor retainer, 10 weeks</dt><dd>+8,170</dd>
+    <dt>Home gates (4)</dt><dd>+15,400</dd>
+    <dt>Wages, 10 weeks</dt><dd>−26,850</dd>
+    <dt>Operating costs, 10 weeks</dt><dd>−5,300</dd>
+    <dt>Signing costs (2)</dt><dd>−2,730</dd>
+    <dt class="is-total">Now</dt><dd class="is-total">11,840</dd>
+  </dl>
+  <div class="tooltip__meta">Second grant half (+17,000) arrives after MW8 · projected at season end before prizes: about 13,100 ts · Source: club ledger</div>
+</template>
+<template id="tip-wages">
+  <div class="tooltip__kicker">Wage bill</div>
+  <div class="tooltip__title">2,685 ts per week</div>
+  <div class="tooltip__body">11 contracts. The Banner Circuit wage budget this season is <strong>2,960 ts</strong> a week. An offer above the headroom is refused.</div>
+  <dl class="tooltip__rows">
+    <dt>Top earner: Brannoc Hale</dt><dd>360</dd>
+    <dt>Lineup (5)</dt><dd>1,580</dd>
+    <dt>Reserves (6)</dt><dd>1,105</dd>
+  </dl>
+  <div class="tooltip__meta">Paid at every week processing, preseason and tournament weeks included</div>
+</template>
+<template id="tip-headroom">
+  <div class="tooltip__kicker">Wage headroom</div>
+  <div class="tooltip__title">275 ts per week</div>
+  <dl class="tooltip__rows"><dt>Wage budget (Banner Circuit, season 3)</dt><dd>2,960</dd><dt>Current wage bill</dt><dd>−2,685</dd><dt class="is-total">Headroom</dt><dd class="is-total">275</dd></dl>
+  <div class="tooltip__meta">An offer above the headroom is refused (03-league-economy, open-028)</div>
+</template>
+
+<dialog class="modal modal--wide" id="offer" aria-labelledby="offer-title">
+  <header class="modal__header">
+    <span class="portrait portrait--sm" data-role="controller" data-race="human"></span>
+    <div>
+      <h2 class="modal__title" id="offer-title">Offer a contract to Lio Farrow</h2>
+      <div class="u-sm u-muted">Hexmonger (Controller) · Human 23 · rating 58 · potential 70 · Keen</div>
+    </div>
+    <button class="icon-btn modal__close" type="button" data-close aria-label="Close"><span class="icon" data-icon="close" aria-hidden="true"></span></button>
+  </header>
+  <div class="modal__body">
+    <div class="l-grid" style="--grid-gap:var(--sp-6)">
+      <div class="span-6 l-stack">
+        <div class="field">
+          <label class="field__label" for="o-wage">Wage per week</label>
+          <div class="l-row">
+            <button class="btn btn--icon btn--sm" type="button" aria-label="Minus 5"><span class="icon" data-icon="minus" aria-hidden="true"></span></button>
+            <input class="input u-num" id="o-wage" value="230" autofocus style="width:7rem;text-align:right">
+            <button class="btn btn--icon btn--sm" type="button" aria-label="Plus 5"><span class="icon" data-icon="plus" aria-hidden="true"></span></button>
+            <span class="u-sm u-muted">ts · asks <strong class="u-num">230</strong></span>
+          </div>
+          <span class="field__hint">Steps of 5 ts. Shift + arrow keys step by 25.</span>
+        </div>
+        <div class="field">
+          <span class="field__label">Length</span>
+          <div class="segmented" role="group" aria-label="Contract length">
+            <button type="button" aria-pressed="false">1 season</button><button type="button" aria-pressed="false">2 seasons</button><button type="button" aria-pressed="true">3 seasons</button>
+          </div>
+          <span class="field__hint">Ends in the season-end step of season 5. He asks for 3.</span>
+        </div>
+        <div class="field">
+          <span class="field__label">Lineup</span>
+          <label class="l-row u-sm"><input class="switch" type="checkbox" role="switch"><span>Add to this week's lineup draft (replacing Seren Ilvane)</span></label>
+        </div>
+      </div>
+      <div class="span-6 l-stack">
+        <div class="callout callout--good"><span class="icon" data-icon="check" aria-hidden="true"></span><div><div class="callout__title">Likely to accept</div><div class="callout__text">Keen, and the offer meets his ask. He answers at week processing; a better rival offer could still win him.</div></div></div>
+        <dl class="kv">
+          <div><dt>Signing cost (on acceptance)</dt><dd data-tip="10% of his market worth (46 weeks of wage), rounded down to 10. From content/default/economy.json.">1,050 ts</dd></div>
+          <div><dt>Balance after</dt><dd>10,790 ts</dd></div>
+          <div><dt>Roster after</dt><dd>12 / 12 <span class="tag tag--warn">full</span></dd></div>
+          <div><dt>Wages to season end</dt><dd data-tip="230 ts × 13 remaining weeks (MW7–MW16 and TW1–TW3)">2,990 ts</dd></div>
+        </dl>
+        <div class="l-stack l-stack--xs">
+          <div class="l-row u-sm"><span class="u-muted">Wage bill after</span><span class="l-push u-num"><strong>2,915</strong> <span class="u-muted">/ 2,960 ts</span></span></div>
+          <div class="meter" style="--v:.985" data-state="warn"><div class="meter__fill"></div><div class="meter__mark" style="--at:1"></div></div>
+          <span class="u-xs u-faint">98% of the wage budget · 45 ts/wk headroom left</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="modal__footer">
+    <span class="modal__footer-note">You can withdraw the offer until week processing. Once he signs, only a release (payout) ends the contract.</span>
+    <button class="btn btn--ghost" type="button" data-close>Cancel <kbd>Esc</kbd></button>
+    <button class="btn btn--primary" type="button" data-close="Offer sent to Lio Farrow" data-close-sub="230 ts/week for 3 seasons · he answers when you Continue" data-close-kind="good" data-undo>Send offer <kbd>Enter</kbd></button>
+  </footer>
+</dialog>
+
+<dialog class="modal modal--wide" id="compare" aria-labelledby="cmp-title">
+  <header class="modal__header">
+    <span class="icon icon--lg" data-icon="compare" aria-hidden="true"></span>
+    <h2 class="modal__title" id="cmp-title">Compare</h2>
+    <button class="icon-btn modal__close" type="button" data-close aria-label="Close"><span class="icon" data-icon="close" aria-hidden="true"></span></button>
+  </header>
+  <div class="modal__body">
+    <div class="compare" style="--cols:3">
+      <span></span>
+      <div class="compare__head compare__cell is-current"><span>Seren Ilvane</span><span class="u-xs u-muted">Rimebinder · yours</span></div>
+      <div class="compare__head compare__cell"><span>Lio Farrow</span><span class="u-xs u-muted">Hexmonger · free agent</span></div>
+      <div class="compare__head compare__cell"><span>Marga Flint</span><span class="u-xs u-muted">Rimebinder · free agent</span></div>
+      <span class="compare__label">Rating</span><span class="compare__cell is-current">55</span><span class="compare__cell">58</span><span class="compare__cell is-best">61</span>
+      <span class="compare__label">Potential</span><span class="compare__cell is-current">57</span><span class="compare__cell is-best">70</span><span class="compare__cell">62</span>
+      <span class="compare__label">Age</span><span class="compare__cell is-current">Elf 51</span><span class="compare__cell is-best">Human 23</span><span class="compare__cell">Dwarf 33</span>
+      <span class="compare__label">Composure</span><span class="compare__cell is-current">13</span><span class="compare__cell">12</span><span class="compare__cell is-best">15</span>
+      <span class="compare__label">Awareness</span><span class="compare__cell is-current">14</span><span class="compare__cell is-best">15</span><span class="compare__cell">12</span>
+      <span class="compare__label">Arcana</span><span class="compare__cell is-current">12</span><span class="compare__cell">13</span><span class="compare__cell is-best">14</span>
+      <span class="compare__label">Precision</span><span class="compare__cell is-current">11</span><span class="compare__cell is-best">13</span><span class="compare__cell">9</span>
+      <span class="compare__label">Wage / week</span><span class="compare__cell is-current">275</span><span class="compare__cell is-best">230</span><span class="compare__cell">270</span>
+      <span class="compare__label">Contract</span><span class="compare__cell is-current">to S4</span><span class="compare__cell">asks 3 seasons</span><span class="compare__cell">asks 2 seasons</span>
+      <span class="compare__label">Traits</span><span class="compare__cell is-current">1 + · 1 −</span><span class="compare__cell is-best">2 +</span><span class="compare__cell">2 + · 1 −</span>
+    </div>
+  </div>
+  <footer class="modal__footer">
+    <span class="modal__footer-note">▲ marks the best value in each row. Ages compare by race curve, not by number.</span>
+    <button class="btn" type="button" data-close>Close <kbd>Esc</kbd></button>
+    <button class="btn btn--primary" type="button" data-close data-open-modal="offer">Offer to Lio Farrow</button>
+  </footer>
+</dialog>
+
+<!-- ===== Shortcut sheet (? key) ===== -->
+<dialog class="modal" id="shortcuts" aria-labelledby="sc-title">
+  <header class="modal__header">
+    <span class="icon icon--lg" data-icon="keyboard" aria-hidden="true"></span>
+    <h2 class="modal__title" id="sc-title">Keyboard shortcuts</h2>
+    <button class="icon-btn modal__close" type="button" data-close aria-label="Close"><span class="icon" data-icon="close" aria-hidden="true"></span></button>
+  </header>
+  <div class="modal__body">
+    <dl class="shortcut-list">
+      <div><dt>Continue / Play match</dt><dd><kbd>Space</kbd></dd></div>
+      <div><dt>Home · Squad · Fixtures</dt><dd><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dd></div>
+      <div><dt>League · Market · Finances · Codex</dt><dd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd></dd></div>
+      <div><dt>Search anything</dt><dd><kbd>Ctrl</kbd><kbd>K</kbd></dd></div>
+      <div><dt>Back / close</dt><dd><kbd>Esc</kbd></dd></div>
+      <div><dt>Save</dt><dd><kbd>Ctrl</kbd><kbd>S</kbd></dd></div>
+      <div><dt>Undo last change</dt><dd><kbd>Ctrl</kbd><kbd>Z</kbd></dd></div>
+      <div><dt>Pin a tooltip</dt><dd><kbd>Shift</kbd></dd></div>
+      <div><dt>Move in a table</dt><dd><kbd>↑</kbd><kbd>↓</kbd></dd></div>
+      <div><dt>Open the selected row</dt><dd><kbd>Enter</kbd></dd></div>
+      <div><dt>Previous / next fighter</dt><dd><kbd>[</kbd><kbd>]</kbd></dd></div>
+      <div><dt>This sheet</dt><dd><kbd>?</kbd></dd></div>
+    </dl>
+  </div>
+  <footer class="modal__footer"><span class="modal__footer-note">Every shortcut can be rebound in Settings · Controls.</span><button class="btn" type="button" data-close>Close <kbd>Esc</kbd></button></footer>
+</dialog>
+
+<script src="mockups.js"></script>
+</body>
+</html>
