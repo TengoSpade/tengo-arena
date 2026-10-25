@@ -32,6 +32,8 @@ export interface FakeStoreOptions {
   saveError?: SaveError | null;
   loadError?: SaveError | null;
   seasonEndReport?: SeasonEndReport | null;
+  /** The report exists but finishSeason() has not run yet (lastSeasonEndReport starts null). */
+  seasonEndPending?: boolean;
 }
 
 export interface FakeStore extends GameStore {
@@ -46,7 +48,7 @@ export function createFakeStore(opts: FakeStoreOptions): FakeStore {
   const playerClubId = signal<ClubId | null>(opts.game?.playerClubId ?? null);
   const busy = signal(false);
   const lastError = signal<EngineError | SaveError | null>(null);
-  const lastSeasonEndReport = signal<SeasonEndReport | null>(opts.seasonEndReport ?? null);
+  const lastSeasonEndReport = signal<SeasonEndReport | null>(opts.seasonEndPending ? null : (opts.seasonEndReport ?? null));
   const commands: Command[] = [];
   const calls: { method: string; args: unknown[] }[] = [];
   let saves = [...(opts.saves ?? [])];
