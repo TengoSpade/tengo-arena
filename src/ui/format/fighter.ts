@@ -173,12 +173,13 @@ export function wageTip(f: Fighter, view: FighterView | null): string {
 
 export { formatInt };
 
+/** Why the former captain is not Snubbed (core SnubExemption). */
 const SNUB_SPARED: Record<string, string> = {
-  preseason: 'changed before matchweek 1',
-  injured: 'he is out injured for a while',
-  'final-season': 'it is his final season',
-  'made-vice': 'he becomes vice-captain',
-  'short-tenure': 'he held the armband only briefly',
+  preseason: 'the change is made before matchweek 1',
+  injured: 'the former captain is out injured for a while',
+  'final-season': 'it is the former captain’s final season',
+  'made-vice': 'the former captain becomes vice-captain',
+  'short-tenure': 'the former captain held the armband only briefly',
 };
 
 /**

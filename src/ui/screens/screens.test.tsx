@@ -169,6 +169,23 @@ describe('Home', () => {
     expect(screen.queryByTestId('next-fixture')).toBeNull();
   });
 
+  it('marks a digest item done through news.setRead and Undo makes it unread again', async () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    mount(<HomeScreen params={{}} />, store);
+    const done = within(screen.getByTestId('digest')).queryAllByRole('button', { name: 'Mark done' });
+    expect(done.length).toBeGreaterThan(0);
+    const unread = () => store.game.value!.news.filter((n) => !n.read).length;
+    const before = unread();
+    await act(() => {
+      fireEvent.click(done[0]!);
+    });
+    expect(unread()).toBeLessThan(before);
+    await act(() => {
+      undoLast();
+    });
+    expect(unread()).toBe(before);
+  });
+
   it('gives every number on the screen a tooltip (ux-004)', () => {
     const { store } = createTestStore({ weekIndex: 11 });
     const { container } = mount(<HomeScreen params={{}} />, store);
