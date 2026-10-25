@@ -131,6 +131,8 @@ describe('store: advance', () => {
     const { store, saves, clock } = createTestStore();
     for (let i = 0; i < 4; i++) {
       clock.advance(60_000);
+      // Integrator (WP5): with the real lifecycle an injury can block Continue; auto-pick like a player would.
+      if (store.blockers.value.length > 0) store.dispatch(coreEngine.suggestLineup(store.game.value!, store.playerClubId.value!, store.content.value!));
       const r = await store.advance();
       expect(r.ok).toBe(true);
     }
