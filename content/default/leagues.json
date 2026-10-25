@@ -1,0 +1,226 @@
+{
+  "_doc": "World and competition structure: regions, tiers, wings (conferences), regular-season schedule, standings, the season-ending tournament, promotion/relegation and the season calendar. Spec: docs/design/_drafts/03-league-economy.md (sys-league, sys-calendar, sys-tournament). Money values live in economy.json; clubs in clubs.json.",
+  "schemaVersion": 1,
+  "status": "PROPOSED · TUNABLE (league-economy designer, 2026-10-25). Structure answers open-014; not approved. Names are EXAMPLE default-theme content (T5).",
+
+  "regions": [
+    {
+      "id": "saltmarch",
+      "name": "Saltmarch",
+      "hostsLeagues": true,
+      "description": "Coastal free cities of salt pans, fens, chalk cliffs and smugglers' isles. Port Varrow hosts the Charter Registry and the Charterhall.",
+      "districts": [
+        { "id": "gullhaven", "name": "Gullhaven Shore", "description": "Harbours, ropewalks and shipyards around the capital, Port Varrow." },
+        { "id": "brinewold", "name": "The Brinewold", "description": "Glaring salt pans and boiling houses in the south-west." },
+        { "id": "reedmere", "name": "Reedmere Fens", "description": "Stilt towns, peat cuttings and eel weirs in the marshes." },
+        { "id": "chalkholm", "name": "Chalkholm Cliffs", "description": "White cliffs, beacon towers and gannet ledges." },
+        { "id": "tidewrack", "name": "Tidewrack Isles", "description": "Skerries, wreckers' coves and smugglers' steps." },
+        { "id": "amberstrand", "name": "Amberstrand", "description": "Amber beaches, dune glassworks and oyster beds on the eastern estuary." }
+      ]
+    },
+    {
+      "id": "emberreach",
+      "name": "Emberreach",
+      "hostsLeagues": false,
+      "hostsLeaguesFromMilestone": "M6",
+      "description": "The volcanic south. A talent pool only until M6 (open-027)."
+    },
+    {
+      "id": "thornwald",
+      "name": "Thornwald",
+      "hostsLeagues": false,
+      "hostsLeaguesFromMilestone": "M6",
+      "description": "The northern forests. A talent pool only until M6 (open-027)."
+    }
+  ],
+
+  "tiers": [
+    {
+      "id": "saltmarch-crown",
+      "regionId": "saltmarch",
+      "level": 1,
+      "name": "Crown Circuit",
+      "shortName": "Crown",
+      "clubCount": 16,
+      "rosterCap": 14,
+      "academyCapacity": 14,
+      "basePrestige": 70,
+      "ratingBand": { "min": 60, "max": 80 },
+      "tournamentName": "Crown Reckoning",
+      "shieldName": "Crown Shield",
+      "worldGenPotentialShift": 8
+    },
+    {
+      "id": "saltmarch-banner",
+      "regionId": "saltmarch",
+      "level": 2,
+      "name": "Banner Circuit",
+      "shortName": "Banner",
+      "clubCount": 16,
+      "rosterCap": 12,
+      "academyCapacity": 12,
+      "basePrestige": 45,
+      "ratingBand": { "min": 45, "max": 65 },
+      "tournamentName": "Banner Reckoning",
+      "shieldName": "Banner Shield",
+      "worldGenPotentialShift": 4
+    },
+    {
+      "id": "saltmarch-muster",
+      "regionId": "saltmarch",
+      "level": 3,
+      "name": "Muster Circuit",
+      "shortName": "Muster",
+      "clubCount": 16,
+      "rosterCap": 10,
+      "academyCapacity": 10,
+      "basePrestige": 20,
+      "ratingBand": { "min": 30, "max": 50 },
+      "tournamentName": "Muster Reckoning",
+      "shieldName": "Muster Shield",
+      "worldGenPotentialShift": 0
+    }
+  ],
+
+  "generationShifts": {
+    "_doc": "Potential shifts owned by league-economy and read by the lifecycle generator (development.json potential.qualityShiftExamples).",
+    "rookieIntake": 0,
+    "generatedFreeAgent": -3,
+    "worldGenFreeAgentsPerClub": "Resolved by D-C: 2.5 per club (120 at 48 clubs); the number lives in development.json generation.worldGen.freeAgentsPerClub"
+  },
+
+  "wings": {
+    "_doc": "Each tier splits into two wings of 8 clubs, redrawn every season by serpentine on the seed order (see regularSeason.seedOrder). Wing ids are shared by all tiers.",
+    "list": [
+      { "id": "dawn", "name": "Dawn Wing" },
+      { "id": "dusk", "name": "Dusk Wing" }
+    ],
+    "size": 8,
+    "serpentinePattern": ["dawn", "dusk", "dusk", "dawn"]
+  },
+
+  "regularSeason": {
+    "format": "two_wing_double_round_robin_plus_cross",
+    "matchesPerClub": 16,
+    "matchBestOf": 3,
+    "wingRounds": 14,
+    "wingRoundMatchweeks": [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16],
+    "crossWingMatchweeks": [5, 12],
+    "secondHalf": "mirror_first_half_venues_swapped",
+    "slotAssignment": "seeded_shuffle_per_wing (stream schedule, season, tier)",
+    "crossPairing": {
+      "_doc": "k = a club's index (0-7) in its wing by seed order. Cross week 1: dawn[k] v dusk[k]. Cross week 2: dawn[k] v dusk[7-k]. In odd seasons dawn hosts cross week 1 and dusk hosts cross week 2; even seasons swap.",
+      "week1": "same_k",
+      "week2": "mirrored_k"
+    },
+    "seedOrder": {
+      "_doc": "Order used for the serpentine wing draw and cross pairing. Season 1: by startPrestige (desc), ties by club id. Later seasons: clubs relegated from the tier above (by their final tier-table rank), then clubs that stayed (by final tier-table rank), then clubs promoted from below (Reckoning champion first, then the Shield route).",
+      "season1": "startPrestige_desc",
+      "later": ["relegatedFromAbove", "stayed", "promotedFromBelow"]
+    },
+    "byes": 0
+  },
+
+  "standings": {
+    "pointsByResult": { "2-0": 3, "2-1": 2, "1-2": 1, "0-2": 0 },
+    "tieBreakers": [
+      { "id": "points" },
+      { "id": "matchWins" },
+      { "id": "roundDifference" },
+      { "id": "headToHeadPoints", "onlyIfAllTiedClubsMetEquallyOften": true },
+      { "id": "roundsWon" },
+      { "id": "downsDifference" },
+      { "id": "lot", "stream": "schedule" }
+    ],
+    "restartOnSplit": "When a criterion separates part of a tied group, each remaining tied subgroup restarts from headToHeadPoints.",
+    "tables": {
+      "wing": "the 8 clubs of one wing; decides qualification and relegation",
+      "tier": "all 16 clubs; decides tournament seeding, the Shield, table prize money and promotion via the Shield route"
+    }
+  },
+
+  "tournament": {
+    "_doc": "Season-ending knockout of 8 clubs per tier (O9). Single matches, no replays.",
+    "qualifiersPerWing": 4,
+    "seeding": "wing winners are seeds 1-2 (ordered by the tier table); the other six qualifiers are seeds 3-8 (ordered by the tier table)",
+    "rounds": [
+      { "id": "quarterfinal", "week": "TW1", "bestOf": 3, "host": "higher_seed", "pairs": [[1, 8], [4, 5], [2, 7], [3, 6]] },
+      { "id": "semifinal", "week": "TW2", "bestOf": 3, "host": "higher_seed", "pairs": [["QF1", "QF2"], ["QF3", "QF4"]] },
+      { "id": "final", "week": "TW3", "bestOf": 5, "host": "neutral", "venueId": "charterhall", "homeSideForSim": "higher_seed" }
+    ]
+  },
+
+  "promotionRelegation": {
+    "_doc": "Applied between each adjacent pair of tiers at season end. Tier 1 has no promotion and the lowest tier has no relegation in M1.",
+    "relegatePerWing": 1,
+    "relegationPlace": "8th in its wing",
+    "promotionRoutes": [
+      { "id": "reckoning", "rule": "the lower tier's tournament champion" },
+      { "id": "shield", "rule": "the lower tier's tier-table #1; if it is also the champion, the next-highest club in that tier table" }
+    ],
+    "promotionPlayoff": { "enabled": false, "milestone": "FUTURE" }
+  },
+
+  "venues": [
+    { "id": "charterhall", "name": "The Charterhall", "city": "Port Varrow", "regionId": "saltmarch", "use": "neutral venue for every tournament final" }
+  ],
+
+  "calendar": {
+    "_doc": "One season = 23 played weeks plus the season-end step. Every Continue processes exactly one week. The free-agent market is open in every week.",
+    "weeks": [
+      { "index": 1, "id": "P1", "phase": "preseason", "label": "Trials Day" },
+      { "index": 2, "id": "P2", "phase": "preseason" },
+      { "index": 3, "id": "P3", "phase": "preseason" },
+      { "index": 4, "id": "P4", "phase": "preseason", "label": "Kick-off week", "commit": "kick_off" },
+      { "index": 5, "id": "MW1", "phase": "regular", "matchweek": 1 },
+      { "index": 6, "id": "MW2", "phase": "regular", "matchweek": 2 },
+      { "index": 7, "id": "MW3", "phase": "regular", "matchweek": 3 },
+      { "index": 8, "id": "MW4", "phase": "regular", "matchweek": 4 },
+      { "index": 9, "id": "MW5", "phase": "regular", "matchweek": 5, "fixtureKind": "cross_wing" },
+      { "index": 10, "id": "MW6", "phase": "regular", "matchweek": 6 },
+      { "index": 11, "id": "MW7", "phase": "regular", "matchweek": 7 },
+      { "index": 12, "id": "MW8", "phase": "regular", "matchweek": 8 },
+      { "index": 13, "id": "MW9", "phase": "regular", "matchweek": 9 },
+      { "index": 14, "id": "MW10", "phase": "regular", "matchweek": 10 },
+      { "index": 15, "id": "MW11", "phase": "regular", "matchweek": 11 },
+      { "index": 16, "id": "MW12", "phase": "regular", "matchweek": 12, "fixtureKind": "cross_wing" },
+      { "index": 17, "id": "MW13", "phase": "regular", "matchweek": 13 },
+      { "index": 18, "id": "MW14", "phase": "regular", "matchweek": 14 },
+      { "index": 19, "id": "MW15", "phase": "regular", "matchweek": 15 },
+      { "index": 20, "id": "MW16", "phase": "regular", "matchweek": 16 },
+      { "index": 21, "id": "TW1", "phase": "tournament", "round": "quarterfinal" },
+      { "index": 22, "id": "TW2", "phase": "tournament", "round": "semifinal" },
+      { "index": 23, "id": "TW3", "phase": "tournament", "round": "final" }
+    ],
+    "weekProcessingOrder": [
+      "simulate_remaining_fixtures",
+      "record_results_and_standings",
+      "lifecycle_weekly (injuries, XP, recovery)",
+      "finance_income",
+      "finance_costs",
+      "finance_status (watch, embargo, registry advance)",
+      "trials_rookies_to_pool (P1 only)",
+      "free_agent_decisions",
+      "ai_action_phase",
+      "free_agent_pool_floor_top_up",
+      "advance_calendar_digest_autosave"
+    ],
+    "seasonEndOrder": [
+      "tournament_complete_placings_fixed",
+      "prizes_and_patron_bonuses",
+      "promotion_relegation",
+      "prestige_update",
+      "academy_graduation (M5)",
+      "aging_and_development",
+      "retirements",
+      "contract_expiries",
+      "offseason_injury_recovery",
+      "knowledge_decay (M4)",
+      "patron_review (M6)",
+      "free_agent_pool_maintenance",
+      "next_season_setup (tiers, wings, fixtures, caps, drop clause, tier minimums, grants, parachutes, budgets, patron goals, trials rookies)",
+      "ai_action_phase (opening offers for P1)",
+      "autosave"
+    ]
+  }
+}

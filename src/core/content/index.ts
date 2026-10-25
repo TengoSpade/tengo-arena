@@ -1,49 +1,68 @@
 /**
- * core/content — public API (phase A placeholder; implemented in phase B).
+ * core/content — public API.
  *
- * Planned API (see README.md and docs/design 05 §4):
- *   loadContent(themeId, raw: RawContentFiles): Result<ContentDB, ContentIssue[]>
- *   hashContent(raw): string
- *   formatContentIssues(issues): string
+ *   loadContent(themeId, raw, { profile }) -> Result<ContentDB, ContentIssue[]>
+ *   parseContentFiles(raw)                 -> Result<ContentFiles, ContentIssue[]>
+ *   validateContentFiles(files, profile)   -> ContentIssue[]
+ *   hashContent(raw), formatContentIssues(issues)
+ *   units: secondsToTicks, metresToCm, metresToMm, mpsToMmPerTick, fractionToBp, mulBp
  *
- * Content types are inferred from zod schemas here (`z.infer<typeof ClassSchema>`),
- * so the schema is the single source of truth for both validation and types.
+ * Content types are inferred from the zod schemas in ./schema; closed
+ * vocabularies (statuses, effect types, rule vocabulary, ...) are exported
+ * as const lists.
  */
-import type { ContentRef } from '../model';
-
-/** The content files every theme must provide (content/<theme>/<name>.json). */
-export const CONTENT_FILE_NAMES = [
-  'combat',
-  'classes',
-  'abilities',
-  'tactics-presets',
-  'races',
-  'traits',
-  'names',
-  'development',
-  'leagues',
-  'clubs',
-  'economy',
-] as const;
-
-export type ContentFileName = (typeof CONTENT_FILE_NAMES)[number];
-
-/** Parsed-but-unvalidated JSON per file, as read by a platform loader (Vite glob in the browser, fs in Node). */
-export type RawContentFiles = Partial<Record<ContentFileName, unknown>>;
-
-/** One validation problem, precise enough for a designer to fix without reading code. */
-export interface ContentIssue {
-  file: ContentFileName | string;
-  /** JSON path inside the file, e.g. "classes[12].abilities[1]". */
-  path: string;
-  message: string;
-  severity: 'error' | 'warning';
-}
-
-/**
- * Validated, indexed content. PLACEHOLDER: phase B replaces this with typed
- * registries (classes, abilities, races, ...) inferred from the schemas.
- */
-export interface ContentDB {
-  readonly ref: ContentRef;
-}
+export { loadContent, parseContentFiles, hashContent, CONTENT_FILE_NAMES } from './load';
+export type { RawContentFiles, LoadContentOptions } from './load';
+export { validateContentFiles, THEME_RULES } from './validate';
+export type { ValidationProfile } from './validate';
+export { formatContentIssues } from './issues';
+export type { ContentIssue } from './issues';
+export { buildContentDB, createRegistry } from './db';
+export type { ContentDB, Registry } from './db';
+export * from './types';
+export {
+  TICKS_PER_SECOND,
+  BP,
+  secondsToTicks,
+  secondsToMs,
+  metresToCm,
+  metresToMm,
+  mpsToMmPerTick,
+  fractionToBp,
+  mulBp,
+  isExact,
+} from './units';
+export {
+  CONTENT_SCHEMAS,
+  STAT_IDS,
+  PHYSICAL_STAT_IDS,
+  MENTAL_STAT_IDS,
+  ARCHETYPE_IDS,
+  ROLE_FAMILIES,
+  HYBRID_PAIR_IDS,
+  AFFINITY_GROUPS,
+  BANDS,
+  STARTING_ROWS,
+  STANCES,
+  ABILITY_SLOTS,
+  DAMAGE_TYPES,
+  STATUS_IDS,
+  STATUS_CATEGORIES,
+  STAT_MOD_STATS,
+  EFFECT_TYPES,
+  EFFECT_PREDICATES,
+  TRIGGER_EVENTS,
+  AMOUNT_STATS,
+  RULE_CONDITIONS,
+  RULE_SELECTORS,
+  RULE_PREDICATES,
+  RULE_ACTIONS,
+  TRAIT_CATEGORIES,
+  TRAIT_EFFECT_TYPES,
+  INJURY_SEVERITIES,
+  TRAINING_EMPHASES,
+  LIFECYCLE_STATUS_IDS,
+  TOURNAMENT_ROUNDS,
+  STANDINGS_TIEBREAKERS,
+  ROUND_TIEBREAKS,
+} from './schema';

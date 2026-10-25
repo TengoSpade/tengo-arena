@@ -1,6 +1,6 @@
 # core/game
 
-**Owner:** game/integration agent (M1 wave 2). **Status:** not started.
+**Owner:** WP5 (game loop, integrator). **Status:** contract stubs in `index.ts` (phase B). The public API in `index.ts` is a fixed contract (typed stubs); implement the bodies, add exports only additively, and request signature changes from the architect.
 
 ## Responsibility
 The season state machine and the only entry points that change `GameState`:

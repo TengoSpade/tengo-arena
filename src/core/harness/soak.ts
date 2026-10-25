@@ -1,17 +1,20 @@
+import type { ContentDB } from '../content';
 import { type Seed } from '../rng';
 
 /**
  * Headless season soak: N seasons with AI managing every club, checking
  * economy, age and league sanity invariants after every week and season.
  *
- * PHASE A STUB. The report shape and CLI (`npm run soak`) are fixed; the
- * checks report "pending" until core/game can run seasons. The game agent
- * implements the loop with createWorld/advanceWeek/runSeasonEnd and the
- * checks listed in SOAK_CHECKS (docs/design 05 §10).
+ * Owner: WP5. CONTRACT: options and report shape fixed (additive changes
+ * allowed). STUB until core/game lands: every check reports "pending". WP5
+ * implements the loop with createWorld / AI for every club / advanceWeek /
+ * runSeasonEnd and the checks in SOAK_CHECKS, using the pass bands in
+ * development.json soakTargets and economy.json balanceTargets.
  */
 export interface SoakOptions {
   seed: Seed;
   seasons: number;
+  content: ContentDB;
 }
 
 export type SoakCheckStatus = 'pass' | 'fail' | 'pending';
@@ -27,6 +30,7 @@ export interface SoakReport {
   kind: 'soak';
   stub: boolean;
   seed: Seed;
+  contentHash: string;
   seasonsRequested: number;
   seasonsCompleted: number;
   checks: SoakCheck[];
@@ -54,6 +58,7 @@ export function runSoak(options: SoakOptions): SoakReport {
     kind: 'soak',
     stub: true,
     seed,
+    contentHash: options.content.ref.hash,
     seasonsRequested: seasons,
     seasonsCompleted: 0,
     checks: SOAK_CHECKS.map((c) => ({ ...c, status: 'pending' as const, detail: 'season engine not implemented yet' })),

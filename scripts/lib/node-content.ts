@@ -37,16 +37,3 @@ export function loadRawContentFromDisk(themeId = 'default'): NodeContentResult {
   }
   return { themeId, dir, raw, missing, errors };
 }
-
-/**
- * Best-effort list of class ids from raw classes.json (array of {id} or
- * {classes: [{id}]}) until core/content provides the validated registry.
- */
-export function classIdsFromRaw(raw: RawContentFiles): string[] {
-  const value = raw.classes;
-  const list: unknown = Array.isArray(value) ? value : (value as { classes?: unknown } | undefined)?.classes;
-  if (!Array.isArray(list)) return [];
-  return list
-    .map((entry: unknown) => (entry && typeof entry === 'object' ? (entry as { id?: unknown }).id : undefined))
-    .filter((id): id is string => typeof id === 'string');
-}

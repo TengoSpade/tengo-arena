@@ -76,6 +76,14 @@ describe('architecture: the checker catches violations (guards against a vacuous
     expect(rulesOf('src/core/sim/a.ts', `interface X { process: number; window(): void }`)).toEqual([]);
   });
 
+  it('keeps core/testkit out of production code', () => {
+    expect(rulesOf('src/core/sim/a.ts', `import { fixtureContent } from '../testkit';`)).toEqual(['testkit-in-production']);
+    expect(rulesOf('src/core/sim/a.test.ts', `import { fixtureContent } from '../testkit';`)).toEqual([]);
+    expect(rulesOf('src/ui/screens/squad/index.tsx', `import { x } from '../../../core/testkit';`)).toEqual(['testkit-in-production']);
+    expect(rulesOf('src/ui/screens/squad/squad.test.tsx', `import { x } from '../../../core/testkit';`)).toEqual([]);
+    expect(rulesOf('src/ui/debug/fixture-world.ts', `const m = await import('../../core/testkit');`)).toEqual([]);
+  });
+
   it('flags deep imports and forbidden directions outside core', () => {
     expect(rulesOf('src/ui/screens/squad/Squad.tsx', `import { x } from '../../../core/sim/engine';`)).toEqual(['deep-import']);
     expect(rulesOf('src/ui/screens/squad/Squad.tsx', `import { x } from '../../../core/sim';`)).toEqual([]);

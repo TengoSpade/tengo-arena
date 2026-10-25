@@ -5,13 +5,13 @@ HTML/CSS screens over the pure core. The UI **reads** `GameState` and **dispatch
 | Folder | Owner (M1) | Purpose |
 | --- | --- | --- |
 | `styles/` | **UI designer** (do not edit) | `tokens.css`, `base.css`, `components.css`: BEM classes, tokens, themes |
-| `app/` | UI foundation agent | app frame (topbar, sidenav, main), hash router, error boundary, keyboard shortcuts |
-| `store/` | UI foundation agent | signals store: current GameState, ContentDB, dispatch, advance, autosave, busy flag |
-| `components/` | UI foundation agent | reusable Preact components wrapping the designer's classes (DataTable, Panel, StatBar, Modal, Toast, Tabs, FighterName, Money, ...) |
-| `screens/` | UI screen agents A and B | one folder per screen (see docs/design 05 §9 for the split) |
-| `format/` | UI foundation agent | number, money, age, date formatting (locale APIs are allowed here, not in core) |
-| `text/` | UI foundation agent | UI copy table (`t(key)`); theme names come from content |
-| `debug/` | UI foundation agent | debug overlay (backtick key or `?debug=1`) and state dump |
+| `app/` | WP6 | app frame (topbar, sidenav, main), hash router, error boundary, keyboard shortcuts |
+| `store/` | WP6 | signals store: current GameState, ContentDB, dispatch, advance, autosave, busy flag |
+| `components/` | WP6 | reusable Preact components wrapping the designer's classes (DataTable, Panel, StatBar, Modal, Toast, Tabs, FighterName, Money, ...) |
+| `screens/` | WP6 and WP7 (see screens/README.md) | one folder per screen (see docs/design 05 §9 for the split) |
+| `format/` | WP6 | number, money, age, date formatting (locale APIs are allowed here, not in core) |
+| `text/` | WP6 (screens keep their own text.ts) | UI copy table (`t(key)`); theme names come from content |
+| `debug/` | WP6 (may load core/testkit fixtures in dev builds) | debug overlay (backtick key or `?debug=1`) and state dump |
 
 Rules:
 - Import core through module indexes only (`../../core/game`, never `../../core/game/pipeline`). Enforced by tests/architecture.

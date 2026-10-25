@@ -30,12 +30,19 @@ export const CORE_MODULE_DEPS: Readonly<Record<string, readonly string[]>> = {
   sim: ['util', 'rng', 'model', 'content', 'tactics'],
   fighters: ['util', 'rng', 'model', 'content'],
   league: ['util', 'rng', 'model', 'content'],
-  economy: ['util', 'rng', 'model', 'content'],
+  economy: ['util', 'rng', 'model', 'content', 'fighters'],
   ai: ['util', 'rng', 'model', 'content', 'tactics', 'fighters', 'league', 'economy'],
   save: ['util', 'rng', 'model', 'content'],
   game: ['util', 'rng', 'model', 'content', 'tactics', 'sim', 'fighters', 'league', 'economy', 'ai'],
   harness: ['util', 'rng', 'model', 'content', 'tactics', 'sim', 'fighters', 'league', 'economy', 'ai', 'game', 'save'],
+  /** Test fixtures; importable only from test files (see TESTKIT rule). */
+  testkit: ['util', 'rng', 'model', 'content'],
 };
+
+/** Fixture module, importable only by test files. */
+export const TESTKIT = 'testkit';
+/** Dev-only UI tooling may load fixtures (behind import.meta.env.DEV, via dynamic import). */
+export const TESTKIT_DEV_DIR = 'src/ui/debug/';
 
 /** npm packages core code may import. */
 export const CORE_ALLOWED_PACKAGES: readonly string[] = ['zod'];
@@ -253,6 +260,11 @@ export function checkSource(relPath: string, text: string): Violation[] {
         continue;
       }
       if (target.coreModule === self) continue;
+      if (target.coreModule === TESTKIT) {
+        if (!isTest) add(node, 'testkit-in-production', 'core/testkit may only be imported from test files');
+        else if (!target.isIndex) add(node, 'deep-import', `import core/testkit through its index.ts, not "${spec}"`);
+        continue;
+      }
       const deps = CORE_MODULE_DEPS[self];
       if (!deps) {
         add(node, 'core-unknown-module', `module "${self}" is not registered in CORE_MODULE_DEPS`);
@@ -274,6 +286,9 @@ export function checkSource(relPath: string, text: string): Violation[] {
         continue;
       }
       const target = resolveTarget(relPath, spec);
+      if (target.coreModule === TESTKIT && !isTest && !relPath.startsWith(TESTKIT_DEV_DIR)) {
+        add(node, 'testkit-in-production', `core/testkit may only be imported from test files and ${TESTKIT_DEV_DIR} (dev tooling)`);
+      }
       if (target.coreModule !== null) {
         if (!target.isIndex) add(node, 'deep-import', `import core/${target.coreModule} through its index.ts, not "${spec}"`);
         if (area.kind === 'render' && !RENDER_ALLOWED_CORE.includes(target.coreModule)) {

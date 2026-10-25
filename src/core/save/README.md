@@ -1,6 +1,6 @@
 # core/save
 
-**Owner:** save/platform agent (M1). **Status:** not started. Envelope types are in `core/model/save.ts`.
+**Owner:** WP5 (game loop). **Status:** contract stubs in `index.ts` (phase B; `checksumState` implemented). The public API in `index.ts` is a fixed contract (typed stubs); implement the bodies, add exports only additively, and request signature changes from the architect.
 
 ## Responsibility
 - Build a `SaveEnvelope` (format, schemaVersion, engineVersion, content ref, meta, checksum, state).

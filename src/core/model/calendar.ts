@@ -1,30 +1,35 @@
+import type { WeekId } from './ids';
+
 /**
- * Season calendar. The season engine (core/game) is the only writer.
+ * Season calendar. core/game is the only writer.
  *
- * `week` is a 1-based index over ALL weeks of the season in order:
- * preseason weeks, then regular-season matchweeks, then tournament weeks
- * (EXAMPLE with the open-005 working assumption: weeks 1-4 = preseason
- * P1-P4, 5-21 = matchweeks 1-17 incl. one bye, 22-24 = tournament rounds).
- * The week layout comes from content (leagues.json) via core/league, which
- * also maps a season week to its display label ("P2", "Matchweek 3", "Final").
+ * A season is one in-game year (O3) of W played weeks from leagues.json
+ * (default 23: P1-P4 preseason, MW1-MW16 regular, TW1-TW3 tournament) plus
+ * the season-end step, which is not a week (03-league-economy sys-calendar).
  *
- * Phase order per season (REQUIRED, 02 §3 and docs/design 05 §6):
- *   preseason -> regular -> tournament -> season-end -> next season's preseason
+ * `weekIndex` is the 1-based index of the week the player is managing now
+ * (the next one to be processed). After the last week is processed the phase
+ * becomes 'season-end' and weekIndex is W + 1 (weekId null) until
+ * runSeasonEnd starts the next season at week 1.
+ *
+ * Phase order (REQUIRED, 02 §3): preseason -> regular -> tournament -> season-end.
  */
 export type SeasonPhase = 'preseason' | 'regular' | 'tournament' | 'season-end';
 
 export const SEASON_PHASES: readonly SeasonPhase[] = ['preseason', 'regular', 'tournament', 'season-end'];
 
 export interface Calendar {
-  /** 1-based season number. A season is one in-game year (O3). */
+  /** 1-based season number. */
   season: number;
-  /** 1-based season week (see file comment): the week the player is currently managing. */
-  week: number;
+  /** 1-based week index (see above). */
+  weekIndex: number;
+  /** leagues.json week id of weekIndex, null during 'season-end'. */
+  weekId: WeekId | null;
   phase: SeasonPhase;
 }
 
-/** Point in game time used to stamp records (news, ledger, history). */
+/** Point in game time used to stamp records (news, ledger, history, statuses). */
 export interface GameTime {
   readonly season: number;
-  readonly week: number;
+  readonly weekIndex: number;
 }

@@ -1,0 +1,7807 @@
+{
+  "_doc": "Tactics vocabulary and per-class presets (sys-tactics). Rule: IF <cond> [AND <cond>] THEN <action> ON <selector> [ONLY <pred> | PREFER <pred>] [COOLDOWN s]. First valid rule wins; the stance is the unremovable fallback.",
+  "schemaVersion": 1,
+  "status": "DRAFT 2026-10-25 (combat designer). PROPOSED · TUNABLE values; spec docs/design/_drafts/03-combat.md.",
+  "limits": {
+    "maxRules": 8,
+    "maxConditionsPerRule": 2,
+    "onlyOrPreferPerRule": 1,
+    "thresholdStepPct": 10,
+    "m1RulesPerPreset": {
+      "min": 2,
+      "max": 4
+    }
+  },
+  "vocabulary": {
+    "conditions": [
+      {
+        "id": "always",
+        "group": "basic",
+        "label": "Always",
+        "params": [],
+        "starter": true,
+        "description": "Always true. Use as the last rule of a list or for abilities gated only by cooldown and focus."
+      },
+      {
+        "id": "self_hp_below",
+        "group": "self",
+        "label": "My HP is below {pct}%",
+        "params": [
+          {
+            "name": "pct",
+            "type": "int",
+            "min": 10,
+            "max": 90,
+            "step": 10,
+            "default": 50
+          }
+        ],
+        "starter": true,
+        "description": "Own HP fraction is strictly below the threshold."
+      },
+      {
+        "id": "ally_hp_below",
+        "group": "ally",
+        "label": "An ally is below {pct}% HP",
+        "params": [
+          {
+            "name": "pct",
+            "type": "int",
+            "min": 10,
+            "max": 90,
+            "step": 10,
+            "default": 50
+          },
+          {
+            "name": "includeSelf",
+            "type": "bool",
+            "default": false
+          }
+        ],
+        "starter": true,
+        "description": "At least one standing ally (optionally including me) is strictly below the threshold."
+      },
+      {
+        "id": "allies_hp_below",
+        "group": "ally",
+        "label": "At least {count} allies are below {pct}% HP [within {band} of me]",
+        "params": [
+          {
+            "name": "pct",
+            "type": "int",
+            "min": 10,
+            "max": 90,
+            "step": 10,
+            "default": 50
+          },
+          {
+            "name": "count",
+            "type": "int",
+            "min": 1,
+            "max": 5,
+            "step": 1,
+            "default": 2
+          },
+          {
+            "name": "band",
+            "type": "band",
+            "default": "close",
+            "optional": true
+          }
+        ],
+        "starter": true,
+        "description": "Counts standing allies including me. With a band, only allies within that gap of me count."
+      },
+      {
+        "id": "enemy_hp_below",
+        "group": "enemy",
+        "label": "An enemy is below {pct}% HP [within {band}]",
+        "params": [
+          {
+            "name": "pct",
+            "type": "int",
+            "min": 10,
+            "max": 90,
+            "step": 10,
+            "default": 50
+          },
+          {
+            "name": "band",
+            "type": "band",
+            "default": "long",
+            "optional": true
+          }
+        ],
+        "starter": true,
+        "description": "At least one standing, targetable enemy is strictly below the threshold."
+      },
+      {
+        "id": "enemy_within",
+        "group": "enemy",
+        "label": "An enemy is within {band} range",
+        "params": [
+          {
+            "name": "band",
+            "type": "band",
+            "default": "close",
+            "optional": false
+          }
+        ],
+        "starter": true,
+        "description": "Gap from me to the nearest targetable enemy is at or below the band."
+      },
+      {
+        "id": "enemies_within",
+        "group": "enemy",
+        "label": "At least {count} enemies are within {band} range",
+        "params": [
+          {
+            "name": "count",
+            "type": "int",
+            "min": 1,
+            "max": 5,
+            "step": 1,
+            "default": 2
+          },
+          {
+            "name": "band",
+            "type": "band",
+            "default": "close",
+            "optional": false
+          }
+        ],
+        "starter": true,
+        "description": "Surrounded test."
+      },
+      {
+        "id": "enemies_clustered",
+        "group": "enemy",
+        "label": "{count}+ enemies are bunched within {radiusM} m",
+        "params": [
+          {
+            "name": "count",
+            "type": "int",
+            "min": 1,
+            "max": 5,
+            "step": 1,
+            "default": 2
+          },
+          {
+            "name": "radiusM",
+            "type": "metres",
+            "min": 1.5,
+            "max": 4,
+            "step": 0.5,
+            "default": 2.5
+          }
+        ],
+        "starter": true,
+        "description": "Some targetable enemy has at least count-1 other enemies whose centres are within radius of its centre."
+      },
+      {
+        "id": "allies_clustered",
+        "group": "ally",
+        "label": "{count}+ allies are bunched within {radiusM} m",
+        "params": [
+          {
+            "name": "count",
+            "type": "int",
+            "min": 1,
+            "max": 5,
+            "step": 1,
+            "default": 3
+          },
+          {
+            "name": "radiusM",
+            "type": "metres",
+            "min": 1.5,
+            "max": 4,
+            "step": 0.5,
+            "default": 4
+          }
+        ],
+        "starter": false,
+        "description": "As enemies_clustered, for standing allies including me."
+      },
+      {
+        "id": "self_targeted",
+        "group": "self",
+        "label": "At least {count} enemies are targeting me",
+        "params": [
+          {
+            "name": "count",
+            "type": "int",
+            "min": 1,
+            "max": 5,
+            "step": 1,
+            "default": 1
+          }
+        ],
+        "starter": true,
+        "description": "Counts enemies whose current target is me."
+      },
+      {
+        "id": "ally_targeted",
+        "group": "ally",
+        "label": "An ally [{role}] is targeted by {count}+ enemies",
+        "params": [
+          {
+            "name": "count",
+            "type": "int",
+            "min": 1,
+            "max": 5,
+            "step": 1,
+            "default": 1
+          },
+          {
+            "name": "role",
+            "type": "role",
+            "default": "healer",
+            "optional": true
+          }
+        ],
+        "starter": true,
+        "description": "Some standing ally other than me (of that role, if given) is the current target of at least count enemies."
+      },
+      {
+        "id": "enemy_casting",
+        "group": "enemy",
+        "label": "An enemy within {band} range is casting",
+        "params": [
+          {
+            "name": "band",
+            "type": "band",
+            "default": "long",
+            "optional": false
+          }
+        ],
+        "starter": true,
+        "description": "A targetable enemy within the band is in an ability windup of at least 0.3 s, or channelling."
+      },
+      {
+        "id": "self_has_status",
+        "group": "self",
+        "label": "I have {status|category}",
+        "params": [
+          {
+            "name": "status",
+            "type": "status",
+            "optional": true,
+            "note": "status id; exactly one of status or category"
+          },
+          {
+            "name": "category",
+            "type": "statusCategory",
+            "optional": true
+          }
+        ],
+        "starter": false,
+        "description": "Status test on me."
+      },
+      {
+        "id": "ally_has_status",
+        "group": "ally",
+        "label": "An ally has {status|category}",
+        "params": [
+          {
+            "name": "status",
+            "type": "status",
+            "optional": true,
+            "note": "status id; exactly one of status or category"
+          },
+          {
+            "name": "category",
+            "type": "statusCategory",
+            "optional": true
+          }
+        ],
+        "starter": true,
+        "description": "Some standing ally (including me) has the status or a status of the category."
+      },
+      {
+        "id": "enemy_has_status",
+        "group": "enemy",
+        "label": "An enemy has {status|category} [within {band}]",
+        "params": [
+          {
+            "name": "status",
+            "type": "status",
+            "optional": true,
+            "note": "status id; exactly one of status or category"
+          },
+          {
+            "name": "category",
+            "type": "statusCategory",
+            "optional": true
+          },
+          {
+            "name": "band",
+            "type": "band",
+            "default": "long",
+            "optional": true
+          }
+        ],
+        "starter": true,
+        "description": "Some targetable enemy has the status or category."
+      },
+      {
+        "id": "fight_time_below",
+        "group": "basic",
+        "label": "In the first {seconds} s of the round",
+        "params": [
+          {
+            "name": "seconds",
+            "type": "int",
+            "min": 1,
+            "max": 30,
+            "step": 1,
+            "default": 5
+          }
+        ],
+        "starter": true,
+        "description": "Fight time strictly below the value."
+      },
+      {
+        "id": "focus_at_least",
+        "group": "self",
+        "label": "My focus is at least {amount}",
+        "params": [
+          {
+            "name": "amount",
+            "type": "int",
+            "min": 10,
+            "max": 100,
+            "step": 10,
+            "default": 60
+          }
+        ],
+        "starter": true,
+        "description": "Own focus at or above the amount."
+      },
+      {
+        "id": "outnumbered",
+        "group": "basic",
+        "label": "We have fewer fighters standing",
+        "params": [],
+        "starter": true,
+        "description": "Standing allies (including me) fewer than standing enemies."
+      },
+      {
+        "id": "allies_down",
+        "group": "ally",
+        "label": "At least {count} allies are down",
+        "params": [
+          {
+            "name": "count",
+            "type": "int",
+            "min": 1,
+            "max": 4,
+            "step": 1,
+            "default": 1
+          }
+        ],
+        "starter": false,
+        "description": "Counts downed allies this round."
+      },
+      {
+        "id": "enemy_role_within",
+        "group": "enemy",
+        "label": "An enemy {role} is within {band} range",
+        "params": [
+          {
+            "name": "role",
+            "type": "role",
+            "default": "healer",
+            "optional": false
+          },
+          {
+            "name": "band",
+            "type": "band",
+            "default": "mid",
+            "optional": false
+          }
+        ],
+        "starter": false,
+        "description": "Role-based threat test (hybrids match both roles)."
+      },
+      {
+        "id": "captain_alive",
+        "group": "basic",
+        "label": "Our captain is standing",
+        "params": [],
+        "starter": true,
+        "description": "The acting captain (captain or, after handover, vice-captain) is standing."
+      }
+    ],
+    "selectors": [
+      {
+        "id": "self",
+        "pool": "self",
+        "sort": null,
+        "label": "myself",
+        "params": [],
+        "starter": true
+      },
+      {
+        "id": "nearest_enemy",
+        "pool": "enemies",
+        "sort": "gap_asc",
+        "label": "the nearest enemy",
+        "params": [],
+        "starter": true
+      },
+      {
+        "id": "furthest_enemy",
+        "pool": "enemies",
+        "sort": "gap_desc",
+        "label": "the furthest enemy",
+        "params": [],
+        "starter": true
+      },
+      {
+        "id": "lowest_hp_enemy",
+        "pool": "enemies",
+        "sort": "hp_pct_asc",
+        "label": "the lowest-HP enemy",
+        "params": [],
+        "starter": true
+      },
+      {
+        "id": "top_damage_enemy",
+        "pool": "enemies",
+        "sort": "damage_dealt_desc",
+        "label": "the enemy who has dealt the most damage",
+        "params": [],
+        "starter": true
+      },
+      {
+        "id": "enemy_targeting_me",
+        "pool": "enemies",
+        "sort": "gap_asc",
+        "filter": "targeting_me",
+        "label": "the nearest enemy attacking me",
+        "params": [],
+        "starter": true
+      },
+      {
+        "id": "enemy_targeting_ally",
+        "pool": "enemies",
+        "sort": "victim_hp_pct_asc",
+        "filter": "targeting_an_ally",
+        "label": "the enemy attacking our weakest [{role}] ally",
+        "params": [
+          {
+            "name": "role",
+            "type": "role",
+            "default": "healer",
+            "optional": true
+          }
+        ],
+        "starter": true
+      },
+      {
+        "id": "casting_enemy",
+        "pool": "enemies",
+        "sort": "gap_asc",
+        "filter": "casting",
+        "label": "the nearest casting enemy",
+        "params": [],
+        "starter": true
+      },
+      {
+        "id": "densest_enemy",
+        "pool": "enemies",
+        "sort": "neighbours_desc",
+        "label": "the enemy at the centre of the biggest group",
+        "params": [
+          {
+            "name": "radiusM",
+            "type": "metres",
+            "min": 1.5,
+            "max": 4,
+            "step": 0.5,
+            "default": 2.5
+          }
+        ],
+        "starter": true
+      },
+      {
+        "id": "captain_target",
+        "pool": "enemies",
+        "sort": null,
+        "label": "our captain's target",
+        "params": [],
+        "starter": true
+      },
+      {
+        "id": "marked_enemy",
+        "pool": "enemies",
+        "sort": "gap_asc",
+        "filter": "marked",
+        "label": "the nearest marked enemy",
+        "params": [],
+        "starter": false
+      },
+      {
+        "id": "enemy_role",
+        "pool": "enemies",
+        "sort": "gap_asc",
+        "filter": "role",
+        "label": "the nearest enemy {role}",
+        "params": [
+          {
+            "name": "role",
+            "type": "role",
+            "default": "healer",
+            "optional": false
+          }
+        ],
+        "starter": true
+      },
+      {
+        "id": "lowest_hp_ally",
+        "pool": "allies",
+        "sort": "hp_pct_asc",
+        "label": "the lowest-HP ally",
+        "params": [
+          {
+            "name": "includeSelf",
+            "type": "bool",
+            "default": true
+          },
+          {
+            "name": "withinM",
+            "type": "metres",
+            "optional": true
+          }
+        ],
+        "starter": true
+      },
+      {
+        "id": "most_targeted_ally",
+        "pool": "allies",
+        "sort": "attackers_desc",
+        "label": "the ally under most attack",
+        "params": [
+          {
+            "name": "includeSelf",
+            "type": "bool",
+            "default": false
+          }
+        ],
+        "starter": true
+      },
+      {
+        "id": "ally_role",
+        "pool": "allies",
+        "sort": "gap_asc",
+        "filter": "role",
+        "label": "our {role}",
+        "params": [
+          {
+            "name": "role",
+            "type": "role",
+            "default": "healer",
+            "optional": false
+          }
+        ],
+        "starter": true
+      },
+      {
+        "id": "densest_ally",
+        "pool": "allies",
+        "sort": "neighbours_desc",
+        "label": "the ally at the centre of our biggest group",
+        "params": [
+          {
+            "name": "radiusM",
+            "type": "metres",
+            "min": 1.5,
+            "max": 4,
+            "step": 0.5,
+            "default": 4
+          }
+        ],
+        "starter": true
+      },
+      {
+        "id": "captain",
+        "pool": "allies",
+        "sort": null,
+        "label": "our captain",
+        "params": [],
+        "starter": false
+      },
+      {
+        "id": "current_target",
+        "pool": "enemies",
+        "sort": null,
+        "label": "my current target",
+        "params": [],
+        "starter": true
+      }
+    ],
+    "predicates": [
+      {
+        "id": "in_range",
+        "label": "in range now",
+        "params": [],
+        "description": "Gap to the target is at or below the action's range (no approach)."
+      },
+      {
+        "id": "within",
+        "label": "within {band}",
+        "params": [
+          {
+            "name": "band",
+            "type": "band",
+            "default": "close",
+            "optional": false
+          }
+        ],
+        "description": "Gap from me to the target is at or below the band."
+      },
+      {
+        "id": "hp_below",
+        "label": "below {pct}% HP",
+        "params": [
+          {
+            "name": "pct",
+            "type": "int",
+            "min": 10,
+            "max": 90,
+            "step": 10,
+            "default": 50
+          }
+        ]
+      },
+      {
+        "id": "hp_above",
+        "label": "above {pct}% HP",
+        "params": [
+          {
+            "name": "pct",
+            "type": "int",
+            "min": 10,
+            "max": 90,
+            "step": 10,
+            "default": 50
+          }
+        ]
+      },
+      {
+        "id": "has_status",
+        "label": "has {status|category} [x{minStacks}]",
+        "params": [
+          {
+            "name": "status",
+            "type": "status",
+            "optional": true,
+            "note": "status id; exactly one of status or category"
+          },
+          {
+            "name": "category",
+            "type": "statusCategory",
+            "optional": true
+          },
+          {
+            "name": "minStacks",
+            "type": "int",
+            "min": 1,
+            "max": 5,
+            "default": 1,
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "lacks_status",
+        "label": "lacks {status|category}",
+        "params": [
+          {
+            "name": "status",
+            "type": "status",
+            "optional": true,
+            "note": "status id; exactly one of status or category"
+          },
+          {
+            "name": "category",
+            "type": "statusCategory",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "has_buff",
+        "label": "has a buff or shield",
+        "params": []
+      },
+      {
+        "id": "role",
+        "label": "is a {role}",
+        "params": [
+          {
+            "name": "role",
+            "type": "role",
+            "default": "healer",
+            "optional": false
+          }
+        ]
+      },
+      {
+        "id": "not_role",
+        "label": "is not a {role}",
+        "params": [
+          {
+            "name": "role",
+            "type": "role",
+            "default": "healer",
+            "optional": false
+          }
+        ]
+      },
+      {
+        "id": "not_targeted_by_ally",
+        "label": "not attacked by any ally",
+        "params": []
+      },
+      {
+        "id": "targeting_me",
+        "label": "attacking me",
+        "params": []
+      },
+      {
+        "id": "not_self",
+        "label": "not me",
+        "params": []
+      }
+    ],
+    "actions": [
+      {
+        "id": "attack",
+        "label": "Attack",
+        "params": [],
+        "targetPool": "enemies",
+        "starter": true,
+        "description": "Basic-attack the target, moving into range first."
+      },
+      {
+        "id": "ability",
+        "label": "Use {slot}",
+        "params": [
+          {
+            "name": "slot",
+            "type": "slot",
+            "values": [
+              "a1",
+              "a2"
+            ]
+          }
+        ],
+        "targetPool": "ability",
+        "starter": true,
+        "description": "Use the ability in that slot on the target. The pool must match the ability's target type."
+      },
+      {
+        "id": "kite",
+        "label": "Keep away ({band})",
+        "params": [
+          {
+            "name": "band",
+            "type": "band",
+            "default": "close",
+            "optional": false
+          }
+        ],
+        "targetPool": "enemies",
+        "starter": true,
+        "description": "Keep the gap to the target above the band while basic-attacking whenever the target is in range."
+      },
+      {
+        "id": "hold",
+        "label": "Hold position",
+        "params": [],
+        "targetPool": "any",
+        "starter": true,
+        "description": "Do not move; basic-attack the target if in range, else the nearest enemy in range."
+      },
+      {
+        "id": "protect",
+        "label": "Protect",
+        "params": [],
+        "targetPool": "allies_not_self",
+        "starter": true,
+        "description": "Stand between the ally and its nearest attacker and basic-attack enemies in range, preferring the ally's attackers."
+      },
+      {
+        "id": "regroup",
+        "label": "Stay with",
+        "params": [],
+        "targetPool": "allies_not_self",
+        "starter": true,
+        "description": "Move to within 2.5 m of the ally, then hold there and basic-attack enemies in range."
+      }
+    ],
+    "stances": [
+      {
+        "id": "aggressive",
+        "name": "Aggressive",
+        "description": "Attack the nearest enemy, closing in as needed."
+      },
+      {
+        "id": "steady",
+        "name": "Steady",
+        "description": "Attack the nearest enemy, but do not advance more than 1 m past our frontmost ally unless an enemy is already in range."
+      },
+      {
+        "id": "cautious",
+        "name": "Cautious",
+        "description": "Attack the nearest enemy in range, keeping a gap of at least 60% of attack range (min 2.5 m) by backing away when closer."
+      }
+    ],
+    "roles": [
+      {
+        "id": "tank",
+        "name": "Tank"
+      },
+      {
+        "id": "melee",
+        "name": "Melee DPS"
+      },
+      {
+        "id": "ranged",
+        "name": "Ranged DPS"
+      },
+      {
+        "id": "controller",
+        "name": "Controller"
+      },
+      {
+        "id": "healer",
+        "name": "Healer"
+      }
+    ],
+    "bands": [
+      "melee",
+      "close",
+      "mid",
+      "long"
+    ]
+  },
+  "presets": [
+    {
+      "id": "oathguard_balanced",
+      "classId": "oathguard",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Bashes casting enemies, guards the most-threatened ally, then fights the nearest enemy.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_casting",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "casting_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally",
+            "includeSelf": false
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "oathguard_protective",
+      "classId": "oathguard",
+      "style": "protective",
+      "name": "Bodyguard",
+      "summary": "Stays with the healer and guards whichever ally is under attack.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "ally_role",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 60
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally",
+            "includeSelf": false
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "protect"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "oathguard_aggressive",
+      "classId": "oathguard",
+      "style": "aggressive",
+      "name": "Vanguard",
+      "summary": "Stuns the captain's target whenever it can and guards only allies in real danger.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 40
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally",
+            "includeSelf": false
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gongbearer_balanced",
+      "classId": "gongbearer",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Rings the gong when two enemies are close, braces when hurt, and peels for allies.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 60
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gongbearer_protective",
+      "classId": "gongbearer",
+      "style": "protective",
+      "name": "Gatekeeper",
+      "summary": "Moves to whichever ally is under attack and taunts the attackers off it.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 50
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "protect"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gongbearer_aggressive",
+      "classId": "gongbearer",
+      "style": "aggressive",
+      "name": "Rabble-Rouser",
+      "summary": "Charges into the enemy back line and taunts it from the inside.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 40
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "furthest_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "long"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "scarhide_balanced",
+      "classId": "scarhide",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Cleaves whatever is in front of it and takes a second wind below half HP.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 50
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "scarhide_aggressive",
+      "classId": "scarhide",
+      "style": "aggressive",
+      "name": "Bloodied Line",
+      "summary": "Pushes into the captain's target and only stops to heal when nearly down.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 30
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "scarhide_protective",
+      "classId": "scarhide",
+      "style": "protective",
+      "name": "Hold the Line",
+      "summary": "Heals early and fights whoever attacks the healer.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 70
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "briarback_balanced",
+      "classId": "briarback",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Bristles when focused, scatters caltrops when crowded, and stands in the way.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "briarback_protective",
+      "classId": "briarback",
+      "style": "protective",
+      "name": "Briar Wall",
+      "summary": "Plants itself beside threatened allies so attackers must go through the barbs.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "protect"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "briarback_aggressive",
+      "classId": "briarback",
+      "style": "aggressive",
+      "name": "Spitebait",
+      "summary": "Walks into the enemy's top damage dealer and dares it to keep swinging.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "bladeturner_balanced",
+      "classId": "bladeturner",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Parries when two enemies swing at it and provokes anyone hitting the healer.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "bladeturner_aggressive",
+      "classId": "bladeturner",
+      "style": "aggressive",
+      "name": "Duelist",
+      "summary": "Picks the enemy's top damage dealer, provokes it and parries its blows.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "bladeturner_protective",
+      "classId": "bladeturner",
+      "style": "protective",
+      "name": "Escort",
+      "summary": "Shadows the most-threatened ally and provokes its attackers.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "self_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "protect"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "phalanx_sergeant_balanced",
+      "classId": "phalanx_sergeant",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Locks shields when nearby allies are hurt and pikes back anyone in reach.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 80,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "phalanx_sergeant_protective",
+      "classId": "phalanx_sergeant",
+      "style": "protective",
+      "name": "Shield Wall",
+      "summary": "Holds beside the healer, shields early and pikes away divers.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 90,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally",
+            "role": "healer"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "protect"
+          },
+          "on": {
+            "sel": "ally_role",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "phalanx_sergeant_aggressive",
+      "classId": "phalanx_sergeant",
+      "style": "aggressive",
+      "name": "Advance",
+      "summary": "Marches on the captain's target behind its pike, shielding only when the line is hurt.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 70,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gutterknife_balanced",
+      "classId": "gutterknife",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Finishes wounded enemies, otherwise steps onto the back line once it is within reach.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_hp_below",
+              "pct": 40,
+              "band": "long"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "long"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "furthest_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "long"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "close"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gutterknife_aggressive",
+      "classId": "gutterknife",
+      "style": "aggressive",
+      "name": "Healer Hunter",
+      "summary": "Goes straight for the enemy healer and stays on it.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": {
+            "pred": "within",
+            "band": "long"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gutterknife_protective",
+      "classId": "gutterknife",
+      "style": "protective",
+      "name": "Counter-Diver",
+      "summary": "Hunts whoever is attacking our back line.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "bloodhowler_balanced",
+      "classId": "bloodhowler",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Frenzies once in melee and keeps rending the nearest enemy.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "bloodhowler_aggressive",
+      "classId": "bloodhowler",
+      "style": "aggressive",
+      "name": "Red Mist",
+      "summary": "Saves the frenzy until it is already hurt, then follows the captain's target.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            },
+            {
+              "cond": "self_hp_below",
+              "pct": 70
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "bloodhowler_protective",
+      "classId": "bloodhowler",
+      "style": "protective",
+      "name": "Leashed",
+      "summary": "Frenzies to survive and fights only enemies that attack its allies.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 50
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "twinfang_balanced",
+      "classId": "twinfang",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Flurries whatever it is fighting and sidesteps when two enemies close in.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "current_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "self_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "twinfang_aggressive",
+      "classId": "twinfang",
+      "style": "aggressive",
+      "name": "Focus Fire",
+      "summary": "Locks onto the captain's target to keep its momentum.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 40
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "twinfang_protective",
+      "classId": "twinfang",
+      "style": "protective",
+      "name": "Guard Dance",
+      "summary": "Sidesteps early and flurries enemies who attack its allies.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 60
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "headsman_balanced",
+      "classId": "headsman",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Sunders what it fights, beheads anything below 30% nearby, and swings Behead whenever focus is high.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_hp_below",
+              "pct": 30,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "close"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "focus_at_least",
+              "amount": 80
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "headsman_aggressive",
+      "classId": "headsman",
+      "style": "aggressive",
+      "name": "Reaper",
+      "summary": "Hunts wounded enemies anywhere and follows the captain's target otherwise.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_hp_below",
+              "pct": 30
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "chaffcutter_balanced",
+      "classId": "chaffcutter",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Leaps on clusters of three and spins when two enemies are close.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 3,
+              "radiusM": 2.5
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "chaffcutter_aggressive",
+      "classId": "chaffcutter",
+      "style": "aggressive",
+      "name": "Thresher",
+      "summary": "Leaps on any pair it can reach and spins at first contact.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.5
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "runecleaver_balanced",
+      "classId": "runecleaver",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Lunges at enemy casters mid-spell, otherwise bursts runes on whoever is close.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_casting",
+              "band": "mid"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "casting_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "runecleaver_aggressive",
+      "classId": "runecleaver",
+      "style": "aggressive",
+      "name": "Mage Hunter",
+      "summary": "Dives the enemy healer, then controllers.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": {
+            "pred": "within",
+            "band": "mid"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "controller"
+          },
+          "only": {
+            "pred": "within",
+            "band": "mid"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "longeye_balanced",
+      "classId": "longeye",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Leaps away from anyone who gets close and aims at the weakest enemy in range.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "longeye_aggressive",
+      "classId": "longeye",
+      "style": "aggressive",
+      "name": "Headhunter",
+      "summary": "Aims at the enemy healer first, then the furthest enemy it can hit.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "furthest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "furthest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "longeye_protective",
+      "classId": "longeye",
+      "style": "protective",
+      "name": "Overwatch",
+      "summary": "Shoots whatever is attacking our allies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "boltrunner_balanced",
+      "classId": "boltrunner",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Tumbles away from melee, pins chasers, and shoots the captain's target while kiting.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "kite",
+            "band": "close"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "boltrunner_aggressive",
+      "classId": "boltrunner",
+      "style": "aggressive",
+      "name": "Run and Gun",
+      "summary": "Pins and shoots the lowest-HP enemy, tumbling only when caught.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "boltrunner_protective",
+      "classId": "boltrunner",
+      "style": "protective",
+      "name": "Escort Fire",
+      "summary": "Pins enemies attacking allies and shoots them.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "emberwright_balanced",
+      "classId": "emberwright",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Blooms fire on any two bunched enemies and lances the nearest.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.5
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "emberwright_aggressive",
+      "classId": "emberwright",
+      "style": "aggressive",
+      "name": "Inferno",
+      "summary": "Blooms fire on the densest group whenever it can and lances the weakest enemy.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "blightbrewer_balanced",
+      "classId": "blightbrewer",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Ruptures fully poisoned enemies, clouds bunched enemies, and spreads poison to fresh targets.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "has_status",
+            "status": "poison",
+            "minStacks": 3
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.2
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": {
+            "pred": "lacks_status",
+            "status": "poison"
+          },
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "blightbrewer_aggressive",
+      "classId": "blightbrewer",
+      "style": "aggressive",
+      "name": "Plague Doctor",
+      "summary": "Clouds the enemy healer and ruptures anything carrying two stacks.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "has_status",
+            "status": "poison",
+            "minStacks": 2
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "thunderhand_balanced",
+      "classId": "thunderhand",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Claps back anyone in melee range and chains lightning off the nearest enemy.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "thunderhand_aggressive",
+      "classId": "thunderhand",
+      "style": "aggressive",
+      "name": "Storm Front",
+      "summary": "Chains lightning into the densest group and finishes the weakest enemy.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 4
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "writ_hunter_balanced",
+      "classId": "writ_hunter",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Keeps a writ on the captain's target, nets anyone who closes in, and shoots the marked enemy.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_has_status",
+              "status": "marked",
+              "not": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_has_status",
+              "status": "marked",
+              "not": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "enemy_has_status",
+              "status": "marked"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "marked_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "writ_hunter_aggressive",
+      "classId": "writ_hunter",
+      "style": "aggressive",
+      "name": "Bounty Board",
+      "summary": "Marks the enemy healer and focuses whatever is marked.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "marked"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_has_status",
+              "status": "marked",
+              "not": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "furthest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "marked_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "writ_hunter_protective",
+      "classId": "writ_hunter",
+      "style": "protective",
+      "name": "Warden's Writ",
+      "summary": "Nets and marks enemies that attack our allies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "marked"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "rimebinder_balanced",
+      "classId": "rimebinder",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Roots anyone who closes in and lances the nearest enemy.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "rimebinder_protective",
+      "classId": "rimebinder",
+      "style": "protective",
+      "name": "Ice Wall",
+      "summary": "Lances enemies attacking the healer and roots crowds around itself.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "rimebinder_aggressive",
+      "classId": "rimebinder",
+      "style": "aggressive",
+      "name": "Lockdown",
+      "summary": "Slows the captain's target and roots crowds.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "hexmonger_balanced",
+      "classId": "hexmonger",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Withers the enemy's top damage dealer and curses bunched enemies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "weaken"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.5
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "hexmonger_aggressive",
+      "classId": "hexmonger",
+      "style": "aggressive",
+      "name": "Ruin",
+      "summary": "Curses the captain's target first, then withers the top damage dealer.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "hexmonger_protective",
+      "classId": "hexmonger",
+      "style": "protective",
+      "name": "Ward-Hex",
+      "summary": "Withers whoever is hurting a badly wounded ally.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "weaken"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.5
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "galeshaper_balanced",
+      "classId": "galeshaper",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Blows away anyone who gets close and pulls bunched enemies together.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 3
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 3
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "galeshaper_protective",
+      "classId": "galeshaper",
+      "style": "protective",
+      "name": "Windbreak",
+      "summary": "Blasts enemies away and slows anyone attacking allies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "galeshaper_aggressive",
+      "classId": "galeshaper",
+      "style": "aggressive",
+      "name": "Vortex",
+      "summary": "Drags groups of three together for allied area damage.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 3,
+              "radiusM": 3
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 3
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 3
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "hushweaver_balanced",
+      "classId": "hushweaver",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Hushes any enemy cast it can see and unravels buffed enemies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_casting",
+              "band": "long"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "casting_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "has_buff"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "hushweaver_aggressive",
+      "classId": "hushweaver",
+      "style": "aggressive",
+      "name": "Gag Order",
+      "summary": "Keeps the enemy healer silenced, then controllers, and unravels the captain's target.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "controller"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "has_buff"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "dreamthief_balanced",
+      "classId": "dreamthief",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Sleeps an enemy no ally is attacking, preferring the healer, and dazes bunched enemies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": {
+            "pred": "not_targeted_by_ally"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": {
+            "pred": "not_targeted_by_ally"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.5
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "dreamthief_protective",
+      "classId": "dreamthief",
+      "style": "protective",
+      "name": "Lullaby",
+      "summary": "Dazes enemies piling on an ally and sleeps whoever attacks it.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "self_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_me"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": {
+            "pred": "not_targeted_by_ally"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "snaresetter_balanced",
+      "classId": "snaresetter",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Traps anyone who gets close, tars bunched enemies, and traps attackers of allies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.5
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "snaresetter_aggressive",
+      "classId": "snaresetter",
+      "style": "aggressive",
+      "name": "Hunting Ground",
+      "summary": "Traps and tars the captain's target.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "chirurgeon_balanced",
+      "classId": "chirurgeon",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Cleanses stunned allies, sutures anyone below 70%, and cleanses heavy debuffs.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_has_status",
+              "category": "cc_hard"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": {
+            "pred": "has_status",
+            "category": "cc_hard"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 70,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_has_status",
+              "category": "debuff"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": {
+            "pred": "has_status",
+            "category": "debuff"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "chirurgeon_protective",
+      "classId": "chirurgeon",
+      "style": "protective",
+      "name": "Triage",
+      "summary": "Saves focus for emergencies: sutures below 40% first, tops up only with spare focus, and stays near the tank.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 40,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_has_status",
+              "category": "cc_hard"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": {
+            "pred": "has_status",
+            "category": "cc_hard"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 80,
+              "includeSelf": true
+            },
+            {
+              "cond": "focus_at_least",
+              "amount": 60
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "regroup"
+          },
+          "on": {
+            "sel": "ally_role",
+            "role": "tank"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "chirurgeon_aggressive",
+      "classId": "chirurgeon",
+      "style": "aggressive",
+      "name": "Combat Medic",
+      "summary": "Heals only below 50% and otherwise joins the captain's attack.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "cantor_balanced",
+      "classId": "cantor",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Sings when two nearby allies are hurt, sanctifies the weakest ally, and stays near the group.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 80,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 90
+            }
+          ],
+          "then": {
+            "type": "regroup"
+          },
+          "on": {
+            "sel": "densest_ally",
+            "radiusM": 4
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "cantor_protective",
+      "classId": "cantor",
+      "style": "protective",
+      "name": "Choir Circle",
+      "summary": "Stays in the middle of the group and sings early.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 90,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 70,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "regroup"
+          },
+          "on": {
+            "sel": "densest_ally",
+            "radiusM": 4
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "aegis_scribe_balanced",
+      "classId": "aegis_scribe",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Shields the ally under the most attackers, then the weakest ally, and lattices a hurt group.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "category": "shield"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 60,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 80,
+              "count": 3
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_ally",
+            "radiusM": 4
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "aegis_scribe_protective",
+      "classId": "aegis_scribe",
+      "style": "protective",
+      "name": "Pre-emptive",
+      "summary": "Opens with a lattice and keeps a barrier on the tank.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "fight_time_below",
+              "seconds": 5
+            },
+            {
+              "cond": "enemy_within",
+              "band": "long"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_ally",
+            "radiusM": 4
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "ally_role",
+            "role": "tank"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "category": "shield"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "grovetender_balanced",
+      "classId": "grovetender",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Keeps rejuvenation on hurt allies and blooms when three are hurt.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 70,
+              "count": 3
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_ally",
+            "radiusM": 4
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 90,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "regen"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "grovetender_protective",
+      "classId": "grovetender",
+      "style": "protective",
+      "name": "Evergreen",
+      "summary": "Keeps the tank permanently rejuvenated, then everyone else.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "ally_role",
+            "role": "tank"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "regen"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 90,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "regen"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 70,
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_ally",
+            "radiusM": 4
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "vigilkeeper_balanced",
+      "classId": "vigilkeeper",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Wards allies about to fall and mends anyone below 70%.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 30,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "deathward"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 70,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "vigilkeeper_protective",
+      "classId": "vigilkeeper",
+      "style": "protective",
+      "name": "Watchful",
+      "summary": "Wards whichever ally two enemies are attacking, and mends early.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 80,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "war_drummer_balanced",
+      "classId": "war_drummer",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Drums once the fighting starts, rallies when two are hurt or anyone is rooted, and stays with the group.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 80,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_has_status",
+              "status": "root"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "regroup"
+          },
+          "on": {
+            "sel": "densest_ally",
+            "radiusM": 4
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "war_drummer_aggressive",
+      "classId": "war_drummer",
+      "style": "aggressive",
+      "name": "Charge Beat",
+      "summary": "Drums from the opening and pushes forward with the tank.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "fight_time_below",
+              "seconds": 4
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "mid"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 70,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r4",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "regroup"
+          },
+          "on": {
+            "sel": "ally_role",
+            "role": "tank"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "siegebreaker_balanced",
+      "classId": "siegebreaker",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Hardens below half HP and charges the weakest enemy within reach.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 50
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "mid"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "siegebreaker_aggressive",
+      "classId": "siegebreaker",
+      "style": "aggressive",
+      "name": "Gatecrasher",
+      "summary": "Charges the furthest enemy it can reach, then fights the weakest one nearby.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "furthest_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "mid"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 40
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "close"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "siegebreaker_protective",
+      "classId": "siegebreaker",
+      "style": "protective",
+      "name": "Breakwater",
+      "summary": "Charges enemies off allies and hardens early.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "self_hp_below",
+              "pct": 60
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "pavisier_balanced",
+      "classId": "pavisier",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Plants when two enemies focus it, shoves melee attackers, and shoots the nearest enemy.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "self_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "pavisier_aggressive",
+      "classId": "pavisier",
+      "style": "aggressive",
+      "name": "Battery",
+      "summary": "Plants as soon as enemies are in range and shoots the weakest one.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "mid"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gaoler_balanced",
+      "classId": "gaoler",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Stomps when two enemies are close and shackles whatever it fights.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gaoler_protective",
+      "classId": "gaoler",
+      "style": "protective",
+      "name": "Warden of the Line",
+      "summary": "Shackles enemies attacking allies and stays beside the threatened ally.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "protect"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "gaoler_aggressive",
+      "classId": "gaoler",
+      "style": "aggressive",
+      "name": "Lockup",
+      "summary": "Shackles the captain's target and stomps on contact.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "harpooner_balanced",
+      "classId": "harpooner",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Harpoons the furthest enemy it can reach and slams the nearest.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "furthest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "harpooner_protective",
+      "classId": "harpooner",
+      "style": "protective",
+      "name": "Lifeline",
+      "summary": "Harpoons enemies off the healer, then off anyone else.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "harpooner_aggressive",
+      "classId": "harpooner",
+      "style": "aggressive",
+      "name": "Catch of the Day",
+      "summary": "Hauls in the enemy healer, or failing that a ranged enemy.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "healer"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_role",
+            "role": "ranged"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "vowknight_balanced",
+      "classId": "vowknight",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Lays hands on allies below 50% and consecrates when two enemies are close.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "vowknight_protective",
+      "classId": "vowknight",
+      "style": "protective",
+      "name": "Oathkeeper",
+      "summary": "Stays beside the most-threatened ally and heals early.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 70,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 90,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "protect"
+          },
+          "on": {
+            "sel": "most_targeted_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "deeproot_keeper_balanced",
+      "classId": "deeproot_keeper",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Takes root when two nearby allies are hurt and lashes enemies in reach.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 80,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "melee"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "deeproot_keeper_protective",
+      "classId": "deeproot_keeper",
+      "style": "protective",
+      "name": "Grove Guard",
+      "summary": "Stays beside the healer and takes root when the group is hurt.",
+      "stance": "steady",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 80,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "protect"
+          },
+          "on": {
+            "sel": "ally_role",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "netcaster_balanced",
+      "classId": "netcaster",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Nets the nearest enemy, preferring ranged ones, then lunges at whatever is in reach.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": {
+            "pred": "role",
+            "role": "ranged"
+          },
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "has_status",
+            "status": "root"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "netcaster_aggressive",
+      "classId": "netcaster",
+      "style": "aggressive",
+      "name": "Retiarius",
+      "summary": "Nets and lunges at the captain's target.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "netcaster_protective",
+      "classId": "netcaster",
+      "style": "protective",
+      "name": "Net Guard",
+      "summary": "Nets enemies attacking the healer, then lunges at anyone attacking allies.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1,
+              "role": "healer"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally",
+            "role": "healer"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "skullslinger_balanced",
+      "classId": "skullslinger",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Cracks any casting enemy, sprays anyone who closes in, and stuns the top damage dealer.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemy_casting",
+              "band": "long"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "casting_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemy_within",
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "skullslinger_aggressive",
+      "classId": "skullslinger",
+      "style": "aggressive",
+      "name": "Headcracker",
+      "summary": "Stuns the captain's target and sprays bunched enemies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 3
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 3
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "leechblade_balanced",
+      "classId": "leechblade",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Mists when two nearby allies are hurt and siphons whatever is in reach.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 80,
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "leechblade_aggressive",
+      "classId": "leechblade",
+      "style": "aggressive",
+      "name": "Bloodletter",
+      "summary": "Mists in crowds and siphons the weakest enemy nearby.",
+      "stance": "aggressive",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "enemies_within",
+              "count": 2,
+              "band": "close"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "self"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "close"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "lowest_hp_enemy"
+          },
+          "only": {
+            "pred": "within",
+            "band": "close"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "sunlance_acolyte_balanced",
+      "classId": "sunlance_acolyte",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Mends allies below 50% and brands the captain's target.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "lacks_status",
+            "status": "illuminated"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "nearest_enemy"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "sunlance_acolyte_protective",
+      "classId": "sunlance_acolyte",
+      "style": "protective",
+      "name": "Dawnkeeper",
+      "summary": "Heals first, and brands only enemies that attack allies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 70,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 1
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "sunlance_acolyte_aggressive",
+      "classId": "sunlance_acolyte",
+      "style": "aggressive",
+      "name": "Zealot",
+      "summary": "Brands and burns the captain's target, healing only emergencies.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 40,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "captain_alive"
+            }
+          ],
+          "then": {
+            "type": "attack"
+          },
+          "on": {
+            "sel": "captain_target"
+          },
+          "only": {
+            "pred": "in_range"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "undertow_mystic_balanced",
+      "classId": "undertow_mystic",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Washes stunned allies clean, floods bunched enemies, and heals hurt groups.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_has_status",
+              "category": "cc_hard"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": {
+            "pred": "has_status",
+            "category": "cc_hard"
+          },
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.8
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.8
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "allies_hp_below",
+              "pct": 70,
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_ally",
+            "radiusM": 4
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "undertow_mystic_protective",
+      "classId": "undertow_mystic",
+      "style": "protective",
+      "name": "Riptide Guard",
+      "summary": "Floods enemies piling on an ally and heals early.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 60,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "hourglass_sage_balanced",
+      "classId": "hourglass_sage",
+      "style": "balanced",
+      "name": "Balanced",
+      "summary": "Rewinds allies below 50% and mires bunched enemies or the top damage dealer.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 50,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "enemies_clustered",
+              "count": 2,
+              "radiusM": 2.5
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "densest_enemy",
+            "radiusM": 2.5
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r3",
+          "if": [
+            {
+              "cond": "always"
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "top_damage_enemy"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    },
+    {
+      "id": "hourglass_sage_protective",
+      "classId": "hourglass_sage",
+      "style": "protective",
+      "name": "Second Chances",
+      "summary": "Rewinds early and mires enemies piling on an ally.",
+      "stance": "cautious",
+      "rules": [
+        {
+          "id": "r1",
+          "if": [
+            {
+              "cond": "ally_hp_below",
+              "pct": 60,
+              "includeSelf": true
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a1"
+          },
+          "on": {
+            "sel": "lowest_hp_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        },
+        {
+          "id": "r2",
+          "if": [
+            {
+              "cond": "ally_targeted",
+              "count": 2
+            }
+          ],
+          "then": {
+            "type": "ability",
+            "slot": "a2"
+          },
+          "on": {
+            "sel": "enemy_targeting_ally"
+          },
+          "only": null,
+          "prefer": null,
+          "cooldownS": 0
+        }
+      ]
+    }
+  ]
+}

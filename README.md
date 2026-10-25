@@ -30,6 +30,13 @@ npm test             # Vitest: unit tests + architecture/purity checks
 npm run check        # all three
 ```
 
+## Content
+
+```sh
+npm run validate-content            # validate content/default (schemas, references, vocabularies, units)
+npm run fixture:content             # architect: regenerate the frozen test fixture after a schema change
+```
+
 ## Headless harnesses
 
 ```sh
@@ -37,7 +44,11 @@ npm run balance -- --fights 5000 --seed balance-1   # per-class win rates from s
 npm run soak -- --seasons 10 --seed soak-1          # N seasons headless with economy/age/league sanity checks
 ```
 
-Both write a JSON report to `reports/` (git-ignored). In phase A they are stubs with the final report shape: balance runs placeholder fights until `core/sim` exists; soak reports every check as pending until `core/game` exists.
+Both write a JSON report to `reports/` (git-ignored). They have their final report shapes; balance plays placeholder fights until `core/sim` lands and soak reports every check as pending until `core/game` lands.
+
+## Work packages
+
+M1 is built by seven parallel work packages with strict file ownership; see [`docs/design/_drafts/05-technical.md`](docs/design/_drafts/05-technical.md) §9.2. Every module exposes a fixed, typed contract in its `index.ts` (stubs until implemented); `src/core/testkit` provides frozen fixtures for tests.
 
 ## Layout
 
@@ -46,8 +57,8 @@ content/<theme>/*.json   theme data (designers)
 docs/                    research and design package
 scripts/                 headless CLIs (balance, soak) and Node helpers
 src/core/                pure, deterministic engine: no DOM, no PixiJS, no Math.random, no clocks
-  util/ rng/ model/      foundation (architect)
-  content/ tactics/ sim/ fighters/ league/ economy/ ai/ game/ save/ harness/
+  util/ rng/ model/ content/ testkit/   foundation, content schemas, fixtures (architect)
+  tactics/ sim/ fighters/ league/ economy/ ai/ game/ save/ harness/   work packages WP1-WP5
 src/platform/            browser/desktop adapters (content loader, saves, clock, entropy)
 src/ui/                  Preact + signals management UI; styles/ belongs to the UI designer
 src/render/              PixiJS arena viewer (M2)

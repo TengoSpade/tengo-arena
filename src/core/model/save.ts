@@ -1,14 +1,14 @@
 import type { SeasonPhase } from './calendar';
 import type { CommandLogEntry } from './commands';
 import type { ContentRef, GameState } from './game-state';
-import type { ClubId } from './ids';
+import type { ClubId, WeekId } from './ids';
 
 export const SAVE_FORMAT = 'arena-league-save';
 
 /**
- * A save file / storage record. Plain JSON. core/save serializes,
- * validates and migrates it; src/platform stores it (IndexedDB in the
- * browser, files in the desktop build) and handles export/import.
+ * A save file / storage record. Plain JSON. core/save serializes, validates
+ * and migrates it; src/platform stores it (IndexedDB in the browser, files in
+ * the desktop build) and handles export/import.
  */
 export interface SaveEnvelope {
   format: typeof SAVE_FORMAT;
@@ -36,7 +36,8 @@ export interface SaveMeta {
   /** App version (package.json version) that wrote the save. */
   gameVersion: string;
   season: number;
-  week: number;
+  weekIndex: number;
+  weekId: WeekId | null;
   phase: SeasonPhase;
   playerClubId: ClubId | null;
   playerClubName: string | null;
@@ -45,3 +46,21 @@ export interface SaveMeta {
 }
 
 export type SaveKind = 'manual' | 'auto';
+
+/** Stable error codes of save parsing (UI maps them to text). */
+export type SaveErrorCode =
+  | 'save.json'
+  | 'save.format'
+  | 'save.too-new'
+  | 'save.checksum'
+  | 'save.migration'
+  | 'save.structure'
+  | 'save.references'
+  | 'save.content-missing'
+  | 'save.storage';
+
+export interface SaveError {
+  code: SaveErrorCode;
+  message: string;
+  details?: Record<string, unknown>;
+}

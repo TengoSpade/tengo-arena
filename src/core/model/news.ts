@@ -1,19 +1,20 @@
+import type { GameTime } from './calendar';
 import type { ClubId, FighterId, FixtureId, NewsId } from './ids';
 
 /**
- * Inbox / news item. Core never stores player-facing prose: `key` selects a
- * text template (UI text table or content), `params` fills it. This keeps
- * theme wording in data and makes localization possible.
+ * Digest / inbox item. Core stores no prose: `key` selects a text template
+ * (UI text table), `params` fill it (03-league-economy digest triggers,
+ * 03-fighter-lifecycle notifications).
  */
 export interface NewsItem {
   id: NewsId;
-  season: number;
-  week: number;
-  /** e.g. "match.result", "contract.expiring", "fighter.retired". */
+  at: GameTime;
+  /** e.g. "match.result", "offer.accepted", "contract.expiring", "fighter.injured", "finance.embargo". */
   key: string;
   params: Record<string, string | number>;
-  refs: { clubId?: ClubId; fighterId?: FighterId; fixtureId?: FixtureId };
-  /** Shown prominently / may block advancing until acknowledged. [phase B] which items block. */
-  important: boolean;
+  /** Which club's digest shows it (null = league-wide). */
+  clubId: ClubId | null;
+  refs: { fighterId?: FighterId; fixtureId?: FixtureId; otherClubId?: ClubId };
+  importance: 'info' | 'notable' | 'urgent';
   read: boolean;
 }

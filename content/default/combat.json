@@ -1,0 +1,1229 @@
+{
+  "_doc": "Shared combat constants. Spec: docs/design/_drafts/03-combat.md. Key suffixes give units: S = seconds, M = metres, Mps = metres per second, Deg = degrees, Ticks = ticks. Unsuffixed fractions are decimals (0.04 = 4%) and convert to basis points; points (HP, focus, armor, ward, composure) are integers. Loaders convert once: metres x100 -> cm for events and displays (sim positions and per-tick movement are integer mm, x1000, per D-E), seconds x20 -> ticks, fractions x10000 -> bp; every value converts exactly.",
+  "schemaVersion": 1,
+  "simVersion": "0.1.0",
+  "status": "DRAFT 2026-10-25 (combat designer). Values are PROPOSED · TUNABLE unless the spec says REQUIRED.",
+  "attributeScale": {
+    "min": 1,
+    "max": 20,
+    "average": 10,
+    "integer": true
+  },
+  "attributes": [
+    {
+      "id": "str",
+      "name": "Strength",
+      "abbr": "STR",
+      "group": "physical",
+      "lifecycleTag": "power",
+      "description": "Raw force. Drives Power for heavy and melee classes and adds a little max HP.",
+      "usedFor": [
+        "power (class-weighted)",
+        "maxHp +1%/pt"
+      ]
+    },
+    {
+      "id": "agi",
+      "name": "Agility",
+      "abbr": "AGI",
+      "group": "physical",
+      "lifecycleTag": "finesse",
+      "description": "Hand speed and footwork. Faster basic attacks and a chance to evade weapon blows.",
+      "usedFor": [
+        "attack speed +2.5%/pt",
+        "evade +1%/pt above 10",
+        "power (class-weighted)"
+      ]
+    },
+    {
+      "id": "pac",
+      "name": "Pace",
+      "abbr": "PAC",
+      "group": "physical",
+      "lifecycleTag": "speed",
+      "description": "Running speed. How fast a fighter closes, chases, kites and escapes.",
+      "usedFor": [
+        "move speed +2%/pt"
+      ]
+    },
+    {
+      "id": "tgh",
+      "name": "Toughness",
+      "abbr": "TGH",
+      "group": "physical",
+      "lifecycleTag": "durability",
+      "description": "Durability. The main source of max HP and a little armor. Races modify it (durability tag).",
+      "usedFor": [
+        "maxHp +4%/pt",
+        "armor +2/pt"
+      ]
+    },
+    {
+      "id": "pre",
+      "name": "Precision",
+      "abbr": "PRE",
+      "group": "physical",
+      "lifecycleTag": "precision",
+      "description": "Aim and timing. Critical-hit chance, and Power for archers and throwers.",
+      "usedFor": [
+        "crit +1%/pt",
+        "power (class-weighted)"
+      ]
+    },
+    {
+      "id": "arc",
+      "name": "Arcana",
+      "abbr": "ARC",
+      "group": "mental",
+      "lifecycleTag": null,
+      "description": "Command of spellcraft. Power for casters, arcane blades and hexers.",
+      "usedFor": [
+        "power (class-weighted)",
+        "support (some classes)"
+      ]
+    },
+    {
+      "id": "spi",
+      "name": "Spirit",
+      "abbr": "SPI",
+      "group": "mental",
+      "lifecycleTag": null,
+      "description": "Inner warmth that mends others. The main source of Support (healing and shields).",
+      "usedFor": [
+        "support (class-weighted)"
+      ]
+    },
+    {
+      "id": "wil",
+      "name": "Willpower",
+      "abbr": "WIL",
+      "group": "mental",
+      "lifecycleTag": null,
+      "description": "Resistance to magic. Ward against arcane damage and shorter slows and debuffs.",
+      "usedFor": [
+        "ward +2.5/pt",
+        "resolve +1.5%/pt"
+      ]
+    },
+    {
+      "id": "cmp",
+      "name": "Composure",
+      "abbr": "CMP",
+      "group": "mental",
+      "lifecycleTag": "composure",
+      "description": "Calm under pressure. Shorter stuns and roots, steadier reactions when hurt or when the captain falls.",
+      "usedFor": [
+        "tenacity +2%/pt",
+        "pressure reaction delay",
+        "shaken severity",
+        "captaincy input"
+      ]
+    },
+    {
+      "id": "ldr",
+      "name": "Leadership",
+      "abbr": "LDR",
+      "group": "mental",
+      "lifecycleTag": "leadership",
+      "description": "Command presence. The main input to captaincy; no effect on a fighter who is not captain.",
+      "usedFor": [
+        "captaincy input (fallback formula)"
+      ]
+    },
+    {
+      "id": "awr",
+      "name": "Awareness",
+      "abbr": "AWR",
+      "group": "mental",
+      "lifecycleTag": "awareness",
+      "description": "Reading the fight. Shorter reaction delay when the fighter changes what it is doing.",
+      "usedFor": [
+        "reaction delay -0.01 s/pt",
+        "captaincy input"
+      ]
+    },
+    {
+      "id": "dis",
+      "name": "Discipline",
+      "abbr": "DIS",
+      "group": "mental",
+      "lifecycleTag": "focus",
+      "description": "Pacing and self-control. Faster focus regeneration, so more abilities per round.",
+      "usedFor": [
+        "focus regen +3%/pt"
+      ]
+    }
+  ],
+  "archetypes": [
+    {
+      "id": "tank",
+      "name": "Tank",
+      "shortName": "TNK",
+      "iconId": "arch_tank",
+      "description": "Front-liners who soak damage, protect allies and hold enemies in place."
+    },
+    {
+      "id": "melee",
+      "name": "Melee DPS",
+      "shortName": "MEL",
+      "iconId": "arch_melee",
+      "description": "Close-quarters damage dealers who dive, duel and finish."
+    },
+    {
+      "id": "ranged",
+      "name": "Ranged DPS",
+      "shortName": "RNG",
+      "iconId": "arch_ranged",
+      "description": "Damage from a distance; fragile if caught."
+    },
+    {
+      "id": "controller",
+      "name": "Controller",
+      "shortName": "CTL",
+      "iconId": "arch_controller",
+      "description": "Slows, roots, stuns, silences and debuffs that shape where and how the fight happens."
+    },
+    {
+      "id": "healer",
+      "name": "Healer",
+      "shortName": "HEA",
+      "iconId": "arch_healer",
+      "description": "Restore HP, shield allies and cleanse harmful effects."
+    }
+  ],
+  "hybridPairs": [
+    {
+      "id": "tank_dps",
+      "name": "Tank / DPS",
+      "families": [
+        "tank",
+        "dps"
+      ]
+    },
+    {
+      "id": "tank_controller",
+      "name": "Tank / Controller",
+      "families": [
+        "tank",
+        "controller"
+      ]
+    },
+    {
+      "id": "tank_healer",
+      "name": "Tank / Healer",
+      "families": [
+        "tank",
+        "healer"
+      ]
+    },
+    {
+      "id": "dps_controller",
+      "name": "DPS / Controller",
+      "families": [
+        "dps",
+        "controller"
+      ]
+    },
+    {
+      "id": "dps_healer",
+      "name": "DPS / Healer",
+      "families": [
+        "dps",
+        "healer"
+      ]
+    },
+    {
+      "id": "controller_healer",
+      "name": "Controller / Healer",
+      "families": [
+        "controller",
+        "healer"
+      ]
+    }
+  ],
+  "affinityGroups": [
+    "frontline",
+    "skirmisher",
+    "ranged",
+    "caster",
+    "support"
+  ],
+  "tick": {
+    "ticksPerSecond": 20,
+    "tickMs": 50
+  },
+  "arena": {
+    "id": "standard",
+    "widthM": 32,
+    "heightM": 18,
+    "origin": "top-left (north-west corner)",
+    "xAxis": "east",
+    "yAxis": "south",
+    "fighterRadiusM": 0.5,
+    "spawn": {
+      "home": {
+        "frontXM": 9,
+        "backXM": 5
+      },
+      "away": {
+        "frontXM": 23,
+        "backXM": 27
+      },
+      "laneCenterYM": 9,
+      "laneSpacingM": 3,
+      "maxPerRow": 5
+    }
+  },
+  "bands": [
+    {
+      "id": "melee",
+      "name": "Melee",
+      "maxGapM": 1.5
+    },
+    {
+      "id": "close",
+      "name": "Close",
+      "maxGapM": 4
+    },
+    {
+      "id": "mid",
+      "name": "Mid",
+      "maxGapM": 7
+    },
+    {
+      "id": "long",
+      "name": "Long",
+      "maxGapM": 10
+    }
+  ],
+  "derived": {
+    "_doc": "d(x) = effective attribute - 10. Coefficients are per attribute point. Each formula truncates toward zero once, at its end.",
+    "maxHp": {
+      "perTgh": 0.04,
+      "perStr": 0.01,
+      "minFactor": 0.4
+    },
+    "armor": {
+      "perTgh": 2
+    },
+    "ward": {
+      "perWil": 2.5
+    },
+    "moveSpeed": {
+      "perPac": 0.02
+    },
+    "attackSpeed": {
+      "perAgi": 0.025,
+      "minIntervalS": 0.45
+    },
+    "power": {
+      "perWeightedPoint": 0.04
+    },
+    "support": {
+      "perWeightedPoint": 0.04
+    },
+    "crit": {
+      "base": 0.05,
+      "perPre": 0.01,
+      "max": 0.5,
+      "multiplier": 1.5
+    },
+    "evade": {
+      "perAgiAbove10": 0.01,
+      "max": 0.75
+    },
+    "tenacity": {
+      "perCmp": 0.02,
+      "min": -0.25,
+      "max": 0.5
+    },
+    "resolve": {
+      "perWil": 0.015,
+      "min": -0.15,
+      "max": 0.3
+    },
+    "focus": {
+      "max": 100,
+      "startFull": true,
+      "regenPerSec": 2.5,
+      "regenPerDis": 0.03
+    },
+    "reaction": {
+      "baseS": 0.3,
+      "perAwrS": -0.01,
+      "perCmpS": -0.005,
+      "minS": 0.15,
+      "maxS": 0.6,
+      "pressureHpBelow": 0.35,
+      "pressureMaxS": 0.15,
+      "jitterTicksMax": 2
+    },
+    "composureInFight": {
+      "min": 1,
+      "max": 20
+    },
+    "speedMultClamp": [
+      0.3,
+      1.6
+    ],
+    "damageDealtClamp": [
+      0.25,
+      2.5
+    ],
+    "damageTakenClamp": [
+      0.25,
+      2
+    ],
+    "healingReceivedClamp": [
+      0,
+      2
+    ],
+    "traitModCaps": {
+      "fractionPerStat": 0.15,
+      "composurePoints": 8
+    }
+  },
+  "combatModsDefaults": {
+    "_doc": "Optional per-fighter hooks (race or future content). Neutral defaults. Races act mainly through attribute tendencies on lifecycle tags (Toughness carries the durability tag).",
+    "hpMult": 1,
+    "armorFlat": 0,
+    "wardFlat": 0,
+    "moveSpeedMult": 1,
+    "tenacityFlat": 0
+  },
+  "timing": {
+    "decisionIntervalTicks": 2,
+    "basicWindupFraction": {
+      "melee": 0.3,
+      "ranged": 0.35
+    },
+    "rangeLeewayM": 0.4,
+    "openingStaggerTicksMax": 4,
+    "triggeredEffectsDelayTicks": 1,
+    "regenTickIntervalS": 1,
+    "auraRecalcTicks": 2,
+    "castingTelegraphMinS": 0.3
+  },
+  "movement": {
+    "approachInsetM": 0.1,
+    "separationPasses": 2,
+    "dashSpeedMps": 16,
+    "leapSpeedMps": 12,
+    "displaceSpeedMps": 12,
+    "sidestep": {
+      "lookAheadM": 1.2,
+      "corridorM": 0.9,
+      "weight": 0.6
+    },
+    "cautiousMinGapFraction": 0.6,
+    "cautiousMinGapFloorM": 2.5,
+    "protectOffsetM": 0.3,
+    "regroupGapM": 2.5,
+    "steadyLeadAllowanceM": 1,
+    "stickiness": {
+      "gapM": 1,
+      "hpPct": 5
+    }
+  },
+  "damage": {
+    "variance": 0.04,
+    "minDamage": 1,
+    "mitigationConstant": 100,
+    "thornsMaxAttackerGapM": 1.5,
+    "riposteMaxAttackerGapM": 1.5,
+    "downCreditWindowS": 5,
+    "assistWindowS": 5,
+    "recentDamageWindowMaxS": 4
+  },
+  "shields": {
+    "maxTotalPctOfMaxHp": 0.5,
+    "consumeOrder": "soonest_expiry_first"
+  },
+  "cc": {
+    "drCategories": [
+      "control",
+      "displace"
+    ],
+    "drWindowS": 6,
+    "drSteps": [
+      1,
+      0.6,
+      0.35,
+      0
+    ],
+    "maxHardDurationS": 2.5,
+    "minAppliedDurationS": 0.1,
+    "onePerAbilityCast": true
+  },
+  "overtime": {
+    "startS": 45,
+    "hardCapS": 75,
+    "stepS": 1,
+    "damagePerStep": 0.03,
+    "healingPerStep": -0.03,
+    "healingFloor": 0
+  },
+  "roundEnd": {
+    "_doc": "Applied at the hard cap, and when both sides lose their last fighter on the same tick. First difference wins.",
+    "tiebreaks": [
+      "fighters_standing",
+      "hp_fraction_sum",
+      "damage_dealt",
+      "first_down",
+      "seeded_coin"
+    ]
+  },
+  "match": {
+    "formats": {
+      "regular": {
+        "bestOf": 3
+      },
+      "final": {
+        "bestOf": 5
+      }
+    },
+    "resetBetweenRounds": [
+      "hp",
+      "focus",
+      "cooldowns",
+      "statuses",
+      "shields",
+      "positions",
+      "zones",
+      "captaincy"
+    ]
+  },
+  "captain": {
+    "_doc": "sys-fight-captain. Adopts the lifecycle proposal (development.json captaincy.inFightProposal): reliability through composure, never raw damage. Grades come from development.json captaincy.grades by CQ; CQ arrives with the fight setup.",
+    "gradeSource": "development.json#captaincy.grades",
+    "aura": {
+      "stat": "composure",
+      "from": "grade.auraComposure",
+      "scope": "every fielded ally including the acting captain, while the acting captain is standing"
+    },
+    "rally": {
+      "from": "grade.rallyComposure",
+      "durationS": 5,
+      "usesPerRound": 1,
+      "suppressesAllyDownPenalties": true,
+      "trigger": "first ally other than the acting captain downed while the acting captain stands"
+    },
+    "down": {
+      "shakenComposure": 1,
+      "shakenDurationS": 4,
+      "handover": "when Shaken ends: vice-captain if fielded and standing, else the standing ally with the highest CQ (ties: lower slot); acting CQ = CQ - development.json captaincy.actingCaptainCqPenalty"
+    },
+    "effectCap": 0.1,
+    "defaultCq": 50
+  },
+  "traitEffectAdapter": {
+    "_doc": "How traits.json effects owned by combat enter the fight (sys-fight-traits). Each \"combat\" effect becomes one statMod per mod key with the mapped predicate. Trait-sourced mods are summed per stat and capped by derived.traitModCaps.",
+    "when": {
+      "always": null,
+      "selfHpBelow": {
+        "p": "self_hp_below",
+        "param": "pct",
+        "from": "value",
+        "scale": 100
+      },
+      "targetHpBelow": {
+        "p": "target_hp_below",
+        "param": "pct",
+        "from": "value",
+        "scale": 100
+      },
+      "openingSeconds": {
+        "p": "fight_time_below",
+        "param": "seconds",
+        "from": "seconds",
+        "scale": 1
+      },
+      "afterSeconds": {
+        "p": "fight_time_at_least",
+        "param": "seconds",
+        "from": "seconds",
+        "scale": 1
+      },
+      "allyDown": {
+        "p": "ally_downed_within",
+        "param": "seconds",
+        "from": "seconds",
+        "scale": 1
+      }
+    },
+    "mods": {
+      "damageDealtMult": {
+        "stat": "damageDealt",
+        "transform": "value - 1"
+      },
+      "damageTakenMult": {
+        "stat": "damageTaken",
+        "transform": "value - 1"
+      },
+      "reactionDelayMult": {
+        "stat": "reactionDelay",
+        "transform": "value - 1"
+      },
+      "composureAdd": {
+        "stat": "composure",
+        "transform": "value"
+      }
+    },
+    "otherTypes": {
+      "enemyComposureAura": "aura on enemies within the named band: statMod composure = add",
+      "shakenImmune": "multiplies negative composure from Shaken and from allyDown-conditioned mods by mult (0 = immune)",
+      "captainRally": "if this fighter is acting captain, multiplies rally composure (truncated) and rally duration by mult"
+    }
+  },
+  "randomness": {
+    "_doc": "All draws use core/rng (sfc32 + cyrb128). Round seed = deriveSeed(matchSeed, \"round\", n). Purpose streams are derived from the round seed by label so adding a roll type never shifts another.",
+    "streams": [
+      {
+        "path": [
+          "phase",
+          "unitIndex"
+        ],
+        "use": "initial crit and evade accumulator phases: 2 draws at fight start"
+      },
+      {
+        "path": [
+          "variance",
+          "unitIndex"
+        ],
+        "use": "one draw per damage instance the unit deals"
+      },
+      {
+        "path": [
+          "react",
+          "unitIndex"
+        ],
+        "use": "opening stagger (1 draw) and reaction jitter (1 draw per committed decision change)"
+      },
+      {
+        "path": [
+          "tiebreak"
+        ],
+        "use": "final coin flip of the round-end tiebreak only"
+      }
+    ]
+  },
+  "coneHalfAngleCos": {
+    "60": 0.866,
+    "90": 0.7071,
+    "120": 0.5,
+    "180": 0
+  },
+  "events": {
+    "frameEveryTicks": 2,
+    "positionUnit": "cm",
+    "recordLevels": [
+      "none",
+      "summary",
+      "full"
+    ]
+  },
+  "statuses": [
+    {
+      "id": "stun",
+      "name": "Stunned",
+      "category": "cc_hard",
+      "polarity": "debuff",
+      "dr": "control",
+      "stacking": "refresh",
+      "stat": null,
+      "cap": null,
+      "blocks": [
+        "move",
+        "attack",
+        "ability"
+      ],
+      "interrupts": true,
+      "iconId": "st_stun",
+      "description": "Cannot move, attack or use abilities. Interrupts casts and channels."
+    },
+    {
+      "id": "sleep",
+      "name": "Asleep",
+      "category": "cc_hard",
+      "polarity": "debuff",
+      "dr": "control",
+      "stacking": "refresh",
+      "stat": null,
+      "cap": null,
+      "blocks": [
+        "move",
+        "attack",
+        "ability"
+      ],
+      "interrupts": true,
+      "breakOnDamagePct": 0.08,
+      "iconId": "st_sleep",
+      "description": "As Stunned, but wakes at the end of any tick in which it took damage of at least 8% of its max HP."
+    },
+    {
+      "id": "root",
+      "name": "Rooted",
+      "category": "cc_hard",
+      "polarity": "debuff",
+      "dr": "control",
+      "stacking": "refresh",
+      "stat": null,
+      "cap": null,
+      "blocks": [
+        "move"
+      ],
+      "interrupts": false,
+      "iconId": "st_root",
+      "description": "Cannot move or dash. Can still attack and cast. Ends mobile channels."
+    },
+    {
+      "id": "silence",
+      "name": "Silenced",
+      "category": "cc_hard",
+      "polarity": "debuff",
+      "dr": "control",
+      "stacking": "refresh",
+      "stat": null,
+      "cap": null,
+      "blocks": [
+        "ability"
+      ],
+      "interrupts": true,
+      "iconId": "st_silence",
+      "description": "Cannot use active abilities. Basic attacks still work. Interrupts casts and channels."
+    },
+    {
+      "id": "taunt",
+      "name": "Taunted",
+      "category": "cc_hard",
+      "polarity": "debuff",
+      "dr": "control",
+      "stacking": "latest",
+      "stat": null,
+      "cap": null,
+      "blocks": [
+        "rules",
+        "ability"
+      ],
+      "interrupts": true,
+      "iconId": "st_taunt",
+      "description": "Rules are suspended: must move to and basic-attack the taunter. The latest taunt wins."
+    },
+    {
+      "id": "slow",
+      "name": "Slowed",
+      "category": "cc_soft",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "moveSpeed",
+      "sign": -1,
+      "cap": 0.6,
+      "iconId": "st_slow",
+      "description": "Move speed reduced. Only the strongest slow applies."
+    },
+    {
+      "id": "sluggish",
+      "name": "Sluggish",
+      "category": "cc_soft",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "attackSpeed",
+      "sign": -1,
+      "cap": 0.5,
+      "iconId": "st_sluggish",
+      "description": "Attack speed reduced. Only the strongest applies."
+    },
+    {
+      "id": "haste",
+      "name": "Hasted",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "moveSpeed",
+      "sign": 1,
+      "cap": 0.5,
+      "iconId": "st_haste",
+      "description": "Move speed increased."
+    },
+    {
+      "id": "frenzy",
+      "name": "Frenzied",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "attackSpeed",
+      "sign": 1,
+      "cap": 1,
+      "iconId": "st_frenzy",
+      "description": "Attack speed increased."
+    },
+    {
+      "id": "momentum",
+      "name": "Momentum",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "stacks",
+      "stat": "attackSpeed",
+      "sign": 1,
+      "cap": 0.5,
+      "iconId": "st_momentum",
+      "description": "Attack speed increased per stack. Separate from Frenzied, so both apply."
+    },
+    {
+      "id": "empower",
+      "name": "Empowered",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "damageDealt",
+      "sign": 1,
+      "cap": 0.6,
+      "iconId": "st_empower",
+      "description": "Deals more damage."
+    },
+    {
+      "id": "weaken",
+      "name": "Weakened",
+      "category": "debuff",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "damageDealt",
+      "sign": -1,
+      "cap": 0.5,
+      "iconId": "st_weaken",
+      "description": "Deals less damage."
+    },
+    {
+      "id": "shaken",
+      "name": "Shaken",
+      "category": "debuff",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "composure",
+      "sign": -1,
+      "cap": 10,
+      "iconId": "st_shaken",
+      "description": "The acting captain fell: composure reduced for a few seconds (sys-fight-captain). Some traits reduce or ignore it."
+    },
+    {
+      "id": "fortify",
+      "name": "Fortified",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "damageTaken",
+      "sign": -1,
+      "cap": 0.6,
+      "iconId": "st_fortify",
+      "description": "Takes less damage."
+    },
+    {
+      "id": "vulnerable",
+      "name": "Vulnerable",
+      "category": "debuff",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "damageTaken",
+      "sign": 1,
+      "cap": 0.5,
+      "iconId": "st_vulnerable",
+      "description": "Takes more damage."
+    },
+    {
+      "id": "marked",
+      "name": "Marked",
+      "category": "debuff",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "damageTaken",
+      "sign": 1,
+      "cap": 0.3,
+      "iconId": "st_marked",
+      "description": "A posted bounty: takes more damage from everyone. Separate from Vulnerable, so both apply."
+    },
+    {
+      "id": "armor_up",
+      "name": "Armored",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "armor",
+      "sign": 1,
+      "cap": 80,
+      "iconId": "st_armor_up",
+      "description": "Armor increased (flat)."
+    },
+    {
+      "id": "armor_shred",
+      "name": "Sundered",
+      "category": "debuff",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "armor",
+      "sign": -1,
+      "cap": 60,
+      "iconId": "st_armor_shred",
+      "description": "Armor reduced (flat, never below 0)."
+    },
+    {
+      "id": "ward_up",
+      "name": "Warded",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "ward",
+      "sign": 1,
+      "cap": 80,
+      "iconId": "st_ward_up",
+      "description": "Ward increased (flat)."
+    },
+    {
+      "id": "ward_shred",
+      "name": "Unwarded",
+      "category": "debuff",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "ward",
+      "sign": -1,
+      "cap": 60,
+      "iconId": "st_ward_shred",
+      "description": "Ward reduced (flat, never below 0)."
+    },
+    {
+      "id": "heal_reduction",
+      "name": "Festering",
+      "category": "debuff",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "healingReceived",
+      "sign": -1,
+      "cap": 0.6,
+      "iconId": "st_heal_reduction",
+      "description": "Receives less healing and smaller shields."
+    },
+    {
+      "id": "thorns",
+      "name": "Barbed",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "thorns",
+      "sign": 1,
+      "cap": 0.6,
+      "iconId": "st_thorns",
+      "description": "Reflects part of the weapon damage taken from attackers in melee range."
+    },
+    {
+      "id": "lifesteal",
+      "name": "Bloodthirsty",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "lifesteal",
+      "sign": 1,
+      "cap": 0.5,
+      "iconId": "st_lifesteal",
+      "description": "Heals for part of the damage it deals."
+    },
+    {
+      "id": "evasive",
+      "name": "Evasive",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "evade",
+      "sign": 1,
+      "cap": 0.6,
+      "iconId": "st_evasive",
+      "description": "Higher chance to evade weapon blows (total evade is capped at 75%)."
+    },
+    {
+      "id": "bleed",
+      "name": "Bleeding",
+      "category": "dot",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "stacks",
+      "stat": null,
+      "cap": null,
+      "iconId": "st_bleed",
+      "description": "Takes physical damage every tick interval."
+    },
+    {
+      "id": "burn",
+      "name": "Burning",
+      "category": "dot",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "stacks",
+      "stat": null,
+      "cap": null,
+      "iconId": "st_burn",
+      "description": "Takes arcane damage every tick interval."
+    },
+    {
+      "id": "poison",
+      "name": "Poisoned",
+      "category": "dot",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "stacks",
+      "stat": null,
+      "cap": null,
+      "iconId": "st_poison",
+      "description": "Takes arcane damage every tick interval; stacks."
+    },
+    {
+      "id": "regen",
+      "name": "Regenerating",
+      "category": "hot",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "stacks",
+      "stat": null,
+      "cap": null,
+      "iconId": "st_regen",
+      "description": "Heals every tick interval."
+    },
+    {
+      "id": "guarded",
+      "name": "Guarded",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "latest",
+      "stat": null,
+      "cap": 0.6,
+      "iconId": "st_guarded",
+      "description": "While the guardian stands within the guard radius, part of the damage taken is redirected to the guardian."
+    },
+    {
+      "id": "riposte",
+      "name": "Riposting",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "refresh",
+      "stat": null,
+      "cap": null,
+      "iconId": "st_riposte",
+      "description": "Each evaded weapon blow from melee range triggers a counter-strike (magnitude = Power coefficient)."
+    },
+    {
+      "id": "deathward",
+      "name": "Deathwarded",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "refresh",
+      "stat": null,
+      "cap": null,
+      "iconId": "st_deathward",
+      "description": "The first time it would be downed, it stays at 1 HP and is healed instead; then the ward ends."
+    },
+    {
+      "id": "anchored",
+      "name": "Anchored",
+      "category": "special",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "refresh",
+      "stat": null,
+      "cap": null,
+      "blocks": [
+        "move"
+      ],
+      "interrupts": false,
+      "iconId": "st_anchored",
+      "description": "Self-chosen stance: cannot move, immune to knockback and pull. Not crowd control."
+    },
+    {
+      "id": "illuminated",
+      "name": "Illuminated",
+      "category": "debuff",
+      "polarity": "debuff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": null,
+      "cap": 0.3,
+      "iconId": "st_illuminated",
+      "description": "Allies who damage this enemy heal for a share (magnitude) of the damage dealt."
+    },
+    {
+      "id": "rallied",
+      "name": "Rallied",
+      "category": "buff",
+      "polarity": "buff",
+      "dr": null,
+      "stacking": "strongest",
+      "stat": "composure",
+      "sign": 1,
+      "cap": 10,
+      "iconId": "st_rallied",
+      "description": "The captain's rally after an ally fell: composure increased, ally-down penalties suppressed."
+    }
+  ],
+  "statusCategories": [
+    {
+      "id": "cc_hard",
+      "name": "Hard control"
+    },
+    {
+      "id": "cc_soft",
+      "name": "Soft control"
+    },
+    {
+      "id": "debuff",
+      "name": "Debuff"
+    },
+    {
+      "id": "buff",
+      "name": "Buff"
+    },
+    {
+      "id": "dot",
+      "name": "Damage over time"
+    },
+    {
+      "id": "hot",
+      "name": "Healing over time"
+    },
+    {
+      "id": "special",
+      "name": "Special"
+    },
+    {
+      "id": "shield",
+      "name": "Shield (pseudo-category for predicates and dispel)"
+    }
+  ],
+  "statModStats": [
+    {
+      "id": "maxHp",
+      "kind": "fraction"
+    },
+    {
+      "id": "armor",
+      "kind": "flat"
+    },
+    {
+      "id": "ward",
+      "kind": "flat"
+    },
+    {
+      "id": "moveSpeed",
+      "kind": "fraction"
+    },
+    {
+      "id": "attackSpeed",
+      "kind": "fraction"
+    },
+    {
+      "id": "power",
+      "kind": "fraction"
+    },
+    {
+      "id": "support",
+      "kind": "fraction"
+    },
+    {
+      "id": "crit",
+      "kind": "chance"
+    },
+    {
+      "id": "evade",
+      "kind": "chance"
+    },
+    {
+      "id": "tenacity",
+      "kind": "fraction"
+    },
+    {
+      "id": "resolve",
+      "kind": "fraction"
+    },
+    {
+      "id": "composure",
+      "kind": "points"
+    },
+    {
+      "id": "reactionDelay",
+      "kind": "fraction"
+    },
+    {
+      "id": "damageDealt",
+      "kind": "fraction"
+    },
+    {
+      "id": "damageTaken",
+      "kind": "fraction"
+    },
+    {
+      "id": "healingDealt",
+      "kind": "fraction"
+    },
+    {
+      "id": "healingReceived",
+      "kind": "fraction"
+    },
+    {
+      "id": "thorns",
+      "kind": "fraction"
+    },
+    {
+      "id": "lifesteal",
+      "kind": "fraction"
+    },
+    {
+      "id": "hpRegenPct",
+      "kind": "fraction_per_s"
+    },
+    {
+      "id": "hpRegenFlat",
+      "kind": "hp_per_s"
+    },
+    {
+      "id": "ccDurationDealt",
+      "kind": "fraction"
+    },
+    {
+      "id": "debuffDurationDealt",
+      "kind": "fraction"
+    },
+    {
+      "id": "focusRegen",
+      "kind": "fraction"
+    },
+    {
+      "id": "cooldownRate",
+      "kind": "fraction"
+    },
+    {
+      "id": "windup",
+      "kind": "fraction"
+    },
+    {
+      "id": "displaceImmune",
+      "kind": "flag"
+    }
+  ]
+}

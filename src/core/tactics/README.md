@@ -1,6 +1,6 @@
 # core/tactics
 
-**Owner:** tactics agent (M1 wave 1). **Status:** not started (needs the rule format from 03-combat, phase B).
+**Owner:** WP1 (combat). **Status:** contract stubs in `index.ts` (phase B). The public API in `index.ts` is a fixed contract (typed stubs); implement the bodies, add exports only additively, and request signature changes from the architect.
 
 ## Responsibility
 - Rule-list model: ordered `WHEN <conditions> -> <action> ON <selector> [ONLY|PREFER] [cooldown]` rules plus a fallback stance (exact vocabulary from 03-combat / tactics-presets.json).

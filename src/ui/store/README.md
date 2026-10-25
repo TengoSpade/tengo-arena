@@ -1,6 +1,6 @@
 # ui/store
 
-**Owner:** UI foundation agent (M1 wave 1). **Status:** not started.
+**Owner:** WP6. **Status:** contract in `index.ts` (GameStore interface, StoreContext, useStore are fixed; createGameStore is a stub).
 
 Planned contract (docs/design 05 §3):
 - `game = signal<GameState | null>`, `content = signal<ContentDB | null>`, `busy = signal<boolean>`; derived views via `computed()` (roster, standings, finances) so tables update without manual wiring.

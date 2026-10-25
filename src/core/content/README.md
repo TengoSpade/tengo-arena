@@ -1,24 +1,28 @@
 # core/content
 
-**Owner:** content agent (M1 wave 1). **Status:** placeholder types only; implementation starts in phase B when the designers' schemas land.
+**Owner:** architect. **Status:** implemented (phase B): zod schemas for all 11 files, cross-file validator, loader, ContentDB, units.
 
-## Responsibility
-- zod schemas for every file in `content/<theme>/` (`CONTENT_FILE_NAMES`), with content types inferred from them.
-- Cross-file reference validation (every `abilityId` in classes.json exists in abilities.json, every preset references known vocabulary, ...).
-- `ContentDB`: frozen, indexed registries (`byId` maps plus ordered lists) used by every other module.
-- `hashContent(raw)` = `hashString(stableStringify(raw))`, stored in `GameState.content.hash`, saves and fight headers.
-- Clear errors: `ContentIssue { file, path, message }` collected (not first-error-only) and formatted for the UI error screen and the CLI.
-
-## Public API (planned)
+## Use
 ```ts
-loadContent(themeId: string, raw: RawContentFiles): Result<ContentDB, ContentIssue[]>
-hashContent(raw: RawContentFiles): string
-formatContentIssues(issues: readonly ContentIssue[]): string
+import { loadContent, formatContentIssues, secondsToTicks, metresToMm } from '../content';
+const result = loadContent('default', raw);          // raw: RawContentFiles from a platform loader
+if (!result.ok) console.error(formatContentIssues(result.error));
+const db = result.value;                               // ContentDB (frozen)
+db.classes.require('oathguard'); db.classAbility('oathguard', 'a1'); db.tierByLevel(1); db.weekByIndex(5);
 ```
 
-## Rules
-- Pure: no file or network IO. Loaders live outside core (`src/platform/content-loader.ts` for the browser, `scripts/lib/node-content.ts` for Node) and pass raw JSON in.
-- No defaults that hide authoring mistakes: missing required fields are errors. Optional fields get documented defaults in the schema.
-- No theme strings in code; all names come from the JSON.
+## Files
+| File | Purpose |
+| --- | --- |
+| `schema/common.ts` | id pattern and the CLOSED vocabularies (stats, archetypes, statuses, effect types, predicates, triggers, rule conditions/selectors/predicates/actions, trait effects, ...) |
+| `schema/<file>.ts` | one zod schema per content file; types inferred (`types.ts`) |
+| `validate.ts` | cross-file rules: references, unique ids, closed lists match, O8 class structure (6 per archetype, 2 per hybrid pair, 42 total), mutual trait opposites, rule params vs vocabulary (type, range, step, required), selector pool vs action/ability target, O2 caps, calendar and schedule coverage, economy integers, exact unit conversion |
+| `units.ts` | authoring units -> engine integers (`S` ticks, `M` cm / mm, `Mps` mm per tick, fractions -> bp) |
+| `db.ts` | `ContentDB` registries and lookups |
+| `load.ts` | `loadContent`, `parseContentFiles`, `hashContent` |
 
-Depends on: `util`, `model` (and npm `zod`). Tests: valid minimal fixture theme, one failing fixture per error class, the shipped `content/default` passes.
+Profiles: `'theme'` (default; full shipped-theme rules) and `'fixture'` (skips count rules, for core/testkit).
+
+Designers: `npm run validate-content` prints every issue as `file › path: message`.
+
+Adding a vocabulary entry (status, effect type, rule condition, ...) is a code change: the owning module must implement it, then the architect adds it to `schema/common.ts`.

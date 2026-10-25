@@ -1,6 +1,6 @@
 # src/platform — environment adapters
 
-**Owner:** save/platform agent (M1), packaging agent (M7). **Status:** content loader only (phase A).
+**Owner:** WP6 (UI foundation); packaging (M7) later. **Status:** content loader (done) and platform contracts in `save-store.ts` (SaveStore, Clock, FileIO; implementations to build).
 
 Everything that touches the outside world and is NOT game logic:
 

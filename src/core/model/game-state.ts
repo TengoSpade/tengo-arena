@@ -1,19 +1,12 @@
 import type { Seed } from '../rng';
-import type { Calendar, SeasonPhase } from './calendar';
+import type { Calendar } from './calendar';
 import type { Club } from './club';
-import type { Competition, Fixture, StandingRow } from './competition';
+import type { Competition, Fixture } from './competition';
 import type { Fighter } from './fighter';
-import type {
-  ClubId,
-  CompetitionId,
-  FighterId,
-  FixtureId,
-  IdCounters,
-  IdMap,
-  NewsId,
-  TierId,
-} from './ids';
+import type { SeasonRecord } from './history';
+import type { ClubId, CompetitionId, FighterId, FixtureId, IdCounters, IdMap } from './ids';
 import type { Ledger } from './ledger';
+import type { AiClubMemory, KnowledgeEntry, MarketState } from './market';
 import type { MatchResult } from './match';
 import type { NewsItem } from './news';
 
@@ -24,16 +17,15 @@ import type { NewsItem } from './news';
 export const STATE_SCHEMA_VERSION = 1;
 
 /**
- * The complete, authoritative, JSON-safe state of one career. Everything the
- * game needs to continue lives here; nothing authoritative lives in the UI.
- *
- * Ownership (who may write which part) is listed in docs/design 05 §3. All
- * writes happen inside core transitions (applyCommand, advanceWeek, season
- * end) on a cloned draft; committed states are treated as immutable.
+ * The complete, authoritative, JSON-safe state of one career. Everything
+ * needed to continue lives here; nothing authoritative lives in the UI.
+ * Ownership per part: docs/design/_drafts/05-technical.md §3.2. All writes
+ * happen inside core transitions on a cloned draft (produce()); committed
+ * states are immutable.
  */
 export interface GameState {
   schemaVersion: number;
-  /** Theme and exact content the career was created with. */
+  /** Theme and exact content the career runs on. */
   content: ContentRef;
   rng: RngRoot;
   ids: IdCounters;
@@ -41,32 +33,36 @@ export interface GameState {
   options: GameOptions;
   /** null until the player picks a club after world generation. */
   playerClubId: ClubId | null;
+
   clubs: IdMap<ClubId, Club>;
   fighters: IdMap<FighterId, Fighter>;
   competitions: IdMap<CompetitionId, Competition>;
   fixtures: IdMap<FixtureId, Fixture>;
-  /** Keyed by fixture id; present iff the fixture was played. */
+  /** Present iff the fixture was played. Full results for the current and previous season; older ones compacted (TUNABLE). */
   results: IdMap<FixtureId, MatchResult>;
+
+  market: MarketState;
+  ai: IdMap<ClubId, AiClubMemory>;
   ledger: Ledger;
-  /** Newest last. Older items may be pruned at season end (TUNABLE retention). */
+  /** Newest last; pruned to the current and previous season at season end. */
   news: NewsItem[];
   /** One record per completed season, oldest first. */
   history: SeasonRecord[];
+
+  /** Reserved for M4 knowledge (per viewing club, per fighter). Always null in M1 (open-026: true values visible). */
+  knowledge: IdMap<ClubId, IdMap<FighterId, KnowledgeEntry>> | null;
 }
 
-/** Content identity: theme folder name + hash of the validated content files. */
+/** Content identity: theme folder name + hash of the raw content files. */
 export interface ContentRef {
-  /** Theme folder under content/, e.g. "default". */
   id: string;
-  /** hashString(stableStringify(raw content files)). */
   hash: string;
 }
 
 /**
- * Root of all randomness. Everything random is derived from `root` plus a
- * path (see core/rng STREAM). `counters` number the streams used by
- * repeatable actions (e.g. counters.action for command-triggered rolls) so
- * each use gets a fresh, reproducible stream.
+ * Root of all randomness. Everything random derives from `root` + a path
+ * (core/rng STREAM). `counters` number repeatable uses, e.g. counters.action
+ * for command-triggered rolls.
  */
 export interface RngRoot {
   root: Seed;
@@ -74,32 +70,20 @@ export interface RngRoot {
 }
 
 /**
- * New-game options. [phase B] the option set (difficulty, aging/injury
- * toggles, hardcore) comes from 02/03 design docs; values are plain JSON.
+ * Career options chosen at new game. Orchestrator decisions of 2026-10-25
+ * (pending owner confirmation) set the M1 defaults.
  */
-export type GameOptions = Record<string, boolean | number | string>;
-
-/** Archive of a finished season (written once by the season-end step). */
-export interface SeasonRecord {
-  season: number;
-  leagues: { tierId: TierId; competitionId: CompetitionId; table: StandingRow[] }[];
-  tournament: { competitionId: CompetitionId; winnerClubId: ClubId | null } | null;
-  promoted: ClubId[];
-  relegated: ClubId[];
-  retiredFighterIds: FighterId[];
+export interface GameOptions {
+  /** Standing training emphasis per fighter (lifecycle L-2); routes earned growth only. Default true. */
+  trainingEmphasis: boolean;
+  /** M1-light patron goal (03-league-economy owner question 8). Default false: no patron goal in M1. */
+  patronGoals: boolean;
+  /** Retirement on (P-10). Default true. */
+  retirement: boolean;
 }
 
-/** Returned by advanceWeek for the hub / digest screen. */
-export interface WeekReport {
-  season: number;
-  week: number;
-  phase: SeasonPhase;
-  /** Fixtures played this week (all clubs), in simulation order. */
-  fixtureIds: FixtureId[];
-  /** The player's fixture this week, if any. */
-  playerFixtureId: FixtureId | null;
-  newsIds: NewsId[];
-  /** Ledger entries written this week: seq in [ledgerSeqFrom, ledgerSeqTo). */
-  ledgerSeqFrom: number;
-  ledgerSeqTo: number;
-}
+export const DEFAULT_GAME_OPTIONS: Readonly<GameOptions> = {
+  trainingEmphasis: true,
+  patronGoals: false,
+  retirement: true,
+};

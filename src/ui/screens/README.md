@@ -1,10 +1,22 @@
 # ui/screens
 
-**Owners:** UI screen agent A and B (M1 wave 2). **Status:** not started.
+One folder per screen (`index.tsx` default-exports the screen component; local CSS and `text.ts` copy live in the folder; tests as `*.test.tsx`). Every screen is already registered in `ui/app/routes.ts` with a placeholder, so screen work never edits shared files.
 
-One folder per screen, each with `index.tsx` (the screen component), optional local CSS and `*.test.tsx`. Proposed M1 split (finalized in phase B):
+| Folder | Route | Owner |
+| --- | --- | --- |
+| `home/` | `#/home` (hub: digest, next fixture, Continue) | WP6 |
+| `new-game/` | `#/new-game` | WP6 |
+| `club-select/` | `#/club-select` | WP6 |
+| `squad/` | `#/squad` (roster, lineup of 5, rows, captain and vice-captain, preset per fighter, training emphasis) | WP6 |
+| `fighter/` | `#/fighter/:id` | WP6 |
+| `codex/` | `#/codex` (classes, abilities, races, traits) | WP6 |
+| `league/` | `#/league` (wing and tier tables, Reckoning bracket) | WP7 |
+| `fixtures/` | `#/fixtures` | WP7 |
+| `match-report/` | `#/match/:fixtureId` | WP7 |
+| `market/` | `#/market` (free agents, offers, renewals, trials rookies) | WP7 |
+| `finances/` | `#/finances` | WP7 |
+| `season-review/` | `#/season-review` | WP7 |
+| `saves/` | `#/saves` | WP7 |
+| `settings/` | `#/settings` | WP7 |
 
-- **Agent A (club and roster):** `new-game/`, `club-select/`, `squad/`, `fighter/`, `lineup/` (lineup of 5, captain, tactics preset per fighter), `market/` (free agents, offers), `contracts/`.
-- **Agent B (season and results):** `hub/` (inbox digest, next fixture, advance), `schedule/`, `standings/`, `match-report/`, `tournament/`, `finances/`, `season-summary/`, `saves/` (save, load, export, import), `settings/`.
-
-Screens read state from `ui/store` and change it only with `dispatch(command)` / `advance()`.
+Screens read `useStore()` signals and call store actions; they never mutate GameState. Tests provide a store through `StoreContext` (state from `core/testkit` `buildFixtureWorld()`).

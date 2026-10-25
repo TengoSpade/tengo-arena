@@ -1,6 +1,6 @@
 # core/league
 
-**Owner:** league agent (M1 wave 1). **Status:** not started (needs 03-league-economy and leagues.json, phase B).
+**Owner:** WP3 (league + calendar). **Status:** contract stubs in `index.ts` (phase B). The public API in `index.ts` is a fixed contract (typed stubs); implement the bodies, add exports only additively, and request signature changes from the architect.
 
 ## Responsibility
 - Season schedule: one league `Competition` per tier with its `Fixture`s (16 matches per club in M1), week assignment, home/away balance.

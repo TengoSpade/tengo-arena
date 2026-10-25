@@ -1,25 +1,26 @@
 # core/model
 
-**Owner:** architect. **Status:** phase A types implemented; fields marked `[phase B]` are provisional.
+**Owner:** architect. **Status:** complete GameState and engine types (phase B). Changes go through the architect (STATE_SCHEMA_VERSION + migration).
 
-Engine and state types shared by every module. Plain JSON data only (no classes, Maps, Dates or functions inside state).
+Engine and state types shared by every module. Plain JSON data only.
 
 | File | Contents |
 | --- | --- |
-| `ids.ts` | branded ids (`ClubId`, `FighterId`, `FixtureId`, content ids), deterministic `allocateId` |
-| `calendar.ts` | `Calendar`, `SeasonPhase` |
-| `club.ts` | `Club`, `Lineup`, `TacticsAssignment` |
-| `fighter.ts` | `Fighter` (provisional), `Contract`, `Injury`, `CareerStats` |
-| `competition.ts` | `Competition`, `Fixture`, `Bracket`, `StandingRow` (derived) |
-| `match.ts` | `MatchResult`, `RoundResult`, `LineupSnapshot`, `FighterMatchStats` |
-| `events.ts` | fight event-stream envelope, engine-level events, `FightLog`, `hashEventStream` |
-| `ledger.ts` | `Money`, `LedgerEntry`, `Ledger`, `LedgerCategory` |
-| `news.ts` | `NewsItem` (text key + params, no prose) |
-| `commands.ts` | `Command` union (the only way decisions change state), `CommandLogEntry` |
-| `game-state.ts` | `GameState`, `STATE_SCHEMA_VERSION`, `SeasonRecord`, `WeekReport` |
-| `save.ts` | `SaveEnvelope`, `SaveMeta`, `SAVE_FORMAT` |
+| `ids.ts` | branded ids; clubs use clubs.json ids; identity ids for competitions and fixtures (`lg:`/`rk:`); allocated fighter and news ids |
+| `calendar.ts` | `Calendar` (season, weekIndex, weekId, phase), `GameTime` |
+| `club.ts` | `Club`, `ClubFinance`, captaincy fields, `Lineup`, `TacticsAssignment`, `ClubSeasonRow` |
+| `fighter.ts` | `Fighter` (stored lifecycle inputs; stats are derived), `Contract`, `Injury`, traits, statuses, career and season counters, history rows; reserved `academy` (M5) |
+| `competition.ts` | `Competition` (league with wings, or Reckoning with bracket), `Fixture`, `Bracket`, `StandingRow` |
+| `match.ts` | sim inputs (`MatchInput`, `SideInput`, `FightFighterInput`) and the committed `MatchResult`, `RoundResult`, `FighterMatchStats`, `DownRecord` |
+| `events.ts` | fight event stream: envelope, header, the full `FightEvent` union, `SUMMARY_EVENT_TYPES`, `hashEventStream` |
+| `ledger.ts` | `Gold`, `LEDGER_CATEGORIES`, `LedgerEntry`, `Ledger` |
+| `market.ts` | offers, negotiations, trials rookies, AI memory, reserved `KnowledgeEntry` (M4) |
+| `news.ts` | `NewsItem` (text key + params) |
+| `commands.ts` | the `Command` union (the only way decisions change state) |
+| `history.ts` | `SeasonRecord`, tier records, retirements |
+| `report.ts` | derived views: `MatchReport`, `WeekReport`, `SeasonEndReport`, `Blocker` |
+| `game-state.ts` | `GameState`, `GameOptions` (M1 defaults), `STATE_SCHEMA_VERSION` |
+| `save.ts` | `SaveEnvelope`, `SaveMeta`, `SaveError` codes |
 | `factories.ts` | `createEmptyGameState` |
 
-Content types (classes, abilities, races, traits, ...) are **not** here; core/content defines them from its schemas (phase B).
-
-Changing a persisted type: bump `STATE_SCHEMA_VERSION`, add a migration in core/save, update docs/design 05. Request via the architect.
+Content types live in core/content (inferred from the schemas).

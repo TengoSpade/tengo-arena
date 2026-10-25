@@ -1,6 +1,6 @@
 # core/ai
 
-**Owner:** AI agent (M1 wave 2). **Status:** not started.
+**Owner:** WP5 (game loop). **Status:** contract stubs in `index.ts` (phase B). The public API in `index.ts` is a fixed contract (typed stubs); implement the bodies, add exports only additively, and request signature changes from the architect.
 
 ## Responsibility
 - AI club manager: each week choose a valid lineup of 5, captain and a tactics preset per fighter; sign free agents to fill needs; renew or release contracts; stay within budget.

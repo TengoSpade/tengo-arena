@@ -1,52 +1,54 @@
-import type { ClubId, CompetitionId, FighterId, FixtureId } from './ids';
+import type { ClubId, FighterId, FixtureId } from './ids';
 
 /**
- * Gold, the single currency (01 §7): a whole number. Never fractional: round
- * with roundHalfAway (core/util) at the point a fractional amount is computed.
+ * Gold, the single currency (01 §7): an integer. Displayed with the theme's
+ * name (economy.json currency, e.g. "tessel"). Ratios are basis points.
+ * Each formula rounds once at its end, toward zero (03 §1).
  */
 export type Gold = number;
 
-/**
- * Ledger categories. [phase B] final list from 03-league-economy; keep the
- * set closed so finance screens and soak checks can group by category.
- */
-export type LedgerCategory =
-  | 'wages'
-  | 'signing-fee'
-  | 'release-fee'
-  | 'prize-money'
-  | 'gate-revenue'
-  | 'budget-allocation'
-  | 'operating-cost'
-  | 'debt-advance'
-  | 'adjustment';
+/** 03-league-economy sys-finance ledger categories (closed list). */
+export const LEDGER_CATEGORIES = [
+  'centralGrant',
+  'parachute',
+  'promotionGrant',
+  'sponsorRetainer',
+  'sponsorWinBonus',
+  'sponsorTournamentBonus',
+  'gate',
+  'tablePrize',
+  'tournamentPrize',
+  'patronBonus',
+  'registryAdvance',
+  'wages',
+  'hiredBlades',
+  'signingCost',
+  'releasePayout',
+  'operations',
+] as const;
+export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number];
 
 /**
- * One gold movement. core/economy is the only writer; every change to a
- * Club.balance is accompanied by exactly one entry in the same transition, so
- * balance(club) === opening balance + sum(entries for club) always holds
- * (checked by the soak harness).
+ * One gold movement of the current season. core/economy is the only writer;
+ * every balance change has exactly one entry in the same transition, so
+ * balance == opening balance + Σ entries holds per club (soak check).
  */
 export interface LedgerEntry {
-  /** Game-wide sequence number, strictly increasing. */
   seq: number;
   season: number;
-  week: number;
+  weekIndex: number;
   clubId: ClubId;
-  /** Signed: income > 0, expense < 0. */
+  /** Signed: income > 0, cost < 0. */
   amount: Gold;
   category: LedgerCategory;
-  /** Text key for the finance screen (UI/content text table), e.g. "ledger.wages.weekly". */
-  reasonKey: string;
   fighterId?: FighterId;
   fixtureId?: FixtureId;
-  competitionId?: CompetitionId;
 }
 
 export interface Ledger {
   nextSeq: number;
-  /** Opening balance per club at the start of the current season (for the balance invariant and season summaries). */
+  /** Balance per club at next-season setup (before the first entry of the season). */
   openingBalances: Record<ClubId, Gold>;
-  /** Current season (and TUNABLE retention of previous seasons; older seasons are summarized at season end). */
+  /** Current season only; at season end the season is summarized into ClubSeasonRow and cleared. */
   entries: LedgerEntry[];
 }

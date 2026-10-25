@@ -1,0 +1,1384 @@
+{
+  "_doc": "Fighter traits (sys-traits). Crusader-Kings-style personality, physique and history traits; every name and text is original. Spec: docs/design/_drafts/03-fighter-lifecycle.md. Stat ids are the combat.json attribute ids (str agi pac tgh pre arc spi wil cmp ldr awr dis). Each effect's 'owner' (see effectTypes) says who applies it: 'management' effects are applied by lifecycle/economy code before or outside the fight (stat adds arrive in the fight setup's effective stats and must not be re-applied); 'sim' effects are applied inside the fight by combat (sys-fight-traits, combat.json traitEffectAdapter; docs/design/03 boundary contract 3). Whole-point stat adds are capped at +/-3 per stat per trait (statAddCapPerTrait, TUNABLE). effectText must be updated by whoever changes a number. Fractions are decimals; the loader converts them to basis points.",
+  "version": 1,
+  "status": "DRAFT 2026-10-25 (fighter-lifecycle designer). ~80/20 positive/negative is REQUIRED (O5); catalogue, weights, numbers and the roll algorithm are PROPOSED / TUNABLE.",
+  "rollRules": {
+    "_doc": "Roll per generated fighter, generation stream STREAM.traits: (1) n from countWeights; (2) the fighter gets exactly one negative trait with probability negativeChancePerTrait * n (40% / 60% / 80% for 2 / 3 / 4 traits), otherwise none: ~20% of rolled traits are negative and no starting fighter has more than one; (3) roll the negative first (if any), then the positives, each a weighted pick among eligible traits of that polarity using rollWeight * raceWeight[race] (missing raceWeight = 1). If no eligible trait remains for a slot it stays empty (no polarity swap, so the one-negative cap always holds).",
+    "countWeights": {
+      "2": 30,
+      "3": 50,
+      "4": 20
+    },
+    "negativeChancePerTrait": 0.2,
+    "maxRolledNegatives": 1,
+    "targetPositiveShare": 0.8,
+    "maxRolledTraits": 4,
+    "maxPerCategory": { "temperament": 2, "physique": 2, "style": 2, "mind": 2, "leadership": 2 },
+    "maxTotalTraits": 8,
+    "rookieOnlyMaxHumanAge": 21,
+    "eligibility": ["not already held", "neither trait lists the other in opposites or excludes (checked both ways)", "not in the same exclusiveGroup as a held trait", "category cap not reached", "rookieOnly traits only if humanAge <= rookieOnlyMaxHumanAge at generation", "rollWeight > 0 (acquired traits are never rolled)"],
+    "kinds": { "boon": "positive, no drawback", "edge": "net positive with a small drawback", "burden": "net negative with a real upside or niche", "flaw": "pure negative; every rolled flaw has a visible way to lose it (scars are flaws by design and permanent, O-ladder)" },
+    "rarityBands": {
+      "_doc": "Labels follow the expected share of generated fighters holding the trait (Monte Carlo over all races).",
+      "common": ">= 8%",
+      "uncommon": "4-8%",
+      "rare": "< 4%",
+      "storied": "never rolled; earned through events, captaincy or injury"
+    },
+    "revealOrder": {
+      "_doc": "FUTURE (M4 scouting, P-12, research D3) hook; M1 shows every trait. Tier = the knowledge step that reveals the trait.",
+      "byCategory": { "physique": 1, "temperament": 2, "style": 3, "mind": 3, "leadership": 4, "acquired": 1 },
+      "negativeTraitsAlwaysTier": 4
+    }
+  },
+  "categories": [
+    { "id": "temperament", "name": "Temperament", "rolled": true, "description": "How the fighter carries themselves: nerve, pride, sociability. Changes only through the events listed on each trait." },
+    { "id": "physique", "name": "Physique", "rolled": true, "description": "Born with it. Never gained after generation and never lost." },
+    { "id": "style", "name": "Fighting Style", "rolled": true, "description": "Habits that show in the arena. Small in-fight modifiers only; never skip or reorder tactics rules (P-06)." },
+    { "id": "mind", "name": "Mind & Discipline", "rolled": true, "description": "How the fighter learns, trains and ages." },
+    { "id": "leadership", "name": "Leadership & Social", "rolled": true, "description": "Captaincy, mentoring and lineup chemistry." },
+    { "id": "acquired", "name": "Acquired", "rolled": false, "description": "Earned or suffered during a career: veteran status, titles, captaincy, scars. Public record; does not count toward the 4 rolled traits." }
+  ],
+  "statAddCapPerTrait": 3,
+  "effectTypes": [
+    { "id": "stat", "owner": "management", "params": "stat (combat attribute id), add", "description": "Whole-point modifier to the effective attribute (|add| <= statAddCapPerTrait). Base stats are untouched; losing the trait removes it. Included in fight-setup stats." },
+    { "id": "contextStat", "owner": "management", "params": "context (tournament), stat, add", "description": "Stat modifier applied to fight-setup stats only in matches of that competition type." },
+    { "id": "devClock", "owner": "management", "params": "group (physical|mental|all), mult, optional humanAgeMin (inclusive) / humanAgeMax (exclusive)", "description": "Multiplies the development-clock advance for the group while humanAge during the season is in range." },
+    { "id": "declineMult", "owner": "management", "params": "group, mult", "description": "Multiplies wear accrued per season." },
+    { "id": "declineShift", "owner": "management", "params": "group, humanYears", "description": "Looks up the decline table at humanAge - humanYears (positive = decline starts later)." },
+    { "id": "xp", "owner": "management", "params": "mult", "description": "Multiplies XP per round (floor after all multipliers)." },
+    { "id": "trainingEmphasis", "owner": "management", "params": "mult", "description": "Multiplies the strength of training emphasis effects (0 = emphasis has no effect)." },
+    { "id": "injuryChance", "owner": "management", "params": "mult", "description": "Multiplies per-round injury chance (rolled by sys-injury after each round)." },
+    { "id": "recovery", "owner": "management", "params": "mult", "description": "Multiplies injury weeks for severities that scale with recovery." },
+    { "id": "scarChance", "owner": "management", "params": "mult", "description": "Multiplies scar chance on moderate and serious injuries." },
+    { "id": "retirement", "owner": "management", "params": "mult", "description": "Multiplies the season retirement chance." },
+    { "id": "captaincy", "owner": "management", "params": "add", "description": "Adds to captaincy (CQ 1-100)." },
+    { "id": "mentor", "owner": "management", "params": "youngDevMult", "description": "Club-mates with humanAge <= 23 get this development multiplier (at most 2 trait mentors per club count; all mentoring capped at x1.15)." },
+    { "id": "chemistry", "owner": "management", "params": "add", "description": "Adds to lineup chemistry while this fighter is fielded (sys-chemistry, applied as a fight-setup composure modifier)." },
+    { "id": "chemistrySameRace", "owner": "management", "params": "perTeammate, max, ifNone", "description": "Chemistry per other fielded fighter of the same race, capped; ifNone applies when there is none." },
+    { "id": "chemistryClash", "owner": "management", "params": "withTrait, add", "description": "Applied once per unordered pair of fielded fighters that both hold withTrait." },
+    { "id": "chemistryPair", "owner": "management", "params": "withTrait, add, minHolders", "description": "Applied once per lineup if at least minHolders fielded fighters hold withTrait." },
+    { "id": "chemistryImmune", "owner": "management", "params": "none", "description": "This fighter does not receive the lineup chemistry composure modifier, good or bad." },
+    { "id": "ruleSlots", "owner": "management", "params": "add", "description": "FUTURE (M3, P-07): changes the fighter rule-slot count, within 4..12." },
+    { "id": "economy", "owner": "management (economy)", "params": "hook, add|mult", "description": "Input for the league/economy designer (economy.json wage.traitAdj): fanAppeal (add), wageDemandMult (mult), loyalty (add)." },
+    { "id": "combat", "owner": "sim", "params": "when (always | selfHpBelow value | targetHpBelow value | openingSeconds seconds | afterSeconds seconds | allyDown seconds), mods {damageDealtMult | damageTakenMult | reactionDelayMult | composureAdd}", "description": "Conditional in-fight modifier, translated by combat.json traitEffectAdapter. Never skips or reorders rules (P-06). Trait-sourced in-fight mods are capped by combat.json derived.traitModCaps." },
+    { "id": "enemyComposureAura", "owner": "sim", "params": "rangeBand, add", "description": "Enemies within the combat.json band get add composure." },
+    { "id": "shakenImmune", "owner": "sim", "params": "mult", "description": "Multiplies negative composure from Shaken and from allyDown-conditioned mods (0 = immune)." },
+    { "id": "captainRally", "owner": "sim", "params": "mult", "description": "As acting captain, rally composure (truncated) and rally duration are multiplied." }
+  ],
+  "traits": [
+    {
+      "id": "still_water",
+      "name": "Still Water",
+      "category": "temperament",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 10,
+      "opposites": ["hot_blood"],
+      "excludes": ["green_nerves"],
+      "raceWeight": { "elf": 1.4, "orc": 0.6, "ashkin": 0.6 },
+      "flavor": "Nothing ripples the surface, not even a blade at the throat.",
+      "effectText": "+2 composure. Captaincy +3.",
+      "icon": "icon_trait_still_water",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": 2 },
+        { "type": "captaincy", "add": 3 }
+      ]
+    },
+    {
+      "id": "hot_blood",
+      "name": "Hot Blood",
+      "category": "temperament",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "uncommon",
+      "rollWeight": 4,
+      "opposites": ["still_water"],
+      "excludes": [],
+      "raceWeight": { "orc": 1.8, "ashkin": 1.6, "elf": 0.5 },
+      "flavor": "Every cut is an insult, and insults get answered.",
+      "effectText": "-2 composure. Captaincy -8. In fights: +8% damage while below 50% HP. May mellow: 15% chance per season to lose it from human-age 30.",
+      "icon": "icon_trait_hot_blood",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": -2 },
+        { "type": "captaincy", "add": -8 },
+        {
+          "type": "combat",
+          "when": "selfHpBelow",
+          "value": 0.5,
+          "mods": { "damageDealtMult": 1.08 }
+        }
+      ],
+      "loss": { "rule": "seasonEndChance", "chance": 0.15, "humanAgeAtLeast": 30 }
+    },
+    {
+      "id": "steel_spine",
+      "name": "Steel Spine",
+      "category": "temperament",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 7,
+      "opposites": ["skittish"],
+      "excludes": ["green_nerves", "flinches"],
+      "raceWeight": { "dwarf": 1.3 },
+      "flavor": "Has watched friends fall before. Keeps swinging.",
+      "effectText": "+1 composure. Captaincy +3. In fights: unaffected by Shaken or by penalties when an ally is downed.",
+      "icon": "icon_trait_steel_spine",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": 1 },
+        { "type": "captaincy", "add": 3 },
+        { "type": "shakenImmune", "mult": 0 }
+      ]
+    },
+    {
+      "id": "skittish",
+      "name": "Skittish",
+      "category": "temperament",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["steel_spine"],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Jumps at shadows, and at the sound of a friend hitting the sand.",
+      "effectText": "Captaincy -6. In fights: -3 composure for 4 s whenever an ally is downed. 50% chance to lose it on becoming Sand-Wise.",
+      "icon": "icon_trait_skittish",
+      "effects": [
+        { "type": "captaincy", "add": -6 },
+        {
+          "type": "combat",
+          "when": "allyDown",
+          "seconds": 4,
+          "mods": { "composureAdd": -3 }
+        }
+      ],
+      "loss": { "rule": "onGainTrait", "trait": "sand_wise", "chance": 0.5 }
+    },
+    {
+      "id": "good_company",
+      "name": "Good Company",
+      "category": "temperament",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 9,
+      "opposites": ["prickly"],
+      "excludes": ["sharp_tongue"],
+      "raceWeight": { "human": 1.2 },
+      "flavor": "Makes the long road between arenas feel shorter.",
+      "effectText": "+1 lineup chemistry while fielded. Captaincy +3.",
+      "icon": "icon_trait_good_company",
+      "effects": [
+        { "type": "chemistry", "add": 1 },
+        { "type": "captaincy", "add": 3 }
+      ]
+    },
+    {
+      "id": "prickly",
+      "name": "Prickly",
+      "category": "temperament",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["good_company"],
+      "excludes": [],
+      "raceWeight": { "elf": 1.2 },
+      "flavor": "Trains alone, eats alone, and prefers it.",
+      "effectText": "-1 lineup chemistry while fielded. +8% XP. Captaincy -8.",
+      "icon": "icon_trait_prickly",
+      "effects": [
+        { "type": "chemistry", "add": -1 },
+        { "type": "xp", "mult": 1.08 },
+        { "type": "captaincy", "add": -8 }
+      ]
+    },
+    {
+      "id": "glory_hungry",
+      "name": "Glory-Hungry",
+      "category": "temperament",
+      "polarity": "positive",
+      "kind": "edge",
+      "tradeoff": true,
+      "rarity": "common",
+      "rollWeight": 8,
+      "opposites": ["idle_hands"],
+      "excludes": [],
+      "raceWeight": { "ashkin": 1.3 },
+      "flavor": "Wants their name sung in every taproom in the league.",
+      "effectText": "+15% XP. Retirement chance x0.8. -1 chemistry for each other Glory-Hungry fighter in the lineup. Captaincy -3. 50% chance to lose it on winning a title.",
+      "icon": "icon_trait_glory_hungry",
+      "effects": [
+        { "type": "xp", "mult": 1.15 },
+        { "type": "retirement", "mult": 0.8 },
+        { "type": "chemistryClash", "withTrait": "glory_hungry", "add": -1 },
+        { "type": "captaincy", "add": -3 }
+      ],
+      "loss": { "rule": "onGainTrait", "trait": "title_tested", "chance": 0.5 }
+    },
+    {
+      "id": "idle_hands",
+      "name": "Idle Hands",
+      "category": "temperament",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["glory_hungry"],
+      "excludes": ["regimented"],
+      "raceWeight": {},
+      "flavor": "Talented enough to get by, and knows it.",
+      "effectText": "Development x0.85. +1 lineup chemistry (easy to like). Retirement chance x1.2. Captaincy -5. 25% chance per season to lose it after a full season under a grade-A club captain in which they played at least half the time.",
+      "icon": "icon_trait_idle_hands",
+      "effects": [
+        { "type": "devClock", "group": "all", "mult": 0.85 },
+        { "type": "chemistry", "add": 1 },
+        { "type": "retirement", "mult": 1.2 },
+        { "type": "captaincy", "add": -5 }
+      ],
+      "loss": { "rule": "seasonEndChance", "chance": 0.25, "requires": "club captain grade A for the whole season and usage >= 0.5" }
+    },
+    {
+      "id": "showboat",
+      "name": "Showboat",
+      "category": "temperament",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 3,
+      "opposites": ["quiet_steel"],
+      "excludes": [],
+      "raceWeight": { "ashkin": 1.4, "human": 1.1 },
+      "flavor": "Fights for the crowd first and the lineup second.",
+      "effectText": "-1 composure. Captaincy -4. Fan appeal +1 (economy). In fights: +8% damage in the first 8 s of a round.",
+      "icon": "icon_trait_showboat",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": -1 },
+        { "type": "captaincy", "add": -4 },
+        { "type": "economy", "hook": "fanAppeal", "add": 1 },
+        {
+          "type": "combat",
+          "when": "openingSeconds",
+          "seconds": 8,
+          "mods": { "damageDealtMult": 1.08 }
+        }
+      ]
+    },
+    {
+      "id": "big_stage",
+      "name": "Big-Stage Nerve",
+      "category": "temperament",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 6,
+      "opposites": [],
+      "excludes": ["green_nerves"],
+      "raceWeight": {},
+      "flavor": "The louder the crowd, the steadier the hands.",
+      "effectText": "+2 composure in tournament matches.",
+      "icon": "icon_trait_big_stage",
+      "effects": [
+        { "type": "contextStat", "context": "tournament", "stat": "cmp", "add": 2 }
+      ]
+    },
+    {
+      "id": "broad_frame",
+      "name": "Broad Frame",
+      "category": "physique",
+      "polarity": "positive",
+      "kind": "edge",
+      "tradeoff": true,
+      "rarity": "common",
+      "rollWeight": 9,
+      "opposites": [],
+      "excludes": ["heavy_hands"],
+      "exclusiveGroup": "frame",
+      "raceWeight": { "dwarf": 1.5, "orc": 1.5, "elf": 0.4 },
+      "flavor": "Built like a doorway someone forgot to finish.",
+      "effectText": "+2 power, +1 durability, -1 speed.",
+      "icon": "icon_trait_broad_frame",
+      "effects": [
+        { "type": "stat", "stat": "str", "add": 2 },
+        { "type": "stat", "stat": "tgh", "add": 1 },
+        { "type": "stat", "stat": "pac", "add": -1 }
+      ]
+    },
+    {
+      "id": "whipcord",
+      "name": "Whipcord",
+      "category": "physique",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 9,
+      "opposites": [],
+      "excludes": ["heavy_hands"],
+      "exclusiveGroup": "frame",
+      "raceWeight": { "elf": 1.5, "ashkin": 1.3, "dwarf": 0.4 },
+      "flavor": "Lean muscle wound tight as a bowstring.",
+      "effectText": "+1 speed, +1 finesse.",
+      "icon": "icon_trait_whipcord",
+      "effects": [
+        { "type": "stat", "stat": "pac", "add": 1 },
+        { "type": "stat", "stat": "agi", "add": 1 }
+      ]
+    },
+    {
+      "id": "reed_thin",
+      "name": "Reed-Thin",
+      "category": "physique",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": [],
+      "excludes": ["thick_hide"],
+      "exclusiveGroup": "frame",
+      "raceWeight": { "elf": 1.5, "dwarf": 0.3, "orc": 0.3 },
+      "flavor": "Hard to hit. Harder to keep standing.",
+      "effectText": "-2 durability, +1 finesse. Injury chance x1.15.",
+      "icon": "icon_trait_reed_thin",
+      "effects": [
+        { "type": "stat", "stat": "tgh", "add": -2 },
+        { "type": "stat", "stat": "agi", "add": 1 },
+        { "type": "injuryChance", "mult": 1.15 }
+      ]
+    },
+    {
+      "id": "granite_bones",
+      "name": "Granite Bones",
+      "category": "physique",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 6,
+      "opposites": ["hollow_bones"],
+      "excludes": [],
+      "raceWeight": { "dwarf": 2, "orc": 1.2, "elf": 0.5 },
+      "flavor": "The physicians complain about blunting their saws.",
+      "effectText": "Injury chance x0.75. Scar chance x0.7.",
+      "icon": "icon_trait_granite_bones",
+      "effects": [
+        { "type": "injuryChance", "mult": 0.75 },
+        { "type": "scarChance", "mult": 0.7 }
+      ]
+    },
+    {
+      "id": "hollow_bones",
+      "name": "Hollow Bones",
+      "category": "physique",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["granite_bones"],
+      "excludes": [],
+      "raceWeight": { "elf": 1.6, "dwarf": 0.3 },
+      "flavor": "Light as a bird, and about as breakable.",
+      "effectText": "Injury chance x1.3, recovery time x1.15. +1 speed.",
+      "icon": "icon_trait_hollow_bones",
+      "effects": [
+        { "type": "injuryChance", "mult": 1.3 },
+        { "type": "recovery", "mult": 1.15 },
+        { "type": "stat", "stat": "pac", "add": 1 }
+      ]
+    },
+    {
+      "id": "quick_mender",
+      "name": "Quick to Mend",
+      "category": "physique",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 8,
+      "opposites": ["slow_mender"],
+      "excludes": [],
+      "raceWeight": { "orc": 1.3, "ashkin": 1.5 },
+      "flavor": "Sleeps off what lays others up for weeks.",
+      "effectText": "Injury recovery time x0.7.",
+      "icon": "icon_trait_quick_mender",
+      "effects": [
+        { "type": "recovery", "mult": 0.7 }
+      ]
+    },
+    {
+      "id": "slow_mender",
+      "name": "Slow to Mend",
+      "category": "physique",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["quick_mender"],
+      "excludes": [],
+      "raceWeight": { "elf": 1.2 },
+      "flavor": "Wounds linger like unpaid debts, but close clean.",
+      "effectText": "Injury recovery time x1.35. Scar chance x0.75.",
+      "icon": "icon_trait_slow_mender",
+      "effects": [
+        { "type": "recovery", "mult": 1.35 },
+        { "type": "scarChance", "mult": 0.75 }
+      ]
+    },
+    {
+      "id": "needle_sight",
+      "name": "Needle Sight",
+      "category": "physique",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 8,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "elf": 1.8, "orc": 0.7 },
+      "flavor": "Can split a hanging thread at forty paces.",
+      "effectText": "+2 precision.",
+      "icon": "icon_trait_needle_sight",
+      "effects": [
+        { "type": "stat", "stat": "pre", "add": 2 }
+      ]
+    },
+    {
+      "id": "thick_hide",
+      "name": "Thick Hide",
+      "category": "physique",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 8,
+      "opposites": [],
+      "excludes": ["reed_thin"],
+      "raceWeight": { "orc": 2, "dwarf": 1.3, "elf": 0.3 },
+      "flavor": "Shrugs off blows that would fell a cart-horse.",
+      "effectText": "+2 durability.",
+      "icon": "icon_trait_thick_hide",
+      "effects": [
+        { "type": "stat", "stat": "tgh", "add": 2 }
+      ]
+    },
+    {
+      "id": "bellows_chest",
+      "name": "Bellows Chest",
+      "category": "physique",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 6,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "dwarf": 1.3 },
+      "flavor": "Breathes like a forge and never seems to tire.",
+      "effectText": "In fights: +8% damage after 30 s of a round.",
+      "icon": "icon_trait_bellows_chest",
+      "effects": [
+        {
+          "type": "combat",
+          "when": "afterSeconds",
+          "seconds": 30,
+          "mods": { "damageDealtMult": 1.08 }
+        }
+      ]
+    },
+    {
+      "id": "weathers_well",
+      "name": "Weathers Well",
+      "category": "physique",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "rare",
+      "rollWeight": 3,
+      "opposites": ["burns_fast"],
+      "excludes": [],
+      "raceWeight": { "dwarf": 1.4, "ashkin": 0.3 },
+      "flavor": "Looks the same at forty as at twenty-five, and fights like it.",
+      "effectText": "Physical decline starts 2 human-years later. Retirement chance x0.85.",
+      "icon": "icon_trait_weathers_well",
+      "effects": [
+        { "type": "declineShift", "group": "physical", "humanYears": 2 },
+        { "type": "retirement", "mult": 0.85 }
+      ]
+    },
+    {
+      "id": "burns_fast",
+      "name": "Burns Fast",
+      "category": "physique",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["weathers_well"],
+      "excludes": [],
+      "raceWeight": { "ashkin": 2.2, "orc": 1.3, "elf": 0.4 },
+      "flavor": "Bright, quick, and gone before you've learned their name.",
+      "effectText": "Development x1.1. Physical decline starts 2 human-years earlier.",
+      "icon": "icon_trait_burns_fast",
+      "effects": [
+        { "type": "devClock", "group": "all", "mult": 1.1 },
+        { "type": "declineShift", "group": "physical", "humanYears": -2 }
+      ]
+    },
+    {
+      "id": "thunder_opener",
+      "name": "Thunder Opener",
+      "category": "style",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 8,
+      "opposites": ["cold_starter"],
+      "excludes": [],
+      "raceWeight": { "orc": 1.4, "ashkin": 1.6 },
+      "flavor": "The first ten heartbeats of a round belong to them.",
+      "effectText": "In fights: +10% damage in the first 8 s of a round.",
+      "icon": "icon_trait_thunder_opener",
+      "effects": [
+        {
+          "type": "combat",
+          "when": "openingSeconds",
+          "seconds": 8,
+          "mods": { "damageDealtMult": 1.1 }
+        }
+      ]
+    },
+    {
+      "id": "cold_starter",
+      "name": "Cold Starter",
+      "category": "style",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["thunder_opener"],
+      "excludes": [],
+      "raceWeight": { "dwarf": 1.4, "ashkin": 0.4 },
+      "flavor": "Needs a few blows to wake up.",
+      "effectText": "In fights: -8% damage in the first 8 s of a round, +6% damage after 30 s.",
+      "icon": "icon_trait_cold_starter",
+      "effects": [
+        {
+          "type": "combat",
+          "when": "openingSeconds",
+          "seconds": 8,
+          "mods": { "damageDealtMult": 0.92 }
+        },
+        {
+          "type": "combat",
+          "when": "afterSeconds",
+          "seconds": 30,
+          "mods": { "damageDealtMult": 1.06 }
+        }
+      ]
+    },
+    {
+      "id": "hard_to_drop",
+      "name": "Hard to Put Down",
+      "category": "style",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 8,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "orc": 1.2, "dwarf": 1.2 },
+      "flavor": "Keeps getting up. It's unsettling.",
+      "effectText": "In fights: -10% damage taken while below 30% HP.",
+      "icon": "icon_trait_hard_to_drop",
+      "effects": [
+        {
+          "type": "combat",
+          "when": "selfHpBelow",
+          "value": 0.3,
+          "mods": { "damageTakenMult": 0.9 }
+        }
+      ]
+    },
+    {
+      "id": "pays_it_back",
+      "name": "Pays It Back",
+      "category": "style",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 6,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "orc": 1.2 },
+      "flavor": "Hurt a friend and you've opened a debt.",
+      "effectText": "In fights: +10% damage for 5 s after an ally is downed.",
+      "icon": "icon_trait_pays_it_back",
+      "effects": [
+        {
+          "type": "combat",
+          "when": "allyDown",
+          "seconds": 5,
+          "mods": { "damageDealtMult": 1.1 }
+        }
+      ]
+    },
+    {
+      "id": "smells_blood",
+      "name": "Smells Blood",
+      "category": "style",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 6,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "ashkin": 1.3 },
+      "flavor": "Knows the moment a foe starts to fold.",
+      "effectText": "In fights: +10% damage against targets below 25% HP.",
+      "icon": "icon_trait_smells_blood",
+      "effects": [
+        {
+          "type": "combat",
+          "when": "targetHpBelow",
+          "value": 0.25,
+          "mods": { "damageDealtMult": 1.1 }
+        }
+      ]
+    },
+    {
+      "id": "guard_first",
+      "name": "Guard-First",
+      "category": "style",
+      "polarity": "positive",
+      "kind": "edge",
+      "tradeoff": true,
+      "rarity": "common",
+      "rollWeight": 8,
+      "opposites": ["all_edge"],
+      "excludes": [],
+      "raceWeight": { "dwarf": 1.4, "ashkin": 0.6 },
+      "flavor": "Never forgets the shield arm, even mid-swing.",
+      "effectText": "In fights: -7% damage taken, -2% damage dealt.",
+      "icon": "icon_trait_guard_first",
+      "effects": [
+        {
+          "type": "combat",
+          "when": "always",
+          "mods": { "damageTakenMult": 0.93, "damageDealtMult": 0.98 }
+        }
+      ]
+    },
+    {
+      "id": "all_edge",
+      "name": "All Edge",
+      "category": "style",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 3,
+      "opposites": ["guard_first"],
+      "excludes": [],
+      "raceWeight": { "ashkin": 1.5, "orc": 1.3, "dwarf": 0.5 },
+      "flavor": "Defence is just a slower way to lose.",
+      "effectText": "In fights: +7% damage dealt, +9% damage taken.",
+      "icon": "icon_trait_all_edge",
+      "effects": [
+        {
+          "type": "combat",
+          "when": "always",
+          "mods": { "damageDealtMult": 1.07, "damageTakenMult": 1.09 }
+        }
+      ]
+    },
+    {
+      "id": "flinches",
+      "name": "Flinches",
+      "category": "style",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "rarity": "rare",
+      "rollWeight": 2,
+      "opposites": [],
+      "excludes": ["steel_spine"],
+      "raceWeight": {},
+      "flavor": "Blinks when the blade comes. Every time.",
+      "effectText": "-1 composure. In fights: reaction delay x1.06. 25% chance per season to lose it after a full season under a club captain of grade B or better in which they played at least half the time.",
+      "icon": "icon_trait_flinches",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": -1 },
+        {
+          "type": "combat",
+          "when": "always",
+          "mods": { "reactionDelayMult": 1.06 }
+        }
+      ],
+      "loss": { "rule": "seasonEndChance", "chance": 0.25, "requires": "club captain grade B or better for the whole season and usage >= 0.5" }
+    },
+    {
+      "id": "heavy_hands",
+      "name": "Heavy Hands",
+      "category": "style",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": [],
+      "excludes": ["whipcord", "broad_frame"],
+      "raceWeight": { "orc": 1.5, "dwarf": 1.3, "elf": 0.4 },
+      "flavor": "Hits like a falling wall; aims like one too.",
+      "effectText": "+2 power, -2 finesse, -1 precision.",
+      "icon": "icon_trait_heavy_hands",
+      "effects": [
+        { "type": "stat", "stat": "str", "add": 2 },
+        { "type": "stat", "stat": "agi", "add": -2 },
+        { "type": "stat", "stat": "pre", "add": -1 }
+      ]
+    },
+    {
+      "id": "quick_study",
+      "name": "Quick Study",
+      "category": "mind",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 8,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "elf": 1.3, "ashkin": 0.8 },
+      "flavor": "Watches a technique once and owns it by supper.",
+      "effectText": "Mental development x1.2. (From M3: +1 rule slot.)",
+      "icon": "icon_trait_quick_study",
+      "effects": [
+        { "type": "devClock", "group": "mental", "mult": 1.2 },
+        { "type": "ruleSlots", "add": 1 }
+      ]
+    },
+    {
+      "id": "regimented",
+      "name": "Regimented",
+      "category": "mind",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 7,
+      "opposites": ["wandering_mind"],
+      "excludes": ["idle_hands", "set_in_ways"],
+      "raceWeight": { "dwarf": 1.5 },
+      "flavor": "Same drills, same hour, every day for a decade.",
+      "effectText": "Training emphasis effects x1.5. +1 composure.",
+      "icon": "icon_trait_regimented",
+      "effects": [
+        { "type": "trainingEmphasis", "mult": 1.5 },
+        { "type": "stat", "stat": "cmp", "add": 1 }
+      ]
+    },
+    {
+      "id": "late_ripener",
+      "name": "Late Ripener",
+      "category": "mind",
+      "polarity": "positive",
+      "kind": "edge",
+      "tradeoff": true,
+      "rarity": "uncommon",
+      "rollWeight": 5,
+      "opposites": ["early_spark"],
+      "excludes": [],
+      "raceWeight": { "elf": 1.3, "ashkin": 0.3 },
+      "flavor": "Unremarkable at twenty. Unstoppable at twenty-eight.",
+      "effectText": "Development x0.85 before human-age 24, x1.35 from human-age 24 to 31.",
+      "icon": "icon_trait_late_ripener",
+      "effects": [
+        { "type": "devClock", "group": "all", "mult": 0.85, "humanAgeMax": 24 },
+        { "type": "devClock", "group": "all", "mult": 1.35, "humanAgeMin": 24, "humanAgeMax": 31 }
+      ]
+    },
+    {
+      "id": "early_spark",
+      "name": "Early Spark",
+      "category": "mind",
+      "polarity": "positive",
+      "kind": "edge",
+      "tradeoff": true,
+      "rarity": "uncommon",
+      "rollWeight": 5,
+      "opposites": ["late_ripener"],
+      "excludes": [],
+      "raceWeight": { "ashkin": 1.5, "orc": 1.2, "elf": 0.7 },
+      "flavor": "Arrived nearly finished; the question is what's left to add.",
+      "effectText": "Development x1.25 before human-age 22, x0.85 from human-age 26.",
+      "icon": "icon_trait_early_spark",
+      "effects": [
+        { "type": "devClock", "group": "all", "mult": 1.25, "humanAgeMax": 22 },
+        { "type": "devClock", "group": "all", "mult": 0.85, "humanAgeMin": 26 }
+      ]
+    },
+    {
+      "id": "student_of_sand",
+      "name": "Student of the Sand",
+      "category": "mind",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "common",
+      "rollWeight": 7,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "elf": 1.2 },
+      "flavor": "Can tell you how every match this season was won, and why.",
+      "effectText": "+1 awareness. Mental development x1.1. (From M3: +1 rule slot.)",
+      "icon": "icon_trait_student_of_sand",
+      "effects": [
+        { "type": "stat", "stat": "awr", "add": 1 },
+        { "type": "devClock", "group": "mental", "mult": 1.1 },
+        { "type": "ruleSlots", "add": 1 }
+      ]
+    },
+    {
+      "id": "keeps_the_edge",
+      "name": "Keeps the Edge",
+      "category": "mind",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 5,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "dwarf": 1.3 },
+      "flavor": "Treats the body like a blade: honed daily, without mercy.",
+      "effectText": "Physical decline x0.75. Retirement chance x0.9.",
+      "icon": "icon_trait_keeps_the_edge",
+      "effects": [
+        { "type": "declineMult", "group": "physical", "mult": 0.75 },
+        { "type": "retirement", "mult": 0.9 }
+      ]
+    },
+    {
+      "id": "wandering_mind",
+      "name": "Wandering Mind",
+      "category": "mind",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["regimented"],
+      "excludes": [],
+      "raceWeight": { "ashkin": 1.3 },
+      "flavor": "Brilliant, briefly, about something else.",
+      "effectText": "-2 discipline. In fights: reaction delay x1.04. 25% chance per season to lose it after a season on Mind emphasis for at least half the matchweeks.",
+      "icon": "icon_trait_wandering_mind",
+      "effects": [
+        { "type": "stat", "stat": "dis", "add": -2 },
+        {
+          "type": "combat",
+          "when": "always",
+          "mods": { "reactionDelayMult": 1.04 }
+        }
+      ],
+      "loss": { "rule": "seasonEndChance", "chance": 0.25, "requires": "training emphasis Mind for >= 50% of the season matchweeks" }
+    },
+    {
+      "id": "green_nerves",
+      "name": "Green Nerves",
+      "category": "mind",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "rarity": "rare",
+      "rollWeight": 3,
+      "rookieOnly": true,
+      "opposites": [],
+      "excludes": ["still_water", "steel_spine", "big_stage"],
+      "raceWeight": {},
+      "flavor": "Has never heard a crowd this loud.",
+      "effectText": "-3 composure. Captaincy -10. Fades after 120 career rounds (progress shown).",
+      "icon": "icon_trait_green_nerves",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": -3 },
+        { "type": "captaincy", "add": -10 }
+      ],
+      "loss": { "rule": "threshold", "careerRoundsAtLeast": 120, "chance": 1, "checkedAt": "matchEnd" }
+    },
+    {
+      "id": "set_in_ways",
+      "name": "Set in Their Ways",
+      "category": "mind",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": [],
+      "excludes": ["regimented"],
+      "raceWeight": { "dwarf": 1.4 },
+      "flavor": "Knows exactly how they fight, and won't hear otherwise.",
+      "effectText": "Training emphasis has no effect. Mental development x0.9. +1 composure.",
+      "icon": "icon_trait_set_in_ways",
+      "effects": [
+        { "type": "trainingEmphasis", "mult": 0 },
+        { "type": "devClock", "group": "mental", "mult": 0.9 },
+        { "type": "stat", "stat": "cmp", "add": 1 }
+      ]
+    },
+    {
+      "id": "rallying_voice",
+      "name": "Rallying Voice",
+      "category": "leadership",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 4,
+      "opposites": ["walks_alone"],
+      "excludes": [],
+      "raceWeight": { "human": 1.2, "ashkin": 0.6 },
+      "flavor": "Their shout carries over any crowd.",
+      "effectText": "Captaincy +12. As acting captain, in fights: rally composure and duration x1.5.",
+      "icon": "icon_trait_rallying_voice",
+      "effects": [
+        { "type": "captaincy", "add": 12 },
+        { "type": "captainRally", "mult": 1.5 }
+      ]
+    },
+    {
+      "id": "quiet_steel",
+      "name": "Quiet Steel",
+      "category": "leadership",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 6,
+      "opposites": ["showboat"],
+      "excludes": [],
+      "raceWeight": { "dwarf": 1.3, "elf": 1.2 },
+      "flavor": "Rarely speaks; everyone listens when they do.",
+      "effectText": "Captaincy +6. +1 composure.",
+      "icon": "icon_trait_quiet_steel",
+      "effects": [
+        { "type": "captaincy", "add": 6 },
+        { "type": "stat", "stat": "cmp", "add": 1 }
+      ]
+    },
+    {
+      "id": "shares_the_craft",
+      "name": "Shares the Craft",
+      "category": "leadership",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 5,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "dwarf": 1.2, "human": 1.1 },
+      "flavor": "Never too busy to fix a youngster's footwork.",
+      "effectText": "Club-mates aged 23 or younger (human-age) develop x1.04. Captaincy +4.",
+      "icon": "icon_trait_shares_the_craft",
+      "effects": [
+        { "type": "mentor", "youngDevMult": 1.04 },
+        { "type": "captaincy", "add": 4 }
+      ]
+    },
+    {
+      "id": "kin_bound",
+      "name": "Kin-Bound",
+      "category": "leadership",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 5,
+      "opposites": [],
+      "excludes": ["walks_alone"],
+      "raceWeight": { "dwarf": 1.6, "orc": 1.3 },
+      "flavor": "Fights hardest beside their own blood.",
+      "effectText": "+1 lineup chemistry per other fielded fighter of the same race (max +2); -1 if there is none.",
+      "icon": "icon_trait_kin_bound",
+      "effects": [
+        { "type": "chemistrySameRace", "perTeammate": 1, "max": 2, "ifNone": -1 }
+      ]
+    },
+    {
+      "id": "walks_alone",
+      "name": "Walks Alone",
+      "category": "leadership",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": ["rallying_voice"],
+      "excludes": ["kin_bound"],
+      "raceWeight": { "elf": 1.3 },
+      "flavor": "Owes nothing to anyone in the line.",
+      "effectText": "Captaincy -15. Unaffected by lineup chemistry, good or bad. +1 composure.",
+      "icon": "icon_trait_walks_alone",
+      "effects": [
+        { "type": "captaincy", "add": -15 },
+        { "type": "chemistryImmune" },
+        { "type": "stat", "stat": "cmp", "add": 1 }
+      ]
+    },
+    {
+      "id": "sharp_tongue",
+      "name": "Sharp Tongue",
+      "category": "leadership",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2.5,
+      "opposites": [],
+      "excludes": ["good_company"],
+      "raceWeight": { "elf": 1.2, "dwarf": 1.2 },
+      "flavor": "Always right, never thanked for it.",
+      "effectText": "-1 lineup chemistry while fielded. Captaincy -10. +1 awareness.",
+      "icon": "icon_trait_sharp_tongue",
+      "effects": [
+        { "type": "chemistry", "add": -1 },
+        { "type": "captaincy", "add": -10 },
+        { "type": "stat", "stat": "awr", "add": 1 }
+      ]
+    },
+    {
+      "id": "counts_every_coin",
+      "name": "Counts Every Coin",
+      "category": "leadership",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "rarity": "rare",
+      "rollWeight": 2,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "dwarf": 1.3, "human": 1.1 },
+      "flavor": "Fights for the purse, and keeps a ledger of every bruise.",
+      "effectText": "Asks 15% more in wages (economy). Captaincy -4. +1 discipline.",
+      "icon": "icon_trait_counts_every_coin",
+      "effects": [
+        { "type": "economy", "hook": "wageDemandMult", "mult": 1.15 },
+        { "type": "captaincy", "add": -4 },
+        { "type": "stat", "stat": "dis", "add": 1 }
+      ]
+    },
+    {
+      "id": "crowd_darling",
+      "name": "Crowd's Darling",
+      "category": "leadership",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "uncommon",
+      "rollWeight": 5,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": { "human": 1.2, "ashkin": 1.2 },
+      "flavor": "Sells out the stands before a blade is drawn.",
+      "effectText": "+1 composure. Fan appeal +1 (economy input).",
+      "icon": "icon_trait_crowd_darling",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": 1 },
+        { "type": "economy", "hook": "fanAppeal", "add": 1 }
+      ]
+    },
+    {
+      "id": "sand_wise",
+      "name": "Sand-Wise",
+      "category": "acquired",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Has seen every trick twice and fallen for none of them since.",
+      "effectText": "+1 composure, +1 awareness. Captaincy +4. (From M3: +1 rule slot.)",
+      "icon": "icon_trait_sand_wise",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": 1 },
+        { "type": "stat", "stat": "awr", "add": 1 },
+        { "type": "captaincy", "add": 4 },
+        { "type": "ruleSlots", "add": 1 }
+      ],
+      "gain": { "rule": "threshold", "careerRoundsAtLeast": 300, "checkedAt": "seasonEnd" }
+    },
+    {
+      "id": "wore_the_armband",
+      "name": "Wore the Armband",
+      "category": "acquired",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Knows what a dressing room needs before it does.",
+      "effectText": "Captaincy +6. Loyalty +1 (cheaper renewals with the current club, economy). (From M3: +1 rule slot.)",
+      "icon": "icon_trait_wore_the_armband",
+      "effects": [
+        { "type": "captaincy", "add": 6 },
+        { "type": "economy", "hook": "loyalty", "add": 1 },
+        { "type": "ruleSlots", "add": 1 }
+      ],
+      "gain": { "rule": "threshold", "matchweeksAsClubCaptainAtLeast": 32, "checkedAt": "weekProcessing" }
+    },
+    {
+      "id": "title_tested",
+      "name": "Title-Tested",
+      "category": "acquired",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Has lifted silverware and wants the weight again.",
+      "effectText": "+1 composure. +1 lineup chemistry if two or more Title-Tested fighters are fielded (once per lineup).",
+      "icon": "icon_trait_title_tested",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": 1 },
+        { "type": "chemistryPair", "withTrait": "title_tested", "add": 1, "minHolders": 2 }
+      ],
+      "gain": { "rule": "event", "event": "started at least one round of a tournament final won by their club, or of the match that clinched a league title" }
+    },
+    {
+      "id": "back_from_brink",
+      "name": "Back from the Brink",
+      "category": "acquired",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "The physicians said never. They were wrong.",
+      "effectText": "+1 composure. Injury chance x0.95.",
+      "icon": "icon_trait_back_from_brink",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": 1 },
+        { "type": "injuryChance", "mult": 0.95 }
+      ],
+      "gain": { "rule": "event", "event": "first round started after recovering from a serious injury" }
+    },
+    {
+      "id": "long_road",
+      "name": "Long Road",
+      "category": "acquired",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Every arena in the league has some of their blood in its sand.",
+      "effectText": "+1 awareness. Club-mates aged 23 or younger (human-age) develop x1.02 (counts as a trait mentor).",
+      "icon": "icon_trait_long_road",
+      "effects": [
+        { "type": "stat", "stat": "awr", "add": 1 },
+        { "type": "mentor", "youngDevMult": 1.02 }
+      ],
+      "gain": { "rule": "threshold", "humanAgeAtLeast": 33, "proSeasonsAtLeast": 12, "checkedAt": "seasonEnd" }
+    },
+    {
+      "id": "pain_tempered",
+      "name": "Pain-Tempered",
+      "category": "acquired",
+      "polarity": "positive",
+      "kind": "boon",
+      "tradeoff": false,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Pain stopped being news a long time ago.",
+      "effectText": "+1 composure.",
+      "icon": "icon_trait_pain_tempered",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": 1 }
+      ],
+      "gain": { "rule": "event", "event": "30% chance whenever a scar is gained, if not already held" }
+    },
+    {
+      "id": "rebuilt_knee",
+      "name": "Rebuilt Knee",
+      "category": "acquired",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "scar": true,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "It holds. Mostly. Not on wet sand.",
+      "effectText": "Permanent scar: -2 speed, -1 finesse.",
+      "icon": "icon_trait_rebuilt_knee",
+      "effects": [
+        { "type": "stat", "stat": "pac", "add": -2 },
+        { "type": "stat", "stat": "agi", "add": -1 }
+      ],
+      "gain": { "rule": "event", "event": "scar roll on a moderate or serious injury" }
+    },
+    {
+      "id": "stiff_shoulder",
+      "name": "Stiff Shoulder",
+      "category": "acquired",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "scar": true,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "The overhead swing never came all the way back.",
+      "effectText": "Permanent scar: -2 power, -1 precision.",
+      "icon": "icon_trait_stiff_shoulder",
+      "effects": [
+        { "type": "stat", "stat": "str", "add": -2 },
+        { "type": "stat", "stat": "pre", "add": -1 }
+      ],
+      "gain": { "rule": "event", "event": "scar roll on a moderate or serious injury" }
+    },
+    {
+      "id": "crooked_ribs",
+      "name": "Crooked Ribs",
+      "category": "acquired",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "scar": true,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Healed, after a fashion. Every deep breath remembers.",
+      "effectText": "Permanent scar: -1 durability. In fights: -5% damage after 30 s of a round.",
+      "icon": "icon_trait_crooked_ribs",
+      "effects": [
+        { "type": "stat", "stat": "tgh", "add": -1 },
+        {
+          "type": "combat",
+          "when": "afterSeconds",
+          "seconds": 30,
+          "mods": { "damageDealtMult": 0.95 }
+        }
+      ],
+      "gain": { "rule": "event", "event": "scar roll on a moderate or serious injury" }
+    },
+    {
+      "id": "ringing_skull",
+      "name": "Ringing Skull",
+      "category": "acquired",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "scar": true,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Some mornings the crowd noise starts before the crowd does.",
+      "effectText": "Permanent scar: -1 composure, -1 discipline. In fights: reaction delay x1.04.",
+      "icon": "icon_trait_ringing_skull",
+      "effects": [
+        { "type": "stat", "stat": "cmp", "add": -1 },
+        { "type": "stat", "stat": "dis", "add": -1 },
+        {
+          "type": "combat",
+          "when": "always",
+          "mods": { "reactionDelayMult": 1.04 }
+        }
+      ],
+      "gain": { "rule": "event", "event": "scar roll on a moderate or serious injury" }
+    },
+    {
+      "id": "clouded_eye",
+      "name": "Clouded Eye",
+      "category": "acquired",
+      "polarity": "negative",
+      "kind": "flaw",
+      "tradeoff": false,
+      "scar": true,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "Sees the world through a pane of milk glass on one side.",
+      "effectText": "Permanent scar: -2 precision, -1 awareness.",
+      "icon": "icon_trait_clouded_eye",
+      "effects": [
+        { "type": "stat", "stat": "pre", "add": -2 },
+        { "type": "stat", "stat": "awr", "add": -1 }
+      ],
+      "gain": { "rule": "event", "event": "scar roll on a moderate or serious injury" }
+    },
+    {
+      "id": "grim_visage",
+      "name": "Grim Visage",
+      "category": "acquired",
+      "polarity": "negative",
+      "kind": "burden",
+      "tradeoff": true,
+      "scar": true,
+      "rarity": "storied",
+      "rollWeight": 0,
+      "opposites": [],
+      "excludes": [],
+      "raceWeight": {},
+      "flavor": "The scar does half the talking now.",
+      "effectText": "Permanent scar: -1 lineup chemistry while fielded. In fights: enemies in the melee band get -1 composure.",
+      "icon": "icon_trait_grim_visage",
+      "effects": [
+        { "type": "chemistry", "add": -1 },
+        { "type": "enemyComposureAura", "rangeBand": "melee", "add": -1 }
+      ],
+      "gain": { "rule": "event", "event": "scar roll on a moderate or serious injury" }
+    }
+  ]
+}

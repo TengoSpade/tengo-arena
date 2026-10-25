@@ -1,0 +1,3263 @@
+{
+  "_doc": "42 fighter classes (O8). Each references 4 abilities in abilities.json and 2-3 presets in tactics-presets.json. Units: metres, seconds, decimal fractions.",
+  "schemaVersion": 1,
+  "status": "DRAFT 2026-10-25 (combat designer). PROPOSED · TUNABLE values; spec docs/design/_drafts/03-combat.md.",
+  "classes": [
+    {
+      "id": "oathguard",
+      "name": "Oathguard",
+      "flavor": "Sworn to one paymaster at a time, and that paymaster never bleeds first.",
+      "description": "Bodyguard tank. Dashes to threatened allies, takes part of their damage, and bashes casters out of their spells.",
+      "iconId": "class_oathguard",
+      "archetypes": [
+        "tank"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "interceptor",
+        "bodyguard"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 2,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1500,
+        "armor": 60,
+        "ward": 45,
+        "power": 60,
+        "support": 0,
+        "attackIntervalS": 1.3,
+        "moveSpeedMps": 3.2,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.18,
+        "agi": 0.09,
+        "pac": 0.07,
+        "tgh": 0.35,
+        "pre": 0.02,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.1,
+        "cmp": 0.11,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.04
+      },
+      "statEmphasis": {
+        "str": 1.27,
+        "agi": 0.89,
+        "pac": 0.8,
+        "tgh": 2,
+        "pre": 0.59,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.93,
+        "cmp": 0.97,
+        "ldr": 1,
+        "awr": 0.67,
+        "dis": 0.67
+      },
+      "abilities": {
+        "basic": "oathguard_mace_strike",
+        "a1": "oathguard_interpose",
+        "a2": "oathguard_shield_bash",
+        "passive": "oathguard_sworn_shield"
+      },
+      "presetIds": [
+        "oathguard_balanced",
+        "oathguard_protective",
+        "oathguard_aggressive"
+      ],
+      "defaultPresetId": "oathguard_balanced"
+    },
+    {
+      "id": "gongbearer",
+      "name": "Gongbearer",
+      "flavor": "Carries a war-gong on its back; when it rings, every enemy forgets everyone else.",
+      "description": "Taunt tank. Rings its gong to force nearby enemies to attack it, then braces behind a shield and hardens while focused.",
+      "iconId": "class_gongbearer",
+      "archetypes": [
+        "tank"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "taunter",
+        "absorber"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1600,
+        "armor": 55,
+        "ward": 50,
+        "power": 55,
+        "support": 0,
+        "attackIntervalS": 1.4,
+        "moveSpeedMps": 3.1,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.18,
+        "agi": 0.09,
+        "pac": 0.07,
+        "tgh": 0.35,
+        "pre": 0.02,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.1,
+        "cmp": 0.11,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.04
+      },
+      "statEmphasis": {
+        "str": 1.27,
+        "agi": 0.89,
+        "pac": 0.8,
+        "tgh": 2,
+        "pre": 0.59,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.93,
+        "cmp": 0.97,
+        "ldr": 1,
+        "awr": 0.67,
+        "dis": 0.67
+      },
+      "abilities": {
+        "basic": "gongbearer_gong_hammer",
+        "a1": "gongbearer_clangor",
+        "a2": "gongbearer_brace",
+        "passive": "gongbearer_hollow_ring"
+      },
+      "presetIds": [
+        "gongbearer_balanced",
+        "gongbearer_protective",
+        "gongbearer_aggressive"
+      ],
+      "defaultPresetId": "gongbearer_balanced"
+    },
+    {
+      "id": "scarhide",
+      "name": "Scarhide",
+      "flavor": "Every scar a contract paid; there is always room for one more.",
+      "description": "Regenerating bruiser. Heals constantly, cleaves crowds with lifesteal, and catches a second wind when it matters.",
+      "iconId": "class_scarhide",
+      "archetypes": [
+        "tank"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "bruiser",
+        "regenerator"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1550,
+        "armor": 45,
+        "ward": 35,
+        "power": 60,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.18,
+        "agi": 0.09,
+        "pac": 0.07,
+        "tgh": 0.35,
+        "pre": 0.02,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.1,
+        "cmp": 0.11,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.04
+      },
+      "statEmphasis": {
+        "str": 1.27,
+        "agi": 0.89,
+        "pac": 0.8,
+        "tgh": 2,
+        "pre": 0.59,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.93,
+        "cmp": 0.97,
+        "ldr": 1,
+        "awr": 0.67,
+        "dis": 0.67
+      },
+      "abilities": {
+        "basic": "scarhide_hacking_axe",
+        "a1": "scarhide_second_wind",
+        "a2": "scarhide_gut_cleave",
+        "passive": "scarhide_thick_blood"
+      },
+      "presetIds": [
+        "scarhide_balanced",
+        "scarhide_aggressive",
+        "scarhide_protective"
+      ],
+      "defaultPresetId": "scarhide_balanced"
+    },
+    {
+      "id": "briarback",
+      "name": "Briarback",
+      "flavor": "Its armor grew barbs over years of bad clients; now everyone who swings at it pays.",
+      "description": "Thorns tank. Reflects damage back at melee attackers and scatters caltrops that slow and cut.",
+      "iconId": "class_briarback",
+      "archetypes": [
+        "tank"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "thorns",
+        "punisher"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1500,
+        "armor": 70,
+        "ward": 35,
+        "power": 55,
+        "support": 0,
+        "attackIntervalS": 1.4,
+        "moveSpeedMps": 3.1,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.18,
+        "agi": 0.09,
+        "pac": 0.07,
+        "tgh": 0.35,
+        "pre": 0.02,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.1,
+        "cmp": 0.11,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.04
+      },
+      "statEmphasis": {
+        "str": 1.27,
+        "agi": 0.89,
+        "pac": 0.8,
+        "tgh": 2,
+        "pre": 0.59,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.93,
+        "cmp": 0.97,
+        "ldr": 1,
+        "awr": 0.67,
+        "dis": 0.67
+      },
+      "abilities": {
+        "basic": "briarback_spiked_gauntlet",
+        "a1": "briarback_bristle",
+        "a2": "briarback_caltrop_scatter",
+        "passive": "briarback_barbed_hide"
+      },
+      "presetIds": [
+        "briarback_balanced",
+        "briarback_protective",
+        "briarback_aggressive"
+      ],
+      "defaultPresetId": "briarback_balanced"
+    },
+    {
+      "id": "bladeturner",
+      "name": "Bladeturner",
+      "flavor": "Never blocks a blow it can step around, and never steps around one without answering.",
+      "description": "Evasive tank. Dodges weapon blows, counter-strikes from a parry stance and provokes single enemies. Spells go straight through.",
+      "iconId": "class_bladeturner",
+      "archetypes": [
+        "tank"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "evasive",
+        "duelist"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 3,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1350,
+        "armor": 40,
+        "ward": 40,
+        "power": 63,
+        "support": 0,
+        "attackIntervalS": 1.1,
+        "moveSpeedMps": 3.5,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "agi": 0.6,
+        "str": 0.4
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.11,
+        "agi": 0.24,
+        "pac": 0.07,
+        "tgh": 0.27,
+        "pre": 0.02,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.1,
+        "cmp": 0.11,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.04
+      },
+      "statEmphasis": {
+        "str": 1.11,
+        "agi": 1.83,
+        "pac": 0.89,
+        "tgh": 2,
+        "pre": 0.61,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 1.06,
+        "cmp": 1.11,
+        "ldr": 1,
+        "awr": 0.72,
+        "dis": 0.72
+      },
+      "abilities": {
+        "basic": "bladeturner_sabre_cut",
+        "a1": "bladeturner_parry_stance",
+        "a2": "bladeturner_provoking_flourish",
+        "passive": "bladeturner_light_feet"
+      },
+      "presetIds": [
+        "bladeturner_balanced",
+        "bladeturner_aggressive",
+        "bladeturner_protective"
+      ],
+      "defaultPresetId": "bladeturner_balanced"
+    },
+    {
+      "id": "phalanx_sergeant",
+      "name": "Phalanx Sergeant",
+      "flavor": "Drilled a hundred recruits to lock shields; now drills whoever its employer hires.",
+      "description": "Shield-wall tank. Shields the whole formation, pikes attackers back, and grows sturdier with allies beside it.",
+      "iconId": "class_phalanx_sergeant",
+      "archetypes": [
+        "tank"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "shield-wall",
+        "formation"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 2,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1450,
+        "armor": 65,
+        "ward": 45,
+        "power": 58,
+        "support": 0,
+        "attackIntervalS": 1.3,
+        "moveSpeedMps": 3.1,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.18,
+        "agi": 0.09,
+        "pac": 0.07,
+        "tgh": 0.35,
+        "pre": 0.02,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.1,
+        "cmp": 0.11,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.04
+      },
+      "statEmphasis": {
+        "str": 1.27,
+        "agi": 0.89,
+        "pac": 0.8,
+        "tgh": 2,
+        "pre": 0.59,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.93,
+        "cmp": 0.97,
+        "ldr": 1,
+        "awr": 0.67,
+        "dis": 0.67
+      },
+      "abilities": {
+        "basic": "phalanx_sergeant_pike_jab",
+        "a1": "phalanx_sergeant_lock_shields",
+        "a2": "phalanx_sergeant_pike_thrust",
+        "passive": "phalanx_sergeant_formation_drill"
+      },
+      "presetIds": [
+        "phalanx_sergeant_balanced",
+        "phalanx_sergeant_protective",
+        "phalanx_sergeant_aggressive"
+      ],
+      "defaultPresetId": "phalanx_sergeant_balanced"
+    },
+    {
+      "id": "gutterknife",
+      "name": "Gutterknife",
+      "flavor": "Learned to fight where the lamplight didn't reach, and still prefers it there.",
+      "description": "Back-line diver. Shadowsteps behind distant targets, hamstrings them, and hits hardest when unseen.",
+      "iconId": "class_gutterknife",
+      "archetypes": [
+        "melee"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "diver",
+        "assassin"
+      ],
+      "affinityGroup": "skirmisher",
+      "complexity": 2,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 950,
+        "armor": 25,
+        "ward": 25,
+        "power": 80,
+        "support": 0,
+        "attackIntervalS": 0.9,
+        "moveSpeedMps": 3.8,
+        "critBonus": 0.05,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "agi": 0.5,
+        "str": 0.3,
+        "pre": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.11,
+        "agi": 0.29,
+        "pac": 0.1,
+        "tgh": 0.15,
+        "pre": 0.15,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.04,
+        "cmp": 0.07,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.05
+      },
+      "statEmphasis": {
+        "str": 1.07,
+        "agi": 2,
+        "pac": 1.02,
+        "tgh": 1.28,
+        "pre": 1.28,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.71,
+        "cmp": 0.86,
+        "ldr": 1,
+        "awr": 0.71,
+        "dis": 0.76
+      },
+      "abilities": {
+        "basic": "gutterknife_shiv",
+        "a1": "gutterknife_shadowstep",
+        "a2": "gutterknife_hamstring",
+        "passive": "gutterknife_unseen_angle"
+      },
+      "presetIds": [
+        "gutterknife_balanced",
+        "gutterknife_aggressive",
+        "gutterknife_protective"
+      ],
+      "defaultPresetId": "gutterknife_balanced"
+    },
+    {
+      "id": "bloodhowler",
+      "name": "Bloodhowler",
+      "flavor": "Howls when wounded, and is always wounded.",
+      "description": "Berserker. Grows deadlier as it loses HP, frenzies for attack speed and lifesteal, and opens bleeding wounds.",
+      "iconId": "class_bloodhowler",
+      "archetypes": [
+        "melee"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "berserker",
+        "lifesteal"
+      ],
+      "affinityGroup": "skirmisher",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1150,
+        "armor": 25,
+        "ward": 25,
+        "power": 80,
+        "support": 0,
+        "attackIntervalS": 1,
+        "moveSpeedMps": 3.6,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.7,
+        "agi": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.23,
+        "agi": 0.23,
+        "pac": 0.1,
+        "tgh": 0.15,
+        "pre": 0.09,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.04,
+        "cmp": 0.07,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.05
+      },
+      "statEmphasis": {
+        "str": 2,
+        "agi": 2,
+        "pac": 1.15,
+        "tgh": 1.48,
+        "pre": 1.09,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.76,
+        "cmp": 0.96,
+        "ldr": 1,
+        "awr": 0.76,
+        "dis": 0.83
+      },
+      "abilities": {
+        "basic": "bloodhowler_rending_axe",
+        "a1": "bloodhowler_blood_frenzy",
+        "a2": "bloodhowler_savage_rend",
+        "passive": "bloodhowler_bloodrush"
+      },
+      "presetIds": [
+        "bloodhowler_balanced",
+        "bloodhowler_aggressive",
+        "bloodhowler_protective"
+      ],
+      "defaultPresetId": "bloodhowler_balanced"
+    },
+    {
+      "id": "twinfang",
+      "name": "Twinfang",
+      "flavor": "Two blades, one rhythm; the longer the song, the faster it plays.",
+      "description": "Flurry duelist. Attack speed builds while it stays on one target; unleashes a channelled flurry and sidesteps danger.",
+      "iconId": "class_twinfang",
+      "archetypes": [
+        "melee"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "flurry",
+        "duelist"
+      ],
+      "affinityGroup": "skirmisher",
+      "complexity": 2,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1000,
+        "armor": 30,
+        "ward": 25,
+        "power": 60,
+        "support": 0,
+        "attackIntervalS": 0.75,
+        "moveSpeedMps": 3.6,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "agi": 0.7,
+        "str": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.11,
+        "agi": 0.35,
+        "pac": 0.1,
+        "tgh": 0.15,
+        "pre": 0.09,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.04,
+        "cmp": 0.07,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.05
+      },
+      "statEmphasis": {
+        "str": 0.97,
+        "agi": 2,
+        "pac": 0.93,
+        "tgh": 1.14,
+        "pre": 0.89,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.67,
+        "cmp": 0.8,
+        "ldr": 1,
+        "awr": 0.67,
+        "dis": 0.71
+      },
+      "abilities": {
+        "basic": "twinfang_twin_strike",
+        "a1": "twinfang_flurry",
+        "a2": "twinfang_sidestep",
+        "passive": "twinfang_momentum"
+      },
+      "presetIds": [
+        "twinfang_balanced",
+        "twinfang_aggressive",
+        "twinfang_protective"
+      ],
+      "defaultPresetId": "twinfang_balanced"
+    },
+    {
+      "id": "headsman",
+      "name": "Headsman",
+      "flavor": "Paid by the head, and has never once been short-changed.",
+      "description": "Executioner. Slow, heavy chops; sunders armor and beheads wounded enemies, resetting the cooldown on a kill.",
+      "iconId": "class_headsman",
+      "archetypes": [
+        "melee"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "executioner",
+        "armor-breaker"
+      ],
+      "affinityGroup": "skirmisher",
+      "complexity": 2,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1100,
+        "armor": 35,
+        "ward": 25,
+        "power": 115,
+        "support": 0,
+        "attackIntervalS": 1.4,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.9,
+        "pre": 0.1
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.29,
+        "agi": 0.14,
+        "pac": 0.1,
+        "tgh": 0.15,
+        "pre": 0.12,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.04,
+        "cmp": 0.07,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.05
+      },
+      "statEmphasis": {
+        "str": 2,
+        "agi": 1.22,
+        "pac": 1.02,
+        "tgh": 1.28,
+        "pre": 1.12,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.71,
+        "cmp": 0.86,
+        "ldr": 1,
+        "awr": 0.71,
+        "dis": 0.76
+      },
+      "abilities": {
+        "basic": "headsman_heavy_chop",
+        "a1": "headsman_behead",
+        "a2": "headsman_sunder",
+        "passive": "headsman_executioners_eye"
+      },
+      "presetIds": [
+        "headsman_balanced",
+        "headsman_aggressive"
+      ],
+      "defaultPresetId": "headsman_balanced"
+    },
+    {
+      "id": "chaffcutter",
+      "name": "Chaffcutter",
+      "flavor": "Built for crowds, paid by the head, never picky about which head.",
+      "description": "Cleaver. Leaps into clusters, spins a whirling harvest, and every swing splashes onto neighbours.",
+      "iconId": "class_chaffcutter",
+      "archetypes": [
+        "melee"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "cleaver",
+        "crowd-killer"
+      ],
+      "affinityGroup": "skirmisher",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1100,
+        "armor": 30,
+        "ward": 25,
+        "power": 75,
+        "support": 0,
+        "attackIntervalS": 1.1,
+        "moveSpeedMps": 3.5,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.7,
+        "agi": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.23,
+        "agi": 0.23,
+        "pac": 0.1,
+        "tgh": 0.15,
+        "pre": 0.09,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.04,
+        "cmp": 0.07,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.05
+      },
+      "statEmphasis": {
+        "str": 2,
+        "agi": 2,
+        "pac": 1.15,
+        "tgh": 1.48,
+        "pre": 1.09,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.76,
+        "cmp": 0.96,
+        "ldr": 1,
+        "awr": 0.76,
+        "dis": 0.83
+      },
+      "abilities": {
+        "basic": "chaffcutter_scythe_sweep",
+        "a1": "chaffcutter_whirling_harvest",
+        "a2": "chaffcutter_reaping_leap",
+        "passive": "chaffcutter_wide_arc"
+      },
+      "presetIds": [
+        "chaffcutter_balanced",
+        "chaffcutter_aggressive"
+      ],
+      "defaultPresetId": "chaffcutter_balanced"
+    },
+    {
+      "id": "runecleaver",
+      "name": "Runecleaver",
+      "flavor": "Etched its blade with runes it only half understands, which is why it hits so hard.",
+      "description": "Arcane blade. Its weapon deals arcane damage that armor won't stop; bursts runes in a cone and lunges at casters to silence them.",
+      "iconId": "class_runecleaver",
+      "archetypes": [
+        "melee"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "spellblade",
+        "mage-hunter"
+      ],
+      "affinityGroup": "skirmisher",
+      "complexity": 2,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 1000,
+        "armor": 25,
+        "ward": 35,
+        "power": 75,
+        "support": 0,
+        "attackIntervalS": 1,
+        "moveSpeedMps": 3.6,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.6,
+        "str": 0.4
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.14,
+        "agi": 0.14,
+        "pac": 0.1,
+        "tgh": 0.15,
+        "pre": 0.09,
+        "arc": 0.18,
+        "spi": 0,
+        "wil": 0.04,
+        "cmp": 0.07,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.05
+      },
+      "statEmphasis": {
+        "str": 1.67,
+        "agi": 1.67,
+        "pac": 1.33,
+        "tgh": 1.75,
+        "pre": 1.25,
+        "arc": 2,
+        "spi": 0.5,
+        "wil": 0.83,
+        "cmp": 1.08,
+        "ldr": 1,
+        "awr": 0.83,
+        "dis": 0.92
+      },
+      "abilities": {
+        "basic": "runecleaver_runed_edge",
+        "a1": "runecleaver_rune_burst",
+        "a2": "runecleaver_arc_lunge",
+        "passive": "runecleaver_third_rune"
+      },
+      "presetIds": [
+        "runecleaver_balanced",
+        "runecleaver_aggressive"
+      ],
+      "defaultPresetId": "runecleaver_balanced"
+    },
+    {
+      "id": "longeye",
+      "name": "Longeye",
+      "flavor": "Never met a target it couldn't outwait.",
+      "description": "Sniper. Longest range in the league; aimed shots punish distant targets, and it leaps back when caught.",
+      "iconId": "class_longeye",
+      "archetypes": [
+        "ranged"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "sniper",
+        "burst"
+      ],
+      "affinityGroup": "ranged",
+      "complexity": 1,
+      "preferredBand": "long",
+      "startingRow": "back",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 780,
+        "armor": 15,
+        "ward": 20,
+        "power": 110,
+        "support": 0,
+        "attackIntervalS": 1.6,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "pre": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.01,
+        "agi": 0.2,
+        "pac": 0.1,
+        "tgh": 0.08,
+        "pre": 0.39,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.03,
+        "cmp": 0.06,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.07
+      },
+      "statEmphasis": {
+        "str": 0.54,
+        "agi": 1.27,
+        "pac": 0.88,
+        "tgh": 0.81,
+        "pre": 2,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.62,
+        "cmp": 0.73,
+        "ldr": 1,
+        "awr": 0.73,
+        "dis": 0.77
+      },
+      "abilities": {
+        "basic": "longeye_longbow_shot",
+        "a1": "longeye_aimed_shot",
+        "a2": "longeye_leap_back",
+        "passive": "longeye_deadeye"
+      },
+      "presetIds": [
+        "longeye_balanced",
+        "longeye_aggressive",
+        "longeye_protective"
+      ],
+      "defaultPresetId": "longeye_balanced"
+    },
+    {
+      "id": "boltrunner",
+      "name": "Boltrunner",
+      "flavor": "Fires, runs, reloads, fires again; has never stood still long enough to be paid in person.",
+      "description": "Kiting crossbow. Moves fast and shoots quickly, pins chasers with a rooting bolt and tumbles away from melee.",
+      "iconId": "class_boltrunner",
+      "archetypes": [
+        "ranged"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "kiter",
+        "skirmisher"
+      ],
+      "affinityGroup": "ranged",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 820,
+        "armor": 15,
+        "ward": 20,
+        "power": 70,
+        "support": 0,
+        "attackIntervalS": 1,
+        "moveSpeedMps": 3.6,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "pre": 0.6,
+        "agi": 0.4
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.01,
+        "agi": 0.27,
+        "pac": 0.1,
+        "tgh": 0.08,
+        "pre": 0.32,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.03,
+        "cmp": 0.06,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.07
+      },
+      "statEmphasis": {
+        "str": 0.55,
+        "agi": 1.77,
+        "pac": 0.97,
+        "tgh": 0.88,
+        "pre": 2,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.64,
+        "cmp": 0.78,
+        "ldr": 1,
+        "awr": 0.78,
+        "dis": 0.83
+      },
+      "abilities": {
+        "basic": "boltrunner_hand_crossbow",
+        "a1": "boltrunner_pinning_bolt",
+        "a2": "boltrunner_tumble_shot",
+        "passive": "boltrunner_light_load"
+      },
+      "presetIds": [
+        "boltrunner_balanced",
+        "boltrunner_aggressive",
+        "boltrunner_protective"
+      ],
+      "defaultPresetId": "boltrunner_balanced"
+    },
+    {
+      "id": "emberwright",
+      "name": "Emberwright",
+      "flavor": "Apprenticed to a forge, graduated to setting the whole arena alight.",
+      "description": "Pyromancer. Arcane fire: blooms of flame that burn groups and a lance that pierces a whole line.",
+      "iconId": "class_emberwright",
+      "archetypes": [
+        "ranged"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "pyromancer",
+        "area"
+      ],
+      "affinityGroup": "caster",
+      "complexity": 1,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 780,
+        "armor": 10,
+        "ward": 30,
+        "power": 73,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 1
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.01,
+        "agi": 0.14,
+        "pac": 0.1,
+        "tgh": 0.08,
+        "pre": 0.13,
+        "arc": 0.32,
+        "spi": 0,
+        "wil": 0.03,
+        "cmp": 0.06,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.07
+      },
+      "statEmphasis": {
+        "str": 0.55,
+        "agi": 1.16,
+        "pac": 0.97,
+        "tgh": 0.88,
+        "pre": 1.11,
+        "arc": 2,
+        "spi": 0.5,
+        "wil": 0.64,
+        "cmp": 0.78,
+        "ldr": 1,
+        "awr": 0.78,
+        "dis": 0.83
+      },
+      "abilities": {
+        "basic": "emberwright_ember_bolt",
+        "a1": "emberwright_firebloom",
+        "a2": "emberwright_flame_lance",
+        "passive": "emberwright_kindling"
+      },
+      "presetIds": [
+        "emberwright_balanced",
+        "emberwright_aggressive"
+      ],
+      "defaultPresetId": "emberwright_balanced"
+    },
+    {
+      "id": "blightbrewer",
+      "name": "Blightbrewer",
+      "flavor": "Brews in the back of the wagon what other clubs pretend not to buy.",
+      "description": "Poisoner. Darts stack poison and spoil healing, flasks leave toxic clouds, and Rupture detonates the stacks.",
+      "iconId": "class_blightbrewer",
+      "archetypes": [
+        "ranged"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "poisoner",
+        "anti-heal"
+      ],
+      "affinityGroup": "ranged",
+      "complexity": 3,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "mixed",
+      "base": {
+        "hp": 800,
+        "armor": 15,
+        "ward": 25,
+        "power": 70,
+        "support": 0,
+        "attackIntervalS": 1.1,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.5,
+        "pre": 0.5
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.01,
+        "agi": 0.14,
+        "pac": 0.1,
+        "tgh": 0.08,
+        "pre": 0.29,
+        "arc": 0.16,
+        "spi": 0,
+        "wil": 0.03,
+        "cmp": 0.06,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.07
+      },
+      "statEmphasis": {
+        "str": 0.55,
+        "agi": 1.22,
+        "pac": 1.02,
+        "tgh": 0.91,
+        "pre": 2,
+        "arc": 1.33,
+        "spi": 0.5,
+        "wil": 0.66,
+        "cmp": 0.81,
+        "ldr": 1,
+        "awr": 0.81,
+        "dis": 0.86
+      },
+      "abilities": {
+        "basic": "blightbrewer_venom_dart",
+        "a1": "blightbrewer_noxious_flask",
+        "a2": "blightbrewer_rupture",
+        "passive": "blightbrewer_festering"
+      },
+      "presetIds": [
+        "blightbrewer_balanced",
+        "blightbrewer_aggressive"
+      ],
+      "defaultPresetId": "blightbrewer_balanced"
+    },
+    {
+      "id": "thunderhand",
+      "name": "Thunderhand",
+      "flavor": "Struck by lightning twice, and took it as a career suggestion.",
+      "description": "Storm caster. Chain lightning arcs between enemies, and a thunderclap blasts back anyone who closes in.",
+      "iconId": "class_thunderhand",
+      "archetypes": [
+        "ranged"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "chain",
+        "storm"
+      ],
+      "affinityGroup": "caster",
+      "complexity": 1,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 800,
+        "armor": 15,
+        "ward": 25,
+        "power": 70,
+        "support": 0,
+        "attackIntervalS": 1.1,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.8,
+        "pre": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.01,
+        "agi": 0.14,
+        "pac": 0.1,
+        "tgh": 0.08,
+        "pre": 0.19,
+        "arc": 0.26,
+        "spi": 0,
+        "wil": 0.03,
+        "cmp": 0.06,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.07
+      },
+      "statEmphasis": {
+        "str": 0.56,
+        "agi": 1.31,
+        "pac": 1.08,
+        "tgh": 0.96,
+        "pre": 1.6,
+        "arc": 2,
+        "spi": 0.5,
+        "wil": 0.67,
+        "cmp": 0.85,
+        "ldr": 1,
+        "awr": 0.85,
+        "dis": 0.9
+      },
+      "abilities": {
+        "basic": "thunderhand_spark",
+        "a1": "thunderhand_chain_lightning",
+        "a2": "thunderhand_thunderclap",
+        "passive": "thunderhand_arc_conductor"
+      },
+      "presetIds": [
+        "thunderhand_balanced",
+        "thunderhand_aggressive"
+      ],
+      "defaultPresetId": "thunderhand_balanced"
+    },
+    {
+      "id": "writ_hunter",
+      "name": "Writ Hunter",
+      "flavor": "Carries a satchel of signed warrants; one of them has your name on it.",
+      "description": "Bounty hunter. Posts a writ that makes one enemy take more damage from everyone, nets runners, and cashes in on marked kills.",
+      "iconId": "class_writ_hunter",
+      "archetypes": [
+        "ranged"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "marker",
+        "focus-fire"
+      ],
+      "affinityGroup": "ranged",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 820,
+        "armor": 20,
+        "ward": 20,
+        "power": 75,
+        "support": 0,
+        "attackIntervalS": 1.15,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "pre": 0.7,
+        "agi": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.01,
+        "agi": 0.24,
+        "pac": 0.1,
+        "tgh": 0.08,
+        "pre": 0.35,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.03,
+        "cmp": 0.06,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.07
+      },
+      "statEmphasis": {
+        "str": 0.54,
+        "agi": 1.53,
+        "pac": 0.93,
+        "tgh": 0.84,
+        "pre": 2,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.63,
+        "cmp": 0.76,
+        "ldr": 1,
+        "awr": 0.76,
+        "dis": 0.8
+      },
+      "abilities": {
+        "basic": "writ_hunter_bounty_bolt",
+        "a1": "writ_hunter_post_the_writ",
+        "a2": "writ_hunter_weighted_net",
+        "passive": "writ_hunter_collect_the_bounty"
+      },
+      "presetIds": [
+        "writ_hunter_balanced",
+        "writ_hunter_aggressive",
+        "writ_hunter_protective"
+      ],
+      "defaultPresetId": "writ_hunter_balanced"
+    },
+    {
+      "id": "rimebinder",
+      "name": "Rimebinder",
+      "flavor": "Grew up on a glacier and still thinks everyone else moves far too fast.",
+      "description": "Frost controller. Every bolt chills, a nova roots everyone nearby, and a glacial lance slows hard.",
+      "iconId": "class_rimebinder",
+      "archetypes": [
+        "controller"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "frost",
+        "peeler"
+      ],
+      "affinityGroup": "caster",
+      "complexity": 1,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 850,
+        "armor": 20,
+        "ward": 35,
+        "power": 55,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.8,
+        "wil": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.03,
+        "arc": 0.17,
+        "spi": 0,
+        "wil": 0.11,
+        "cmp": 0.15,
+        "ldr": 0,
+        "awr": 0.11,
+        "dis": 0.18
+      },
+      "statEmphasis": {
+        "str": 0.67,
+        "agi": 1,
+        "pac": 1.17,
+        "tgh": 1.25,
+        "pre": 0.75,
+        "arc": 1.92,
+        "spi": 0.5,
+        "wil": 1.42,
+        "cmp": 1.75,
+        "ldr": 1,
+        "awr": 1.42,
+        "dis": 2
+      },
+      "abilities": {
+        "basic": "rimebinder_frost_shard",
+        "a1": "rimebinder_rime_nova",
+        "a2": "rimebinder_glacial_lance",
+        "passive": "rimebinder_deep_chill"
+      },
+      "presetIds": [
+        "rimebinder_balanced",
+        "rimebinder_protective",
+        "rimebinder_aggressive"
+      ],
+      "defaultPresetId": "rimebinder_balanced"
+    },
+    {
+      "id": "hexmonger",
+      "name": "Hexmonger",
+      "flavor": "Sells curses by the ounce and always throws in a free sample.",
+      "description": "Hexer. Withers the enemy's top damage dealer and curses groups to take extra damage; its debuffs linger.",
+      "iconId": "class_hexmonger",
+      "archetypes": [
+        "controller"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "hexer",
+        "debuffer"
+      ],
+      "affinityGroup": "caster",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 850,
+        "armor": 20,
+        "ward": 35,
+        "power": 55,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.7,
+        "wil": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.03,
+        "arc": 0.15,
+        "spi": 0,
+        "wil": 0.14,
+        "cmp": 0.15,
+        "ldr": 0,
+        "awr": 0.11,
+        "dis": 0.17
+      },
+      "statEmphasis": {
+        "str": 0.68,
+        "agi": 1.03,
+        "pac": 1.21,
+        "tgh": 1.29,
+        "pre": 0.76,
+        "arc": 1.82,
+        "spi": 0.5,
+        "wil": 1.74,
+        "cmp": 1.82,
+        "ldr": 1,
+        "awr": 1.47,
+        "dis": 2
+      },
+      "abilities": {
+        "basic": "hexmonger_hex_bolt",
+        "a1": "hexmonger_withering_hex",
+        "a2": "hexmonger_mark_of_ruin",
+        "passive": "hexmonger_lingering_malice"
+      },
+      "presetIds": [
+        "hexmonger_balanced",
+        "hexmonger_aggressive",
+        "hexmonger_protective"
+      ],
+      "defaultPresetId": "hexmonger_balanced"
+    },
+    {
+      "id": "galeshaper",
+      "name": "Galeshaper",
+      "flavor": "Talks to the wind, and the wind, unfortunately, listens.",
+      "description": "Wind controller. Blasts attackers away in a cone, drags enemies together with a downdraft, and speeds nearby allies.",
+      "iconId": "class_galeshaper",
+      "archetypes": [
+        "controller"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "displacer",
+        "wind"
+      ],
+      "affinityGroup": "caster",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 870,
+        "armor": 20,
+        "ward": 35,
+        "power": 55,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.8,
+        "awr": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.03,
+        "arc": 0.17,
+        "spi": 0,
+        "wil": 0.07,
+        "cmp": 0.15,
+        "ldr": 0,
+        "awr": 0.15,
+        "dis": 0.18
+      },
+      "statEmphasis": {
+        "str": 0.67,
+        "agi": 1,
+        "pac": 1.17,
+        "tgh": 1.25,
+        "pre": 0.75,
+        "arc": 1.92,
+        "spi": 0.5,
+        "wil": 1.08,
+        "cmp": 1.75,
+        "ldr": 1,
+        "awr": 1.75,
+        "dis": 2
+      },
+      "abilities": {
+        "basic": "galeshaper_gust",
+        "a1": "galeshaper_repelling_gale",
+        "a2": "galeshaper_downdraft",
+        "passive": "galeshaper_tailwind"
+      },
+      "presetIds": [
+        "galeshaper_balanced",
+        "galeshaper_protective",
+        "galeshaper_aggressive"
+      ],
+      "defaultPresetId": "galeshaper_balanced"
+    },
+    {
+      "id": "hushweaver",
+      "name": "Hushweaver",
+      "flavor": "Knots silence into thread and sews it over other people's mouths.",
+      "description": "Anti-caster. Silences and interrupts, unravels enemy buffs and shields, and hits casters harder.",
+      "iconId": "class_hushweaver",
+      "archetypes": [
+        "controller"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "silencer",
+        "anti-caster"
+      ],
+      "affinityGroup": "caster",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 850,
+        "armor": 20,
+        "ward": 35,
+        "power": 58,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.7,
+        "awr": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.03,
+        "arc": 0.15,
+        "spi": 0,
+        "wil": 0.07,
+        "cmp": 0.15,
+        "ldr": 0,
+        "awr": 0.17,
+        "dis": 0.18
+      },
+      "statEmphasis": {
+        "str": 0.67,
+        "agi": 1,
+        "pac": 1.17,
+        "tgh": 1.25,
+        "pre": 0.75,
+        "arc": 1.75,
+        "spi": 0.5,
+        "wil": 1.08,
+        "cmp": 1.75,
+        "ldr": 1,
+        "awr": 1.92,
+        "dis": 2
+      },
+      "abilities": {
+        "basic": "hushweaver_muting_needle",
+        "a1": "hushweaver_hush",
+        "a2": "hushweaver_unravel",
+        "passive": "hushweaver_quiet_mind"
+      },
+      "presetIds": [
+        "hushweaver_balanced",
+        "hushweaver_aggressive"
+      ],
+      "defaultPresetId": "hushweaver_balanced"
+    },
+    {
+      "id": "dreamthief",
+      "name": "Dreamthief",
+      "flavor": "Steals a few seconds of sleep from everyone it meets and sells them back at a markup.",
+      "description": "Sleep controller. Puts one enemy to sleep for a long time (enough damage wakes it) and dazes small groups.",
+      "iconId": "class_dreamthief",
+      "archetypes": [
+        "controller"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "sleeper",
+        "stunner"
+      ],
+      "affinityGroup": "caster",
+      "complexity": 3,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 850,
+        "armor": 20,
+        "ward": 35,
+        "power": 55,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.8,
+        "cmp": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.03,
+        "arc": 0.18,
+        "spi": 0,
+        "wil": 0.07,
+        "cmp": 0.18,
+        "ldr": 0,
+        "awr": 0.11,
+        "dis": 0.18
+      },
+      "statEmphasis": {
+        "str": 0.67,
+        "agi": 1,
+        "pac": 1.17,
+        "tgh": 1.25,
+        "pre": 0.75,
+        "arc": 2,
+        "spi": 0.5,
+        "wil": 1.08,
+        "cmp": 2,
+        "ldr": 1,
+        "awr": 1.42,
+        "dis": 2
+      },
+      "abilities": {
+        "basic": "dreamthief_lull_mote",
+        "a1": "dreamthief_slumber",
+        "a2": "dreamthief_daze_pulse",
+        "passive": "dreamthief_drowsy_air"
+      },
+      "presetIds": [
+        "dreamthief_balanced",
+        "dreamthief_protective"
+      ],
+      "defaultPresetId": "dreamthief_balanced"
+    },
+    {
+      "id": "snaresetter",
+      "name": "Snaresetter",
+      "flavor": "Has a trap for every kind of fool, and two for the fast ones.",
+      "description": "Trapper. Sets bear traps that root whoever steps on them and spills tar that slows; rooted prey takes extra damage.",
+      "iconId": "class_snaresetter",
+      "archetypes": [
+        "controller"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "trapper",
+        "zoner"
+      ],
+      "affinityGroup": "ranged",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 850,
+        "armor": 25,
+        "ward": 25,
+        "power": 58,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "pre": 0.6,
+        "awr": 0.4
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.16,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.07,
+        "cmp": 0.15,
+        "ldr": 0,
+        "awr": 0.19,
+        "dis": 0.18
+      },
+      "statEmphasis": {
+        "str": 0.66,
+        "agi": 0.97,
+        "pac": 1.13,
+        "tgh": 1.21,
+        "pre": 1.76,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 1.05,
+        "cmp": 1.68,
+        "ldr": 1,
+        "awr": 2,
+        "dis": 1.92
+      },
+      "abilities": {
+        "basic": "snaresetter_barbed_dart",
+        "a1": "snaresetter_bear_trap",
+        "a2": "snaresetter_tar_pit",
+        "passive": "snaresetter_pinned_prey"
+      },
+      "presetIds": [
+        "snaresetter_balanced",
+        "snaresetter_aggressive"
+      ],
+      "defaultPresetId": "snaresetter_balanced"
+    },
+    {
+      "id": "chirurgeon",
+      "name": "Chirurgeon",
+      "flavor": "Stitches faster than the opposition can cut, and charges by the stitch.",
+      "description": "Single-target healer. Big direct heals that grow on badly wounded allies, plus a tincture that cleanses.",
+      "iconId": "class_chirurgeon",
+      "archetypes": [
+        "healer"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "surgeon",
+        "cleanser"
+      ],
+      "affinityGroup": "support",
+      "complexity": 1,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 850,
+        "armor": 20,
+        "ward": 35,
+        "power": 38,
+        "support": 100,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "pre": 0.7,
+        "agi": 0.3
+      },
+      "supportAttrs": {
+        "spi": 0.6,
+        "awr": 0.4
+      },
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.05,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.05,
+        "arc": 0,
+        "spi": 0.22,
+        "wil": 0.06,
+        "cmp": 0.14,
+        "ldr": 0,
+        "awr": 0.21,
+        "dis": 0.08
+      },
+      "statEmphasis": {
+        "str": 0.64,
+        "agi": 0.84,
+        "pac": 1.05,
+        "tgh": 1.11,
+        "pre": 0.84,
+        "arc": 0.5,
+        "spi": 2,
+        "wil": 0.91,
+        "cmp": 1.45,
+        "ldr": 1,
+        "awr": 1.93,
+        "dis": 1.05
+      },
+      "abilities": {
+        "basic": "chirurgeon_scalpel_toss",
+        "a1": "chirurgeon_suture",
+        "a2": "chirurgeon_purging_tincture",
+        "passive": "chirurgeon_field_dressing"
+      },
+      "presetIds": [
+        "chirurgeon_balanced",
+        "chirurgeon_protective",
+        "chirurgeon_aggressive"
+      ],
+      "defaultPresetId": "chirurgeon_balanced"
+    },
+    {
+      "id": "cantor",
+      "name": "Cantor",
+      "flavor": "Sings the same hymn every fight; the crowd now sings it back.",
+      "description": "Area healer. Choruses that heal everyone nearby and a sanctuary that keeps healing; allies close to it regenerate.",
+      "iconId": "class_cantor",
+      "archetypes": [
+        "healer"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "choir",
+        "area-heal"
+      ],
+      "affinityGroup": "support",
+      "complexity": 1,
+      "preferredBand": "close",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 880,
+        "armor": 20,
+        "ward": 35,
+        "power": 38,
+        "support": 95,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 1
+      },
+      "supportAttrs": {
+        "spi": 0.7,
+        "cmp": 0.3
+      },
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.03,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.01,
+        "arc": 0.05,
+        "spi": 0.26,
+        "wil": 0.06,
+        "cmp": 0.24,
+        "ldr": 0,
+        "awr": 0.08,
+        "dis": 0.08
+      },
+      "statEmphasis": {
+        "str": 0.62,
+        "agi": 0.67,
+        "pac": 0.96,
+        "tgh": 1.02,
+        "pre": 0.56,
+        "arc": 0.79,
+        "spi": 2,
+        "wil": 0.85,
+        "cmp": 1.88,
+        "ldr": 1,
+        "awr": 0.96,
+        "dis": 0.96
+      },
+      "abilities": {
+        "basic": "cantor_chime",
+        "a1": "cantor_chorus_of_mending",
+        "a2": "cantor_sanctuary_hymn",
+        "passive": "cantor_resonant_voice"
+      },
+      "presetIds": [
+        "cantor_balanced",
+        "cantor_protective"
+      ],
+      "defaultPresetId": "cantor_balanced"
+    },
+    {
+      "id": "aegis_scribe",
+      "name": "Aegis Scribe",
+      "flavor": "Writes warding sigils so quickly the ink is still wet when the blows land.",
+      "description": "Shield healer. Inscribes barriers on threatened allies before the damage lands, and lattices whole groups.",
+      "iconId": "class_aegis_scribe",
+      "archetypes": [
+        "healer"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "shielder",
+        "pre-emptive"
+      ],
+      "affinityGroup": "support",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 850,
+        "armor": 20,
+        "ward": 35,
+        "power": 38,
+        "support": 100,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 1
+      },
+      "supportAttrs": {
+        "spi": 0.5,
+        "arc": 0.5
+      },
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.03,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.01,
+        "arc": 0.23,
+        "spi": 0.18,
+        "wil": 0.06,
+        "cmp": 0.14,
+        "ldr": 0,
+        "awr": 0.08,
+        "dis": 0.08
+      },
+      "statEmphasis": {
+        "str": 0.63,
+        "agi": 0.7,
+        "pac": 1.02,
+        "tgh": 1.09,
+        "pre": 0.57,
+        "arc": 2,
+        "spi": 1.67,
+        "wil": 0.89,
+        "cmp": 1.41,
+        "ldr": 1,
+        "awr": 1.02,
+        "dis": 1.02
+      },
+      "abilities": {
+        "basic": "aegis_scribe_sigil_spark",
+        "a1": "aegis_scribe_inscribe_barrier",
+        "a2": "aegis_scribe_ward_lattice",
+        "passive": "aegis_scribe_reinforced_script"
+      },
+      "presetIds": [
+        "aegis_scribe_balanced",
+        "aegis_scribe_protective"
+      ],
+      "defaultPresetId": "aegis_scribe_balanced"
+    },
+    {
+      "id": "grovetender",
+      "name": "Grovetender",
+      "flavor": "Talks to the arena moss between rounds; the moss, apparently, talks back.",
+      "description": "Heal-over-time healer. Keeps rejuvenation running on several allies at once and blooms when the group is hurt.",
+      "iconId": "class_grovetender",
+      "archetypes": [
+        "healer"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "regrowth",
+        "heal-over-time"
+      ],
+      "affinityGroup": "support",
+      "complexity": 1,
+      "preferredBand": "close",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 850,
+        "armor": 20,
+        "ward": 35,
+        "power": 38,
+        "support": 100,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 1
+      },
+      "supportAttrs": {
+        "spi": 1
+      },
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.03,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.01,
+        "arc": 0.05,
+        "spi": 0.36,
+        "wil": 0.06,
+        "cmp": 0.14,
+        "ldr": 0,
+        "awr": 0.08,
+        "dis": 0.08
+      },
+      "statEmphasis": {
+        "str": 0.58,
+        "agi": 0.63,
+        "pac": 0.83,
+        "tgh": 0.88,
+        "pre": 0.54,
+        "arc": 0.71,
+        "spi": 2,
+        "wil": 0.75,
+        "cmp": 1.08,
+        "ldr": 1,
+        "awr": 0.83,
+        "dis": 0.83
+      },
+      "abilities": {
+        "basic": "grovetender_thorn_seed",
+        "a1": "grovetender_rejuvenate",
+        "a2": "grovetender_bloomburst",
+        "passive": "grovetender_deep_roots"
+      },
+      "presetIds": [
+        "grovetender_balanced",
+        "grovetender_protective"
+      ],
+      "defaultPresetId": "grovetender_balanced"
+    },
+    {
+      "id": "vigilkeeper",
+      "name": "Vigilkeeper",
+      "flavor": "Keeps a lantern lit for every fighter on its side, and refuses to let one go out.",
+      "description": "Death-denying healer. Wards an ally so a lethal blow leaves it standing, and catches allies who drop low.",
+      "iconId": "class_vigilkeeper",
+      "archetypes": [
+        "healer"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "death-ward",
+        "savior"
+      ],
+      "affinityGroup": "support",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 850,
+        "armor": 20,
+        "ward": 35,
+        "power": 38,
+        "support": 95,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 1
+      },
+      "supportAttrs": {
+        "spi": 0.8,
+        "cmp": 0.2
+      },
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.03,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.01,
+        "arc": 0.05,
+        "spi": 0.29,
+        "wil": 0.06,
+        "cmp": 0.21,
+        "ldr": 0,
+        "awr": 0.08,
+        "dis": 0.08
+      },
+      "statEmphasis": {
+        "str": 0.6,
+        "agi": 0.66,
+        "pac": 0.91,
+        "tgh": 0.97,
+        "pre": 0.55,
+        "arc": 0.76,
+        "spi": 2,
+        "wil": 0.81,
+        "cmp": 1.59,
+        "ldr": 1,
+        "awr": 0.91,
+        "dis": 0.91
+      },
+      "abilities": {
+        "basic": "vigilkeeper_lantern_flicker",
+        "a1": "vigilkeeper_vigil",
+        "a2": "vigilkeeper_mend",
+        "passive": "vigilkeeper_lamplight"
+      },
+      "presetIds": [
+        "vigilkeeper_balanced",
+        "vigilkeeper_protective"
+      ],
+      "defaultPresetId": "vigilkeeper_balanced"
+    },
+    {
+      "id": "war_drummer",
+      "name": "War Drummer",
+      "flavor": "Beats time for the whole line; the line has never once been out of step.",
+      "description": "Tempo healer. Drums that quicken allies' attacks and steps, and a rally beat that heals and frees allies from slows and roots.",
+      "iconId": "class_war_drummer",
+      "archetypes": [
+        "healer"
+      ],
+      "hybridPair": null,
+      "roleTags": [
+        "tempo",
+        "rally"
+      ],
+      "affinityGroup": "support",
+      "complexity": 1,
+      "preferredBand": "close",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 950,
+        "armor": 25,
+        "ward": 35,
+        "power": 45,
+        "support": 85,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.5,
+        "str": 0.5
+      },
+      "supportAttrs": {
+        "spi": 0.5,
+        "ldr": 0.5
+      },
+      "ratingWeights": {
+        "str": 0.04,
+        "agi": 0.03,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.01,
+        "arc": 0.03,
+        "spi": 0.18,
+        "wil": 0.06,
+        "cmp": 0.14,
+        "ldr": 0.18,
+        "awr": 0.08,
+        "dis": 0.08
+      },
+      "statEmphasis": {
+        "str": 0.83,
+        "agi": 0.75,
+        "pac": 1.17,
+        "tgh": 1.25,
+        "pre": 0.58,
+        "arc": 0.75,
+        "spi": 2,
+        "wil": 1,
+        "cmp": 1.67,
+        "ldr": 2,
+        "awr": 1.17,
+        "dis": 1.17
+      },
+      "abilities": {
+        "basic": "war_drummer_drumbeat_strike",
+        "a1": "war_drummer_quickstep_cadence",
+        "a2": "war_drummer_rally_beat",
+        "passive": "war_drummer_marching_rhythm"
+      },
+      "presetIds": [
+        "war_drummer_balanced",
+        "war_drummer_aggressive"
+      ],
+      "defaultPresetId": "war_drummer_balanced"
+    },
+    {
+      "id": "siegebreaker",
+      "name": "Siegebreaker",
+      "flavor": "Hired to knock down gates; finds people much easier.",
+      "description": "Battering bruiser. Its blows scale with its own max HP; charges into the back line and shrugs off punishment.",
+      "iconId": "class_siegebreaker",
+      "archetypes": [
+        "tank",
+        "melee"
+      ],
+      "hybridPair": "tank_dps",
+      "roleTags": [
+        "bruiser",
+        "charger"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1350,
+        "armor": 45,
+        "ward": 30,
+        "power": 63,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.22,
+        "agi": 0.15,
+        "pac": 0.09,
+        "tgh": 0.23,
+        "pre": 0.06,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.07,
+        "cmp": 0.09,
+        "ldr": 0,
+        "awr": 0.04,
+        "dis": 0.05
+      },
+      "statEmphasis": {
+        "str": 1.93,
+        "agi": 1.48,
+        "pac": 1.09,
+        "tgh": 2,
+        "pre": 0.89,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.96,
+        "cmp": 1.09,
+        "ldr": 1,
+        "awr": 0.76,
+        "dis": 0.83
+      },
+      "abilities": {
+        "basic": "siegebreaker_maul",
+        "a1": "siegebreaker_battering_charge",
+        "a2": "siegebreaker_iron_hide",
+        "passive": "siegebreaker_unbowed"
+      },
+      "presetIds": [
+        "siegebreaker_balanced",
+        "siegebreaker_aggressive",
+        "siegebreaker_protective"
+      ],
+      "defaultPresetId": "siegebreaker_balanced"
+    },
+    {
+      "id": "pavisier",
+      "name": "Pavisier",
+      "flavor": "Carries a door-sized shield and a crossbow that needs a door-sized shield.",
+      "description": "Ranged bulwark. Plants its pavise to become an immovable, heavily armored turret, and shoves off anyone who gets close.",
+      "iconId": "class_pavisier",
+      "archetypes": [
+        "tank",
+        "ranged"
+      ],
+      "hybridPair": "tank_dps",
+      "roleTags": [
+        "turret",
+        "cover"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1250,
+        "armor": 50,
+        "ward": 35,
+        "power": 68,
+        "support": 0,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.1,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "pre": 0.7,
+        "str": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.11,
+        "agi": 0.1,
+        "pac": 0.09,
+        "tgh": 0.21,
+        "pre": 0.22,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.07,
+        "cmp": 0.09,
+        "ldr": 0,
+        "awr": 0.05,
+        "dis": 0.06
+      },
+      "statEmphasis": {
+        "str": 1.25,
+        "agi": 1.18,
+        "pac": 1.11,
+        "tgh": 1.93,
+        "pre": 2,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.98,
+        "cmp": 1.11,
+        "ldr": 1,
+        "awr": 0.84,
+        "dis": 0.91
+      },
+      "abilities": {
+        "basic": "pavisier_arbalest_bolt",
+        "a1": "pavisier_plant_the_pavise",
+        "a2": "pavisier_shield_shove",
+        "passive": "pavisier_cover"
+      },
+      "presetIds": [
+        "pavisier_balanced",
+        "pavisier_aggressive"
+      ],
+      "defaultPresetId": "pavisier_balanced"
+    },
+    {
+      "id": "gaoler",
+      "name": "Gaoler",
+      "flavor": "Has never lost a prisoner, and treats every opponent as one.",
+      "description": "Jailer tank. Shackles enemies in place, stomps to stun crowds, and slows everyone who stays near it.",
+      "iconId": "class_gaoler",
+      "archetypes": [
+        "tank",
+        "controller"
+      ],
+      "hybridPair": "tank_controller",
+      "roleTags": [
+        "jailer",
+        "anchor"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1400,
+        "armor": 50,
+        "ward": 40,
+        "power": 58,
+        "support": 0,
+        "attackIntervalS": 1.3,
+        "moveSpeedMps": 3.2,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "awr": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.19,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.2,
+        "pre": 0.03,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.09,
+        "cmp": 0.13,
+        "ldr": 0,
+        "awr": 0.11,
+        "dis": 0.11
+      },
+      "statEmphasis": {
+        "str": 1.92,
+        "agi": 0.95,
+        "pac": 1.1,
+        "tgh": 2,
+        "pre": 0.73,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 1.17,
+        "cmp": 1.48,
+        "ldr": 1,
+        "awr": 1.33,
+        "dis": 1.33
+      },
+      "abilities": {
+        "basic": "gaoler_chain_flail",
+        "a1": "gaoler_shackle",
+        "a2": "gaoler_quake_stomp",
+        "passive": "gaoler_jailers_reach"
+      },
+      "presetIds": [
+        "gaoler_balanced",
+        "gaoler_protective",
+        "gaoler_aggressive"
+      ],
+      "defaultPresetId": "gaoler_balanced"
+    },
+    {
+      "id": "harpooner",
+      "name": "Harpooner",
+      "flavor": "Spent ten years hauling whales; the back line is lighter.",
+      "description": "Puller tank. Harpoons a distant enemy and reels it in, taunted; immune to being pushed around itself.",
+      "iconId": "class_harpooner",
+      "archetypes": [
+        "tank",
+        "controller"
+      ],
+      "hybridPair": "tank_controller",
+      "roleTags": [
+        "puller",
+        "peel"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 2,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1350,
+        "armor": 45,
+        "ward": 40,
+        "power": 63,
+        "support": 0,
+        "attackIntervalS": 1.25,
+        "moveSpeedMps": 3.2,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.7,
+        "pre": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.17,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.21,
+        "pre": 0.08,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.09,
+        "cmp": 0.13,
+        "ldr": 0,
+        "awr": 0.07,
+        "dis": 0.11
+      },
+      "statEmphasis": {
+        "str": 1.71,
+        "agi": 0.93,
+        "pac": 1.07,
+        "tgh": 2,
+        "pre": 1.07,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 1.14,
+        "cmp": 1.43,
+        "ldr": 1,
+        "awr": 1,
+        "dis": 1.29
+      },
+      "abilities": {
+        "basic": "harpooner_boarding_axe",
+        "a1": "harpooner_harpoon",
+        "a2": "harpooner_anchor_slam",
+        "passive": "harpooner_sea_legs"
+      },
+      "presetIds": [
+        "harpooner_balanced",
+        "harpooner_protective",
+        "harpooner_aggressive"
+      ],
+      "defaultPresetId": "harpooner_balanced"
+    },
+    {
+      "id": "vowknight",
+      "name": "Vowknight",
+      "flavor": "Swore a vow to bleed for others, and keeps it with alarming enthusiasm.",
+      "description": "Pain-sharing knight. Part of the damage it takes heals its weakest ally; it lays on hands and consecrates the ground.",
+      "iconId": "class_vowknight",
+      "archetypes": [
+        "tank",
+        "healer"
+      ],
+      "hybridPair": "tank_healer",
+      "roleTags": [
+        "martyr",
+        "sustain"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "mixed",
+      "base": {
+        "hp": 1400,
+        "armor": 50,
+        "ward": 40,
+        "power": 55,
+        "support": 70,
+        "attackIntervalS": 1.3,
+        "moveSpeedMps": 3.2,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": {
+        "spi": 0.7,
+        "wil": 0.3
+      },
+      "ratingWeights": {
+        "str": 0.1,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.22,
+        "pre": 0.02,
+        "arc": 0,
+        "spi": 0.14,
+        "wil": 0.14,
+        "cmp": 0.12,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.06
+      },
+      "statEmphasis": {
+        "str": 1.18,
+        "agi": 0.91,
+        "pac": 1.05,
+        "tgh": 2,
+        "pre": 0.64,
+        "arc": 0.5,
+        "spi": 1.45,
+        "wil": 1.45,
+        "cmp": 1.32,
+        "ldr": 1,
+        "awr": 0.91,
+        "dis": 0.91
+      },
+      "abilities": {
+        "basic": "vowknight_oathblade",
+        "a1": "vowknight_laying_of_hands",
+        "a2": "vowknight_consecrate",
+        "passive": "vowknight_shared_suffering"
+      },
+      "presetIds": [
+        "vowknight_balanced",
+        "vowknight_protective"
+      ],
+      "defaultPresetId": "vowknight_balanced"
+    },
+    {
+      "id": "deeproot_keeper",
+      "name": "Deeproot Keeper",
+      "flavor": "Was a sapling when the Charter was signed, and is in no hurry.",
+      "description": "Rooted warden. Takes root to become a fortified healing totem, lashes nearby enemies with thorns, and regenerates.",
+      "iconId": "class_deeproot_keeper",
+      "archetypes": [
+        "tank",
+        "healer"
+      ],
+      "hybridPair": "tank_healer",
+      "roleTags": [
+        "totem",
+        "regen"
+      ],
+      "affinityGroup": "frontline",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1500,
+        "armor": 55,
+        "ward": 40,
+        "power": 50,
+        "support": 70,
+        "attackIntervalS": 1.4,
+        "moveSpeedMps": 3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.8,
+        "agi": 0.2
+      },
+      "supportAttrs": {
+        "spi": 0.8,
+        "wil": 0.2
+      },
+      "ratingWeights": {
+        "str": 0.1,
+        "agi": 0.06,
+        "pac": 0.08,
+        "tgh": 0.22,
+        "pre": 0.02,
+        "arc": 0,
+        "spi": 0.16,
+        "wil": 0.12,
+        "cmp": 0.12,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.06
+      },
+      "statEmphasis": {
+        "str": 1.18,
+        "agi": 0.91,
+        "pac": 1.05,
+        "tgh": 2,
+        "pre": 0.64,
+        "arc": 0.5,
+        "spi": 1.59,
+        "wil": 1.32,
+        "cmp": 1.32,
+        "ldr": 1,
+        "awr": 0.91,
+        "dis": 0.91
+      },
+      "abilities": {
+        "basic": "deeproot_keeper_bough_swing",
+        "a1": "deeproot_keeper_take_root",
+        "a2": "deeproot_keeper_thornlash",
+        "passive": "deeproot_keeper_sapflow"
+      },
+      "presetIds": [
+        "deeproot_keeper_balanced",
+        "deeproot_keeper_protective"
+      ],
+      "defaultPresetId": "deeproot_keeper_balanced"
+    },
+    {
+      "id": "netcaster",
+      "name": "Netcaster",
+      "flavor": "Fights the old way: one net, one trident, no patience for runners.",
+      "description": "Net fighter. Nets enemies in place, lunges for heavy damage on rooted prey, and slows with every hit.",
+      "iconId": "class_netcaster",
+      "archetypes": [
+        "melee",
+        "controller"
+      ],
+      "hybridPair": "dps_controller",
+      "roleTags": [
+        "pinner",
+        "skirmisher"
+      ],
+      "affinityGroup": "skirmisher",
+      "complexity": 2,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1000,
+        "armor": 30,
+        "ward": 25,
+        "power": 68,
+        "support": 0,
+        "attackIntervalS": 1,
+        "moveSpeedMps": 3.6,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "agi": 0.5,
+        "str": 0.3,
+        "pre": 0.2
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.1,
+        "agi": 0.22,
+        "pac": 0.09,
+        "tgh": 0.12,
+        "pre": 0.11,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.06,
+        "cmp": 0.11,
+        "ldr": 0,
+        "awr": 0.07,
+        "dis": 0.12
+      },
+      "statEmphasis": {
+        "str": 1.18,
+        "agi": 2,
+        "pac": 1.11,
+        "tgh": 1.32,
+        "pre": 1.25,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.91,
+        "cmp": 1.25,
+        "ldr": 1,
+        "awr": 0.98,
+        "dis": 1.32
+      },
+      "abilities": {
+        "basic": "netcaster_trident_thrust",
+        "a1": "netcaster_cast_net",
+        "a2": "netcaster_pinning_lunge",
+        "passive": "netcaster_tangle"
+      },
+      "presetIds": [
+        "netcaster_balanced",
+        "netcaster_aggressive",
+        "netcaster_protective"
+      ],
+      "defaultPresetId": "netcaster_balanced"
+    },
+    {
+      "id": "skullslinger",
+      "name": "Skullslinger",
+      "flavor": "Picks its stones for weight and its targets for thickness of skull.",
+      "description": "Concussive slinger. Stuns with a cracking shot, sprays slowing shot, and its stones weaken enemies.",
+      "iconId": "class_skullslinger",
+      "archetypes": [
+        "ranged",
+        "controller"
+      ],
+      "hybridPair": "dps_controller",
+      "roleTags": [
+        "stunner",
+        "skirmisher"
+      ],
+      "affinityGroup": "ranged",
+      "complexity": 1,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 840,
+        "armor": 18,
+        "ward": 25,
+        "power": 60,
+        "support": 0,
+        "attackIntervalS": 1.1,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "pre": 0.7,
+        "str": 0.3
+      },
+      "supportAttrs": null,
+      "ratingWeights": {
+        "str": 0.1,
+        "agi": 0.1,
+        "pac": 0.09,
+        "tgh": 0.09,
+        "pre": 0.26,
+        "arc": 0,
+        "spi": 0,
+        "wil": 0.05,
+        "cmp": 0.1,
+        "ldr": 0,
+        "awr": 0.08,
+        "dis": 0.13
+      },
+      "statEmphasis": {
+        "str": 1.08,
+        "agi": 1.08,
+        "pac": 1.02,
+        "tgh": 1.02,
+        "pre": 2,
+        "arc": 0.5,
+        "spi": 0.5,
+        "wil": 0.79,
+        "cmp": 1.08,
+        "ldr": 1,
+        "awr": 0.96,
+        "dis": 1.25
+      },
+      "abilities": {
+        "basic": "skullslinger_sling_stone",
+        "a1": "skullslinger_skullcracker",
+        "a2": "skullslinger_scatter_shot",
+        "passive": "skullslinger_concussive"
+      },
+      "presetIds": [
+        "skullslinger_balanced",
+        "skullslinger_aggressive"
+      ],
+      "defaultPresetId": "skullslinger_balanced"
+    },
+    {
+      "id": "leechblade",
+      "name": "Leechblade",
+      "flavor": "Its sword drinks; it insists on sharing.",
+      "description": "Siphoning duelist. Every cut it lands heals its weakest ally; a crimson mist hurts enemies and mends friends.",
+      "iconId": "class_leechblade",
+      "archetypes": [
+        "melee",
+        "healer"
+      ],
+      "hybridPair": "dps_healer",
+      "roleTags": [
+        "siphon",
+        "sustain"
+      ],
+      "affinityGroup": "skirmisher",
+      "complexity": 1,
+      "preferredBand": "melee",
+      "startingRow": "front",
+      "damageProfile": "physical",
+      "base": {
+        "hp": 1050,
+        "armor": 30,
+        "ward": 30,
+        "power": 65,
+        "support": 55,
+        "attackIntervalS": 1,
+        "moveSpeedMps": 3.6,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "str": 0.5,
+        "agi": 0.5
+      },
+      "supportAttrs": {
+        "spi": 0.7,
+        "arc": 0.3
+      },
+      "ratingWeights": {
+        "str": 0.11,
+        "agi": 0.17,
+        "pac": 0.09,
+        "tgh": 0.12,
+        "pre": 0.05,
+        "arc": 0.05,
+        "spi": 0.13,
+        "wil": 0.05,
+        "cmp": 0.1,
+        "ldr": 0,
+        "awr": 0.06,
+        "dis": 0.07
+      },
+      "statEmphasis": {
+        "str": 1.47,
+        "agi": 2,
+        "pac": 1.29,
+        "tgh": 1.56,
+        "pre": 0.94,
+        "arc": 0.94,
+        "spi": 1.65,
+        "wil": 0.94,
+        "cmp": 1.38,
+        "ldr": 1,
+        "awr": 1.03,
+        "dis": 1.12
+      },
+      "abilities": {
+        "basic": "leechblade_leeching_cut",
+        "a1": "leechblade_siphon_strike",
+        "a2": "leechblade_crimson_mist",
+        "passive": "leechblade_blood_tithe"
+      },
+      "presetIds": [
+        "leechblade_balanced",
+        "leechblade_aggressive"
+      ],
+      "defaultPresetId": "leechblade_balanced"
+    },
+    {
+      "id": "sunlance_acolyte",
+      "name": "Sunlance Acolyte",
+      "flavor": "Sworn to a dawn-cult that takes its tithes in arena purses.",
+      "description": "Radiant striker. Brands enemies so that allies who hit them heal, and mends allies with dawn light.",
+      "iconId": "class_sunlance_acolyte",
+      "archetypes": [
+        "ranged",
+        "healer"
+      ],
+      "hybridPair": "dps_healer",
+      "roleTags": [
+        "brand",
+        "battle-healer"
+      ],
+      "affinityGroup": "caster",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 840,
+        "armor": 18,
+        "ward": 35,
+        "power": 65,
+        "support": 70,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.4,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.8,
+        "pre": 0.2
+      },
+      "supportAttrs": {
+        "spi": 0.8,
+        "wil": 0.2
+      },
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.09,
+        "pac": 0.09,
+        "tgh": 0.09,
+        "pre": 0.11,
+        "arc": 0.13,
+        "spi": 0.14,
+        "wil": 0.08,
+        "cmp": 0.1,
+        "ldr": 0,
+        "awr": 0.07,
+        "dis": 0.08
+      },
+      "statEmphasis": {
+        "str": 0.71,
+        "agi": 1.46,
+        "pac": 1.46,
+        "tgh": 1.46,
+        "pre": 1.68,
+        "arc": 1.89,
+        "spi": 2,
+        "wil": 1.36,
+        "cmp": 1.57,
+        "ldr": 1,
+        "awr": 1.25,
+        "dis": 1.36
+      },
+      "abilities": {
+        "basic": "sunlance_acolyte_sunlance",
+        "a1": "sunlance_acolyte_searing_brand",
+        "a2": "sunlance_acolyte_dawns_mercy",
+        "passive": "sunlance_acolyte_radiant_zeal"
+      },
+      "presetIds": [
+        "sunlance_acolyte_balanced",
+        "sunlance_acolyte_protective",
+        "sunlance_acolyte_aggressive"
+      ],
+      "defaultPresetId": "sunlance_acolyte_balanced"
+    },
+    {
+      "id": "undertow_mystic",
+      "name": "Undertow Mystic",
+      "flavor": "Reads the tides in the arena sand, and sometimes drowns people in them.",
+      "description": "Tide mystic. Floods an undertow that slows enemies and heals allies standing in it, and washes allies clean.",
+      "iconId": "class_undertow_mystic",
+      "archetypes": [
+        "controller",
+        "healer"
+      ],
+      "hybridPair": "controller_healer",
+      "roleTags": [
+        "tide",
+        "cleanser"
+      ],
+      "affinityGroup": "support",
+      "complexity": 2,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 880,
+        "armor": 20,
+        "ward": 40,
+        "power": 50,
+        "support": 80,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 1
+      },
+      "supportAttrs": {
+        "spi": 0.7,
+        "wil": 0.3
+      },
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.05,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.02,
+        "arc": 0.13,
+        "spi": 0.13,
+        "wil": 0.12,
+        "cmp": 0.14,
+        "ldr": 0,
+        "awr": 0.09,
+        "dis": 0.13
+      },
+      "statEmphasis": {
+        "str": 0.71,
+        "agi": 1.04,
+        "pac": 1.36,
+        "tgh": 1.46,
+        "pre": 0.71,
+        "arc": 1.89,
+        "spi": 1.89,
+        "wil": 1.79,
+        "cmp": 2,
+        "ldr": 1,
+        "awr": 1.46,
+        "dis": 1.89
+      },
+      "abilities": {
+        "basic": "undertow_mystic_brine_bolt",
+        "a1": "undertow_mystic_undertow",
+        "a2": "undertow_mystic_cleansing_tide",
+        "passive": "undertow_mystic_ebb_and_flow"
+      },
+      "presetIds": [
+        "undertow_mystic_balanced",
+        "undertow_mystic_protective"
+      ],
+      "defaultPresetId": "undertow_mystic_balanced"
+    },
+    {
+      "id": "hourglass_sage",
+      "name": "Hourglass Sage",
+      "flavor": "Carries a cracked hourglass that runs a little differently for everyone near it.",
+      "description": "Time sage. Rewinds an ally's recent wounds, mires enemies in torpor, and speeds up nearby allies' cooldowns.",
+      "iconId": "class_hourglass_sage",
+      "archetypes": [
+        "controller",
+        "healer"
+      ],
+      "hybridPair": "controller_healer",
+      "roleTags": [
+        "rewind",
+        "tempo"
+      ],
+      "affinityGroup": "support",
+      "complexity": 3,
+      "preferredBand": "mid",
+      "startingRow": "back",
+      "damageProfile": "arcane",
+      "base": {
+        "hp": 880,
+        "armor": 20,
+        "ward": 40,
+        "power": 50,
+        "support": 80,
+        "attackIntervalS": 1.2,
+        "moveSpeedMps": 3.3,
+        "critBonus": 0,
+        "evadeBonus": 0,
+        "tenacityBonus": 0
+      },
+      "powerAttrs": {
+        "arc": 0.8,
+        "awr": 0.2
+      },
+      "supportAttrs": {
+        "spi": 0.6,
+        "awr": 0.4
+      },
+      "ratingWeights": {
+        "str": 0.02,
+        "agi": 0.05,
+        "pac": 0.08,
+        "tgh": 0.09,
+        "pre": 0.02,
+        "arc": 0.11,
+        "spi": 0.11,
+        "wil": 0.07,
+        "cmp": 0.14,
+        "ldr": 0,
+        "awr": 0.18,
+        "dis": 0.13
+      },
+      "statEmphasis": {
+        "str": 0.67,
+        "agi": 0.92,
+        "pac": 1.17,
+        "tgh": 1.25,
+        "pre": 0.67,
+        "arc": 1.42,
+        "spi": 1.42,
+        "wil": 1.08,
+        "cmp": 1.67,
+        "ldr": 1,
+        "awr": 2,
+        "dis": 1.58
+      },
+      "abilities": {
+        "basic": "hourglass_sage_sand_mote",
+        "a1": "hourglass_sage_rewind_wounds",
+        "a2": "hourglass_sage_torpor_field",
+        "passive": "hourglass_sage_hastened_hours"
+      },
+      "presetIds": [
+        "hourglass_sage_balanced",
+        "hourglass_sage_protective"
+      ],
+      "defaultPresetId": "hourglass_sage_balanced"
+    }
+  ]
+}

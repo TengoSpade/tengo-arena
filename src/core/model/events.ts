@@ -1,33 +1,33 @@
 import type { Seed } from '../rng';
 import { StreamHasher, stableStringify } from '../util';
-import type { ClassId, ClubId, FighterId } from './ids';
+import type { RoundTiebreakStep } from './match';
+import type { AbilityId, ClassId, ClubId, FighterId } from './ids';
 
 /**
- * Fight event stream: the contract between the simulation (core/sim, the
- * only producer), match reports (core/game, ui) and the M2 arena viewer
- * (src/render, a pure consumer that never re-simulates or mutates state).
+ * Fight event stream (03-combat sys-match-report): the contract between
+ * core/sim (the only producer), match reports (core/game, src/ui) and the M2
+ * arena viewer (src/render, a pure consumer).
  *
- * Phase A fixes the ENVELOPE and the engine-level events below. The
- * content-dependent event types (ability casts, damage, heals, statuses,
- * rule firings, movement intents, ...) are added by core/sim in phase B as
- * further members of the FightEvent union, using the same envelope.
+ * Units in events: positions in integer CENTIMETRES (the sim works in
+ * millimetres internally and converts when recording; orchestrator decision
+ * 2026-10-25), time in ticks (50 ms), amounts in whole points.
  */
 
 export const FIGHT_LOG_FORMAT = 'arena-league-fight';
 
 /**
  * How much the sim records. The OUTCOME must be identical at every level
- * (REQUIRED; tested): recording never consumes randomness or changes order.
- * - none:    result + checksum only (AI-vs-AI headless matches, balance runs)
- * - summary: + per-fighter stats and key events (unit.down, fight.end) for match reports
- * - full:    + every event and periodic frames (M2 viewer, determinism tests)
+ * (REQUIRED, T4 / vis-009; tested): recording never draws randomness.
+ * - none:    results and checksum only (AI-vs-AI matches, balance runs)
+ * - summary: + events marked S below (match reports)
+ * - full:    + every event and frames (M2 viewer, determinism tests)
  */
 export type RecordLevel = 'none' | 'summary' | 'full';
 
 /** 0 = home side, 1 = away side. */
 export type Side = 0 | 1;
 
-/** Index into FightHeader.units (0..2*teamSize-1). Events reference units by index to stay compact. */
+/** Index into FightHeader.units: 0-4 home, 5-9 away. */
 export type UnitIndex = number;
 
 export interface FightUnitInfo {
@@ -36,7 +36,6 @@ export interface FightUnitInfo {
   fighterId: FighterId;
   clubId: ClubId;
   classId: ClassId;
-  /** Position in the lineup (0-based) and starting row. */
   slot: number;
   row: 'front' | 'back';
   isCaptain: boolean;
@@ -46,13 +45,14 @@ export interface FightHeader {
   format: typeof FIGHT_LOG_FORMAT;
   engineVersion: number;
   contentHash: string;
-  /** The round seed this fight was simulated from. */
+  /** Round seed. */
   seed: Seed;
-  /** Fixed simulation step in ms (50 ms PROPOSED, 03 §1). Event time in ms = tick * tickMs. */
+  round: number;
+  /** 50 (combat.json tick.tickMs). */
   tickMs: number;
-  /** At level 'full', a 'frame' event is recorded every `frameEvery` ticks. */
+  /** A frame every N ticks at 'full' (combat.json events.frameEveryTicks). */
   frameEvery: number;
-  /** Arena size in integer centimetres (03 §1 units). [phase B] values and arena id from combat.json. */
+  /** Arena size in cm. */
   arena: { width: number; height: number };
   units: FightUnitInfo[];
 }
@@ -61,7 +61,6 @@ export interface FightHeader {
 export interface SimEvent<T extends string = string, D = unknown> {
   /** 0-based, strictly increasing within one fight. */
   seq: number;
-  /** Tick on which the event happened (0-based). */
   tick: number;
   type: T;
   /** Acting unit, if any. */
@@ -71,42 +70,140 @@ export interface SimEvent<T extends string = string, D = unknown> {
   data?: D;
 }
 
-export type FightEndReason =
-  | 'elimination'
-  /** Time cap reached; winner decided by the tie-break rule in 03-combat [phase B]. */
-  | 'time-limit';
-
 export interface UnitSpawn {
   unit: UnitIndex;
   x: number;
   y: number;
   hp: number;
   maxHp: number;
+  focus: number;
 }
 
-/** Compact per-unit frame: [x cm, y cm, hp], all integers. Index = UnitIndex. [phase B] may gain fields (focus, state flags, facing). */
-export type FrameUnit = [x: number, y: number, hp: number];
+/** [x cm, y cm, hp, stateBits]. stateBits: 1 casting, 2 stunned/asleep, 4 rooted, 8 silenced, 16 downed. */
+export type FrameUnit = [x: number, y: number, hp: number, stateBits: number];
 
-export type FightStartEvent = SimEvent<'fight.start', { units: UnitSpawn[] }>;
-export type FrameEvent = SimEvent<'frame', { u: FrameUnit[] }>;
-/** `unit` is downed (0 HP, out for the round, 01 §7); `data.by` is the unit credited, if any. */
-export type UnitDownEvent = SimEvent<'unit.down', { by: UnitIndex | null }>;
-export type FightEndEvent = SimEvent<'fight.end', { winner: Side | null; reason: FightEndReason }>;
+/** Why a rule was skipped (P-22 inspector / recap). */
+export type RuleSkipReason =
+  | 'condition_false'
+  | 'no_target'
+  | 'only_filtered_all'
+  | 'on_cooldown'
+  | 'rule_cooldown'
+  | 'no_focus'
+  | 'out_of_range'
+  | 'blocked';
 
-/** Engine-level events fixed in phase A. core/sim extends this union in phase B. */
-export type EngineEvent = FightStartEvent | FrameEvent | UnitDownEvent | FightEndEvent;
+export interface RuleTraceEntry {
+  /** Rule index; the stance is index = rule count. */
+  rule: number;
+  fired: boolean;
+  skip: RuleSkipReason | null;
+}
+
+export interface RoundRecap {
+  unit: UnitIndex;
+  damageDealt: number;
+  damageToShields: number;
+  damageTaken: number;
+  healingDone: number;
+  shieldingDone: number;
+  overheal: number;
+  ccAppliedTicks: number;
+  ccReceivedTicks: number;
+  downsInflicted: number;
+  assists: number;
+  focusSpent: number;
+  casts: Record<AbilityId, number>;
+  ruleFires: number[];
+  ruleCommittedTicks: number[];
+  ruleSkips: Partial<Record<RuleSkipReason, number>>[];
+  stanceTicks: number;
+}
+
+/** Every event type, keyed by `type`, with its data. Level: S = summary and full, F = full only. */
+export interface FightEventData {
+  /** S */ 'fight.start': { units: UnitSpawn[] };
+  /** F */ frame: { u: FrameUnit[] };
+  /** F (counted at S) */ 'unit.decide': {
+    rule: number;
+    action: string;
+    targetUnit: UnitIndex | null;
+    reactTicks: number;
+    reactCauses: string[];
+    commitTick: number;
+    trace: RuleTraceEntry[];
+  };
+  /** F */ 'attack.start': { windupTicks: number };
+  /** F */ 'attack.cancel': { reason: string };
+  /** F */ 'cast.start': { ability: AbilityId; castTicks: number };
+  /** S for actives, F for basics */ 'cast.release': { ability: AbilityId; focusSpent: number; cooldownTicks: number };
+  /** S */ 'cast.interrupt': { ability: AbilityId; by: UnitIndex | null; cause: string };
+  /** F */ 'projectile.launch': { ability: AbilityId; landTick: number };
+  /** F (aggregated at S) */ hit: {
+    ability: AbilityId | null;
+    amount: number;
+    toShield: number;
+    overkill: number;
+    damageType: 'physical' | 'arcane' | 'true';
+    crit: boolean;
+    guardRedirect: boolean;
+    preMitigation: number;
+  };
+  /** F */ evade: { ability: AbilityId | null };
+  /** F */ heal: { ability: AbilityId | null; amount: number; overheal: number };
+  /** F */ 'shield.gain': { ability: AbilityId | null; amount: number; expiresTick: number };
+  /** F */ 'shield.break': Record<string, never>;
+  /** F (CC at S) */ 'status.apply': {
+    status: string;
+    ability: AbilityId | null;
+    durationTicks: number;
+    magnitude: number;
+    stacks: number;
+    drStep: number | null;
+  };
+  /** F */ 'status.expire': { status: string };
+  /** F */ 'status.resist': { status: string; reason: 'dr_immune' | 'below_min' | 'immune' };
+  /** F */ displace: { kind: 'dash' | 'leap' | 'knockback' | 'pull'; from: [number, number]; to: [number, number]; ticks: number };
+  /** F */ 'zone.spawn': { ability: AbilityId; x: number; y: number; radius: number };
+  /** F */ 'zone.trigger': Record<string, never>;
+  /** F */ 'zone.expire': Record<string, never>;
+  /** S */ 'deathward.save': { by: UnitIndex | null; healed: number };
+  /** S */ 'captain.rally': { composure: number };
+  /** S */ 'captain.down': Record<string, never>;
+  /** S */ 'captain.handover': { newCaptain: UnitIndex; cq: number };
+  /** S */ 'overtime.start': Record<string, never>;
+  /** S */ 'unit.down': { by: UnitIndex | null; ability: AbilityId | null; hit: number; overkill: number; assists: UnitIndex[] };
+  /** S */ 'fight.end': { winner: Side; reason: 'elimination' | 'time-limit'; tiebreakStep: RoundTiebreakStep | null };
+  /** S */ 'round.summary': { units: RoundRecap[] };
+}
+
+export type FightEventType = keyof FightEventData;
+
+/** Discriminated union of every fight event. */
+export type FightEvent = { [K in FightEventType]: SimEvent<K, FightEventData[K]> }[FightEventType];
+
+/** Event types recorded at 'summary' level (the rest only at 'full'). */
+export const SUMMARY_EVENT_TYPES: readonly FightEventType[] = [
+  'fight.start',
+  'cast.interrupt',
+  'deathward.save',
+  'captain.rally',
+  'captain.down',
+  'captain.handover',
+  'overtime.start',
+  'unit.down',
+  'fight.end',
+  'round.summary',
+];
 
 export interface FightLog {
   header: FightHeader;
-  events: SimEvent[];
-  /** hashEventStream(header, events): replays and determinism tests compare this. */
+  events: FightEvent[];
+  /** hashEventStream(header, events). */
   hash: string;
 }
 
-/**
- * Canonical hash of a fight's header and event stream. Two fights are
- * "identical" for replay purposes iff their hashes match.
- */
+/** Canonical hash of a fight's header and event stream (replays and determinism tests compare it). */
 export function hashEventStream(header: FightHeader, events: readonly SimEvent[]): string {
   const hasher = new StreamHasher();
   hasher.update(stableStringify(header));
