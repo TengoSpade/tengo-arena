@@ -599,6 +599,10 @@ export class Fight {
   // ---- The tick loop --------------------------------------------------------------------------------
   run(): void {
     if (this.rec) this.emitStart();
+    // round_start triggers resolve on tick 1 like every triggered effect.
+    for (const u of this.units) {
+      for (let k = 0; k < u.triggers.length; k++) if (u.triggers[k]!.on === 'round_start') fireTrigger(this, u, k, u.index, u.index, 0);
+    }
     while (!this.ended) this.step();
   }
 

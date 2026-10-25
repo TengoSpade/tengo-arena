@@ -543,11 +543,11 @@ export function applyEffect(f: Fight, rel: Release, e: CEffect, tgt: Unit, prima
       f.qFocus.push({ target: tgt.index, milli: e.milli });
       return;
     case 'heal_recent_damage': {
-      const window = Math.min(e.windowTicks, f.tb.damage.recentMaxTicks);
+      const span = Math.min(e.windowTicks, f.tb.damage.recentMaxTicks);
       let recent = 0;
       for (let i = 0; i < tgt.dmgRing.length; i++) {
         const tk = tgt.dmgRingTick[i]!;
-        if (tk >= 0 && tk > f.tick - window - 1 && tk < f.tick) recent += tgt.dmgRing[i]!;
+        if (tk >= 0 && tk > f.tick - span - 1 && tk < f.tick) recent += tgt.dmgRing[i]!;
       }
       const fromRecent = Math.trunc((recent * 100 * e.pctBp) / BP);
       const min = evalAmount(e.min, rel, tgt);
