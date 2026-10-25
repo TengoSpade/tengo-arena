@@ -319,6 +319,7 @@ export interface SimTables {
     protectOffsetMm: number;
     regroupGapMm: number;
     steadyLeadMm: number;
+    stickGapMm: number;
   };
   damage: { varianceBp: number; minDamage: number; mitigation: number; thornsGapMm: number; riposteGapMm: number; assistTicks: number; recentMaxTicks: number };
   shieldCapBp: number;
@@ -526,6 +527,7 @@ function build(content: ContentDB): SimTables {
       protectOffsetMm: toMm(c.movement.protectOffsetM),
       regroupGapMm: toMm(c.movement.regroupGapM),
       steadyLeadMm: toMm(c.movement.steadyLeadAllowanceM),
+      stickGapMm: toMm(c.movement.stickiness.gapM),
     },
     damage: {
       varianceBp: toBp(c.damage.variance),

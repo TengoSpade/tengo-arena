@@ -59,15 +59,15 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
         "rounds": [
           [
             "away",
-            642,
-            "9a5ba8b139eb9e95dc41fbdf087507b0",
-            "bdc80073ac93fca5d69d25fe0e4568fa",
+            712,
+            "b1e30c26523f4bb4e72c3be884d0ad1b",
+            "ccb75889f44aa221c76690478b89b1b3",
           ],
           [
             "away",
-            734,
-            "9ec08f91ae44b31cbdec7fcb25644194",
-            "9b097501e3a5a6099d7c79ac60971a59",
+            906,
+            "63652b166c526ace2db11b1768ab8d08",
+            "c4f9ac43c38003f8fb436231c8abc981",
           ],
         ],
         "score": {

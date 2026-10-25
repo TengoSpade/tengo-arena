@@ -4,7 +4,7 @@
  * displacements, two separation passes and the wall clamp. Integer mm.
  */
 import type { Fight } from './fight';
-import { abilityUsable } from './act';
+import { abilityUsable, effectiveDecision } from './act';
 import { has, isImmobile, nearestEnemyInRange, retreatGap } from './resolve';
 import { ACT_CAST, ACT_CHANNEL, ACT_WINDUP, type Unit } from './state';
 import { BP, SC_ANCHORED, SC_ROOT, SC_SLEEP, SC_STUN } from './tables';
@@ -57,7 +57,7 @@ function clampI(v: number, lo: number, hi: number): number {
 }
 
 function goalFor(f: Fight, u: Unit): Goal {
-  const d = u.committed;
+  const d = effectiveDecision(f, u);
   if (!d || d.target === null) return NONE;
   const tgt = f.units[d.target]!;
   if (!tgt.standing) return NONE;
