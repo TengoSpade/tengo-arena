@@ -229,26 +229,37 @@ function inActionRange(view: BattleView, me: UnitIndex, cand: UnitIndex, action:
 // ---- Selectors -----------------------------------------------------------------------------
 
 
-const candidates: UnitIndex[] = [];
-const keys: number[] = [];
+/** Scratch buffers (fixed size, explicit counts: no array length writes in the hot path). */
+const MAX_UNITS = 64;
+const candidates = new Int32Array(MAX_UNITS);
+const keys = new Float64Array(MAX_UNITS);
+const preferred = new Int32Array(MAX_UNITS);
+const preferredKeys = new Float64Array(MAX_UNITS);
+let nCand = 0;
 
 function buildPool(sel: CSelector, action: CAction, selfOk: boolean, view: BattleView, me: UnitIndex): void {
-  candidates.length = 0;
+  nCand = 0;
   const side = view.side(me);
   const pool = action.pool === 'any' ? sel.pool : action.pool;
   if (pool === 'self') {
-    candidates.push(me);
+    candidates[nCand++] = me;
     return;
   }
-  for (let u = 0; u < view.unitCount; u++) {
+  const n = view.unitCount;
+  for (let u = 0; u < n; u++) {
     if (!view.standing(u)) continue;
     if (pool === 'enemies') {
-      if (view.side(u) !== side) candidates.push(u);
+      if (view.side(u) !== side) candidates[nCand++] = u;
     } else if (view.side(u) === side) {
       if (u === me && !selfOk) continue;
-      candidates.push(u);
+      candidates[nCand++] = u;
     }
   }
+}
+
+function hasCandidate(u: UnitIndex): boolean {
+  for (let i = 0; i < nCand; i++) if (candidates[i] === u) return true;
+  return false;
 }
 
 /** Selector filter (before ONLY); returns whether the candidate stays. */
@@ -310,14 +321,15 @@ function pickBest(
   sel: CSelector,
   view: BattleView,
   me: UnitIndex,
-  pool: readonly UnitIndex[],
-  poolKeys: readonly number[],
+  pool: Int32Array,
+  poolKeys: Float64Array,
+  count: number,
 ): UnitIndex {
   let best = NO_UNIT;
   let bestKey = 0;
   let bestGap = 0;
   let bestHp = 0;
-  for (let i = 0; i < pool.length; i++) {
+  for (let i = 0; i < count; i++) {
     const u = pool[i]!;
     const k = poolKeys[i]!;
     const g = u === me ? 0 : view.gapMm(me, u);
@@ -335,7 +347,8 @@ function pickBest(
   }
   const current = view.currentTarget(me);
   if (current !== null && current !== best) {
-    const idx = pool.indexOf(current);
+    let idx = -1;
+    for (let i = 0; i < count; i++) if (pool[i] === current) idx = i;
     if (idx >= 0) {
       const tol = sel.keyKind === 0 ? ct.stickGapMm : sel.keyKind === 1 ? ct.stickHpBp : 0;
       if (poolKeys[idx]! - bestKey <= tol) return current;
@@ -344,12 +357,11 @@ function pickBest(
   return best;
 }
 
-type SelectOutcome = { target: UnitIndex; reason: null } | { target: typeof NO_UNIT; reason: 'no_target' | 'only_filtered' };
+/** select() result codes: a unit index, or one of these. */
+const NO_TARGET = -1;
+const ONLY_FILTERED = -2;
 
-const preferred: UnitIndex[] = [];
-const preferredKeys: number[] = [];
-
-function select(ct: CompiledInternal, rule: CRule, view: BattleView, me: UnitIndex): SelectOutcome {
+function select(ct: CompiledInternal, rule: CRule, view: BattleView, me: UnitIndex): number {
   const sel = rule.sel;
   const action = rule.action;
   const side = view.side(me);
@@ -378,70 +390,72 @@ function select(ct: CompiledInternal, rule: CRule, view: BattleView, me: UnitInd
       single = undefined;
   }
   if (single !== undefined) {
-    if (single === null) return { target: NO_UNIT, reason: 'no_target' };
+    if (single === null) return NO_TARGET;
     buildPool(sel, action, selfOk, view, me);
-    if (!candidates.includes(single)) return { target: NO_UNIT, reason: 'no_target' };
-    if (rule.only && !checkPred(rule.only, view, me, single, action)) return { target: NO_UNIT, reason: 'only_filtered' };
-    return { target: single, reason: null };
+    if (!hasCandidate(single)) return NO_TARGET;
+    if (rule.only && !checkPred(rule.only, view, me, single, action)) return ONLY_FILTERED;
+    return single;
   }
 
   buildPool(sel, action, selfOk, view, me);
   // Selector filter.
   let w = 0;
-  for (let i = 0; i < candidates.length; i++) {
+  for (let i = 0; i < nCand; i++) {
     const u = candidates[i]!;
     if (selectorFilter(sel, view, me, u)) candidates[w++] = u;
   }
-  candidates.length = w;
-  if (w === 0) return { target: NO_UNIT, reason: 'no_target' };
+  nCand = w;
+  if (w === 0) return NO_TARGET;
   if (rule.only) {
     w = 0;
-    for (let i = 0; i < candidates.length; i++) {
+    for (let i = 0; i < nCand; i++) {
       const u = candidates[i]!;
       if (checkPred(rule.only, view, me, u, action)) candidates[w++] = u;
     }
-    candidates.length = w;
-    if (w === 0) return { target: NO_UNIT, reason: 'only_filtered' };
+    nCand = w;
+    if (w === 0) return ONLY_FILTERED;
   }
-  keys.length = candidates.length;
-  for (let i = 0; i < candidates.length; i++) keys[i] = primaryKey(sel, view, me, candidates[i]!);
+  for (let i = 0; i < nCand; i++) keys[i] = primaryKey(sel, view, me, candidates[i]!);
   if (rule.prefer) {
-    preferred.length = 0;
-    preferredKeys.length = 0;
-    for (let i = 0; i < candidates.length; i++) {
+    let np = 0;
+    for (let i = 0; i < nCand; i++) {
       const u = candidates[i]!;
       if (checkPred(rule.prefer, view, me, u, action)) {
-        preferred.push(u);
-        preferredKeys.push(keys[i]!);
+        preferred[np] = u;
+        preferredKeys[np] = keys[i]!;
+        np++;
       }
     }
-    if (preferred.length > 0) return { target: pickBest(ct, sel, view, me, preferred, preferredKeys), reason: null };
+    if (np > 0) return pickBest(ct, sel, view, me, preferred, preferredKeys, np);
   }
-  return { target: pickBest(ct, sel, view, me, candidates, keys), reason: null };
+  return pickBest(ct, sel, view, me, candidates, keys, nCand);
 }
 
 /** The stance's target: the nearest enemy with the published tie-breaks. */
 function stanceTarget(ct: CompiledInternal, view: BattleView, me: UnitIndex): UnitIndex | null {
-  candidates.length = 0;
+  nCand = 0;
   const side = view.side(me);
-  for (let u = 0; u < view.unitCount; u++) if (view.standing(u) && view.side(u) !== side) candidates.push(u);
-  if (candidates.length === 0) return null;
-  keys.length = candidates.length;
-  for (let i = 0; i < candidates.length; i++) keys[i] = view.gapMm(me, candidates[i]!);
-  return pickBest(ct, NEAREST, view, me, candidates, keys);
+  const n = view.unitCount;
+  for (let u = 0; u < n; u++) if (view.standing(u) && view.side(u) !== side) candidates[nCand++] = u;
+  if (nCand === 0) return null;
+  for (let i = 0; i < nCand; i++) keys[i] = view.gapMm(me, candidates[i]!);
+  return pickBest(ct, NEAREST, view, me, candidates, keys, nCand);
 }
 
 const NEAREST: CSelector = { code: 1, id: 'nearest_enemy', pool: 'enemies', keyKind: 0, includeSelf: false, withinMm: -1, radiusMm: 0, role: null };
 
 // ---- Evaluation ----------------------------------------------------------------------------
 
-export function evaluate(ct: CompiledInternal, view: BattleView, me: UnitIndex): Evaluation {
-  const trace: TraceEntry[] = [];
+const EMPTY_TRACE: TraceEntry[] = [];
+
+/** `withTrace` false skips building the trace (the sim's per-interval fast path; same decision). */
+export function evaluate(ct: CompiledInternal, view: BattleView, me: UnitIndex, withTrace = true): Evaluation {
+  const trace: TraceEntry[] | null = withTrace ? [] : null;
   const taunter = view.tauntedBy ? view.tauntedBy(me) : null;
   if (taunter !== null && taunter !== undefined && view.standing(taunter)) {
     return {
       decision: { rule: -1, action: 'attack', slot: null, target: taunter, band: null },
-      trace,
+      trace: trace ?? EMPTY_TRACE,
       forced: 'taunted',
     };
   }
@@ -449,7 +463,7 @@ export function evaluate(ct: CompiledInternal, view: BattleView, me: UnitIndex):
   for (let i = 0; i < rules.length; i++) {
     const rule = rules[i]!;
     if (!view.ruleReady(me, i)) {
-      trace.push({ rule: i, fired: false, skip: 'rule_cooldown', reason: 'rule_cooldown' });
+      if (trace) trace.push({ rule: i, fired: false, skip: 'rule_cooldown', reason: 'rule_cooldown' });
       continue;
     }
     let failed = -1;
@@ -462,57 +476,61 @@ export function evaluate(ct: CompiledInternal, view: BattleView, me: UnitIndex):
       }
     }
     if (failed >= 0) {
-      trace.push({ rule: i, fired: false, skip: 'condition_false', reason: 'cond_false', cond: failed, observed });
+      if (trace) trace.push({ rule: i, fired: false, skip: 'condition_false', reason: 'cond_false', cond: failed, observed });
       continue;
     }
     const action = rule.action;
     if (action.type === 'ability' && action.slot !== null) {
       if (!view.abilityReady(me, action.slot)) {
-        const ready = view.abilityReadyInTicks ? view.abilityReadyInTicks(me, action.slot) : undefined;
-        trace.push({ rule: i, fired: false, skip: 'on_cooldown', reason: 'cooldown', readyInTicks: ready });
+        if (trace) {
+          const ready = view.abilityReadyInTicks ? view.abilityReadyInTicks(me, action.slot) : undefined;
+          trace.push({ rule: i, fired: false, skip: 'on_cooldown', reason: 'cooldown', readyInTicks: ready });
+        }
         continue;
       }
       if (view.focus(me) < action.focusCost) {
-        trace.push({ rule: i, fired: false, skip: 'no_focus', reason: 'no_focus', observed: view.focus(me) });
+        if (trace) trace.push({ rule: i, fired: false, skip: 'no_focus', reason: 'no_focus', observed: view.focus(me) });
         continue;
       }
       if (view.hasStatus(me, 'silence')) {
-        trace.push({ rule: i, fired: false, skip: 'blocked', reason: 'silenced' });
+        if (trace) trace.push({ rule: i, fired: false, skip: 'blocked', reason: 'silenced' });
         continue;
       }
       if (view.abilityBlocked && view.abilityBlocked(me, action.slot)) {
-        trace.push({ rule: i, fired: false, skip: 'blocked', reason: 'blocked' });
+        if (trace) trace.push({ rule: i, fired: false, skip: 'blocked', reason: 'blocked' });
         continue;
       }
     }
     const pick = select(ct, rule, view, me);
-    if (pick.reason !== null) {
-      trace.push({
-        rule: i,
-        fired: false,
-        skip: pick.reason === 'no_target' ? 'no_target' : 'only_filtered_all',
-        reason: pick.reason,
-      });
+    if (pick < 0) {
+      if (trace) {
+        trace.push({
+          rule: i,
+          fired: false,
+          skip: pick === NO_TARGET ? 'no_target' : 'only_filtered_all',
+          reason: pick === NO_TARGET ? 'no_target' : 'only_filtered',
+        });
+      }
       continue;
     }
-    if (action.type === 'ability' && action.slot !== null && !action.approach && !view.abilityInRange(me, action.slot, pick.target)) {
-      trace.push({ rule: i, fired: false, skip: 'out_of_range', reason: 'out_of_range' });
+    if (action.type === 'ability' && action.slot !== null && !action.approach && !view.abilityInRange(me, action.slot, pick)) {
+      if (trace) trace.push({ rule: i, fired: false, skip: 'out_of_range', reason: 'out_of_range' });
       continue;
     }
-    trace.push({ rule: i, fired: true, skip: null, reason: null });
+    if (trace) trace.push({ rule: i, fired: true, skip: null, reason: null });
     const decision: Decision = {
       rule: i,
       action: action.type,
       slot: action.slot,
-      target: pick.target,
+      target: pick,
       band: action.band,
     };
-    return { decision, trace, forced: null };
+    return { decision, trace: trace ?? EMPTY_TRACE, forced: null };
   }
-  trace.push({ rule: rules.length, fired: true, skip: null, reason: null });
+  if (trace) trace.push({ rule: rules.length, fired: true, skip: null, reason: null });
   return {
     decision: { rule: rules.length, action: 'stance', slot: null, target: stanceTarget(ct, view, me), band: null },
-    trace,
+    trace: trace ?? EMPTY_TRACE,
     forced: null,
   };
 }

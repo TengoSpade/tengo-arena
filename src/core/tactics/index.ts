@@ -221,6 +221,15 @@ export function evaluateTactics(compiled: CompiledTactics, view: BattleView, uni
   return evaluate(compiled.internal as CompiledInternal, view, unit);
 }
 
+/**
+ * Additive: the decision alone, without building the trace (same result as
+ * evaluateTactics(...).decision). core/sim calls it every decision interval and
+ * asks for the full evaluation only when the decision changes.
+ */
+export function decideTactics(compiled: CompiledTactics, view: BattleView, unit: UnitIndex): Decision {
+  return evaluate(compiled.internal as CompiledInternal, view, unit, false).decision;
+}
+
 /** Human-readable sentence of a rule for UI ("IF an ally is below 40% HP THEN use Mend ON the lowest-HP ally"), from vocabulary labels. */
 export function describeRule(rule: RuleDef, classId: ClassId, content: ContentDB): string {
   return describeRuleText(rule, classId, content);

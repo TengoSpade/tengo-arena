@@ -3,7 +3,7 @@
  * reaction delay", P-06) and action execution beneath the rules (sys-fight-ai
  * timing rules: basic windups, casts, channels, releases).
  */
-import { evaluateTactics, type Decision, type TraceEntry } from '../tactics';
+import { decideTactics, evaluateTactics, type Decision, type TraceEntry } from '../tactics';
 import type { Fight } from './fight';
 import { canEvaluate, has, isImmobile, nearestEnemyInRange, retreatGap, sameDecision } from './resolve';
 import { ACT_CAST, ACT_CHANNEL, ACT_NONE, ACT_WINDUP, type Unit } from './state';
@@ -71,15 +71,18 @@ export function decisions(f: Fight): void {
     }
     if (u.forced || !canEvaluate(u) || t < u.nextEval) continue;
     u.nextEval = t + f.tb.timing.decisionInterval;
-    const ev = evaluateTactics(u.tactics, view, idx);
-    const d = ev.decision;
-    if (d.target === null) continue;
-    if (u.committed && sameDecision(d, u.committed)) {
+    // Fast path: the decision alone; the traced evaluation only when something changes.
+    const quick = decideTactics(u.tactics, view, idx);
+    if (quick.target === null) continue;
+    if (u.committed && sameDecision(quick, u.committed)) {
       u.pending = null;
       // Two rules with the same action and target are one decision: switch attribution without delay.
-      if (d.rule !== u.committed.rule) commitDecision(f, u, d, ev.trace, 0, []);
+      if (quick.rule !== u.committed.rule) commitDecision(f, u, quick, evaluateTactics(u.tactics, view, idx).trace, 0, []);
       continue;
     }
+    if (u.pending && sameDecision(quick, u.pending.decision) && quick.rule === u.pending.decision.rule) continue;
+    const ev = evaluateTactics(u.tactics, view, idx);
+    const d = ev.decision;
     if (u.pending) {
       // A later different result replaces the pending one without restarting the timer.
       u.pending.decision = d;

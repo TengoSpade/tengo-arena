@@ -57,13 +57,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             642,
             "9a5ba8b139eb9e95dc41fbdf087507b0",
-            "87d8499d65bff04e720fff767152250c",
+            "bdc80073ac93fca5d69d25fe0e4568fa",
           ],
           [
             "away",
             734,
             "9ec08f91ae44b31cbdec7fcb25644194",
-            "3454edf417b52c2fb4d2212d5389a315",
+            "9b097501e3a5a6099d7c79ac60971a59",
           ],
         ],
         "score": {

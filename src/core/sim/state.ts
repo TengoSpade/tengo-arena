@@ -218,6 +218,8 @@ export class Unit {
   /** Has conditional mods on attackers: rebuild when targeting changes. */
   targetedMods = false;
   auraMods = new Int32Array(STAT_COUNT);
+  /** auraMods holds a non-zero contribution (skip the add otherwise). */
+  hasAura = false;
   auraTraitComposure = 0;
   /** Aura entries conditioned on the attacker (e.g. Cover), evaluated per hit. */
   auraHitTaken: CStatMod[] = [];

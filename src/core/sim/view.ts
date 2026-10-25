@@ -9,7 +9,7 @@ import type { Band, BattleView, Role } from '../tactics';
 import type { Fight } from './fight';
 import { has, hasStatus, statusInst, statusStacks } from './resolve';
 import { ACT_CAST, ACT_CHANNEL } from './state';
-import { BP, SC_ANCHORED, SC_ROOT, ST } from './tables';
+import { BP, SC_ANCHORED, SC_ROOT, SC_TAUNT, ST } from './tables';
 
 export class SimView implements BattleView {
   private readonly f: Fight;
@@ -140,7 +140,9 @@ export class SimView implements BattleView {
     return this.f.tick >= (this.f.units[unit]!.ruleCdEnd[ruleIndex] ?? 0);
   }
   tauntedBy(unit: UnitIndex): UnitIndex | null {
-    const s = statusInst(this.f.units[unit]!, 'taunt');
+    const u = this.f.units[unit]!;
+    if (!has(u, SC_TAUNT)) return null;
+    const s = statusInst(u, 'taunt');
     return s && s.source >= 0 && this.f.units[s.source]!.standing ? s.source : null;
   }
   abilityBlocked(unit: UnitIndex, slot: 'a1' | 'a2'): boolean {

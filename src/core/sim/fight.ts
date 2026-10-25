@@ -48,6 +48,8 @@ export interface SideState {
   rallyAvailable: boolean;
   handoverAt: number;
   lastAllyDownTick: number;
+  /** Grade aura of the acting captain (cached with captainCq). */
+  auraComposure: number;
   /** Tick this side first downed an enemy (tiebreak step first_down), or -1. */
   firstDownTick: number;
   downs: number;
@@ -161,7 +163,7 @@ export class Fight {
   }
 
   private sideState(): SideState {
-    return { captain: -1, captainCq: 0, vice: -1, rallyAvailable: true, handoverAt: -1, lastAllyDownTick: -1_000_000, firstDownTick: -1, downs: 0 };
+    return { captain: -1, captainCq: 0, auraComposure: 0, vice: -1, rallyAvailable: true, handoverAt: -1, lastAllyDownTick: -1_000_000, firstDownTick: -1, downs: 0 };
   }
 
   private buildSide(side: 0 | 1, s: SideInput): void {
@@ -221,6 +223,7 @@ export class Fight {
       if (s.captainIndex < 0 || s.captainIndex > 4) throw new InvariantError(`sim: captainIndex ${s.captainIndex} out of range`);
       st.captain = side * 5 + s.captainIndex;
       st.captainCq = this.units[st.captain]!.cq;
+      st.auraComposure = this.gradeOf(st.captainCq).aura;
       st.vice = s.viceCaptainIndex === null || s.viceCaptainIndex === s.captainIndex ? -1 : side * 5 + s.viceCaptainIndex;
     }
   }
@@ -284,8 +287,8 @@ export class Fight {
     return Math.min(u.atkSpeedMax, Math.max(4000, v));
   }
   speedMm(u: Unit): number {
-    const [lo, hi] = this.tb.derived.speedClamp;
-    const mult = Math.min(hi, Math.max(lo, BP + u.mods[ST.moveSpeed]!));
+    const c = this.tb.derived.speedClamp;
+    const mult = Math.min(c[1], Math.max(c[0], BP + u.mods[ST.moveSpeed]!));
     return Math.trunc((u.speedE4 * mult) / (BP * BP));
   }
   tenacityBp(u: Unit): number {
@@ -461,7 +464,10 @@ export class Fight {
   recomputeAuras(): void {
     if (!this.auraOwners) this.initAuras();
     for (const u of this.units) {
-      u.auraMods.fill(0);
+      if (u.hasAura) {
+        u.auraMods.fill(0);
+        u.hasAura = false;
+      }
       if (u.auraHitTaken.length > 0) u.auraHitTaken = [];
       u.auraTraitComposure = 0;
     }
@@ -483,6 +489,7 @@ export class Fight {
               continue;
             }
             const v = this.statModValue(m, r, owner);
+            r.hasAura = true;
             // Several fighters projecting the same aura: only the strongest counts.
             const key = (r.index * 10 + slot) * 4 + k;
             if (this.auraSeen[key] === 0) {
@@ -519,13 +526,13 @@ export class Fight {
       if (cm.pred && !this.predSelf(cm.pred, u)) continue;
       m[cm.stat]! += this.statModValue(cm, u, u);
     }
-    for (let i = 0; i < STAT_COUNT; i++) m[i]! += u.auraMods[i]!;
+    if (u.hasAura) for (let i = 0; i < STAT_COUNT; i++) m[i]! += u.auraMods[i]!;
     // Statuses: strongest instance per status (stacks statuses sum), signed, capped.
     if (u.statuses.length > 0) this.addStatusMods(u);
     // Traits: summed per stat and capped (derived.traitModCaps).
     if (u.traitMods.length > 0 || u.auraTraitComposure !== 0) this.addTraitMods(u);
     const side = this.sides[u.side];
-    if (side.captain >= 0 && this.units[side.captain]!.standing) m[ST.composure]! += this.gradeOf(side.captainCq).aura;
+    if (side.captain >= 0 && this.units[side.captain]!.standing) m[ST.composure]! += side.auraComposure;
     const d = this.tb.derived;
     u.cmpEff = Math.min(d.cmpMax, Math.max(d.cmpMin, u.attrs[8]! + m[ST.composure]!));
   }
@@ -534,14 +541,16 @@ export class Fight {
     const total = this.statusScratch;
     const longest = this.statusScratch2;
     const touched = this.statusTouched;
-    touched.length = 0;
+    let nt = 0;
     for (const inst of u.statuses) {
       const st = inst.st;
       if (st.stat < 0) continue;
       const i = st.index;
       const mag = inst.magnitude * inst.stacks;
-      if (!touched.includes(st)) {
-        touched.push(st);
+      let seen = false;
+      for (let k = 0; k < nt; k++) if (touched[k] === st) seen = true;
+      if (!seen) {
+        touched[nt++] = st;
         total[i] = mag;
         longest[i] = inst.end;
       } else if (st.stacking === 'stacks') total[i]! += mag;
@@ -550,14 +559,15 @@ export class Fight {
         longest[i] = inst.end;
       }
     }
-    for (const st of touched) {
+    for (let k = 0; k < nt; k++) {
+      const st = touched[k]!;
       const v = total[st.index]!;
       if (v === 0) continue;
       const capped = st.cap >= 0 && v > st.cap ? st.cap : v;
       u.mods[st.stat]! += st.sign * capped;
     }
   }
-  private statusTouched: CStatus[] = [];
+  private statusTouched: CStatus[] = new Array<CStatus>(64);
   private statusScratch = new Int32Array(64);
   private statusScratch2 = new Int32Array(64);
   private traitScratch = new Int32Array(STAT_COUNT);
@@ -748,6 +758,7 @@ export class Fight {
     s.captain = next;
     this.captainChanged = true;
     s.captainCq = Math.max(0, this.units[next]!.cq - this.tb.captain.actingPenalty);
+    s.auraComposure = this.gradeOf(s.captainCq).aura;
     if (s.vice === next) s.vice = -1;
     if (this.rec) this.rec.emit('captain.handover', this.tick, next, undefined, { newCaptain: next, cq: s.captainCq });
   }
