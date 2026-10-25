@@ -6,6 +6,7 @@ import {
   type ClubId,
   type Competition,
   type CompetitionId,
+  type FighterId,
   type Fixture,
   type GameState,
   type TierId,
@@ -130,7 +131,7 @@ describe('points (le-003)', () => {
     const f = lg.fixture('x', 'y');
     const result = fakeResult(f, { home: 2, away: 0, homeDowns: 3, awayDowns: 9 });
     const blade = Object.values(result.fighterStats).find((s) => s.clubId === 'x')!;
-    result.fighterStats[asId('blade-1')] = { ...blade, downsSuffered: 1 };
+    result.fighterStats[asId<FighterId>('blade-1')] = { ...blade, downsSuffered: 1 };
     lg.state.results[f.id] = result;
     recordResult(lg.state, result, content);
     expect(lg.table()[0]).toMatchObject({ clubId: 'x', downsSuffered: 4, downsInflicted: 9 });
