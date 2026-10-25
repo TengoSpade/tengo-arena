@@ -79,7 +79,7 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
 
     case 'captaincy.set': {
       if (cmd.captainId !== null && cmd.captainId === cmd.viceCaptainId) {
-        return fail('captaincy.same-fighter', 'Choose a different vice-captain', { fighterId: cmd.captainId });
+        return fail('captaincy.same', 'Choose a different vice-captain', { fighterId: cmd.captainId });
       }
       for (const id of [cmd.captainId, cmd.viceCaptainId]) {
         if (id === null) continue;

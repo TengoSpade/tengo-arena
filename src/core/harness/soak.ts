@@ -3,6 +3,7 @@ import { createGameEngine, realGamePorts, type GamePorts } from '../game';
 import type { ClubId, GameState, MatchResult, SeasonRecord } from '../model';
 import { checksumState, createSave, parseSave, saveMetaFor, serializeSave, validateState } from '../save';
 import { type Seed } from '../rng';
+import { NotImplementedError } from '../util';
 
 /**
  * Headless season soak: N seasons with AI managing every club, checking
@@ -264,6 +265,17 @@ function notImplementedOf(message: string): string | null {
 }
 
 function runOnce(options: SoakOptions, seasons: number, observe: boolean): RunResult {
+  try {
+    return runOnceUnsafe(options, seasons, observe);
+  } catch (e) {
+    // A stubbed module throws NotImplementedError through the engine; any other throw is an engine bug.
+    const message = e instanceof Error ? e.message : String(e);
+    const obs: Observations = { ledger: [], lineups: [], overCap: [], schedule: [], references: [], roundtrip: [], solvency: [], ages: [], aiRejections: {} };
+    return { summaries: [], checksums: [], final: null, error: message, notImplemented: e instanceof NotImplementedError ? notImplementedOf(message) : null, observations: obs };
+  }
+}
+
+function runOnceUnsafe(options: SoakOptions, seasons: number, observe: boolean): RunResult {
   const { content } = options;
   const ports = options.ports ?? realGamePorts;
   const engine = createGameEngine(ports);

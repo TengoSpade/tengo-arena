@@ -11,7 +11,7 @@
  */
 import type { ContentDB } from '../content';
 import type { ClubId, FighterId, Fixture, GameState, LineupEntry, MatchResult, WeekReport } from '../model';
-import { cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
+import { NotImplementedError, cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
 import { addMatchNews, buildMatchInput, eligibleEntries, toResult } from './match';
 import type { GamePorts } from './ports';
@@ -159,6 +159,7 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
     draft.calendar = ports.league.nextCalendar(cal, content);
     tidyAll(ports, draft, content);
   } catch (e) {
+    if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
     if (e instanceof LineupError) return err(engineError('lineup.unfillable', e.message, { clubId: e.clubId, have: e.have }));
     return err(engineError('engine.failure', `Week processing failed: ${e instanceof Error ? e.message : String(e)}`, { name: e instanceof Error ? e.name : 'unknown' }));
   }

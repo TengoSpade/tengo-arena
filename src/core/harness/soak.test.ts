@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createGameEngine, createStandInPorts } from '../game';
-import { asId, type ClubId, type GameState, type SeasonRecord } from '../model';
+import { asId, type ClubId, type GameState, type SeasonRecord, type TierId } from '../model';
 import { checksumState, createSave, parseSave, saveMetaFor, serializeSave } from '../save';
 import { fixtureContent } from '../testkit';
-import { cloneJson } from '../util';
+import { NotImplementedError, cloneJson } from '../util';
 import { SOAK_CHECKS, dynastyFlags, ledgerMismatches, lineupProblems, overCap, runSoak, scheduleProblems } from './soak';
 
 const content = fixtureContent();
@@ -26,7 +26,7 @@ describe('runSoak on stand-ins', () => {
   it('reports blocked checks as pending when a module is a stub', () => {
     // Default ports are the real modules; on the fixture content the real sim may still be a stub.
     const ports = createStandInPorts();
-    const stubbed = { ...ports, sim: { ...ports.sim, simulateMatch: () => { throw new Error('Not implemented yet: sim.simulateMatch'); } } };
+    const stubbed = { ...ports, sim: { ...ports.sim, simulateMatch: () => { throw new NotImplementedError('sim.simulateMatch'); } } };
     const report = runSoak({ seed: 'soak-stub', seasons: 1, content, ports: stubbed });
     expect(report.stub).toBe(true);
     expect(report.checks.every((c) => c.status === 'pending')).toBe(true);
@@ -96,7 +96,7 @@ describe('individual checks', () => {
   });
 
   it('competitive-balance: flags 4 Reckoning titles in 8 seasons and 6 Shields in 10', () => {
-    const tierId = asId(content.leagues.tiers[0]!.id);
+    const tierId = asId<TierId>(content.leagues.tiers[0]!.id);
     const rec = (season: number, champion: string, shield: string): SeasonRecord => ({
       season,
       tiers: [{ tierId, wingTables: [], tierTable: [], reckoningChampionId: asId(champion), reckoningRunnerUpId: null, shieldWinnerId: asId(shield), promotedIds: [], relegatedIds: [] }],

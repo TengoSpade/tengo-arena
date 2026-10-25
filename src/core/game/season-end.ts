@@ -15,7 +15,7 @@
  */
 import type { ContentDB } from '../content';
 import type { ClubSeasonRow, FighterId, GameState, NewsItem, RetirementRecord, SeasonEndReport, SeasonRecord } from '../model';
-import { cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
+import { NotImplementedError, cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
 import { clubsInOrder, newsSince, rosterOf, tidyAll } from './shared';
 import { runAiPhase, type PhaseLog } from './week';
@@ -130,6 +130,7 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
     runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content), log);
     tidyAll(ports, draft, content);
   } catch (e) {
+    if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
     return err(engineError('engine.failure', `Season end failed: ${e instanceof Error ? e.message : String(e)}`, { name: e instanceof Error ? e.name : 'unknown' }));
   }
   const report: SeasonEndReport = {

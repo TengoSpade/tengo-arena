@@ -92,7 +92,7 @@ describe('tactics.assign, captaincy.set, training.set', () => {
     const [a, b] = rosterOf(base, c);
     const s = apply(base, { type: 'captaincy.set', clubId: c, captainId: a!, viceCaptainId: b! });
     expect([s.clubs[c]!.captainId, s.clubs[c]!.viceCaptainId]).toEqual([a, b]);
-    expect(code(base, { type: 'captaincy.set', clubId: c, captainId: a!, viceCaptainId: a! })).toBe('captaincy.same-fighter');
+    expect(code(base, { type: 'captaincy.set', clubId: c, captainId: a!, viceCaptainId: a! })).toBe('captaincy.same');
     expect(code(base, { type: 'captaincy.set', clubId: c, captainId: freeAgent(base), viceCaptainId: null })).toBe('captaincy.not-on-roster');
   });
 

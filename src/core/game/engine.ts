@@ -5,7 +5,7 @@
  */
 import type { ContentDB } from '../content';
 import type { Blocker, ClubId, Command, Fighter, FighterId, FixtureId, GameState, MatchInput, MatchReport, SeasonEndReport, WeekReport } from '../model';
-import { cloneJson, ok, type EngineError, type Result } from '../util';
+import { NotImplementedError, cloneJson, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
 import { buildMatchReport, prepareMatchInput } from './match';
 import type { GamePorts } from './ports';
@@ -49,6 +49,7 @@ export function createGameEngine(ports: GamePorts): GameEngine {
       try {
         return createWorld(ports, content, params);
       } catch (e) {
+        if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
         return { ok: false, error: { code: 'engine.failure', message: `World generation failed: ${e instanceof Error ? e.message : String(e)}` } };
       }
     },
@@ -59,6 +60,7 @@ export function createGameEngine(ports: GamePorts): GameEngine {
       try {
         r = applyToDraft(ports, draft, command, content);
       } catch (e) {
+        if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
         return { ok: false, error: { code: 'engine.failure', message: `Command ${command.type} failed: ${e instanceof Error ? e.message : String(e)}` } };
       }
       if (!r.ok) return r;
