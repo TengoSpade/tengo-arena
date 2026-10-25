@@ -1,0 +1,9 @@
+/* Home layout glue only. */
+.home-tiles {
+  grid-template-columns: 1.1fr 1.1fr 0.9fr;
+}
+
+.home-row-gap {
+  width: 0.4rem;
+  flex: none;
+}

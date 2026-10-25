@@ -31,6 +31,7 @@ export { Money, type MoneyProps } from './Money';
 export { FighterName, type FighterNameProps } from './FighterName';
 export { ClassTag, type ClassTagProps } from './ClassTag';
 export { Tabs, TabPanel, type TabDef, type TabsProps } from './Tabs';
+export { RuleLine, type RuleLineParts } from './RuleLine';
 export {
   Crest,
   Portrait,

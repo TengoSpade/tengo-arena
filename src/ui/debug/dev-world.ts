@@ -55,6 +55,31 @@ export function devNoise(key: string): number {
 }
 
 const WAGE_STEP = 5;
+
+interface Parts {
+  prefixes: readonly string[];
+  middles?: readonly string[];
+  suffixes: readonly string[];
+}
+
+function pick<T>(list: readonly T[], key: string): T {
+  return list[Math.floor(devNoise(key) * list.length) % list.length]!;
+}
+
+function word(parts: Parts | undefined, key: string): string {
+  if (!parts || parts.prefixes.length === 0) return '';
+  const w = pick(parts.prefixes, `${key}:p`) + (parts.middles?.length && devNoise(`${key}:m?`) < 0.3 ? pick(parts.middles, `${key}:m`) : '') + pick(parts.suffixes, `${key}:s`);
+  return w.charAt(0).toUpperCase() + w.slice(1);
+}
+
+/** Readable dev names from names.json parts (given + family only; dev scaffolding, not the generator). */
+export function devName(content: ContentDB, raceId: string, n: number): Fighter['name'] | null {
+  const race = content.names.races[raceId as keyof typeof content.names.races] as { given?: Parts; family?: Parts } | undefined;
+  const given = word(race?.given, `given:${n}`);
+  const family = word(race?.family, `family:${n}`);
+  if (!given) return null;
+  return { given, family: family || null, epithet: null, full: family ? `${given} ${family}` : given };
+}
 const roundTo = (v: number, step: number) => Math.round(v / step) * step;
 
 /** Wing draw, fixtures, results and news for a dev career. */
@@ -75,19 +100,21 @@ export function buildDevWorld(content: ContentDB, options: DevWorldOptions = {})
     const tier = content.tierByLevel(template.startTierLevel);
     const profile = content.tierProfile(template.startTierLevel);
     const perClub = Math.max(7, tier.rosterCap - 2 - (n % 2));
-    const ratingShift = (3 - template.startTierLevel) * 180;
+    // Dev only: aim ratings at the middle of the tier's usual band.
+    const targetStat100 = Math.round(((tier.ratingBand.min + tier.ratingBand.max) / 2 / 5) * 100);
     const fighterIds: FighterId[] = [];
     for (let i = 0; i < perClub; i++, n++) {
       const klass = classes[(n * 5 + i * 7) % classes.length]!;
       const race = races[(n * 3 + (i % 4)) % races.length]!;
       const base = makeFixtureFighter(n, content, {});
       const cap100 = Object.fromEntries(
-        Object.entries(base.cap100).map(([stat, v]) => [stat, Math.min(2000, Math.max(300, v + ratingShift - 150 + Math.round(devNoise(`${n}:${stat}`) * 300)))]),
+        Object.entries(base.cap100).map(([stat]) => [stat, Math.min(2000, Math.max(200, targetStat100 - 350 + Math.round(devNoise(`${n}:${stat}`) * 700) + Math.round((devNoise(`lvl:${n}`) - 0.5) * 500)))]),
       ) as Fighter['cap100'];
       const traitIds = pickTraits(n, traits.map((tr) => ({ id: tr.id, opposites: tr.opposites })), devNoise(`traits:${n}`));
       const age = Math.round(race.debutAge.min + devNoise(`age:${n}`) * (race.lifespan * 0.32));
       const wage = roundTo(profile.tierMinWage * (1.2 + devNoise(`wage:${n}`) * 1.6), WAGE_STEP);
       const f = makeFixtureFighter(n, content, {
+        name: devName(content, race.id, n) ?? base.name,
         raceId: asId<RaceId>(race.id),
         classId: asId<ClassId>(klass.id),
         age,
@@ -163,6 +190,7 @@ export function buildDevWorld(content: ContentDB, options: DevWorldOptions = {})
     const klass = classes[(n * 11) % classes.length]!;
     const race = races[(n * 7) % races.length]!;
     const f = makeFixtureFighter(n, content, {
+      name: devName(content, race.id, n) ?? makeFixtureFighter(n, content).name,
       classId: asId<ClassId>(klass.id),
       raceId: asId<RaceId>(race.id),
       age: Math.round(race.debutAge.min + devNoise(`fa-age:${n}`) * race.lifespan * 0.25),

@@ -23,6 +23,8 @@ export interface TipContent {
   kicker?: string;
   title?: string;
   body?: string;
+  /** Extra body lines (rule sentences, effect lines). */
+  lines?: readonly string[];
   rows?: readonly TipRow[];
   flavor?: string;
   meta?: string;
@@ -180,6 +182,11 @@ export function TipBody({ tip }: { tip: TipContent }) {
       {tip.kicker && <div class="tooltip__kicker">{tip.kicker}</div>}
       {tip.title && <div class="tooltip__title">{tip.title}</div>}
       {tip.body && <div class="tooltip__body">{tip.body}</div>}
+      {tip.lines?.map((line, i) => (
+        <div key={i} class="tooltip__body">
+          {line}
+        </div>
+      ))}
       {tip.rows && tip.rows.length > 0 && (
         <dl class="tooltip__rows">
           {tip.rows.map((row, i) => (
