@@ -569,6 +569,8 @@ function ClubPanel({ ctx }: { ctx: ClubContext }) {
             )}
           </span>
         </div>
+        {/* TODO(m1/fix-perf): with core's weekly finance projection, this tile becomes the mockup's
+            "This week" (projected net, e.g. "away, no gate"); the season-end projection moves to Finances. */}
         <div class="stat-tile" tabIndex={0} {...tipAttrs(T.projectedTip)}>
           <span class="stat-tile__label">{T.projected}</span>
           <span class="stat-tile__value">
