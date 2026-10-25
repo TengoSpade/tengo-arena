@@ -115,7 +115,8 @@
     "reserveSpendRateBp": 5000,
     "reserveCapBp": 1000,
     "ascensionWageRatioBonusBp": 800,
-    "ascensionSeasons": 1
+    "ascensionSeasons": 1,
+    "worldGenBillBandBp": { "_doc": "New career (D-P): opening bills are rescaled into this share of WB, leaving room for the trials rookie and a tier-minimum signing.", "minBp": 8000, "maxBp": 8700 }
   },
 
   "wage": {
@@ -220,7 +221,9 @@
     "decisionOrder": "marketWage desc, then fighter id asc",
     "trialsDay": {
       "_doc": "Rookie count per season comes from development.json generation.intake. Each club receives floor(rookies / clubs); the remainder goes one each to clubs drawn by lot (stream rookies). Exclusive to that club during P1; unsigned rookies enter the free-agent pool at P1 week processing, before the AI action phase.",
-      "exclusiveWeeks": 1
+      "exclusiveWeeks": 1,
+      "maxAskBpOfTierMinWage": 12500,
+      "_maxAskNote": "Rookie scale (D-P): on Trials Day a rookie asks his club at most this share of the tier minimum."
     },
     "pool": {
       "inSeasonFloor": 60,

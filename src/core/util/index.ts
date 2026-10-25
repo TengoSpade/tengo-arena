@@ -1,5 +1,6 @@
 export { cyrb128, u32Hex, hashString, StreamHasher } from './hash';
 export { stableStringify } from './stable-json';
+export { getOwn, isReservedName } from './keys';
 export { ok, err, engineError } from './result';
 export type { Result, EngineError } from './result';
 export { InvariantError, NotImplementedError, invariant, assertNever, notImplemented } from './assert';

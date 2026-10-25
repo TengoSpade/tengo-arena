@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { asId, type ClassId, type ClubId, type FighterId, type GameState, type TierId, type TraitId } from '../model';
 import { buildFixtureWorld, fixtureContent } from '../testkit';
 import {
+  ask,
   agreedRenewal,
   assignHiredBlades,
   capReliefAllowance,
@@ -254,19 +255,23 @@ describe('Trials Day (le-022, D-H)', () => {
     return { s, r1, r2 };
   }
 
-  it('signs one at its ask of 150 for 3 seasons at once with no signing cost, paid from the P1 processing', () => {
+  it('signs one at its Trials Day ask (rookie scale) for 3 seasons at once with no signing cost, paid from the P1 processing', () => {
     const { s, r1, r2 } = trialsWorld();
+    // le-022's rookie asks 150 on the open market; on Trials Day (D-P) his club pays at most the rookie scale:
+    // floor5(tier minimum 60 × 1.25) = 75.
+    expect(ask(s, r1.id, C, 3, content)).toBe(75);
+    expect(ask(s, r1.id, A, 3, content)).toBeGreaterThan(75); // the cap is only his own club's
     expect(code(makeOffer(s, { clubId: A, fighterId: r2.id, wagePerWeek: 200, seasons: 1, acceptCounter: false }, content))).toBe('offer.trials-exclusive');
     expect(code(signTrialsRookie(s, { clubId: A, fighterId: r1.id, wagePerWeek: 150, seasons: 3 }, content))).toBe('trials.not-yours');
-    const r = signTrialsRookie(s, { clubId: C, fighterId: r1.id, wagePerWeek: 150, seasons: 3 }, content);
-    expect(r).toEqual({ ok: true, value: { kind: 'accepted', wagePerWeek: 150, seasons: 3 } });
-    expect(r1.contract).toMatchObject({ clubId: C, wagePerWeek: 150, startSeason: 1, endSeason: 3 });
+    const r = signTrialsRookie(s, { clubId: C, fighterId: r1.id, wagePerWeek: 75, seasons: 3 }, content);
+    expect(r).toEqual({ ok: true, value: { kind: 'accepted', wagePerWeek: 75, seasons: 3 } });
+    expect(r1.contract).toMatchObject({ clubId: C, wagePerWeek: 75, startSeason: 1, endSeason: 3 });
     expect(s.ledger.entries.filter((e) => e.category === 'signingCost')).toEqual([]);
     expect(s.market.trialsRookies[C]).toEqual([r2.id]);
     const bill = wageBill(s, C);
     weeklyCosts(s, content);
     expect(s.ledger.entries.find((e) => e.clubId === C && e.category === 'wages')!.amount).toBe(-bill);
-    expect(bill).toBeGreaterThanOrEqual(150);
+    expect(bill).toBeGreaterThanOrEqual(75);
     // Step 7: the unsigned rookie enters the pool before the AI acts; from P2 he is a normal free agent.
     releaseTrialsRookies(s, content);
     expect(s.market.trialsRookies).toEqual({});
@@ -280,10 +285,11 @@ describe('Trials Day (le-022, D-H)', () => {
 
   it('trials signings answer with a counter or a refusal like any negotiation, and are blocked under embargo', () => {
     const { s, r1 } = trialsWorld();
-    const low = signTrialsRookie(s, { clubId: C, fighterId: r1.id, wagePerWeek: 140, seasons: 3 }, content);
-    expect(low).toEqual({ ok: true, value: { kind: 'countered', counterWage: 145, validUntilWeek: 1 } });
+    // Ask 75 (rookie scale); 70 is within his flex: counter at floor5((70 + 75) / 2) = 70.
+    const low = signTrialsRookie(s, { clubId: C, fighterId: r1.id, wagePerWeek: 70, seasons: 3 }, content);
+    expect(low).toEqual({ ok: true, value: { kind: 'countered', counterWage: 70, validUntilWeek: 1 } });
     s.clubs[C]!.finance.status = 'embargo';
-    expect(code(signTrialsRookie(s, { clubId: C, fighterId: r1.id, wagePerWeek: 150, seasons: 3 }, content))).toBe('embargo.trials');
+    expect(code(signTrialsRookie(s, { clubId: C, fighterId: r1.id, wagePerWeek: 75, seasons: 3 }, content))).toBe('embargo.trials');
   });
 
   it('intake-001: 70 rookies over 48 clubs: 1 each and 22 by lot, deterministic', () => {

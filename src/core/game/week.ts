@@ -10,12 +10,12 @@
  * The UI store autosaves after success. The input state is never mutated.
  */
 import type { ContentDB } from '../content';
-import { beginTransition, putResult, type ClubId, type FighterId, type Fixture, type GameState, type LineupEntry, type MatchResult, type WeekReport } from '../model';
+import { beginTransition, putResult, type Club, type ClubId, type Fighter, type FighterId, type Fixture, type GameState, type LineupEntry, type MatchResult, type WeekReport } from '../model';
 import { NotImplementedError, engineError, err, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
 import { addMatchNews, buildMatchInput, eligibleEntries, toResult } from './match';
 import type { GamePorts } from './ports';
-import { clubsInOrder, defaultTactics, newsSince, rosterOf, tidyAll } from './shared';
+import { GAME_NEWS_KEYS, addNews, clubsInOrder, compareIds, defaultTactics, newsSince, onRoster, rosterOf, tidyAll } from './shared';
 import { getBlockers } from './views';
 
 /** Commands an AI club issued that the rulebook refused (diagnostics; the soak counts them). */
@@ -47,6 +47,39 @@ export function runAiPhase(
   }
 }
 
+/**
+ * D-S, at kickoff: a club whose captain is missing (none named, or no longer on
+ * its roster) gets one automatically: the vice-captain if fit, else the fit
+ * starter with the highest CQ (ties: matchweeks at the club, then id), named
+ * interim captain with a captain.interim news item. Same rule for the player's
+ * and AI clubs, so a missing captain never blocks Play. A captain who is only
+ * unavailable this week keeps the job; the fight is then led by the vice, else
+ * the best-CQ starter (fighters.lineupCaptain). A lineup of hired blades only
+ * leaves the club without a captain; a blade leads as acting captain.
+ */
+export function autoCaptain(ports: GamePorts, draft: GameState, club: Club, content: ContentDB): FighterId | null {
+  if (club.captainId !== null && onRoster(draft, club.id, club.captainId) !== null) return null;
+  const fit = (id: FighterId | null): Fighter | null => {
+    const f = id === null ? null : onRoster(draft, club.id, id);
+    return f && ports.fighters.isFit(f) ? f : null;
+  };
+  club.captainId = null;
+  const vice = fit(club.viceCaptainId);
+  // No vice: the fit starter with the highest CQ (ties: matchweeks at the club, then id).
+  let pick = vice?.id ?? null;
+  let best = -1;
+  for (const e of vice ? [] : club.lineup.fighters) {
+    const f = fit(e.fighterId);
+    const score = f ? ports.fighters.captaincy(draft, f.id, club.id, content).cq * 10_000 + Math.min(9_999, f.career.matchweeksAtClub) : -1;
+    if (f && (score > best || (score === best && compareIds(f.id, pick!) < 0))) [pick, best] = [f.id, score];
+  }
+  if (pick === null) return null;
+  club.captainId = pick;
+  if (club.viceCaptainId === pick) club.viceCaptainId = null;
+  addNews(draft, { key: GAME_NEWS_KEYS.captainInterim, clubId: club.id, refs: { fighterId: pick }, params: { reason: vice ? 'vice' : 'starter' }, importance: 'notable' });
+  return pick;
+}
+
 /** Lock the lineups of the clubs playing this week; hired blades fill short-handed sides (open-006). */
 function lockLineups(
   ports: GamePorts,
@@ -57,6 +90,7 @@ function lockLineups(
   const playing: ClubId[] = [];
   for (const fx of fixtures) for (const c of [fx.homeClubId, fx.awayClubId]) if (!playing.includes(c)) playing.push(c);
   const ordered = clubsInOrder(draft, content).filter((c) => playing.includes(c.id));
+  for (const club of ordered) autoCaptain(ports, draft, club, content);
   for (const club of ordered) ports.fighters.lineupLock(draft, club.id, content);
   const assigned = ports.economy.assignHiredBlades(draft, content);
 
@@ -118,9 +152,12 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
   const log: PhaseLog = { rejections: [] };
   const results: MatchResult[] = [];
   try {
-    // Season 1 has no preceding season end: the AI's season-start phase (trials signings,
-    // opening offers, captains) runs here, before the first processing (P1).
-    if (cal.season === 1 && cal.weekIndex === 1) runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content), log);
+    // Season 1 has no preceding season end. World creation already ran the AI season-start
+    // setup for every club except trials signings (D-P); AI clubs sign their trials rookie here,
+    // before the first processing (P1) releases unsigned ones to the pool.
+    if (cal.season === 1 && cal.weekIndex === 1) {
+      runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content).filter((cmd) => cmd.type === 'trials.sign'), log);
+    }
 
     // 1. Simulate every fixture of the week (all fixtures are simulated here in M1).
     const fixtures = ports.league.fixturesForWeek(draft, cal.weekIndex, content).filter((f) => f.status === 'scheduled');

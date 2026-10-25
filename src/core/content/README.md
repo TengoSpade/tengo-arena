@@ -26,3 +26,8 @@ Profiles: `'theme'` (default; full shipped-theme rules) and `'fixture'` (skips c
 Designers: `npm run validate-content` prints every issue as `file › path: message`.
 
 Adding a vocabulary entry (status, effect type, rule condition, ...) is a code change: the owning module must implement it, then the architect adds it to `schema/common.ts`.
+
+## Orchestrator decisions (M1 core fix round, pending owner confirmation)
+- **Reserved ids.** Content ids may not be inherited object names (`constructor` passes the id pattern, so the cross-file check names it).
+- **D-Q, one rating formula.** `combatRating(content, classId, stats)` (rating.ts) = clamp(round(5 × Σ wᵢ × statᵢ), ratingMin, ratingMax) on the integer effective stats, rounded half away from zero in integer bp. Fighter ratings and potentials (core/fighters `ratingFromStats`), the fight-input OVR of the balance harness (sim/build) and the stand-ins all call it; the displayed rating is the one the rules use. development.json's rating `_doc` states this form.
+- **D-P / D-T keys.** economy.json `budget.worldGenBillBandBp` and `market.trialsDay.maxAskBpOfTierMinWage`; development.json `retirement.physicalPeakHumanAge`, `hazardByRatingDrop`, `hazardPerHumanYearPastPeak` (replacing `hazardPerHumanYear`). The frozen fixture content (testkit) was patched with these keys only.

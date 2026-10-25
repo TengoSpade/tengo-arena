@@ -23,3 +23,6 @@ So AI rosters sit within 2 of the cap with legal reserves (owner target), while 
 
 ## Performance
 Fighter-level values (rating, potential, human-age) are memoised per call, and shared across clubs within one AI action phase (`beginPhase`), because no AI command changes them.
+
+## Orchestrator decisions (M1 core fix round, pending owner confirmation)
+- **D-T veteran penalty.** `veteranPenaltyPerHumanYearOver` stands for expected decline, which is physical only, so it scales with the class's physical rating-weight share: in full at a 50/50 class, about half for healers and controllers, about 1.5× for melee and ranged.

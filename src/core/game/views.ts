@@ -6,6 +6,7 @@ import type { ContentDB } from '../content';
 import type { SnubExemption } from '../fighters';
 import { freeAgentList, type Blocker, type ClubId, type Command, type Fighter, type FighterId, type GameState, type Gold, type StatId } from '../model';
 import type { GamePorts } from './ports';
+import { getOwn } from '../util';
 import { compareIds, onRoster, rosterOf } from './shared';
 
 /** Everything the fighter profile and roster tables show. */
@@ -29,7 +30,7 @@ export function getBlockers(ports: GamePorts, state: GameState, content: Content
   if (state.playerClubId === null) return [{ code: 'club.not-chosen' }];
   if (state.calendar.phase === 'season-end') return [{ code: 'phase.season-end' }];
   const clubId = state.playerClubId;
-  const club = state.clubs[clubId];
+  const club = getOwn(state.clubs, clubId);
   if (!club) return [{ code: 'club.not-chosen' }];
   const out: Blocker[] = [];
   const roster = rosterOf(state, clubId);
@@ -54,14 +55,14 @@ export function getBlockers(ports: GamePorts, state: GameState, content: Content
     const fit = roster.filter((f) => ports.fighters.isFit(f)).length;
     const need = Math.min(5, fit);
     if (valid < need) out.push({ code: 'lineup.incomplete', details: { have: valid, need } });
-    if (club.captainId === null && roster.length > 0) out.push({ code: 'captain.missing' });
+    // No captain blocker (D-S): a missing captain is named automatically at kickoff (week.ts autoCaptain).
   }
   return out;
 }
 
 /** A club's roster, sorted by lineup slot, then rating descending (when content is given), then id. */
 export function roster(ports: GamePorts, state: GameState, clubId: ClubId, content?: ContentDB): Fighter[] {
-  const club = state.clubs[clubId];
+  const club = getOwn(state.clubs, clubId);
   const slot = new Map<string, number>();
   club?.lineup.fighters.forEach((e, i) => slot.set(e.fighterId, i));
   const ratings = new Map<string, number>();
@@ -87,7 +88,7 @@ export function freeAgents(ports: GamePorts, state: GameState, content?: Content
 }
 
 export function fighterView(ports: GamePorts, state: GameState, fighterId: FighterId, content: ContentDB): FighterView {
-  const f = state.fighters[fighterId];
+  const f = getOwn(state.fighters, fighterId);
   if (!f) throw new RangeError(`fighterView: unknown fighter "${fighterId}"`);
   const p = ports.fighters;
   const clubForCq = f.clubId ?? state.playerClubId;
@@ -135,7 +136,7 @@ export interface ReleasePreview {
 }
 
 export function releasePreview(ports: GamePorts, state: GameState, clubId: ClubId, fighterId: FighterId, content: ContentDB): ReleasePreview | null {
-  const club = state.clubs[clubId];
+  const club = getOwn(state.clubs, clubId);
   if (!club || onRoster(state, clubId, fighterId) === null) return null;
   const payout = ports.economy.releasePayout(state, clubId, fighterId, content);
   return {
@@ -183,7 +184,7 @@ export function captaincyPreview(
   viceCaptainId: FighterId | null,
   content: ContentDB,
 ): CaptaincyPreview | null {
-  const club = state.clubs[clubId];
+  const club = getOwn(state.clubs, clubId);
   if (!club) return null;
   for (const id of [captainId, viceCaptainId]) if (id !== null && onRoster(state, clubId, id) === null) return null;
   const pick = (id: FighterId | null): CaptaincyPick | null => {

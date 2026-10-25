@@ -6,7 +6,7 @@
  */
 import { TRAINING_EMPHASES, type ContentDB } from '../content';
 import type { ClubId, Command, Fighter, FighterId, GameState, LineupEntry, OfferResponse } from '../model';
-import { ok, type EngineError, type Result } from '../util';
+import { getOwn, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
 import { defaultTactics, fail, onRoster, rosterOf, tidyClub } from './shared';
 
@@ -14,7 +14,7 @@ import { defaultTactics, fail, onRoster, rosterOf, tidyClub } from './shared';
 const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set(['news.markRead', 'news.setRead', 'shortlist.toggle', 'club.choose']);
 
 function clubCheck(state: GameState, clubId: ClubId): EngineError | null {
-  return state.clubs[clubId] ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };
+  return getOwn(state.clubs, clubId) ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };
 }
 
 function rosterFighter(state: GameState, clubId: ClubId, fighterId: FighterId, code: string): Result<Fighter, EngineError> {
@@ -42,6 +42,9 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
       const e = clubCheck(draft, cmd.clubId);
       if (e) return { ok: false, error: e };
       draft.playerClubId = cmd.clubId;
+      // The player makes the club's own market decisions (as after every season end, where the AI phase
+      // skips the player's club): the AI's opening offers made for it at world creation are withdrawn.
+      for (const o of draft.market.offers.filter((x) => x.clubId === cmd.clubId)) ports.economy.withdrawOffer(draft, o.clubId, o.fighterId);
       return ok(null);
     }
 
@@ -102,7 +105,7 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
     }
 
     case 'offer.make': {
-      const f = draft.fighters[cmd.fighterId];
+      const f = getOwn(draft.fighters, cmd.fighterId);
       if (!f || f.status !== 'free-agent') return fail('offer.not-free-agent', `Fighter "${cmd.fighterId}" is not a free agent`, { fighterId: cmd.fighterId });
       for (const [owner, ids] of Object.entries(draft.market.trialsRookies)) {
         if (ids.includes(cmd.fighterId)) {
@@ -157,7 +160,7 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
     }
 
     case 'shortlist.toggle': {
-      if (!draft.fighters[cmd.fighterId]) return fail('shortlist.unknown-fighter', `Unknown fighter "${cmd.fighterId}"`);
+      if (!getOwn(draft.fighters, cmd.fighterId)) return fail('shortlist.unknown-fighter', `Unknown fighter "${cmd.fighterId}"`);
       const list = draft.clubs[cmd.clubId]!.shortlist;
       const i = list.indexOf(cmd.fighterId);
       if (i >= 0) list.splice(i, 1);

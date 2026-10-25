@@ -7,7 +7,7 @@
 import type { ContentDB, TraitDef } from '../content';
 import { fractionToBp } from '../content';
 import { clubResults, type ClubId, type Fighter, type FighterId, type GameState } from '../model';
-import { clamp } from '../util';
+import { clamp, getOwn } from '../util';
 import { fighterHumanAge, fighterPotential, fighterRating } from './fighter-values';
 import { floorTo, interpolate, mulDiv, stepLookup } from './math';
 import { requireClub, requireFighter, tierOf } from './queries';
@@ -201,7 +201,12 @@ export function askDetails(state: GameState, fighter: Fighter, clubId: ClubId, s
   }
   const totalBp = clamp(tierGapBp + prestigeBp + lengthBp + greedBp + demandBp + situationBp, e.ask.totalMinBp, e.ask.totalMaxBp);
   const raw = floorTo(mulDiv(mw.marketWage, BP + totalBp, BP), e.wage.roundDownToMultiple);
-  const ask = clamp(raw, profile.tierMinWage, e.wage.maxWeeklyWage);
+  let ask = clamp(raw, profile.tierMinWage, e.wage.maxWeeklyWage);
+  // Trials Day rookie scale (D-P): from his own club during the exclusive window the ask is capped.
+  const scaleBp = e.market.trialsDay.maxAskBpOfTierMinWage;
+  if (scaleBp !== undefined && getOwn(state.market.trialsRookies, clubId)?.includes(fighter.id)) {
+    ask = Math.min(ask, Math.max(profile.tierMinWage, floorTo(mulDiv(profile.tierMinWage, scaleBp, BP), e.wage.roundDownToMultiple)));
+  }
   return {
     marketWage: mw.marketWage,
     calibreLevel: calibre,

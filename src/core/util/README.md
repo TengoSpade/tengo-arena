@@ -13,3 +13,6 @@ Small, dependency-free helpers every module may use:
 - `clone.ts` — `cloneJson`, `produce` (clone, mutate draft, return), `deepFreeze`.
 
 Depends on: nothing. Changes: request them from the architect (see docs/design 05 §11).
+
+## Orchestrator decisions (M1 core fix round, pending owner confirmation)
+- `isReservedName` and `getOwn` (keys.ts): the shared guard against inherited names used as ids. Lookups by an id that did not come from the state itself (commands, views, `personOf`) use `getOwn`.

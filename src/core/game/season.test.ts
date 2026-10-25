@@ -3,7 +3,7 @@ import { asId, personName, type ClubId, type FighterId, type GameState } from '.
 import { STREAM, deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
 import { cloneJson, deepFreeze, hashString, stableStringify } from '../util';
-import { createGameEngine, createStandInPorts, type GameEngine } from './index';
+import { createGameEngine, createStandInPorts, realGamePorts, type GameEngine } from './index';
 
 const content = fixtureContent();
 const checksum = (state: unknown): string => hashString(stableStringify(state));
@@ -66,6 +66,82 @@ describe('createWorld', () => {
   it('rejects an invalid seed', () => {
     const r = newEngine().createWorld(content, { rootSeed: '' });
     expect(r.ok ? null : r.error.code).toBe('world.seed');
+  });
+});
+
+describe('season-1 start (D-P)', () => {
+  const engine = createGameEngine(realGamePorts);
+  let s: GameState;
+  beforeAll(() => {
+    s = world(engine, 'start-1');
+  }, 60_000);
+
+  it('a Trials Day class of exactly one rookie per club, from the rookie generator', () => {
+    const clubs = Object.keys(s.clubs).sort();
+    expect(Object.keys(s.market.trialsRookies).sort()).toEqual(clubs);
+    for (const c of clubs) expect(s.market.trialsRookies[c as ClubId]).toHaveLength(1);
+    const ids = Object.values(s.market.trialsRookies).flat();
+    expect(new Set(ids).size).toBe(clubs.length);
+    for (const id of ids) expect(s.fighters[id]).toMatchObject({ status: 'free-agent', debutSeason: 1, contract: null });
+  });
+
+  it('the AI season-start setup ran for every club before P1: captain, vice, lineup, opening offers', () => {
+    for (const c of Object.values(s.clubs)) {
+      expect(c.captainId).not.toBeNull();
+      expect(c.viceCaptainId).not.toBeNull();
+      expect(c.lineup.fighters).toHaveLength(5);
+    }
+    expect(s.market.offers.length).toBeGreaterThan(0);
+    // Trials signings wait for the first processing: every trials rookie is still unsigned.
+    for (const id of Object.values(s.market.trialsRookies).flat()) expect(s.fighters[id]!.clubId).toBeNull();
+  });
+
+  it('the first P1 processing: AI clubs sign trials rookies, the player decides on their own', () => {
+    const player = Object.keys(s.clubs).sort()[3] as ClubId;
+    const own = s.market.trialsRookies[player]![0]!;
+    const chosen = engine.applyCommand(s, { type: 'club.choose', clubId: player }, content);
+    if (!chosen.ok) throw new Error(chosen.error.message);
+    const r = engine.advanceWeek(chosen.value.state, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const p1 = r.value.state;
+    expect(p1.fighters[own]!.clubId).toBeNull(); // not signed for the player
+    const signed = Object.entries(s.market.trialsRookies).filter(([c, [id]]) => c !== player && p1.fighters[id!]?.clubId === c);
+    expect(signed.length).toBeGreaterThan(0);
+  });
+
+  it('P1, the player club in every tier: the trials rookie signs through checkOffer and the command, with wage room left for a tier-minimum depth signing', () => {
+    for (const tier of content.leagues.tiers) {
+      const clubId = Object.values(s.clubs).filter((c) => c.tierId === tier.id).map((c) => c.id).sort()[0]!;
+      const chosen = engine.applyCommand(s, { type: 'club.choose', clubId }, content);
+      if (!chosen.ok) throw new Error(chosen.error.message);
+      const p1 = chosen.value.state;
+      expect(p1.market.offers.filter((o) => o.clubId === clubId)).toEqual([]); // the AI's opening offers for it are withdrawn
+      const rookie = p1.market.trialsRookies[clubId]![0]!;
+      const [terms] = content.economy.contracts.lengthsSeasons
+        .map((seasons) => ({ seasons, wage: engine.ports.economy.ask(p1, rookie, clubId, seasons, content) }))
+        .sort((x, y) => x.wage - y.wage);
+      const min = content.tierProfile(tier.level).tierMinWage;
+      expect(terms!.wage).toBeLessThanOrEqual(Math.trunc((min * content.economy.market.trialsDay.maxAskBpOfTierMinWage!) / 10_000)); // rookie scale
+      const check = engine.ports.economy.checkOffer(p1, { clubId, fighterId: rookie, wagePerWeek: terms!.wage, seasons: terms!.seasons, kind: 'trials' }, content);
+      expect(check.ok ? null : check.error).toBeNull();
+      if (!check.ok) continue;
+      expect(check.value.wageRoomAfter).toBeGreaterThanOrEqual(min);
+      const signed = engine.applyCommand(p1, { type: 'trials.sign', clubId, fighterId: rookie, wagePerWeek: terms!.wage, seasons: terms!.seasons }, content);
+      expect(signed.ok ? signed.value.response : signed.error).toMatchObject({ kind: 'accepted' });
+      if (signed.ok) expect(signed.value.state.fighters[rookie]).toMatchObject({ clubId, status: 'active' });
+    }
+  });
+
+  it('starting balance and the first grant installment are counted once', () => {
+    for (const c of Object.values(s.clubs)) {
+      const setup = s.ledger.entries.filter((e) => e.clubId === c.id);
+      const grants = setup.filter((e) => e.category === 'centralGrant');
+      expect(grants).toHaveLength(1);
+      const grant = content.tierProfile(content.tiers.require(c.tierId).level).centralGrant;
+      expect(grants[0]!.amount).toBe(Math.trunc(grant / 2));
+      // P1 balance = starting balance (opening) + the setup credits, nothing else.
+      expect(c.finance.balance).toBe(s.ledger.openingBalances[c.id]! + setup.reduce((a, e) => a + e.amount, 0));
+    }
   });
 });
 
@@ -284,6 +360,39 @@ describe('blockers (02 §3)', () => {
 
   it('a valid lineup has no blockers', () => {
     expect(engine.getBlockers(mw1, content)).toEqual([]);
+  });
+
+  it('D-S: a missing captain never blocks; at kickoff the vice takes over, else the best-CQ starter, with news', () => {
+    const noCaptain = cloneJson(mw1);
+    const club = noCaptain.clubs[clubId]!;
+    const vice = club.viceCaptainId!;
+    expect(vice).not.toBeNull();
+    club.captainId = null;
+    expect(engine.getBlockers(noCaptain, content)).toEqual([]);
+    const r = engine.advanceWeek(noCaptain, content);
+    expect(r.ok ? null : r.error.code).toBeNull();
+    if (!r.ok) return;
+    expect(r.value.state.clubs[clubId]!.captainId).toBe(vice);
+    expect(r.value.state.clubs[clubId]!.viceCaptainId).toBeNull();
+    expect(r.value.state.news.some((n) => n.key === 'captain.interim' && n.clubId === clubId && n.refs.fighterId === vice && n.params['reason'] === 'vice')).toBe(true);
+
+    // Neither captain nor vice: the fit starter with the highest CQ, for an AI club as well.
+    const none = cloneJson(mw1);
+    const ai = Object.keys(none.clubs).sort()[7] as ClubId;
+    for (const id of [clubId, ai]) {
+      none.clubs[id]!.captainId = null;
+      none.clubs[id]!.viceCaptainId = null;
+    }
+    const starters = none.clubs[clubId]!.lineup.fighters.map((e) => e.fighterId);
+    const cq = (id: FighterId) => engine.ports.fighters.captaincy(none, id, clubId, content).cq;
+    const n = engine.advanceWeek(none, content);
+    expect(n.ok).toBe(true);
+    if (!n.ok) return;
+    const named = n.value.state.clubs[clubId]!.captainId!;
+    expect(starters).toContain(named);
+    expect(cq(named)).toBe(Math.max(...starters.map(cq)));
+    expect(n.value.state.clubs[ai]!.captainId).not.toBeNull();
+    expect(n.value.state.news.filter((x) => x.key === 'captain.interim' && x.params['reason'] === 'starter').map((x) => x.clubId).sort()).toEqual([clubId, ai].sort());
   });
 
   it('an injured starter blocks and is named; advanceWeek refuses with advance.blocked', () => {

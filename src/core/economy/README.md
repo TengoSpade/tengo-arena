@@ -50,3 +50,6 @@
 ## Known gaps
 - No patron goal (D-C). AI decisions are core/ai (WP5); `finance-sim.ts` has only a minimal test policy.
 - Lineups, captaincy and shortlists are not cleaned when a fighter leaves a roster (game/fighters own them).
+
+## Orchestrator decisions (M1 core fix round, pending owner confirmation)
+- **D-P, P1 wage room.** Opening bills are rescaled into `budget.worldGenBillBandBp` = 80-87% of WB, and a Trials Day rookie asks his own club at most the rookie scale `market.trialsDay.maxAskBpOfTierMinWage` = 1.25 × the tier minimum (never below it; his open-market ask applies once he is in the pool). So at P1 every club can sign its season-1 rookie and still has wage room for one tier-minimum depth signing (at most 12.5% of WB is needed in Muster, 12% in Banner, 8% in Crown). In Muster the roster cap (10, world rosters 9) is then full: a depth signing there needs a release. The finance simulation test allows the season-1 wage flow down to the band's bottom edge.

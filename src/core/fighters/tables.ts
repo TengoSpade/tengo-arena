@@ -20,8 +20,10 @@ export interface LifecycleTables {
   readonly maturity: Readonly<Record<StatGroup, readonly (readonly [number, number])[]>>;
   /** [human-year, wear in centipoints per human-year], ascending step tables. */
   readonly decline: Readonly<Record<StatGroup, readonly (readonly [number, number])[]>>;
-  /** Per-season retirement hazard in bp after the lifespan conversion, indexed by floor(human-age). */
-  readonly hazardBp: ReadonlyMap<string, readonly number[]>;
+  /** D-T: per-season age hazard in bp after the lifespan conversion, indexed by floor(human-age). */
+  readonly ageHazardBp: ReadonlyMap<string, readonly number[]>;
+  /** D-T: [rating drop below career peak, per-season hazard bp], ascending step table. */
+  readonly dropHazardBp: readonly (readonly [number, number])[];
   /** Class rating weights in bp. */
   readonly ratingWeightsBp: ReadonlyMap<string, Readonly<Record<string, number>>>;
   /** Class cap offsets in centipoints (recentred; float, rounded inside the cap formula). */
@@ -55,8 +57,9 @@ function build(content: ContentDB): LifecycleTables {
   const declineTable = (pairs: readonly (readonly [number, number])[]): [number, number][] =>
     pairs.map(([age, v]) => [age, roundN(bp(v) / 100)] as [number, number]).sort((a, b) => a[0] - b[0]);
 
-  const hazardBp = new Map<string, number[]>();
-  for (const race of content.races.list) hazardBp.set(race.id, hazardTable(content, race));
+  const ageHazardBp = new Map<string, number[]>();
+  for (const race of content.races.list) ageHazardBp.set(race.id, ageHazardTable(content, race));
+  const dropHazardBp = dev.retirement.hazardByRatingDrop.map(([drop, h]) => [drop, bp(h)] as [number, number]).sort((a, b) => a[0] - b[0]);
 
   const ratingWeightsBp = new Map<string, Record<string, number>>();
   const classOffset100 = new Map<string, Record<string, number>>();
@@ -75,7 +78,8 @@ function build(content: ContentDB): LifecycleTables {
     groupOf,
     maturity: { physical: curve(dev.maturityCurve.physical), mental: curve(dev.maturityCurve.mental) },
     decline: { physical: declineTable(dev.decline.physicalPerHumanYear), mental: declineTable(dev.decline.mentalPerHumanYear) },
-    hazardBp,
+    ageHazardBp,
+    dropHazardBp,
     ratingWeightsBp,
     classOffset100,
     weeksPerSeason: weeks.length,
@@ -85,14 +89,16 @@ function build(content: ContentDB): LifecycleTables {
 }
 
 /** Per-season retirement probability p = 1 - (1 - h)^k per floor(human-age), in bp. */
-function hazardTable(content: ContentDB, race: RaceDef): number[] {
+/** D-T age hazard per race: 1 − (1 − h)^k, h from hazardPerHumanYearPastPeak on the years past the physical peak. */
+function ageHazardTable(content: ContentDB, race: RaceDef): number[] {
   const dev = content.development;
   const k = dev.time.humanBaselineLifespan / race.lifespan;
   const out: number[] = [];
   const top = dev.retirement.forcedHumanAge;
   for (let year = 0; year <= top; year++) {
+    const past = year - dev.retirement.physicalPeakHumanAge;
     let h = 0;
-    for (const [age, v] of dev.retirement.hazardPerHumanYear) if (age <= year) h = v;
+    for (const [years, v] of dev.retirement.hazardPerHumanYearPastPeak) if (years <= past) h = v;
     const hBp = bp(h);
     if (hBp <= 0) out.push(0);
     else if (hBp >= BP) out.push(BP);

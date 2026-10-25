@@ -5,6 +5,7 @@ import {
   CAREER_ENDING_WEEKS,
   announceFinalSeasons,
   generateRookies,
+  rating,
   retirementChanceBp,
   rookieCount,
   seasonEndDevelopment,
@@ -19,33 +20,50 @@ const vet = (race: string, age: number, extra: Partial<Fighter> = {}): Fighter =
   makeFixtureFighter(1, content, { raceId: race as RaceId, classId: 'oathguard' as ClassId, age, ...extra });
 const chance = (f: Fighter, usageBp = 6000, season = 1) => retirementChanceWith(f, content, { age: f.age, usageBp, season, enabled: true });
 
-describe('retirement chance', () => {
-  it('precomputes 1 − (1 − h)^k per race: human 34 → 15%, dwarf 35 → 24.1%', () => {
-    expect(tables(content).hazardBp.get('human')![34]).toBe(1500);
-    expect(tables(content).hazardBp.get('dwarf')![35]).toBe(2412);
-    expect(tables(content).hazardBp.get('elf')![40]).toBe(7177);
+/** Set the career peak `drop` points above the current rating. */
+function withDrop(f: Fighter, drop: number): Fighter {
+  f.career.peakRating = rating(f, content) + drop;
+  return f;
+}
+
+describe('retirement chance (D-T: effectiveness, not a fixed age)', () => {
+  it('precomputes the age hazard 1 − (1 − h)^k per race on the human-years past the physical peak (30)', () => {
+    const t = tables(content);
+    expect(t.ageHazardBp.get('human')![41]).toBe(80); // 11 years past: 0.8%
+    expect(t.ageHazardBp.get('human')![50]).toBe(300);
+    expect(t.ageHazardBp.get('elf')![41]).toBe(53); // k = 80 / 120
+    expect(t.ageHazardBp.get('dwarf')![55]).toBe(1979); // k = 80 / 72
   });
-  it('worked example: dwarf 32, usage 0.6, expiring contract, 1 scar → 39.2%', () => {
+  it('a fighter still at his peak rating plays on at human-age 45; 16 points below it he retires far more often', () => {
+    const f = vet('human', 45, { classId: 'chirurgeon' as ClassId, contract: contract(3) });
+    expect(chance(withDrop(f, 0))).toBe(90); // 1.5% age hazard × 0.6 (contract running)
+    expect(chance(withDrop(f, 16))).toBe(1212); // 1 − (1 − 0.19)(1 − 0.015) = 20.2%, × 0.6
+  });
+  it('worked example: dwarf 32 at his peak, usage 0.6, expiring contract, 1 scar → 3.3%', () => {
     const f = vet('dwarf', 32, { contract: contract(1), traits: [{ id: 'stiff_shoulder' as TraitId, gainedSeason: 1, source: 'scar' }] });
-    expect(chance(f)).toBe(3918);
+    expect(chance(withDrop(f, 0))).toBe(333); // 0.22% age hazard × 1.5 + 3 points per scar
   });
-  it('modifiers: usage ≥ 0.75 ×0.8, ≤ 0.30 ×1.5, contract running ×0.6, traits, heavy wear +5', () => {
-    const f = vet('human', 34, { contract: contract(3) });
-    expect(chance(f, 10_000)).toBe(Math.trunc(1500 * 0.8 * 0.6));
-    expect(chance(f, 2000)).toBe(Math.trunc(1500 * 1.5 * 0.6));
+  it('modifiers: usage ≥ 0.75 ×0.8, ≤ 0.30 ×1.5, contract running ×0.6, traits; heavy wear adds nothing (the rating drop carries it)', () => {
+    const f = withDrop(vet('human', 34, { contract: contract(3) }), 12);
+    const base = 10_000 - ((10_000 - 800) * (10_000 - 20)) / 10_000; // drop 12: 8%; 4 years past the peak: 0.2%
+    expect(chance(f, 10_000)).toBe(Math.trunc(base * 0.8 * 0.6));
+    expect(chance(f, 2000)).toBe(Math.trunc(base * 1.5 * 0.6));
+    expect(chance(f, 6000)).toBe(491);
     const g = { ...f, traits: [{ id: 'glory_hungry' as TraitId, gainedSeason: 1, source: 'rolled' as const }] };
-    expect(chance(g, 6000)).toBe(Math.trunc(1500 * 0.6 * 0.8));
+    expect(chance(g, 6000)).toBe(Math.trunc(base * 0.6 * 0.8));
     const worn = { ...f, wear100: { ...f.wear100 } };
     for (const id of tables(content).physicalIds) worn.wear100[id as StatId] = 240;
-    expect(chance(worn, 6000)).toBe(Math.trunc(1500 * 0.6) + 500);
+    expect(retirementChanceWith(worn, content, { age: 34, usageBp: 6000, season: 1, enabled: true }) - chance(withDrop(worn, f.career.peakRating - rating(worn, content)), 6000)).toBe(0);
   });
   it('ret-001: below human-age 31 the chance is 0 (elf 46 = 30.67)', () => {
     expect(chance(vet('elf', 46))).toBe(0);
     expect(chance(vet('elf', 47))).toBeGreaterThan(0);
   });
-  it('ret-002: human-age 41.0 retires for certain; disabled retirement keeps only career-ending', () => {
-    expect(chance(vet('human', 41))).toBe(10_000);
-    expect(chance(vet('orc', 33))).toBe(10_000); // 41.25
+  it('ret-002: human-age 58 retires for certain (race-scaled); disabled retirement keeps only career-ending', () => {
+    expect(chance(vet('human', 58))).toBe(10_000);
+    expect(chance(vet('orc', 47))).toBe(10_000); // 58.75
+    expect(chance(vet('human', 57))).toBeLessThan(10_000);
+    expect(chance(vet('human', 41))).toBeLessThan(1000); // the old fixed cap is gone
     const f = vet('human', 38);
     expect(retirementChanceWith(f, content, { age: 38, usageBp: 0, season: 1, enabled: false })).toBe(0);
     const ce = { ...f, injury: { severity: 'serious' as const, weeksOut: CAREER_ENDING_WEEKS, fixtureId: null, round: 1, causeFighterId: null, damageBp: 0, since: { season: 1, weekIndex: 10 } } };
@@ -66,6 +84,7 @@ describe('final season and season-end retirements', () => {
     const id = Object.keys(s.fighters)[0] as FighterId;
     const f = s.fighters[id]!;
     Object.assign(f, { raceId: 'human', age: 39, contract: contract(1, f.clubId!) });
+    withDrop(f, 30); // far below his peak (D-T): the chance with usage 1.0 is above 60%
     expect(retirementChanceBp(s, id, content)).toBeGreaterThan(0);
     const news = announceFinalSeasons(s, content);
     expect(s.fighters[id]!.finalSeason).toBe(true);

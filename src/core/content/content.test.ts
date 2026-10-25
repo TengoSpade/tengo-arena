@@ -113,6 +113,18 @@ describe('loadContent: errors are precise and collected', () => {
     expect(errorsOf(files).some((i) => i.message.includes('duplicate club id'))).toBe(true);
   });
 
+  it('rejects inherited names (constructor, __proto__) as ids', () => {
+    // "constructor" passes the id pattern, so the cross-file check names it; the others fail the pattern.
+    const files = raw();
+    list(files['clubs']!, 'clubs')[0]!['id'] = 'constructor';
+    expect(errorsOf(files).some((i) => i.message.includes('club id "constructor" is a reserved name'))).toBe(true);
+    for (const name of ['__proto__', 'toString', 'hasOwnProperty']) {
+      const other = raw();
+      list(other['clubs']!, 'clubs')[0]!['id'] = name;
+      expect(errorsOf(other).length).toBeGreaterThan(0);
+    }
+  });
+
   it('requires integers everywhere in economy.json', () => {
     const files = raw();
     (files['economy']!['season'] as Mutable)['homeFixturesPerClub'] = 8.5;

@@ -7,7 +7,7 @@
  * classes, 6 per archetype, 2 per hybrid pair, club counts per tier);
  * 'fixture' skips those count rules so small test content sets validate.
  */
-import { compareNumbers } from '../util';
+import { compareNumbers, isReservedName } from '../util';
 import type { ContentIssue } from './issues';
 import {
   AFFINITY_GROUPS,
@@ -76,6 +76,8 @@ function checkUnique(c: Collector, file: string, path: string, items: readonly {
   const seen = new Set<string>();
   items.forEach((item, i) => {
     if (seen.has(item.id)) c.error(file, `${path}[${i}].id`, `duplicate ${what} "${item.id}"`);
+    // Ids index plain objects in GameState: an inherited name (constructor, toString, __proto__) would resolve to a prototype member.
+    if (isReservedName(item.id)) c.error(file, `${path}[${i}].id`, `${what} "${item.id}" is a reserved name`);
     seen.add(item.id);
   });
   return seen;
@@ -469,7 +471,9 @@ export function validateContentFiles(f: ContentFiles, profile: ValidationProfile
   checkCurveAscending(c, DF, 'maturityCurve.mental', development.maturityCurve.mental);
   checkCurveAscending(c, DF, 'decline.physicalPerHumanYear', development.decline.physicalPerHumanYear);
   checkCurveAscending(c, DF, 'decline.mentalPerHumanYear', development.decline.mentalPerHumanYear);
-  checkCurveAscending(c, DF, 'retirement.hazardPerHumanYear', development.retirement.hazardPerHumanYear);
+  checkCurveAscending(c, DF, 'retirement.hazardByRatingDrop', development.retirement.hazardByRatingDrop);
+  checkCurveAscending(c, DF, 'retirement.hazardPerHumanYearPastPeak', development.retirement.hazardPerHumanYearPastPeak);
+  if (development.retirement.forcedHumanAge <= development.retirement.minHumanAge) c.error(DF, 'retirement.forcedHumanAge', 'must be above minHumanAge');
   for (const race of Object.keys(development.soakTargets.injuriesPer40RoundsByRace)) {
     if (!raceIds.has(race)) c.error(DF, `soakTargets.injuriesPer40RoundsByRace.${race}`, `unknown race "${race}"`);
   }

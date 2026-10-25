@@ -271,8 +271,8 @@ function regionFor(state: GameState, content: ContentDB, i: number): RegionId {
   return rng.pick(regions).id as RegionId;
 }
 
-export function generateRookiesOn(draft: GameState, content: ContentDB): FighterId[] {
-  const n = rookieCount(draft, content);
+export function generateRookiesOn(draft: GameState, content: ContentDB, count?: number): FighterId[] {
+  const n = count ?? rookieCount(draft, content);
   const shift = content.leagues.generationShifts.rookieIntake;
   const ids: FighterId[] = [];
   for (let i = 0; i < n; i++) ids.push(createFighterOn(draft, { kind: 'rookie', potentialShift: shift, regionId: regionFor(draft, content, i) }, content));

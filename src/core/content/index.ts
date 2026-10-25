@@ -18,6 +18,7 @@ export type { ValidationProfile } from './validate';
 export { formatContentIssues } from './issues';
 export type { ContentIssue } from './issues';
 export { buildContentDB, createRegistry } from './db';
+export { combatRating } from './rating';
 export type { ContentDB, Registry } from './db';
 export * from './types';
 export {

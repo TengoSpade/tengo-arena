@@ -201,9 +201,12 @@ export function offseasonRecovery(draft: GameState, content: ContentDB): void {
   mutating(() => offseasonRecoveryOn(draft, content));
 }
 
-/** Season end step 13: rookie intake count and generation (economy assigns them to clubs for Trials Day). */
-export function generateRookies(draft: GameState, content: ContentDB): FighterId[] {
-  return mutating(() => generateRookiesOn(draft, content));
+/**
+ * Season end step 13: rookie intake count and generation (economy assigns them to clubs for Trials Day).
+ * `count` overrides the intake formula (world creation: one rookie per club for season 1, D-P).
+ */
+export function generateRookies(draft: GameState, content: ContentDB, count?: number): FighterId[] {
+  return mutating(() => generateRookiesOn(draft, content, count));
 }
 
 /** P1: final-season announcements. */

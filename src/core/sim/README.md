@@ -47,3 +47,6 @@ timers -> decisions (start-of-tick snapshot of targets) -> actions -> movement (
 `acceptance.test.ts` (content/default via import.meta.glob): cs-001..003, cmb-001..011, mv-001..003, the Behead worked example, tiebreak chain and overtime, simultaneous downs, the 17 effect types, the 34 statuses, captain aura / rally / Shaken / handover, combat traits, every class and all 105 presets fight.
 
 Depends on: `util`, `rng`, `model`, `content`, `tactics`.
+
+## Orchestrator decisions (M1 core fix round, pending owner confirmation)
+- **D-Q.** `fighterInput` (balance harness and tests) gives a fighter the OVR of his stats by core/content `combatRating` unless a test pins `rating`; game fight inputs already carry fighters' ratings, the same function. The golden event hashes were re-pinned when the fixture content changed (the header carries the content hash); round checksums are unchanged.

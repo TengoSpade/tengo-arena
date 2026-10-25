@@ -3,7 +3,7 @@
  * uniform attributes (03-combat §8 reference situation: all attributes 10,
  * CQ 50, default presets, human, no traits) and overrides.
  */
-import type { ContentDB } from '../content';
+import { combatRating, type ContentDB } from '../content';
 import { asId, type ClassId, type ClubId, type FighterId, type FightFighterInput, type RaceId, type SideInput, type StatId, type TacticsPresetId, type TraitId } from '../model';
 import { ATTR_IDS } from './tables';
 
@@ -36,7 +36,8 @@ export function fighterInput(content: ContentDB, spec: FighterSpec, slot: number
     captainQuality: spec.captainQuality ?? content.combat.captain.defaultCq,
     traitIds: (spec.traitIds ?? []).map((t) => asId<TraitId>(t)),
     tactics: { kind: 'preset', presetId: asId<TacticsPresetId>(spec.presetId ?? k.defaultPresetId) },
-    rating: spec.rating ?? 50,
+    // Same formula as fighter ratings (D-Q): the OVR of these stats unless a test pins one.
+    rating: spec.rating ?? combatRating(content, k.id, stats),
   };
 }
 

@@ -4,6 +4,7 @@
  * cmb-012, and a coarse speed check (the real bench is `npm run balance -- --bench`).
  */
 import { describe, expect, it, vi } from 'vitest';
+import { combatRating } from '../content';
 import { SUMMARY_EVENT_TYPES, hashEventStream, type MatchInput } from '../model';
 import { deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
@@ -51,6 +52,8 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
     expect(a.rounds.map((r) => r.checksum)).not.toEqual(b.rounds.map((r) => r.checksum));
   });
 
+  // The round checksums pin the fight itself. The event hash also covers the fight header (content hash):
+  // re-pinned 2026-10 when the fixture content gained the D-P/D-T keys; checksums unchanged, no engine change.
   it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
     const out = simulateMatch(match(), content, { record: 'full' });
     expect(ENGINE_VERSION).toBe(1);
@@ -61,13 +64,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "ccb75889f44aa221c76690478b89b1b3",
+            "d1d34f800d7a3c9209701522ffd6e8d0",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "c4f9ac43c38003f8fb436231c8abc981",
+            "387266cfecd1f92b401878810aae5c74",
           ],
         ],
         "score": {
@@ -172,5 +175,17 @@ describe('speed (coarse; budget numbers come from npm run balance -- --bench)', 
     for (let i = 0; i < n; i++) simulateFight({ seed: `bench-${i}`, round: 1, home: match().home, away: match().away }, content);
     const perRound = (clock() - t0) / n;
     expect(perRound).toBeLessThan(25);
+  });
+});
+
+describe('combat OVR (D-Q)', () => {
+  it('fight inputs carry the same rating formula as fighters (core/content combatRating)', () => {
+    const content = fixtureContent();
+    for (const k of content.classes.list) {
+      const stats = { str: 14, agi: 9, pac: 12, tgh: 16, pre: 7, arc: 11, spi: 5, wil: 13, cmp: 10, ldr: 18, awr: 6, dis: 12 };
+      const input = fighterInput(content, { classId: k.id, stats }, 0);
+      expect(input.rating).toBe(combatRating(content, k.id, input.stats));
+      expect(fighterInput(content, { classId: k.id }, 0).rating).toBe(combatRating(content, k.id, fighterInput(content, { classId: k.id }, 0).stats));
+    }
   });
 });

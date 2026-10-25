@@ -101,10 +101,9 @@ export const EconomyFileSchema = z.object({
     ascensionSeasons: z.number(),
     /** New career: opening wage bills are rescaled into this share of WB (default 82-92%). */
     worldGenBillBandBp: z
-      .object({ minBp: z.number().int(), maxBp: z.number().int() })
+      .object({ _doc: z.string().optional(), minBp: z.number().int(), maxBp: z.number().int() })
       .strict()
-      .refine((b) => b.minBp > 0 && b.minBp <= b.maxBp && b.maxBp <= 10_000, 'needs 0 < minBp <= maxBp <= 10000')
-      .default({ minBp: 8200, maxBp: 9200 }),
+      .default({ minBp: 8000, maxBp: 8700 }),
   }).strict(),
   wage: z.object({
     _doc: z.string().optional(),
@@ -219,6 +218,9 @@ export const EconomyFileSchema = z.object({
     trialsDay: z.object({
       _doc: z.string().optional(),
       exclusiveWeeks: z.number(),
+      /** Rookie scale: a trials rookie's ask from his own club during Trials Day is at most this share of the tier minimum (absent = no cap). */
+      maxAskBpOfTierMinWage: z.number().int().optional(),
+      _maxAskNote: z.string().optional(),
     }).strict(),
     pool: z.object({
       inSeasonFloor: z.number(),

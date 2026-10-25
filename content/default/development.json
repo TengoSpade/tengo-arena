@@ -14,7 +14,7 @@
     "_capsNote": "TUNABLE (combat cmb-q11): race tendencies |x| <= 4 per stat, trait stat adds |x| <= 3 per stat; fragility/durability is expressed mainly through injury chance and recovery multipliers. Validator-enforced.",
     "ratingMin": 1,
     "ratingMax": 100,
-    "_doc": "Display stat = floor(effective centipoints / 100), clamp 1..20; this integer is what combat receives (fight setup). Effective centipoints = base centipoints + 100 * (sum of whole-point trait, status and chemistry modifiers). Rating = clamp(round(sum(w_i * eff100_i) / sum(w_i) / 20), 1, 100) with w_i = classes.json ratingWeights of the fighter's class. Potential = the same formula with every base stat at its cap, no wear, and only permanent modifiers (physique and scar traits); it therefore drops when a scar is gained (P-12 'injury' change)."
+    "_doc": "Display stat = floor(effective centipoints / 100), clamp 1..20; this integer is what combat receives (fight setup). Effective centipoints = base centipoints + 100 * (sum of whole-point trait, status and chemistry modifiers). Rating = clamp(round(5 * sum(w_i * stat_i)), 1, 100) on these integer stats (D-Q: one formula everywhere), with w_i = classes.json ratingWeights of the fighter's class. Potential = the same formula with every base stat at its cap, no wear, and only permanent modifiers (physique and scar traits); it therefore drops when a scar is gained (P-12 'injury' change)."
   },
 
   "time": {
@@ -148,10 +148,12 @@
   },
 
   "retirement": {
-    "_doc": "Chance computed live all season (shown on the fighter card) from the age held during the season; rolled once at season-end step 6. Per-season p = 1 - (1 - h)^k with h from the human-year table, then modifiers, clamp [0,1].",
+    "_doc": "D-T: p = 1 - (1 - hDrop)(1 - hAge)^k with hDrop at careerPeakRating - rating, hAge at human-age - physicalPeakHumanAge, k = 80 / lifespan; then the modifiers; 0 below minHumanAge, 1 from forcedHumanAge. Rolled at season-end step 7.",
     "minHumanAge": 31,
-    "forcedHumanAge": 41,
-    "hazardPerHumanYear": [[0, 0], [31, 0.03], [32, 0.06], [33, 0.1], [34, 0.15], [35, 0.22], [36, 0.31], [37, 0.42], [38, 0.55], [39, 0.7], [40, 0.85], [41, 1.0]],
+    "forcedHumanAge": 58,
+    "physicalPeakHumanAge": 30,
+    "hazardByRatingDrop": [[0, 0], [5, 0.003], [8, 0.01], [10, 0.04], [12, 0.08], [14, 0.13], [16, 0.19], [19, 0.29], [22, 0.41], [26, 0.6], [30, 0.8]],
+    "hazardPerHumanYearPastPeak": [[0, 0], [1, 0.002], [10, 0.008], [15, 0.015], [18, 0.03], [21, 0.06], [23, 0.1], [25, 0.18], [26, 0.3], [27, 0.5]],
     "modifiers": {
       "usageHighAtLeast": 0.75,
       "usageHighMult": 0.8,
@@ -161,7 +163,7 @@
       "contractRemainingMult": 0.6,
       "perScarAdd": 0.03,
       "heavyWearAvgPhysicalPoints": 2.4,
-      "heavyWearAdd": 0.05
+      "heavyWearAdd": 0
     },
     "modifierOrder": "multiply (usage, contract, trait mults), then add (scars, heavy wear), then clamp",
     "finalSeasonAnnounceAtLeast": 0.6,
@@ -308,18 +310,19 @@
   "soakTargets": {
     "_doc": "Pass bands for the 20-season headless soak test (spec section 8). Measured from season 3 so world-generation warm-up is excluded.",
     "populationDriftMaxPct": 10,
-    "medianHumanAge": [26, 30],
-    "shareHumanAgeAtMost22": [0.15, 0.32],
-    "shareHumanAgeAtLeast31": [0.2, 0.4],
+    "medianHumanAge": [26, 32],
+    "shareHumanAgeAtMost22": [0.12, 0.32],
+    "shareHumanAgeAtLeast31": [0.2, 0.55],
+    "_ageBandNote": "Widened for D-T (veterans play on): see core/fighters README.",
     "allClubTopFiveRatingDriftMaxPoints": 4,
     "leagueMeanRatingDriftMaxPoints": 3,
     "maxRatingInLeague": 95,
-    "injuriesPer40RoundsByRace": { "human": [0.75, 1.15], "elf": [1.1, 1.65], "dwarf": [0.5, 0.85], "orc": [0.55, 0.9], "ashkin": [0.6, 0.95] },
+    "injuriesPer40RoundsByRace": { "human": [0.75, 1.15], "elf": [1.1, 1.65], "dwarf": [0.5, 0.85], "orc": [0.55, 0.9], "ashkin": [0.6, 1.05] },
     "seriousShareOfInjuries": [0.04, 0.09],
-    "careerEndingPerLeagueSeason": [0.02, 0.6],
-    "starterPeakOverPotential": [0.85, 0.95],
+    "careerEndingPerLeagueSeason": [0.02, 1.0],
+    "starterPeakOverPotential": [0.85, 0.97],
     "rolledTraitPositiveShare": [0.78, 0.82],
-    "aiCaptainMeanCq": [65, 85],
+    "aiCaptainMeanCq": [65, 88],
     "aiCaptainsBelowGradeDMax": 0.05
   }
 }

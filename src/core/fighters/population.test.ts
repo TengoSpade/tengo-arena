@@ -3,6 +3,8 @@
  * development.json soakTargets. Bands are read from content, never typed here.
  */
 import { describe, expect, it } from 'vitest';
+import { PHYSICAL_STAT_IDS } from '../content';
+import type { Fighter } from '../model';
 import { fixtureContent } from '../testkit';
 import { runPopulation, type PopulationReport } from './population';
 
@@ -20,6 +22,19 @@ function median(values: number[]): number {
   const mid = s.length >> 1;
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
+
+/** Physical share of the class rating weight above one half (D-T: such fighters decline fast after 30). */
+function physicallyWeighted(f: Fighter): boolean {
+  let phys = 0;
+  let all = 0;
+  for (const [stat, w] of Object.entries(content.classes.require(f.classId).ratingWeights as Record<string, number>)) {
+    all += w;
+    if ((PHYSICAL_STAT_IDS as readonly string[]).includes(stat)) phys += w;
+  }
+  return phys * 2 > all;
+}
+
+const humanAge = (f: Fighter, age = f.age) => Math.floor((age * 800) / content.races.require(f.raceId).lifespan) / 10;
 
 function checkAgeAndPopulation(report: PopulationReport): void {
   const samples = report.samples.filter((s) => s.season >= FROM);
@@ -42,9 +57,12 @@ describe('20-season population without matches (usage at the floor)', () => {
   it('stays inside the soakTargets age and population bands', () => {
     checkAgeAndPopulation(report);
   });
-  it('turns the league over: by season 20 only elves remain from world generation', () => {
+  it('turns the league over: by season 20 world generation survives in elves and mentally weighted veterans (D-T)', () => {
     const survivors = Object.values(report.finalState.fighters).filter((f) => f.debutSeason === 1 && f.status !== 'retired');
-    for (const f of survivors) expect(f.raceId).toBe('elf');
+    const others = survivors.filter((f) => f.raceId !== 'elf');
+    for (const f of survivors) expect(humanAge(f)).toBeLessThan(content.development.retirement.forcedHumanAge);
+    // Mental stats hold until human-age 60, physical ones fall from 31: the non-elf survivors are mostly mental classes.
+    expect(others.filter((f) => !physicallyWeighted(f)).length).toBeGreaterThanOrEqual(Math.ceil(others.length * 0.75));
   });
   it('without rounds started nobody develops (D-A): world-gen clocks never move', () => {
     for (const f of Object.values(report.finalState.fighters)) expect(f.career.xpTotal).toBe(0);
@@ -86,13 +104,19 @@ describe('20-season population with synthetic matches', () => {
     }
     expect(inBand(median(report.starterPeakOverPotential), targets.starterPeakOverPotential)).toBe(true);
   });
-  it('retirement ages per race follow the lifespan (medians within 2 years of 03 sys-development)', () => {
-    const expected: Record<string, number> = { human: 36, elf: 55, dwarf: 33, orc: 29, ashkin: 24 };
-    for (const [race, m] of Object.entries(expected)) {
-      const ages = report.retirementAges[race]!;
-      expect(ages.length).toBeGreaterThan(20);
-      expect(Math.abs(median(ages) - m), `${race} median ${median(ages)}`).toBeLessThanOrEqual(2);
-    }
+  it('retirement ages follow the lifespan and effectiveness (D-T): race medians agree in human-age; mental classes retire later', () => {
+    const byRace = Object.entries(report.retirementAges).map(([race, ages]) => {
+      expect(ages.length, race).toBeGreaterThan(20);
+      return Math.floor((median(ages) * 800) / content.races.require(race).lifespan) / 10;
+    });
+    const all = median(byRace);
+    for (const m of byRace) expect(Math.abs(m - all)).toBeLessThanOrEqual(3);
+    expect(all).toBeGreaterThanOrEqual(36);
+    expect(all).toBeLessThanOrEqual(44);
+    // Retired from a club (leavers keep their freeAgency record; career-ending injuries are not age).
+    const retired = Object.values(report.finalState.fighters).filter((f) => f.status === 'retired' && f.freeAgency === null && f.injury?.careerEnding !== true && f.history.length > 0);
+    const at = (pick: (f: Fighter) => boolean) => median(retired.filter(pick).map((f) => humanAge(f, f.history[f.history.length - 1]!.age)));
+    expect(at((f) => !physicallyWeighted(f)) - at(physicallyWeighted)).toBeGreaterThanOrEqual(4);
   });
   it('dev-007: training emphasis switched off equals everyone Balanced, bit for bit, over 20 seasons', () => {
     const off = runPopulation({ seed: 'population-2', seasons: SEASONS, content, matches: true, trainingEmphasis: false });
