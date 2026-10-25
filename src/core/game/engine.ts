@@ -4,14 +4,15 @@
  * pre-integration soak bind it to stand-ins or spies.
  */
 import type { ContentDB } from '../content';
-import type { Blocker, ClubId, Command, Fighter, FighterId, FixtureId, GameState, MatchInput, SeasonEndReport, WeekReport } from '../model';
-import { NotImplementedError, cloneJson, ok, type EngineError, type Result } from '../util';
+import { withDerivedMemo } from '../fighters';
+import { beginTransition, type Blocker, type ClubId, type Command, type Fighter, type FighterId, type FixtureId, type GameState, type MatchInput, type SeasonEndReport, type WeekReport } from '../model';
+import { NotImplementedError, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
 import { buildMatchReport, prepareMatchInput, type DetailedMatchReport } from './match';
 import type { GamePorts } from './ports';
 import { processSeasonEnd, type SeasonEndOutcome } from './season-end';
 import { newsSince } from './shared';
-import { fighterView, freeAgents, getBlockers, releasePreview, roster, suggestLineup, type FighterView, type ReleasePreview } from './views';
+import { captaincyPreview, fighterView, freeAgents, getBlockers, releasePreview, roster, suggestLineup, type CaptaincyPreview, type FighterView, type ReleasePreview } from './views';
 import { processWeek, type WeekOutcome } from './week';
 import { createWorld, type NewGameParams } from './world';
 import type { OfferResponse, NewsId } from '../model';
@@ -40,6 +41,7 @@ export interface GameEngine {
   freeAgents(state: GameState, content?: ContentDB): Fighter[];
   suggestLineup(state: GameState, clubId: ClubId, content: ContentDB): Command;
   releasePreview(state: GameState, clubId: ClubId, fighterId: FighterId, content: ContentDB): ReleasePreview | null;
+  captaincyPreview(state: GameState, clubId: ClubId, captainId: FighterId | null, viceCaptainId: FighterId | null, content: ContentDB): CaptaincyPreview | null;
 }
 
 export function createGameEngine(ports: GamePorts): GameEngine {
@@ -47,14 +49,14 @@ export function createGameEngine(ports: GamePorts): GameEngine {
     ports,
     createWorld: (content, params) => {
       try {
-        return createWorld(ports, content, params);
+        return withDerivedMemo(() => createWorld(ports, content, params));
       } catch (e) {
         if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
         return { ok: false, error: { code: 'engine.failure', message: `World generation failed: ${e instanceof Error ? e.message : String(e)}` } };
       }
     },
-    applyCommand: (state, command, content) => {
-      const draft = cloneJson(state);
+    applyCommand: (state, command, content) => withDerivedMemo(() => {
+      const draft = beginTransition(state);
       const from = draft.ids.news;
       let r: Result<OfferResponse | null, EngineError>;
       try {
@@ -65,18 +67,18 @@ export function createGameEngine(ports: GamePorts): GameEngine {
       }
       if (!r.ok) return r;
       return ok({ state: draft, newsIds: newsSince(draft, from), response: r.value });
-    },
+    }),
     getBlockers: (state, content) => getBlockers(ports, state, content),
     advanceWeek: (state, content) => {
-      const r = processWeek(ports, state, content);
+      const r = withDerivedMemo(() => processWeek(ports, state, content));
       return r.ok ? ok({ state: r.value.state, report: r.value.report }) : r;
     },
-    advanceWeekLogged: (state, content) => processWeek(ports, state, content),
+    advanceWeekLogged: (state, content) => withDerivedMemo(() => processWeek(ports, state, content)),
     runSeasonEnd: (state, content) => {
-      const r = processSeasonEnd(ports, state, content);
+      const r = withDerivedMemo(() => processSeasonEnd(ports, state, content));
       return r.ok ? ok({ state: r.value.state, report: r.value.report }) : r;
     },
-    runSeasonEndLogged: (state, content) => processSeasonEnd(ports, state, content),
+    runSeasonEndLogged: (state, content) => withDerivedMemo(() => processSeasonEnd(ports, state, content)),
     prepareMatchInput: (state, fixtureId, content) => prepareMatchInput(ports, state, fixtureId, content),
     buildMatchReport: (state, fixtureId, content) => buildMatchReport(ports, state, fixtureId, content),
     roster: (state, clubId, content) => roster(ports, state, clubId, content),
@@ -84,5 +86,6 @@ export function createGameEngine(ports: GamePorts): GameEngine {
     freeAgents: (state, content) => freeAgents(ports, state, content),
     suggestLineup: (state, clubId, content) => suggestLineup(ports, state, clubId, content),
     releasePreview: (state, clubId, fighterId, content) => releasePreview(ports, state, clubId, fighterId, content),
+    captaincyPreview: (state, clubId, captainId, viceCaptainId, content) => captaincyPreview(ports, state, clubId, captainId, viceCaptainId, content),
   };
 }

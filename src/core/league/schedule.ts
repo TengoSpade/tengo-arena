@@ -8,6 +8,7 @@
  */
 import type { ContentDB } from '../content';
 import {
+  putFixture,
   asId,
   leagueCompetitionId,
   leagueFixtureId,
@@ -322,7 +323,7 @@ export function setupSeasonImpl(draft: GameState, season: number, content: Conte
     const schedule = buildLeagueSchedule({ rootSeed: draft.rng.root, season, tierId, seedOrder }, content);
     for (const f of schedule.fixtures) {
       invariant(!draft.fixtures[f.id], `setupSeason: fixture ${f.id} already exists`);
-      draft.fixtures[f.id] = f;
+      putFixture(draft, f);
     }
     const competition: Competition = {
       id: competitionId,

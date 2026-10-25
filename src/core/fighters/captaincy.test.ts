@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixtureWorld, fixtureContent, makeFixtureFighter } from '../testkit';
 import type { ClassId, ClubId, Fighter, FighterId, GameState, RaceId, TraitId, WeekId } from '../model';
-import { captaincy, captaincyBreakdown, effectiveStats, gradeFor, lineupCaptain, lineupChemistry, lineupLock, weeklyLifecycle } from './index';
+import { captainChangeConsequences, captaincy, captaincyBreakdown, effectiveStats, gradeFor, lineupCaptain, lineupChemistry, lineupLock, weeklyLifecycle } from './index';
 import { mentorMultiplier } from './season';
 import { withStats } from './testing';
 
@@ -148,6 +148,27 @@ describe('captain changes at lineup lock', () => {
     at(s, 13);
     lineupLock(s, club, content);
     expect(s.fighters[senior.id]!.statuses.some((x) => x.id === 'passed_over')).toBe(false);
+  });
+  it('captainChangeConsequences previews exactly what the next lock applies (Snubbed, then Passed Over)', () => {
+    const { s, club, ids } = world();
+    at(s, 12);
+    const senior = s.fighters[ids[5]!]!;
+    Object.assign(senior, withStats({ ...senior, age: 31 }, content, { ldr: 18, cmp: 14 }));
+    senior.career.roundsStarted = 400;
+    const weak = s.fighters[ids[2]!]!;
+    Object.assign(weak, withStats(weak, content, { ldr: 6 }));
+    const c = s.clubs[club]!;
+    const preview = captainChangeConsequences(s, club, c.captainAtLastLock, weak.id, ids[3]!, c.captainSince, content);
+    expect(captainChangeConsequences(s, club, c.captainAtLastLock, c.captainAtLastLock, ids[1]!, c.captainSince, content)).toEqual({ snubbedId: null, snubExemption: null, passedOverIds: [] });
+    c.captainId = weak.id;
+    c.viceCaptainId = ids[3]!;
+    lineupLock(s, club, content);
+    const has = (id: FighterId, status: string) => s.fighters[id]!.statuses.some((x) => x.id === status);
+    expect(preview.snubbedId).toBe(ids[0]);
+    expect(preview.snubExemption).toBeNull();
+    expect(has(ids[0]!, 'snubbed')).toBe(true);
+    expect(preview.passedOverIds).toContain(senior.id);
+    for (const id of ids) expect(has(id, 'passed_over')).toBe(preview.passedOverIds.includes(id));
   });
   it('cap-007: a captain of 25+ matchweeks released at MW12 → Captain Departed 4 weeks and an interim captain', () => {
     const { s, club, ids } = world();

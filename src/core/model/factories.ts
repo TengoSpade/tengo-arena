@@ -29,5 +29,6 @@ export function createEmptyGameState(params: { rootSeed: Seed; content: ContentR
     news: [],
     history: [],
     knowledge: null,
+    alumni: {},
   };
 }

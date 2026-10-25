@@ -127,6 +127,13 @@ export interface FighterMatchStats {
   downs: DownRecord[];
   /** Opponents faced (M4 knowledge contact). */
   opponentIds: FighterId[];
+  /**
+   * Damage taken and max HP in each round played (index = round - 1; v2, for
+   * per-round injury rolls). The sim always writes them; absent only in
+   * hand-built fixtures and in results from v1 saves.
+   */
+  roundDamageTaken?: number[];
+  roundMaxHp?: number[];
 }
 
 export interface DownRecord {

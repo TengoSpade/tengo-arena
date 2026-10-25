@@ -10,6 +10,8 @@
 import { PHYSICAL_STAT_IDS, type AiPersonalityDef, type ClassDef, type ContentDB } from '../content';
 import {
   asId,
+  clubRoster,
+  freeAgentList,
   idNumber,
   type Club,
   type ClubId,
@@ -224,9 +226,7 @@ class Ctx {
 
   /** Active roster fighters in id order. */
   roster(): Fighter[] {
-    const out: Fighter[] = [];
-    for (const f of Object.values(this.state.fighters)) if (f.clubId === this.clubId && f.status === 'active') out.push(f);
-    return out.sort(byIdNumber);
+    return [...clubRoster(this.state, this.clubId)];
   }
 
   byRating = (a: Fighter, b: Fighter): number => this.rating(b) - this.rating(a) || this.cq(b) - this.cq(a) || byIdNumber(a, b);
@@ -569,8 +569,8 @@ function freeAgentOffers(ctx: Ctx, roster: readonly Fighter[], extraRostered: nu
     state.market.negotiations.filter((n) => n.clubId === clubId && n.season === season && n.patienceLeft <= 0).map((n) => n.fighterId),
   );
   const pool: Fighter[] = [];
-  for (const f of Object.values(state.fighters)) {
-    if (f.status !== 'free-agent' || trials.has(f.id) || released.has(f.id) || refused.has(f.id) || ownIds.has(f.id)) continue;
+  for (const f of freeAgentList(state)) {
+    if (trials.has(f.id) || released.has(f.id) || refused.has(f.id) || ownIds.has(f.id)) continue;
     pool.push(f);
   }
   if (pool.length === 0) return cmds;

@@ -11,7 +11,7 @@ import type { GamePorts } from './ports';
 import { defaultTactics, fail, onRoster, rosterOf, tidyClub } from './shared';
 
 /** Commands allowed while the season-end step is pending (no club decisions then). */
-const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set(['news.markRead', 'shortlist.toggle', 'club.choose']);
+const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set(['news.markRead', 'news.setRead', 'shortlist.toggle', 'club.choose']);
 
 function clubCheck(state: GameState, clubId: ClubId): EngineError | null {
   return state.clubs[clubId] ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };
@@ -31,7 +31,7 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
   if (draft.calendar.phase === 'season-end' && !SEASON_END_ALLOWED.has(cmd.type)) {
     return fail('phase.season-end', 'Club decisions wait until the season-end step has run');
   }
-  if (cmd.type !== 'club.choose' && cmd.type !== 'news.markRead') {
+  if (cmd.type !== 'club.choose' && cmd.type !== 'news.markRead' && cmd.type !== 'news.setRead') {
     const e = clubCheck(draft, cmd.clubId);
     if (e) return { ok: false, error: e };
   }
@@ -165,16 +165,13 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
       return ok(null);
     }
 
-    case 'news.markRead': {
+    case 'news.markRead':
+    case 'news.setRead': {
+      const read = cmd.type === 'news.markRead' ? true : cmd.read;
       const wanted = new Set<string>(cmd.newsIds);
-      let found = 0;
-      for (const n of draft.news) {
-        if (wanted.has(n.id)) {
-          found++;
-          n.read = true;
-        }
-      }
-      if (found !== wanted.size) return fail('news.unknown', 'Some news items do not exist', { requested: wanted.size, found });
+      const items = draft.news.filter((n) => wanted.has(n.id));
+      if (items.length !== wanted.size) return fail('news.unknown', 'Some news items do not exist', { requested: wanted.size, found: items.length });
+      for (const n of items) n.read = read;
       return ok(null);
     }
   }

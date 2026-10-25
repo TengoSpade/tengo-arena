@@ -181,7 +181,7 @@ src/render   -> core/{util, rng, model, content, sim}; the only importer of pixi
 
 | Type | Purpose |
 | --- | --- |
-| `GameState` | `schemaVersion`, `content`, `rng`, `ids`, `calendar`, `options`, `playerClubId`, `clubs`, `fighters`, `competitions`, `fixtures`, `results`, `market`, `ai`, `ledger`, `news`, `history`, reserved `knowledge` (M4). `STATE_SCHEMA_VERSION = 1` |
+| `GameState` | `schemaVersion`, `content`, `rng`, `ids`, `calendar`, `options`, `playerClubId`, `clubs`, `fighters`, `competitions`, `fixtures`, `results`, `market`, `ai`, `ledger`, `news`, `history`, reserved `knowledge` (M4), `alumni` (slim records of fighters who left; `personOf`, `personName`). `STATE_SCHEMA_VERSION = 2` |
 | `GameOptions` | `trainingEmphasis` (true), `patronGoals` (false: no patron goal in M1), `retirement` (true) |
 | `Calendar` | `season`, `weekIndex` (1..23, 24 during season end), `weekId` (`P1`…`TW3`), `phase` |
 | `Club` | identity and colours, region/district, tier and wing, AI personality, tactics style, prestige, `ClubFinance` (balance, season and wage budgets, status healthy/watch/embargo, debt weeks, Registry debt, parachute and ascension seasons), captaincy fields, club statuses, `Lineup` (5 × `{ fighterId, row }`, match-captain override, tactics per fighter), shortlist, `ClubSeasonRow` history |
@@ -252,7 +252,7 @@ Each file has a zod schema in `src/core/content/schema/`; types are inferred (`C
 - **Resume guarantee:** loading restores the exact `GameState`; advancing from it with identical inputs reproduces the original results (seeds derive from the root and fixture identity). Committed results never change.
 - **Commit boundaries:** one atomic commit per transition (tech-007): results, XP, injuries, ledger, offers and the calendar move together.
 - **Save identity / version, interrupted writes, invalid saves, migrations, deletion, settings:** as specified in §3.3 and phase A: versioned envelope with checksum; one IndexedDB transaction per write (temp file + rename on desktop); unreadable saves stay listed with export for support; ordered pure migrations with fixture saves; confirm dialogs for deletion; settings outside saves.
-- **Size:** ≤ 3 MB after 10 seasons (TUNABLE (tech)) through compaction of results, per-season ledger summaries in `ClubSeasonRow`, news retention of two seasons and fighter history rows of about 20 integers.
+- **Size:** ≤ 3 MB after 10 seasons (TUNABLE (tech)) through compaction of results, per-season ledger summaries in `ClubSeasonRow`, news retention of two seasons and fighter history rows of about 20 integers. Retention (v2): results, fixtures and competitions of the current and previous season only, the previous season compacted except the player club's matches; fighters who left become `alumni` records (past hired blades and leavers who never played are dropped once their season leaves the window); display stats on the last two history rows of a fighter. OPEN (G1): full current-season results are about 13 KB each, so a save peaks near 10 MB late in a season; compacting AI-vs-AI results after a few weeks would remove detailed reports and per-match fighter logs for those matches.
 
 ## 6. Time, randomness, and reproducibility
 

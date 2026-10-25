@@ -4,7 +4,7 @@
  */
 import type { ContentDB, TierDef, TierProfile } from '../content';
 import type { Club, ClubId, Fighter, FighterId, GameState, Negotiation, Offer } from '../model';
-import { idNumber } from '../model';
+import { clubRoster, freeAgentList, idNumber } from '../model';
 import { InvariantError, compareStrings } from '../util';
 import { fighterRating } from './fighter-values';
 
@@ -42,11 +42,7 @@ export function clubsInOrder(state: GameState, content: ContentDB): Club[] {
 
 /** Roster fighters of a club (status active), in id order. */
 export function rosterOf(state: GameState, clubId: ClubId): Fighter[] {
-  const out: Fighter[] = [];
-  for (const f of Object.values(state.fighters)) {
-    if (f.clubId === clubId && f.status === 'active') out.push(f);
-  }
-  return out.sort((a, b) => compareFighterIds(a.id, b.id));
+  return [...clubRoster(state, clubId)];
 }
 
 /** The club whose exclusive trials rookie this fighter is (Trials Day), or null. */
@@ -66,9 +62,7 @@ export function isInPool(state: GameState, fighter: Fighter): boolean {
 export function poolFighters(state: GameState): Fighter[] {
   const exclusive = new Set<string>();
   for (const ids of Object.values(state.market.trialsRookies)) for (const id of ids ?? []) exclusive.add(id);
-  return Object.values(state.fighters)
-    .filter((f) => f.status === 'free-agent' && !exclusive.has(f.id))
-    .sort((a, b) => compareFighterIds(a.id, b.id));
+  return freeAgentList(state).filter((f) => !exclusive.has(f.id));
 }
 
 export function pendingOffersOf(state: GameState, clubId: ClubId): Offer[] {
@@ -97,18 +91,14 @@ export function findNegotiation(
 }
 
 /**
- * An AGREED renewal is stored as a renewal negotiation with a wage and no
- * validity week (a counter always has one). Its terms start at next-season
- * setup; the contract's endSeason is already extended. (CHANGE REQUEST:
- * Contract.next {wagePerWeek, endSeason}; this encoding is internal.)
+ * The agreed, not yet started renewal of a fighter (Contract.next): its wage
+ * starts at next-season setup; the contract's endSeason already includes it.
+ * 'season' is when it was agreed.
  */
 export function agreedRenewal(state: GameState, fighterId: FighterId): { clubId: ClubId; wagePerWeek: number; season: number } | null {
-  for (const n of state.market.negotiations) {
-    if (n.fighterId === fighterId && n.kind === 'renewal' && n.counterWage !== null && n.validUntilWeek === null) {
-      return { clubId: n.clubId, wagePerWeek: n.counterWage, season: n.season };
-    }
-  }
-  return null;
+  const c = state.fighters[fighterId]?.contract;
+  if (!c || !c.next) return null;
+  return { clubId: c.clubId, wagePerWeek: c.next.wagePerWeek, season: c.signedAt.season };
 }
 
 /** Weekly bill the commitment rule uses: current wages, or the agreed renewal wage when higher. */

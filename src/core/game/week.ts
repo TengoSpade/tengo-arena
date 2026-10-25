@@ -10,8 +10,8 @@
  * The UI store autosaves after success. The input state is never mutated.
  */
 import type { ContentDB } from '../content';
-import type { ClubId, FighterId, Fixture, GameState, LineupEntry, MatchResult, WeekReport } from '../model';
-import { NotImplementedError, cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
+import { beginTransition, putResult, type ClubId, type FighterId, type Fixture, type GameState, type LineupEntry, type MatchResult, type WeekReport } from '../model';
+import { NotImplementedError, engineError, err, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
 import { addMatchNews, buildMatchInput, eligibleEntries, toResult } from './match';
 import type { GamePorts } from './ports';
@@ -112,7 +112,7 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
     const blockers = getBlockers(ports, state, content);
     if (blockers.length > 0) return err(engineError('advance.blocked', `Decide first: ${blockers.map((b) => b.code).join(', ')}`, { blockers }));
   }
-  const draft = cloneJson(state);
+  const draft = beginTransition(state);
   const newsFrom = draft.ids.news;
   const ledgerFrom = draft.ledger.nextSeq;
   const log: PhaseLog = { rejections: [] };
@@ -131,7 +131,7 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
         const out = ports.sim.simulateMatch(input, content, { record: 'none' });
         const used = [...(blades.get(fx.homeClubId) ?? []), ...(blades.get(fx.awayClubId) ?? [])];
         const result = toResult(ports, fx, input, out, used, content);
-        draft.results[fx.id] = result;
+        putResult(draft, result);
         results.push(result);
       }
     }

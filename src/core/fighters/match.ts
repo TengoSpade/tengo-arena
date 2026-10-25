@@ -114,8 +114,11 @@ function roundFacts(result: MatchResult, fid: FighterId, stats: FighterMatchStat
   const out: RoundFacts[] = [];
   for (let r = 1; r <= n; r++) {
     const d = downs.get(r);
-    const damage = d ? d.damageTakenRound : perOther;
-    const hp = d && d.maxHp > 0 ? d.maxHp : maxHp;
+    // Exact per-round values from the sim (v2); older results fall back to the estimate.
+    const exactDamage = stats.roundDamageTaken?.[r - 1];
+    const exactHp = stats.roundMaxHp?.[r - 1];
+    const damage = exactDamage ?? (d ? d.damageTakenRound : perOther);
+    const hp = exactHp !== undefined && exactHp > 0 ? exactHp : d && d.maxHp > 0 ? d.maxHp : maxHp;
     out.push({
       won: result.rounds[r - 1]?.winner === side,
       credits: credits.get(`${fid}|${r}`) ?? 0,
@@ -266,6 +269,7 @@ function applyInjury(
     causeFighterId: facts.byFighterId,
     damageBp: facts.exposure.damageRatioBp,
     since: ctx.since,
+    careerEnding: careerEnded,
   };
   f.season.injuries += 1;
   out.injuries.push({ fighterId: f.id, severity, weeksOut });

@@ -6,7 +6,7 @@
  */
 import type { ContentDB, TraitDef } from '../content';
 import { fractionToBp } from '../content';
-import type { ClubId, Fighter, FighterId, GameState } from '../model';
+import { clubResults, type ClubId, type Fighter, type FighterId, type GameState } from '../model';
 import { clamp } from '../util';
 import { fighterHumanAge, fighterPotential, fighterRating } from './fighter-values';
 import { floorTo, interpolate, mulDiv, stepLookup } from './math';
@@ -130,8 +130,7 @@ export function greedLabel(greedBp: number, content: ContentDB): { id: string; l
 export function seasonStarts(state: GameState, fighterId: FighterId, clubId: ClubId, season: number): { started: number; played: number } {
   let started = 0;
   let played = 0;
-  for (const r of Object.values(state.results)) {
-    if (r.season !== season) continue;
+  for (const r of clubResults(state, season, clubId)) {
     const side = r.homeClubId === clubId ? r.input.home : r.awayClubId === clubId ? r.input.away : null;
     if (!side) continue;
     played += 1;

@@ -110,6 +110,21 @@ export interface Contract {
   signedAt: GameTime;
   /** A relegation drop clause has already been applied this contract. */
   dropClauseApplied: boolean;
+  /**
+   * Agreed renewal not yet in force (renewals happen in the final season; the new
+   * wage starts at the next season-end setup, 03-league-economy sys-contracts).
+   * endSeason already includes the renewal (next.endSeason === endSeason); the
+   * old wage is paid until setup, which then applies next.wagePerWeek and clears
+   * next. null or absent = none. (Optional in the type for hand-built fixtures;
+   * core always writes it.)
+   */
+  next?: ContractTerms | null;
+}
+
+export interface ContractTerms {
+  wagePerWeek: Gold;
+  /** Last season covered by the renewed contract (equals Contract.endSeason). */
+  endSeason: number;
 }
 
 export interface FreeAgency {
@@ -118,7 +133,12 @@ export interface FreeAgency {
   formerClubId: ClubId | null;
   releasedByClubId: ClubId | null;
   releasedSeason: number | null;
+  /** When he entered the pool (market "new this week"). Optional in the type for hand-built fixtures; core always writes it. */
+  enteredAt?: GameTime;
 }
+
+/** Injury.weeksOut of a career-ending injury (never counts down to fit). */
+export const CAREER_ENDING_WEEKS = 999;
 
 /** P-11 ladder (knock, minor, moderate, serious); scars are traits. */
 export interface Injury {
@@ -132,6 +152,8 @@ export interface Injury {
   /** Size of the hit as basis points of max HP. */
   damageBp: number;
   since: GameTime;
+  /** Career-ending (P-11 top rung): unavailable for good, retires at season end. Absent = false. */
+  careerEnding?: boolean;
 }
 
 /** Lifetime totals. */
@@ -167,7 +189,11 @@ export interface FighterSeasonRow {
   clubId: ClubId | null;
   rating: number;
   potential: number;
-  /** Display stats at season end. */
+  /**
+   * Display stats at season end. Kept on the last HISTORY_STATS_ROWS rows only
+   * (the fighter screen and the season review compare the latest two); older
+   * rows hold {} to bound the save (05 §5).
+   */
   stats: Record<StatId, number>;
   xp: number;
   /** Share of possible rounds started, basis points. */
@@ -175,6 +201,17 @@ export interface FighterSeasonRow {
   injuries: number;
   traitsGained: TraitId[];
   traitsLost: TraitId[];
+}
+
+/** Rows of Fighter.history that keep their display stats (FighterSeasonRow.stats). */
+export const HISTORY_STATS_ROWS = 2;
+
+/** Blank the display stats of rows older than the last HISTORY_STATS_ROWS (in place). */
+export function trimHistoryStats(history: FighterSeasonRow[]): void {
+  for (let i = 0; i < history.length - HISTORY_STATS_ROWS; i++) {
+    const row = history[i]!;
+    if (Object.keys(row.stats).length > 0) row.stats = {} as Record<StatId, number>;
+  }
 }
 
 /** Reserved for M5. */

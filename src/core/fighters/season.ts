@@ -10,6 +10,8 @@ import {
 import {
   emptySeasonCounters,
   idNumber,
+  setMembership,
+  trimHistoryStats,
   type ClubId,
   type Fighter,
   type FighterId,
@@ -29,7 +31,7 @@ import { BP, bp, roundN } from './fixed';
 import { createFighterOn } from './generation';
 import { pushNews } from './news';
 import { retirementChanceWith } from './retirement';
-import { effectiveStatsOf, fighterHumanAge100, potentialOf, ratingOf } from './stats';
+import { effectiveStatsOf, fighterHumanAge100, freshRatingOf, potentialOf, ratingOf } from './stats';
 import { tables } from './tables';
 import { removeTrait } from './traits';
 
@@ -184,6 +186,7 @@ export function seasonEndDevelopmentOn(draft: GameState, content: ContentDB): Ne
       ],
       traitsLost: changes.filter((c) => c.change === 'lost').map((c) => c.traitId as TraitId),
     });
+    trimHistoryStats(f.history);
     f.season = emptySeasonCounters();
     f.age += 1;
   }
@@ -221,8 +224,7 @@ export function seasonEndRetirementsOn(draft: GameState, content: ContentDB): Re
     records.push(record);
     pushNews(draft, { key: 'fighter.retired', clubId: f.clubId, fighterId: f.id, params: { age: ageDuring, cause: record.cause } });
     // Contracts end without payout (index.ts contract); the fighter leaves every roster.
-    f.status = 'retired';
-    f.clubId = null;
+    setMembership(draft, f, null, 'retired');
     f.contract = null;
     f.freeAgency = null;
     f.finalSeason = false;
@@ -319,10 +321,11 @@ export function trendDelta(f: Fighter, content: ContentDB, trainingOn = content.
   const projectedWeeks = { ...f.season.emphasisWeeks };
   const remaining = Math.max(0, t.weeksPerSeason - processed);
   projectedWeeks[f.trainingEmphasis] += remaining;
+  // A scratch copy changed between the two ratings: never memoized.
   const copy = cloneJson(f);
-  const before = ratingOf(copy, content);
+  const before = freshRatingOf(copy, content);
   developSeason(copy, content, { seasonXp: projected, mentor: 1, emphasisWeeks: projectedWeeks, trainingEnabled: trainingOn });
-  return ratingOf(copy, content) - before;
+  return freshRatingOf(copy, content) - before;
 }
 
 export function trendId(f: Fighter, content: ContentDB): string {

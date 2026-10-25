@@ -7,6 +7,8 @@
 import type { CaptaincyGradeDef, ContentDB } from '../../content';
 import type { CaptaincyValue, FighterSpec, MatchLifecycleOutcome, StatContext } from '../../fighters';
 import {
+  putFighter,
+  setMembership,
   allocateId,
   asId,
   emptyCareerStats,
@@ -78,7 +80,7 @@ function createFighter(draft: GameState, spec: FighterSpec, content: ContentDB):
     learnedAbilityIds: [],
     academy: null,
   };
-  draft.fighters[id] = f;
+  putFighter(draft, f);
   return id;
 }
 
@@ -185,8 +187,7 @@ function seasonEndRetirements(draft: GameState, content: ContentDB): RetirementR
     const rec: RetirementRecord = { fighterId: f.id, age: f.age, lastClubId: f.clubId, proSeasons: f.career.proSeasons, peakRating: f.career.peakRating, cause: 'age' };
     out.push(rec);
     draft.history[draft.history.length - 1]?.retirements.push(rec);
-    f.status = 'retired';
-    f.clubId = null;
+    setMembership(draft, f, null, 'retired');
     f.contract = null;
     f.freeAgency = null;
   }
@@ -230,6 +231,7 @@ export function standInFighters(): Port {
       const cq = captaincy(state, fighterId, clubId, content).cq - (isClubCaptain ? 0 : content.development.captaincy.actingCaptainCqPenalty);
       return { fighterId, index, cqForFight: Math.max(0, cq), isClubCaptain, viceIndex: viceIndex >= 0 && viceIndex !== index ? viceIndex : null };
     },
+    captainChangeConsequences: () => ({ snubbedId: null, snubExemption: null, passedOverIds: [] }),
     lineupLock: () => [],
     applyMatchLifecycle,
     weeklyLifecycle,

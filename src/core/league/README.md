@@ -27,7 +27,8 @@ Specs: 03-league-economy sys-league, sys-calendar, sys-tournament; 03 §3.3; dat
   5. Later steps.
   6. `setupSeason(draft, season + 1, content)`. The archive must already be in history and the moves applied.
   7. `draft.calendar = seasonStartCalendar(season + 1, content)`.
-  8. `compactHistory(draft, content)`.
+  8. Later steps (rookies, finance setup, the AI phase).
+  9. `compactHistory(draft, content)`, last, after every step has read the ending season.
 - `leagueSeasonColumns(state, record, clubId)` returns the league-owned columns of `ClubSeasonRow`. Game merges in the economy columns.
 
 ## Decisions (for the architect to merge as tech- entries)
@@ -38,7 +39,9 @@ Specs: 03-league-economy sys-league, sys-calendar, sys-tournament; 03 §3.3; dat
 5. **Reckoning shape.** The competition's `clubIds` are the seeds; `wings` and `seedOrder` are empty. `BracketTie.home` and `away` are bracket positions in content order. The fixture's home club is the higher seed, which also holds at the neutral final (`homeSideForSim`). Pair tokens such as `"QF1"` use the code map QF/SF/F of the closed round vocabulary. A round without `pairs` pairs the previous round's winners in order.
 6. **Statuses.** A league goes `scheduled` → `in-progress` → `completed` when every fixture is played (`seedReckonings` also marks it completed). A Reckoning becomes `completed` when the final is recorded.
 7. **Archive.** `TierSeasonRecord.promotedIds` and `relegatedIds` list the clubs that left *that* tier, up or down. Promotions are in route order (reckoning, then shield). `shieldWinnerId` is always tier-table #1, even when the Shield promotion route passes to #2.
-8. **Compaction.** `RESULT_RETENTION_SEASONS = 2` (TUNABLE (tech), 05 §5) keeps the current and previous season in full. Older results keep their ids, score, winner, round summaries, MVP and hired blades. They drop the sim fighters, per-round final HP and per-fighter stats. `isCompactedResult()` tells the match report that it cannot re-simulate such a result. Tables of compacted seasons come from `history`; live standings would lose their downs.
+8. **Retention.** `RESULT_RETENTION_SEASONS = 2` (TUNABLE (tech), 05 §5). At the start of season N (end of the season-end step) the competitions, fixtures and results of seasons before N − 1 are deleted, and season N − 1 results are compacted, except the player club's matches, which stay in full until they are deleted. A compacted result keeps its ids, score, winner, round summaries, MVP and hired blades; it drops the sim fighters, per-round final HP and per-fighter stats. `isCompactedResult()` tells the match report that it cannot re-simulate such a result. Tables of past seasons come from `history`. Results are write-once and shared between states (core/model `beginTransition`), so compaction replaces an entry (`putResult`) and never edits one in place.
+10. **Reckoning stages.** `TierSeasonRecord.reckoningStages` records each participant's furthest stage (quarterfinal, semifinal, final, champion); it matches `ClubSeasonRow.reckoning`.
+11. **Indexes.** Fixtures and results are written only through `putFixture`, `putResult`, `removeFixture` and `removeResult` (core/model indexes); `fixturesForWeek` reads the week index and needs `content` for the tier order.
 9. **Failures.** Every broken invariant throws `InvariantError`: unknown or replayed fixtures, a score that is not a decided best-of-N, a schedule that fails validation, a season set up twice, wrong tier sizes, an unfinished Reckoning at promotion time, or an invalid move.
 
 ## Tests

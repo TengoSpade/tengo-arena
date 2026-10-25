@@ -9,6 +9,7 @@
  */
 import type { ContentDB } from '../content';
 import {
+  setMembership,
   asId,
   createEmptyGameState,
   type Club,
@@ -88,7 +89,7 @@ export function createWorld(ports: GamePorts, content: ContentDB, params: NewGam
 
   // Rosters at rosterFillOfCap of the cap (toward zero, 03 §1), clubs in clubs.json order. The fighters join
   // their club here without a contract: economy.initialFinances writes the contracts (1/2/3 seasons in equal
-  // shares at each fighter's ask), the greed rolls, the finances and the 95%-of-WB trim.
+  // shares at each fighter's ask), the greed rolls, the finances and the opening bills rescaled into 82-92% of WB.
   const gen = content.development.generation;
   for (const t of content.clubs.list) {
     const club = draft.clubs[asId<ClubId>(t.id)]!;
@@ -102,8 +103,7 @@ export function createWorld(ports: GamePorts, content: ContentDB, params: NewGam
       const spec = { kind: 'worldgen' as const, potentialShift: tier.worldGenPotentialShift, regionId: club.regionId };
       const id = ports.fighters.createFighter(draft, WORLDGEN_RATING_IN_TIER_BAND ? { ...spec, ratingTarget } : spec, content);
       const f = draft.fighters[id]!;
-      f.clubId = club.id;
-      f.status = 'active';
+      setMembership(draft, f, club.id, 'active');
       f.freeAgency = null;
     }
   }

@@ -6,7 +6,7 @@
  */
 import type { ContentDB } from '../content';
 import type { ClassId, ClubId, Fighter, FighterId, GameState, RegionId } from '../model';
-import { asId } from '../model';
+import { asId, setMembership, type GameTime } from '../model';
 import { Rng, STREAM } from '../rng';
 import { fighterIsFit, generateFighter, type FighterSpec } from './fighter-values';
 import { clubsInOrder, compareFighterIds, poolFighters, profileOf, roleFamiliesOf, rosterOf, tierOf } from './queries';
@@ -29,16 +29,20 @@ export function rollContractProfileImpl(draft: GameState, fighterId: FighterId, 
   f.contractProfile = { greedBp: g.minBp + g.stepBp * rng.int(0, steps) };
 }
 
-function freeAgencyBlank(): NonNullable<Fighter['freeAgency']> {
-  return { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null };
+function freeAgencyBlank(at: GameTime): NonNullable<Fighter['freeAgency']> {
+  return { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null, enteredAt: at };
+}
+
+/** Game time stamp for "entered the pool" (FreeAgency.enteredAt). */
+export function nowOf(state: GameState): GameTime {
+  return { season: state.calendar.season, weekIndex: state.calendar.weekIndex };
 }
 
 /** Mark a fighter as an unattached free agent (pool or trials rookie). */
-export function makeFreeAgent(f: Fighter): void {
-  f.clubId = null;
+export function makeFreeAgent(state: GameState, f: Fighter): void {
+  setMembership(state, f, null, 'free-agent');
   f.contract = null;
-  f.status = 'free-agent';
-  if (!f.freeAgency) f.freeAgency = freeAgencyBlank();
+  if (!f.freeAgency) f.freeAgency = freeAgencyBlank(nowOf(state));
 }
 
 // ---- Trials Day (P-18, D-H) -------------------------------------------------------------------------------
@@ -55,7 +59,7 @@ export function assignTrialsRookies(draft: GameState, rookieIds: readonly Fighte
   const valid = rookieIds.filter((id) => draft.fighters[id] !== undefined).slice().sort(compareFighterIds);
   for (const id of valid) {
     const f = draft.fighters[id]!;
-    makeFreeAgent(f);
+    makeFreeAgent(draft, f);
     rollContractProfileImpl(draft, id, content);
   }
   const rng = Rng.create(draft.rng.root, STREAM.rookies, season, 'trials-day');
@@ -76,6 +80,14 @@ export function assignTrialsRookies(draft: GameState, rookieIds: readonly Fighte
 
 /** Week processing step 7 (P1): unsigned trials rookies enter the free-agent pool. */
 export function releaseTrialsRookiesImpl(draft: GameState): void {
+  // Unsigned trials rookies join the open pool now ("new this week" on the market).
+  const at = nowOf(draft);
+  for (const ids of Object.values(draft.market.trialsRookies)) {
+    for (const id of ids ?? []) {
+      const f = draft.fighters[id];
+      if (f && f.status === 'free-agent' && f.freeAgency) f.freeAgency.enteredAt = at;
+    }
+  }
   draft.market.trialsRookies = {};
 }
 
@@ -134,8 +146,7 @@ export function assignHiredBladesImpl(draft: GameState, content: ContentDB): Rec
       const id = generateFighter(draft, spec, content);
       const blade = draft.fighters[id]!;
       rollContractProfileImpl(draft, id, content);
-      blade.status = 'hired-blade';
-      blade.clubId = club.id;
+      setMembership(draft, blade, club.id, 'hired-blade');
       blade.freeAgency = null;
       // One-week record outside the roster (03 sys-contracts); charged at this week's processing.
       blade.contract = {
@@ -145,6 +156,7 @@ export function assignHiredBladesImpl(draft: GameState, content: ContentDB): Rec
         endSeason: now.season,
         signedAt: { season: now.season, weekIndex: now.weekIndex },
         dropClauseApplied: false,
+        next: null,
       };
       present.push(blade);
       ids.push(id);
@@ -191,7 +203,7 @@ export function topUpFreeAgentPoolImpl(draft: GameState, content: ContentDB): Fi
     if (lowest) spec.ratingTarget = rng.int(lowest.ratingBand.min, lowest.ratingBand.max);
     const id = generateFighter(draft, spec, content);
     const f = draft.fighters[id]!;
-    makeFreeAgent(f);
+    makeFreeAgent(draft, f);
     rollContractProfileImpl(draft, id, content);
     created.push(id);
   };
@@ -220,12 +232,11 @@ export function poolMaintenanceImpl(draft: GameState, content: ContentDB): Fight
   const limit = content.development.retirement.unsignedSeasonEndsBeforeLeaving;
   const leavers: FighterId[] = [];
   for (const f of poolFighters(draft)) {
-    const fa = f.freeAgency ?? freeAgencyBlank();
+    const fa = f.freeAgency ?? freeAgencyBlank(nowOf(draft));
     fa.unsignedSeasonEnds += 1;
     f.freeAgency = fa;
     if (fa.unsignedSeasonEnds >= limit) {
-      f.status = 'retired';
-      f.clubId = null;
+      setMembership(draft, f, null, 'retired');
       f.contract = null;
       leavers.push(f.id);
     }

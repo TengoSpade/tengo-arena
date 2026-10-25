@@ -19,3 +19,6 @@ export type * from './report';
 export * from './game-state';
 export * from './save';
 export { createEmptyGameState } from './factories';
+export * from './alumni';
+export * from './indexes';
+export * from './transition';

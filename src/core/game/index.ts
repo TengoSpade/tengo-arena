@@ -2,10 +2,11 @@
  * core/game — the season engine and the only entry points that change
  * GameState (03-league-economy sys-calendar order; 02 §3). Owner: WP5.
  *
- * Transitions are pure: (state, content) -> new state on a JSON-cloned
- * draft; on error they return err(...) and leave the input untouched. Weekly
- * order: leagues.json calendar.weekProcessingOrder; season end:
- * calendar.seasonEndOrder. Match seed = deriveSeed(root, STREAM.match,
+ * Transitions are pure: (state, content) -> new state on a draft from
+ * core/model beginTransition (mutable parts copied, write-once results,
+ * history and alumni shared); on error they return err(...) and leave the
+ * input untouched. Weekly order: leagues.json calendar.weekProcessingOrder;
+ * season end: calendar.seasonEndOrder. Match seed = deriveSeed(root, STREAM.match,
  * season, fixtureId); simulation in fixturesForWeek order.
  *
  * The functions below run on the real modules. createGameEngine(ports) gives
@@ -28,12 +29,12 @@ import type {
 import type { EngineError, Result } from '../util';
 import { createGameEngine, type CommandOutcome } from './engine';
 import { realGamePorts } from './ports';
-import type { FighterView, ReleasePreview } from './views';
+import type { CaptaincyPreview, FighterView, ReleasePreview } from './views';
 import type { NewGameParams } from './world';
 
 export { createGameEngine } from './engine';
 export type { CommandOutcome, GameEngine } from './engine';
-export type { FighterView, ReleasePreview } from './views';
+export type { CaptaincyPick, CaptaincyPreview, FighterView, ReleasePreview } from './views';
 export type { DetailedMatchReport, FighterRuleDetail } from './match';
 export type { NewGameParams } from './world';
 export type { AiRejection, PhaseLog } from './week';
@@ -115,3 +116,13 @@ export function releasePreview(state: GameState, clubId: ClubId, fighterId: Figh
   return engine.releasePreview(state, clubId, fighterId, content);
 }
 
+/** Captaincy-change preview: proposed captain and vice CQ, Snubbed / Passed Over at the next lock, chemistry before and after. */
+export function captaincyPreview(
+  state: GameState,
+  clubId: ClubId,
+  captainId: FighterId | null,
+  viceCaptainId: FighterId | null,
+  content: ContentDB,
+): CaptaincyPreview | null {
+  return engine.captaincyPreview(state, clubId, captainId, viceCaptainId, content);
+}
