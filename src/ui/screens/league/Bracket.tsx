@@ -11,6 +11,7 @@ import { fmtMoney } from './lib/format';
 import { isRoundId, roundName, type RoundId } from './lib/calendar';
 import { href } from './lib/store';
 import { t } from './text';
+import './league.css';
 
 export interface BracketTeam {
   seed: number | null;

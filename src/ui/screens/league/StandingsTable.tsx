@@ -12,6 +12,7 @@ import { fmtSigned } from './lib/format';
 import { sortBy, SortTh, useSort } from './lib/sort';
 import { FormStrip } from './lib/ui';
 import { t } from './text';
+import './league.css';
 
 export interface Zones {
   /** Rows 1..qualifiers reach the Reckoning (wing tables). */
