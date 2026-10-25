@@ -19,7 +19,7 @@ import {
   type TacticsAssignment,
   type TacticsPresetId,
 } from '../model';
-import { engineError, type EngineError } from '../util';
+import { engineError, getOwn, type EngineError } from '../util';
 import type { GamePorts } from './ports';
 
 export function fail(code: string, message: string, details?: Record<string, unknown>): { ok: false; error: EngineError } {
@@ -45,7 +45,7 @@ export function rosterOf(state: GameState, clubId: ClubId): Fighter[] {
 }
 
 export function onRoster(state: GameState, clubId: ClubId, fighterId: FighterId): Fighter | null {
-  const f = state.fighters[fighterId];
+  const f = getOwn(state.fighters, fighterId);
   return f && f.clubId === clubId && f.status === 'active' ? f : null;
 }
 

@@ -239,6 +239,49 @@ describe('migrations', () => {
   });
 });
 
+describe('tampered saves: inherited names as ids or keys', () => {
+  const state = world();
+  const env = envelopeOf(state);
+  const code = (json: string): string | null => {
+    const r = parseSave(json, content);
+    return r.ok ? null : r.error.code;
+  };
+  const tamper = (edit: (s: GameState) => void): string => {
+    const e = cloneJson(env);
+    edit(e.state);
+    return reseal(e);
+  };
+  const someFighter = (s: GameState) => Object.values(s.fighters).find((f) => f.contract !== null)!;
+
+  it('rejects inherited names as ids: player club, lineup, contract, ledger, news', () => {
+    for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__', 'valueOf']) {
+      expect(code(tamper((s) => { s.playerClubId = asId(name); }))).toBe('save.structure');
+      expect(code(tamper((s) => { Object.values(s.clubs)[0]!.lineup.fighters[0]!.fighterId = asId(name); }))).toBe('save.structure');
+      expect(code(tamper((s) => { someFighter(s).contract!.clubId = asId(name); }))).toBe('save.structure');
+      expect(code(tamper((s) => { s.ledger.entries.push({ seq: s.ledger.nextSeq, season: 1, weekIndex: 1, clubId: asId(name), amount: 0, category: 'operations' }); s.ledger.nextSeq += 1; }))).toBe('save.structure');
+      expect(code(tamper((s) => { s.news.push({ id: asId('n-990'), at: { season: 1, weekIndex: 1 }, key: 'x', params: {}, clubId: asId(name), refs: {}, importance: 'info', read: false }); s.ids.news = 991; }))).toBe('save.structure');
+      expect(code(tamper((s) => { Object.values(s.clubs)[0]!.shortlist.push(asId(name)); }))).toBe('save.structure');
+    }
+  });
+
+  it('rejects inherited names and __proto__ as map keys (clubs, fighters, ledger balances, lineup tactics)', () => {
+    const own = (obj: object, key: string, value: unknown) => Object.defineProperty(obj, key, { value, enumerable: true, writable: true, configurable: true });
+    for (const name of ['__proto__', 'constructor', 'toString']) {
+      expect(code(tamper((s) => { own(s.clubs, name, cloneJson(Object.values(s.clubs)[0]!)); }))).toBe('save.structure');
+      expect(code(tamper((s) => { own(s.fighters, name, cloneJson(someFighter(s))); }))).toBe('save.structure');
+      expect(code(tamper((s) => { own(s.ledger.openingBalances, name, 0); }))).toBe('save.structure');
+      expect(code(tamper((s) => { own(Object.values(s.clubs)[0]!.lineup.tactics, name, { kind: 'preset', presetId: 'x' }); }))).toBe('save.structure');
+    }
+  });
+
+  it('validateState names the path; a clean world has none', () => {
+    const s = world();
+    expect(validateState(s, content)).toEqual([]);
+    s.playerClubId = asId('constructor');
+    expect(validateState(s, content)).toEqual([{ path: 'playerClubId', message: 'reserved name "constructor" is not a valid id' }]);
+  });
+});
+
 describe('validateState', () => {
   it('accepts the fixture world', () => {
     expect(validateState(world(), content)).toEqual([]);

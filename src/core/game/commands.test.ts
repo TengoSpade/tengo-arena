@@ -48,6 +48,11 @@ describe('club.choose', () => {
     expect(s.playerClubId).toBe(c);
     expect(code(s, { type: 'club.choose', clubId: c })).toBe('club.already-chosen');
     expect(code(base, { type: 'club.choose', clubId: asId<ClubId>('nowhere') })).toBe('club.unknown');
+    // Inherited names are never clubs or fighters (tampered input).
+    for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+      expect(code(base, { type: 'club.choose', clubId: asId<ClubId>(name) })).toBe('club.unknown');
+      expect(code(base, { type: 'shortlist.toggle', clubId: clubs(base)[0]!, fighterId: asId<FighterId>(name) })).toBe('shortlist.unknown-fighter');
+    }
   });
 });
 

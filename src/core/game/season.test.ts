@@ -3,7 +3,7 @@ import { asId, personName, type ClubId, type FighterId, type GameState } from '.
 import { STREAM, deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
 import { cloneJson, deepFreeze, hashString, stableStringify } from '../util';
-import { createGameEngine, createStandInPorts, type GameEngine } from './index';
+import { createGameEngine, createStandInPorts, realGamePorts, type GameEngine } from './index';
 
 const content = fixtureContent();
 const checksum = (state: unknown): string => hashString(stableStringify(state));
@@ -66,6 +66,59 @@ describe('createWorld', () => {
   it('rejects an invalid seed', () => {
     const r = newEngine().createWorld(content, { rootSeed: '' });
     expect(r.ok ? null : r.error.code).toBe('world.seed');
+  });
+});
+
+describe('season-1 start (D-P)', () => {
+  const engine = createGameEngine(realGamePorts);
+  let s: GameState;
+  beforeAll(() => {
+    s = world(engine, 'start-1');
+  }, 60_000);
+
+  it('a Trials Day class of exactly one rookie per club, from the rookie generator', () => {
+    const clubs = Object.keys(s.clubs).sort();
+    expect(Object.keys(s.market.trialsRookies).sort()).toEqual(clubs);
+    for (const c of clubs) expect(s.market.trialsRookies[c as ClubId]).toHaveLength(1);
+    const ids = Object.values(s.market.trialsRookies).flat();
+    expect(new Set(ids).size).toBe(clubs.length);
+    for (const id of ids) expect(s.fighters[id]).toMatchObject({ status: 'free-agent', debutSeason: 1, contract: null });
+  });
+
+  it('the AI season-start setup ran for every club before P1: captain, vice, lineup, opening offers', () => {
+    for (const c of Object.values(s.clubs)) {
+      expect(c.captainId).not.toBeNull();
+      expect(c.viceCaptainId).not.toBeNull();
+      expect(c.lineup.fighters).toHaveLength(5);
+    }
+    expect(s.market.offers.length).toBeGreaterThan(0);
+    // Trials signings wait for the first processing: every trials rookie is still unsigned.
+    for (const id of Object.values(s.market.trialsRookies).flat()) expect(s.fighters[id]!.clubId).toBeNull();
+  });
+
+  it('the first P1 processing: AI clubs sign trials rookies, the player decides on their own', () => {
+    const player = Object.keys(s.clubs).sort()[3] as ClubId;
+    const own = s.market.trialsRookies[player]![0]!;
+    const chosen = engine.applyCommand(s, { type: 'club.choose', clubId: player }, content);
+    if (!chosen.ok) throw new Error(chosen.error.message);
+    const r = engine.advanceWeek(chosen.value.state, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const p1 = r.value.state;
+    expect(p1.fighters[own]!.clubId).toBeNull(); // not signed for the player
+    const signed = Object.entries(s.market.trialsRookies).filter(([c, [id]]) => c !== player && p1.fighters[id!]?.clubId === c);
+    expect(signed.length).toBeGreaterThan(0);
+  });
+
+  it('starting balance and the first grant installment are counted once', () => {
+    for (const c of Object.values(s.clubs)) {
+      const setup = s.ledger.entries.filter((e) => e.clubId === c.id);
+      const grants = setup.filter((e) => e.category === 'centralGrant');
+      expect(grants).toHaveLength(1);
+      const grant = content.tierProfile(content.tiers.require(c.tierId).level).centralGrant;
+      expect(grants[0]!.amount).toBe(Math.trunc(grant / 2));
+      // P1 balance = starting balance (opening) + the setup credits, nothing else.
+      expect(c.finance.balance).toBe(s.ledger.openingBalances[c.id]! + setup.reduce((a, e) => a + e.amount, 0));
+    }
   });
 });
 

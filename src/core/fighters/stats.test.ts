@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { combatRating } from '../content';
 import { fixtureContent, makeFixtureFighter } from '../testkit';
 import type { ClassId, RaceId, StatId, TraitId } from '../model';
 import { effectiveStats, humanAge100, potential, rating, ratingFromStats } from './index';
@@ -35,6 +36,8 @@ describe('rating is the combat formula (sys-combat-stats, cs-001, cs-002)', () =
       for (const id of Object.keys(w)) sum += (w[id] ?? 0) * (s[id] ?? 0);
       expect(rating(f, content)).toBe(Math.round(5 * sum + 1e-9));
       expect(ratingFromStats(f.classId, s, content)).toBe(rating(f, content));
+      // D-Q: one function: the displayed rating is core/content combatRating of the integer stats combat receives.
+      expect(combatRating(content, f.classId, s)).toBe(rating(f, content));
     }
   });
 });

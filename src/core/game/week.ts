@@ -118,9 +118,12 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
   const log: PhaseLog = { rejections: [] };
   const results: MatchResult[] = [];
   try {
-    // Season 1 has no preceding season end: the AI's season-start phase (trials signings,
-    // opening offers, captains) runs here, before the first processing (P1).
-    if (cal.season === 1 && cal.weekIndex === 1) runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content), log);
+    // Season 1 has no preceding season end. World creation already ran the AI season-start
+    // setup for every club except trials signings (D-P); AI clubs sign their trials rookie here,
+    // before the first processing (P1) releases unsigned ones to the pool.
+    if (cal.season === 1 && cal.weekIndex === 1) {
+      runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content).filter((cmd) => cmd.type === 'trials.sign'), log);
+    }
 
     // 1. Simulate every fixture of the week (all fixtures are simulated here in M1).
     const fixtures = ports.league.fixturesForWeek(draft, cal.weekIndex, content).filter((f) => f.status === 'scheduled');

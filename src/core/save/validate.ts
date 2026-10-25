@@ -5,6 +5,7 @@
  */
 import type { ContentDB } from '../content';
 import { type GameState, idNumber } from '../model';
+import { isReservedName } from '../util';
 import { GameStateSchema, formatZodPath } from './schema';
 
 export interface StateIssue {
@@ -21,7 +22,49 @@ export interface StateCheck {
 
 const MAX_ISSUES_PER_GROUP = 200;
 
+function nullProto<T>(map: Record<string, T>): Record<string, T> {
+  return Object.assign(Object.create(null) as Record<string, T>, map);
+}
+
+const ID_KEY = /^(id|[a-zA-Z]+Id|captainAtLastLock)$/;
+
+/**
+ * Tampered-save guard: names every plain object inherits (constructor,
+ * toString, hasOwnProperty, __proto__, ...) are rejected as a map key anywhere
+ * in the state and as an id value (a key named id or ...Id, and every string
+ * in an array: id lists, shortlists, seeds). Such an id would look up a
+ * prototype member instead of an entry (e.g. playerClubId "constructor").
+ */
+export function reservedNameIssues(state: unknown): StateIssue[] {
+  const issues: StateIssue[] = [];
+  const add = (path: string, message: string): void => {
+    if (issues.length < MAX_ISSUES_PER_GROUP) issues.push({ path, message });
+  };
+  const walk = (v: unknown, path: string): void => {
+    if (issues.length >= MAX_ISSUES_PER_GROUP || v === null || typeof v !== 'object') return;
+    if (Array.isArray(v)) {
+      v.forEach((x: unknown, i) => {
+        if (typeof x === 'string' && isReservedName(x)) add(`${path}[${i}]`, `reserved name "${x}" is not a valid id`);
+        else walk(x, `${path}[${i}]`);
+      });
+      return;
+    }
+    const obj = v as Record<string, unknown>;
+    for (const k of Object.keys(obj)) {
+      const p = path === '' ? k : `${path}.${k}`;
+      if (isReservedName(k)) add(p, `reserved name "${k}" is not a valid key`);
+      const x = Object.getOwnPropertyDescriptor(obj, k)?.value as unknown;
+      if (typeof x === 'string' && ID_KEY.test(k) && isReservedName(x)) add(p, `reserved name "${x}" is not a valid id`);
+      else walk(x, p);
+    }
+  };
+  walk(state, '');
+  return issues;
+}
+
 export function structureIssues(state: unknown): StateIssue[] {
+  const reserved = reservedNameIssues(state);
+  if (reserved.length > 0) return reserved;
   const parsed = GameStateSchema.safeParse(state);
   if (parsed.success) return [];
   return parsed.error.issues.slice(0, MAX_ISSUES_PER_GROUP).map((i) => ({ path: formatZodPath(i.path), message: i.message }));
@@ -97,10 +140,12 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
   const add = (path: string, message: string): void => {
     if (issues.length < MAX_ISSUES_PER_GROUP) issues.push({ path, message });
   };
-  const clubs = state.clubs as Record<string, GameState['clubs'][keyof GameState['clubs']]>;
-  const fighters = state.fighters as Record<string, GameState['fighters'][keyof GameState['fighters']]>;
-  const fixtures = state.fixtures as Record<string, GameState['fixtures'][keyof GameState['fixtures']]>;
-  const competitions = state.competitions as Record<string, GameState['competitions'][keyof GameState['competitions']]>;
+  // Null-prototype copies: a lookup by any id string finds an entry or nothing, never an inherited member.
+  const clubs = nullProto(state.clubs as Record<string, GameState['clubs'][keyof GameState['clubs']]>);
+  const fighters = nullProto(state.fighters as Record<string, GameState['fighters'][keyof GameState['fighters']]>);
+  const fixtures = nullProto(state.fixtures as Record<string, GameState['fixtures'][keyof GameState['fixtures']]>);
+  const competitions = nullProto(state.competitions as Record<string, GameState['competitions'][keyof GameState['competitions']]>);
+  const opening = nullProto(state.ledger.openingBalances as Record<string, number>);
   const isClub = (id: string | null): boolean => id === null || clubs[id] !== undefined;
   const isFighter = (id: string | null): boolean => id === null || fighters[id] !== undefined;
 
@@ -145,7 +190,7 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
     }
     for (const fid of Object.keys(c.lineup.tactics)) if (!isFighter(fid)) add(`${p}.lineup.tactics`, `unknown fighter "${fid}"`);
     for (const fid of c.shortlist) if (!isFighter(fid)) add(`${p}.shortlist`, `unknown fighter "${fid}"`);
-    if (state.ledger.openingBalances[c.id] === undefined) add(`ledger.openingBalances.${cid}`, 'missing');
+    if (opening[c.id] === undefined) add(`ledger.openingBalances.${cid}`, 'missing');
   }
 
   // fighters
@@ -182,7 +227,7 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
     if (!isClub(x.homeClubId)) add(`${p}.homeClubId`, 'unknown club');
     if (!isClub(x.awayClubId)) add(`${p}.awayClubId`, 'unknown club');
     if (x.homeClubId === x.awayClubId) add(p, 'a club plays itself');
-    const played = (state.results as Record<string, unknown>)[xid] !== undefined;
+    const played = Object.hasOwn(state.results, xid);
     if (played !== (x.status === 'played')) add(`${p}.status`, `status "${x.status}" but result ${played ? 'present' : 'missing'}`);
   }
   for (const [xid, r] of Object.entries(state.results)) {
@@ -215,9 +260,9 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
   });
   if (state.ledger.nextSeq <= prevSeq) add('ledger.nextSeq', `${state.ledger.nextSeq} <= last entry seq ${prevSeq}`);
   for (const [cid, c] of Object.entries(clubs)) {
-    const opening = state.ledger.openingBalances[c.id] ?? 0;
-    const expected = opening + (sums.get(cid) ?? 0);
-    if (c.finance.balance !== expected) add(`clubs.${cid}.finance.balance`, `balance ${c.finance.balance} != opening ${opening} + ledger ${expected - opening}`);
+    const start = opening[c.id] ?? 0;
+    const expected = start + (sums.get(cid) ?? 0);
+    if (c.finance.balance !== expected) add(`clubs.${cid}.finance.balance`, `balance ${c.finance.balance} != opening ${start} + ledger ${expected - start}`);
   }
 
   // news and AI memory

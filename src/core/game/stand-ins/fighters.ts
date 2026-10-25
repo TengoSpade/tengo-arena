@@ -4,7 +4,7 @@
  * in tests before (and independently of) the real module. It is NOT the
  * game's lifecycle; never wire it into the shipped game.
  */
-import type { CaptaincyGradeDef, ContentDB } from '../../content';
+import { combatRating, type CaptaincyGradeDef, type ContentDB } from '../../content';
 import type { CaptaincyValue, FighterSpec, MatchLifecycleOutcome, StatContext } from '../../fighters';
 import {
   putFighter,
@@ -97,11 +97,7 @@ function effectiveStats(f: Fighter, content: ContentDB, context?: StatContext): 
 }
 
 function rating(f: Fighter, content: ContentDB): number {
-  const stats = effectiveStats(f, content);
-  const w = content.classes.require(f.classId).ratingWeights as Record<string, number>;
-  let sumBp = 0;
-  for (const [s, v] of Object.entries(stats)) sumBp += Math.round((w[s] ?? 0) * 10000) * v;
-  return clamp(Math.trunc((5 * sumBp) / 10000), 1, 100);
+  return combatRating(content, f.classId, effectiveStats(f, content));
 }
 
 function grade(content: ContentDB, cq: number): CaptaincyGradeDef {
@@ -194,11 +190,11 @@ function seasonEndRetirements(draft: GameState, content: ContentDB): RetirementR
   return out;
 }
 
-function generateRookies(draft: GameState, content: ContentDB): FighterId[] {
+function generateRookies(draft: GameState, content: ContentDB, n?: number): FighterId[] {
   const clubs = Object.keys(draft.clubs).length;
   const prev = draft.history[draft.history.length - 1];
   const retired = prev ? prev.retirements.filter((r) => r.cause !== 'left-unsigned').length : 0;
-  const count = Math.round(clubs * 0.6) + retired;
+  const count = n ?? Math.round(clubs * 0.6) + retired;
   const ids: FighterId[] = [];
   const region = content.regions.list[0]!.id;
   for (let i = 0; i < count; i++) ids.push(createFighter(draft, { kind: 'rookie', potentialShift: 0, regionId: asId(region) }, content));

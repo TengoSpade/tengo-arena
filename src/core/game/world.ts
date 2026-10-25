@@ -116,8 +116,9 @@ export function createWorld(ports: GamePorts, content: ContentDB, params: NewGam
   }
 
   ports.league.setupSeason(draft, 1, content);
-  // Season-1 intake (02 §2 step 3: Trials Day exists in the first season too).
-  const rookies = ports.fighters.generateRookies(draft, content);
+  // Season-1 Trials Day class (D-P): exactly one rookie per club from the normal rookie generator
+  // (no season end precedes season 1, so the intake formula does not apply; later seasons use it).
+  const rookies = ports.fighters.generateRookies(draft, content, Object.keys(draft.clubs).length);
   ports.economy.initialFinances(draft, content);
   ports.economy.assignTrialsRookies(draft, rookies, 1, content);
 
@@ -126,6 +127,17 @@ export function createWorld(ports: GamePorts, content: ContentDB, params: NewGam
     for (const cmd of ports.ai.planRoster(draft, club.id, content)) {
       const r = applyToDraft(ports, draft, cmd, content);
       if (!r.ok) return fail('world.setup', `World setup command ${cmd.type} for ${club.id} failed: ${r.error.message}`, { error: r.error });
+    }
+  }
+  // AI season-start setup before P1 for every club (D-P; no club is the player's yet): the same
+  // season-start plan as after a season end (captains, vice, training emphasis, opening offers), so
+  // P1 opens with the AI's offers pending. Trials signings wait for the first P1 processing, where
+  // AI clubs sign theirs and the player's own trials rookie is the player's decision.
+  ports.ai.beginPhase();
+  for (const club of clubsInOrder(draft, content)) {
+    for (const cmd of ports.ai.planSeasonEnd(draft, club.id, content)) {
+      if (cmd.type === 'trials.sign') continue;
+      applyToDraft(ports, draft, cmd, content); // a refused AI command changes nothing (same rulebook as later seasons)
     }
   }
   ports.fighters.announceFinalSeasons(draft, content);

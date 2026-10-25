@@ -1,5 +1,6 @@
 import type { CareerStats, Fighter, PersonName } from './fighter';
 import type { GameState } from './game-state';
+import { getOwn } from '../util';
 import type { ClassId, ClubId, FighterId, RaceId, RegionId, TraitId } from './ids';
 
 /**
@@ -60,13 +61,13 @@ export type Person = { kind: 'fighter'; fighter: Fighter } | { kind: 'alumnus'; 
 
 /** Look up a fighter id among current fighters, then alumni (for names in reports, records and history). */
 export function personOf(state: GameState, id: FighterId): Person | null {
-  const f = state.fighters[id];
+  const f = getOwn(state.fighters, id);
   if (f) return { kind: 'fighter', fighter: f };
-  const a = state.alumni[id];
+  const a = getOwn(state.alumni, id);
   return a ? { kind: 'alumnus', alumnus: a } : null;
 }
 
 /** Display name of a current fighter or alumnus, or null if unknown. */
 export function personName(state: GameState, id: FighterId): PersonName | null {
-  return state.fighters[id]?.name ?? state.alumni[id]?.name ?? null;
+  return getOwn(state.fighters, id)?.name ?? getOwn(state.alumni, id)?.name ?? null;
 }

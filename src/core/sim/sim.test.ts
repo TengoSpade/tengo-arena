@@ -4,6 +4,7 @@
  * cmb-012, and a coarse speed check (the real bench is `npm run balance -- --bench`).
  */
 import { describe, expect, it, vi } from 'vitest';
+import { combatRating } from '../content';
 import { SUMMARY_EVENT_TYPES, hashEventStream, type MatchInput } from '../model';
 import { deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
@@ -172,5 +173,17 @@ describe('speed (coarse; budget numbers come from npm run balance -- --bench)', 
     for (let i = 0; i < n; i++) simulateFight({ seed: `bench-${i}`, round: 1, home: match().home, away: match().away }, content);
     const perRound = (clock() - t0) / n;
     expect(perRound).toBeLessThan(25);
+  });
+});
+
+describe('combat OVR (D-Q)', () => {
+  it('fight inputs carry the same rating formula as fighters (core/content combatRating)', () => {
+    const content = fixtureContent();
+    for (const k of content.classes.list) {
+      const stats = { str: 14, agi: 9, pac: 12, tgh: 16, pre: 7, arc: 11, spi: 5, wil: 13, cmp: 10, ldr: 18, awr: 6, dis: 12 };
+      const input = fighterInput(content, { classId: k.id, stats }, 0);
+      expect(input.rating).toBe(combatRating(content, k.id, input.stats));
+      expect(fighterInput(content, { classId: k.id }, 0).rating).toBe(combatRating(content, k.id, fighterInput(content, { classId: k.id }, 0).stats));
+    }
   });
 });

@@ -14,7 +14,7 @@
     "_capsNote": "TUNABLE (combat cmb-q11): race tendencies |x| <= 4 per stat, trait stat adds |x| <= 3 per stat; fragility/durability is expressed mainly through injury chance and recovery multipliers. Validator-enforced.",
     "ratingMin": 1,
     "ratingMax": 100,
-    "_doc": "Display stat = floor(effective centipoints / 100), clamp 1..20; this integer is what combat receives (fight setup). Effective centipoints = base centipoints + 100 * (sum of whole-point trait, status and chemistry modifiers). Rating = clamp(round(sum(w_i * eff100_i) / sum(w_i) / 20), 1, 100) with w_i = classes.json ratingWeights of the fighter's class. Potential = the same formula with every base stat at its cap, no wear, and only permanent modifiers (physique and scar traits); it therefore drops when a scar is gained (P-12 'injury' change)."
+    "_doc": "Display stat = floor(effective centipoints / 100), clamp 1..20; this integer is what combat receives (fight setup). Effective centipoints = base centipoints + 100 * (sum of whole-point trait, status and chemistry modifiers). Rating = clamp(round(5 * sum(w_i * stat_i)), 1, 100) on the integer display stats (the values combat receives; D-Q: one formula for the displayed rating, fight inputs and every rule), with w_i = classes.json ratingWeights of the fighter's class. Potential = the same formula with every base stat at its cap, no wear, and only permanent modifiers (physique and scar traits); it therefore drops when a scar is gained (P-12 'injury' change)."
   },
 
   "time": {

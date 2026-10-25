@@ -7,10 +7,10 @@
  *   stat_i         = clamp(floor(eff100_i / 100), 1, 20)    (what combat receives)
  *   rating         = clamp(round(5 × Σ ratingWeight_i × stat_i), 1, 100)   (the combat formula)
  */
-import type { ContentDB } from '../content';
+import { combatRating, type ContentDB } from '../content';
 import type { Fighter, StatId } from '../model';
 import { effectSources, hasEffect, statAdds } from './effects';
-import { BP, roundN, truncN } from './fixed';
+import { BP, truncN } from './fixed';
 import { FighterMemo } from './memo';
 import { tables, type StatGroup } from './tables';
 
@@ -93,15 +93,9 @@ export function effectiveStatsOf(fighter: Fighter, content: ContentDB, context: 
   return out;
 }
 
-/** The combat rating formula on integer stats: round(5 × Σ w_i × s_i), clamped 1-100. */
+/** The combat rating formula on integer stats (D-Q): core/content combatRating, shared with combat's OVR. */
 export function ratingFromStats(classId: string, stats: Readonly<Record<string, number>>, content: ContentDB): number {
-  const weights = tables(content).ratingWeightsBp.get(classId);
-  if (!weights) throw new RangeError(`Unknown class ${classId}`);
-  let sum = 0;
-  for (const [id, w] of Object.entries(weights)) sum += w * (stats[id] ?? 0);
-  const { ratingMin, ratingMax } = content.development.scale;
-  const r = roundN((5 * sum) / BP);
-  return r < ratingMin ? ratingMin : r > ratingMax ? ratingMax : r;
+  return combatRating(content, classId, stats);
 }
 
 const ratingMemo = new FighterMemo();
