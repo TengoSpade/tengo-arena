@@ -332,12 +332,30 @@ export class Fight {
     return g < 0 ? 0 : g;
   }
 
+  /** Positions at the last distance computation (pairs of two unmoved units keep their distance). */
+  private distX = new Int32Array(10).fill(-1);
+  private distY = new Int32Array(10).fill(-1);
+  private moved = new Uint8Array(10);
+
   computeDistances(): void {
     const us = this.units;
+    let any = false;
+    for (let i = 0; i < 10; i++) {
+      const u = us[i]!;
+      const m = u.x !== this.distX[i] || u.y !== this.distY[i] ? 1 : 0;
+      this.moved[i] = m;
+      if (m) {
+        any = true;
+        this.distX[i] = u.x;
+        this.distY[i] = u.y;
+      }
+    }
+    if (!any) return;
     for (let i = 0; i < 10; i++) {
       const a = us[i]!;
-      this.dist[i * 10 + i] = 0;
+      const mi = this.moved[i]!;
       for (let j = i + 1; j < 10; j++) {
+        if (mi === 0 && this.moved[j] === 0) continue;
         const b = us[j]!;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
@@ -598,7 +616,10 @@ export class Fight {
 
   // ---- The tick loop --------------------------------------------------------------------------------
   run(): void {
-    if (this.rec) this.emitStart();
+    if (this.rec) {
+      this.rec.begin(this.header);
+      this.emitStart();
+    }
     // round_start triggers resolve on tick 1 like every triggered effect.
     for (const u of this.units) {
       for (let k = 0; k < u.triggers.length; k++) if (u.triggers[k]!.on === 'round_start') fireTrigger(this, u, k, u.index, u.index, 0);
@@ -1009,8 +1030,13 @@ export class Fight {
   // ---- Phase 7: end check ------------------------------------------------------------------------------
   endCheck(): void {
     const t = this.tick;
-    const homeUp = this.units.some((u) => u.side === 0 && u.standing);
-    const awayUp = this.units.some((u) => u.side === 1 && u.standing);
+    let homeUp = false;
+    let awayUp = false;
+    for (const u of this.units) {
+      if (!u.standing) continue;
+      if (u.side === 0) homeUp = true;
+      else awayUp = true;
+    }
     if (homeUp && awayUp && t + 1 < this.tb.overtime.cap) return;
     this.ended = true;
     this.durationTicks = t + 1;
