@@ -3,7 +3,7 @@ import type { ContentDB } from '../content';
 import { asId, type AiPersonalityId, type ClubId, type Command, type Fighter, type FighterId, type GameState, type WeekId } from '../model';
 import { buildFixtureWorld, fixtureContent } from '../testkit';
 import { cloneJson, ok, stableStringify } from '../util';
-import { PRESET_STYLE_FOR_TACTICS_STYLE, createAi, emphasisFor, type AiPorts } from './index';
+import { createAi, emphasisFor, type AiPorts } from './index';
 
 const content: ContentDB = fixtureContent();
 const fid = (n: number): FighterId => asId<FighterId>(`f-${n}`);
@@ -90,7 +90,6 @@ describe('chooseLineup (03 sys-ai-manager procedure 8)', () => {
   });
 
   it('cmb-013: a cautious club fields the first protective preset of the class', () => {
-    expect(PRESET_STYLE_FOR_TACTICS_STYLE.cautious).toBe('protective');
     const choice = createAi(fakePorts()).chooseLineup(world(), SEALBEARERS, content);
     const oathguard = choice.fighters.find((e) => world().fighters[e.fighterId]!.classId === 'oathguard');
     expect(oathguard).toBeDefined();

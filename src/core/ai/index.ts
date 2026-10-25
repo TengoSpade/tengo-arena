@@ -17,7 +17,7 @@ import type { ClubId, Command, FighterId, GameState } from '../model';
 import { createAi, type LineupChoice } from './policy';
 import { realAiPorts } from './ports';
 
-export { createAi, emphasisFor, roleFamilies, stylePreset, PRESET_STYLE_FOR_TACTICS_STYLE } from './policy';
+export { createAi, emphasisFor, roleFamilies, stylePreset } from './policy';
 export type { AiApi, CaptainChoice, LineupChoice, RoleFamily } from './policy';
 export type { AiPorts } from './ports';
 export { realAiPorts } from './ports';

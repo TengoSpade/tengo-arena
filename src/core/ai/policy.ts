@@ -19,9 +19,10 @@ import {
   type GameState,
   type LineupEntry,
   type TacticsAssignment,
-  type TacticsPresetId,
+  type ClassId,
   type TrainingEmphasis,
 } from '../model';
+import { presetForStyle } from '../tactics';
 import type { AiPorts } from './ports';
 
 export interface LineupChoice {
@@ -73,13 +74,6 @@ export const PROVISIONAL_RANK_BY_SURPLUS: readonly string[] = ['star_chasing'];
 /** 03 sys-captaincy (D-I): an AI captain injured with >= 4 weeks left may be replaced (exempt change). */
 export const PROVISIONAL_CAPTAIN_INJURY_WEEKS = 4;
 
-/** 03 sys-tactics "Preset selection in M1": club tacticsStyle -> preset style. */
-export const PRESET_STYLE_FOR_TACTICS_STYLE: Readonly<Record<Club['tacticsStyle'], string>> = {
-  aggressive: 'aggressive',
-  steady: 'balanced',
-  cautious: 'protective',
-};
-
 /** 03 §5.2 training rule 1: this trait sends the fighter to Mind. */
 const WANDERING_MIND_TRAIT = 'wandering_mind';
 /** development.json statuses id used by the at-risk resting rule. */
@@ -111,13 +105,9 @@ export function roleFamilies(klass: ClassDef): RoleFamily[] {
   return out;
 }
 
-/** The first preset of the class with the club's mapped style (presetIds order), else the class default. */
+/** The club style's preset for the class (core/tactics presetForStyle, cmb-013). */
 export function stylePreset(klass: ClassDef, tacticsStyle: Club['tacticsStyle'], content: ContentDB): TacticsAssignment {
-  const style = PRESET_STYLE_FOR_TACTICS_STYLE[tacticsStyle];
-  for (const pid of klass.presetIds) {
-    if (content.presets.get(pid)?.style === style) return { kind: 'preset', presetId: asId<TacticsPresetId>(pid) };
-  }
-  return { kind: 'preset', presetId: asId<TacticsPresetId>(klass.defaultPresetId) };
+  return presetForStyle(asId<ClassId>(klass.id), tacticsStyle, content);
 }
 
 /** Training emphasis by the first matching rule of 03 §5.2 (D-A). */

@@ -1,6 +1,6 @@
 # core/ai
 
-**Owner:** WP5 (game loop). **Status:** implemented. Public API: `planWeek`, `planSeasonEnd`, `chooseLineup`, `valueFighter` (contract), plus `createAi(ports)`, `emphasisFor`, `roleFamilies`, `stylePreset`, `PRESET_STYLE_FOR_TACTICS_STYLE` and the `AiApi` extras `chooseCaptains`, `planRoster`, `beginPhase`.
+**Owner:** WP5 (game loop). **Status:** implemented. Public API: `planWeek`, `planSeasonEnd`, `chooseLineup`, `valueFighter` (contract), plus `createAi(ports)`, `emphasisFor`, `roleFamilies`, `stylePreset` (delegates to `tactics.presetForStyle`) and the `AiApi` extras `chooseCaptains`, `planRoster`, `beginPhase`.
 
 ## Rules kept
 - **One rulebook (P-04):** the AI only returns `Command`s; core/game validates them exactly like the player's. Tests check that planning never changes the state it reads.
