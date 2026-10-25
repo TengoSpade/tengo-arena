@@ -347,7 +347,8 @@ function StyleTile({ ctx, club }: { ctx: ClubContext; club: Club }) {
 
 function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const { state, content, tier, roster } = ctx;
-  const week = content.weekByIndex(state.calendar.weekIndex);
+  // Integrator (WP5): during the season-end step weekIndex is W + 1 (core/model calendar), which has no week def.
+  const week = content.weeks.list.find((w) => w.index === state.calendar.weekIndex) ?? content.weekByIndex(content.weeks.list.length);
   const over = roster.length - ctx.rosterCap;
   const ending = roster.filter((f) => contractEnds(f.contract, state.calendar.season).final).length;
   const lineupOk = store.blockers.value.filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')).length === 0;
