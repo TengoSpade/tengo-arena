@@ -40,9 +40,8 @@
   gap: var(--sp-1) var(--sp-4);
 }
 
-/* The champion column needs less room than a match column; give the names the
-   width so the 1920 px layout shows short names untruncated (04 art-004). */
+/* The champion column is narrower than the match columns (set inline from the
+   round count) so short names stay untruncated at 1920 px (04 art-004). */
 .league-bracket {
-  grid-template-columns: repeat(calc(var(--bracket-cols, 4) - 1), minmax(10.5rem, 1fr)) minmax(8.5rem, 0.8fr);
   --bracket-gap: 1.5rem;
 }

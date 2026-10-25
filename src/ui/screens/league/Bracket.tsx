@@ -226,7 +226,11 @@ export function BracketView({
   const prize = content.tierProfile(level).tournamentPrize;
   const champ = clubOf(state, model.championId);
   return (
-    <div class="bracket league-bracket" style={{ '--bracket-cols': model.columns.length + 1 }} data-testid="bracket">
+    <div
+      class="bracket league-bracket"
+      style={{ gridTemplateColumns: `repeat(${model.columns.length}, minmax(10.5rem, 1fr)) minmax(8.5rem, 0.8fr)` }}
+      data-testid="bracket"
+    >
       {model.columns.map((col) => {
         const pairs: BracketMatch[][] = [];
         if (col.matches.length === 1) pairs.push(col.matches);
