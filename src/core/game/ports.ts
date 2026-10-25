@@ -29,6 +29,7 @@ export interface GamePorts {
     | 'retirementChanceBp'
     | 'trend'
     | 'lineupCaptain'
+    | 'captainChangeConsequences'
     | 'lineupLock'
     | 'applyMatchLifecycle'
     | 'weeklyLifecycle'
@@ -110,6 +111,7 @@ export const realGamePorts: GamePorts = {
     retirementChanceBp: fighters.retirementChanceBp,
     trend: fighters.trend,
     lineupCaptain: fighters.lineupCaptain,
+    captainChangeConsequences: fighters.captainChangeConsequences,
     lineupLock: fighters.lineupLock,
     applyMatchLifecycle: fighters.applyMatchLifecycle,
     weeklyLifecycle: fighters.weeklyLifecycle,

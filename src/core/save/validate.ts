@@ -65,6 +65,11 @@ export function contentIssues(state: GameState, content: ContentDB): StateIssue[
     checkStatKeys(`${p}.cap100`, f.cap100);
     checkStatKeys(`${p}.wear100`, f.wear100);
   }
+  for (const [aid, a] of Object.entries(state.alumni)) {
+    // Records and history screens show an alumnus's class and race.
+    if (!content.classes.has(a.classId)) add(`alumni.${aid}.classId`, `unknown class "${a.classId}"`);
+    if (!content.races.has(a.raceId)) add(`alumni.${aid}.raceId`, `unknown race "${a.raceId}"`);
+  }
   for (const [xid, r] of Object.entries(state.results)) {
     for (const side of [r.input.home, r.input.away]) {
       for (const ff of side.fighters) {
@@ -154,6 +159,13 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
     if (f.status === 'active' && (f.clubId === null || f.contract === null)) add(`${p}.status`, 'active fighter without club or contract');
     if ((f.status === 'free-agent' || f.status === 'retired') && f.clubId !== null) add(`${p}.status`, `${f.status} fighter with clubId "${f.clubId}"`);
     if (f.freeAgency !== null && !isClub(f.freeAgency.formerClubId)) add(`${p}.freeAgency.formerClubId`, 'unknown club');
+  }
+  for (const [aid, a] of Object.entries(state.alumni)) {
+    const p = `alumni.${aid}`;
+    if (a.id !== aid) add(`${p}.id`, `key/id mismatch "${a.id}"`);
+    if (fighters[aid] !== undefined) add(p, 'also a current fighter');
+    if (!isClub(a.lastClubId)) add(`${p}.lastClubId`, `unknown club "${a.lastClubId}"`);
+    maxFighter = Math.max(maxFighter, idNumber(aid));
   }
   if (state.ids.fighter <= maxFighter) add('ids.fighter', `counter ${state.ids.fighter} <= highest fighter id ${maxFighter}`);
 

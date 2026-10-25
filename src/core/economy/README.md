@@ -23,7 +23,7 @@
 - Ledger stamps: week processing → its week; setup entries → `{newSeason, SETUP_WEEK_INDEX = 0}`; season-end prizes → `{season, W + 1}`; commands in the season-end AI phase → the coming season's setup.
 
 ## Technical decisions (for the architect, proposed `tech-` entries)
-1. **Agreed renewals** are stored as a renewal `Negotiation` with `counterWage` set and `validUntilWeek: null`; the contract's `endSeason` is extended at once and the new wage applies at setup (03: "new terms start at season-end setup"). Read it with `agreedRenewal()`. CHANGE REQUEST: `Contract.next`.
+1. **Agreed renewals** are stored on the contract: `Contract.next = { wagePerWeek, endSeason }`. The contract's `endSeason` is extended at once (`next.endSeason` equals it); the old wage is paid until next-season setup, which applies `next.wagePerWeek` and clears `next` (03: "new terms start at season-end setup"). Read it with `agreedRenewal()`. Renewal negotiations hold only open talks (patience, counters). Save v1 → v2 moves the old agreed-renewal negotiations to `Contract.next`.
 2. **Commitment rule** uses the bill with agreed renewal raises (max of current and agreed wage), so renewals cannot over-commit next season.
 3. **Registry advance prestige −5** is applied once, in the season-end prestige update (its `advancePenalty` term), not at the processing; the result is identical and keeps prestige (retainer, gate) constant in-season.
 4. **In-season grant due** is derived from the fixed SB minus its other parts (retainer and gate are constant in-season; parachute and promotion grant are read from the ledger).
@@ -31,9 +31,13 @@
 6. Counters: free-agent counters are valid through the next processing; renewal and trials counters (made during week w) through week w's processing. Trials signings use free-agent patience.
 7. Free-agent patience is per (fighter, club, season) in `market.negotiations`; `market.refusalsThisSeason` is a per-club counter only.
 8. Movement at setup is detected from the ending season's archived tier table (or its league competition) against the club's current tier; parachute/ascension counters include the current season.
-9. Pool leavers (2 unsigned season ends) get status `retired` with `freeAgency` kept; past hired blades keep status `hired-blade` with `clubId` null.
+9. Pool leavers (2 unsigned season ends) get status `retired` with `freeAgency` kept; past hired blades keep status `hired-blade` with `clubId` null. At the end of the season-end step core/game moves both, and every retired fighter, to `GameState.alumni` (slim records; `personName` finds them).
 10. Economy digest items are written for the player's club only.
 11. Final gate: computed with the higher seed's (home side) parameters, split evenly, odd unit to it.
+12. **Membership** (`clubId`, `status`) changes only through `setMembership` (core/model indexes), so roster and pool indexes stay exact. `FreeAgency.enteredAt` is the game time a fighter entered the pool (release, expiry, Trials Day release, generation).
+13. **Weekly projection.** `financeView().weeklyProjection` lists each remaining week (income, costs, net, running balance from the balance less pending signing costs); its last balance is `projectedSeasonEndBalance`.
+14. **Opening bills (new career).** Contracts are signed at asks, then each club's bill is rescaled into `budget.worldGenBillBandBp` of WB (optional economy.json key, default `{ minBp: 8200, maxBp: 9200 }`; tuning CR-1, replacing the 95% drop-trim). Only if the tier minimum keeps a bill above the band are the lowest value-per-wage fighters released, down to the AI roster minimum.
+15. **Free-agent tie-breaks** follow `market.tieBreakers` (`higherPrestige`, `higherTier`, `lot`) in content order, then the lot and club id.
 
 ## PROVISIONAL constants (OPEN, content requested)
 - `PROVISIONAL_JOURNEYMAN_HUMAN_AGE` 26–33 (03 sys-transfers) → `development.json generation.journeyman`.

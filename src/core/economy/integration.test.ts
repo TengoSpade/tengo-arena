@@ -56,8 +56,11 @@ describe('economy with real fighters (WP2)', () => {
       const roster = rosterOf(s, club.id);
       expect(roster.length).toBeGreaterThanOrEqual(content.economy.ai.rosterMinimum);
       expect(club.finance.wageBudgetPerWeek).toBeGreaterThan(0);
-      // World-generation trim: bill <= 95% of WB unless the roster is already at the minimum of 8.
-      if (roster.length > content.economy.ai.rosterMinimum) expect(wageBill(s, club.id)).toBeLessThanOrEqual(Math.trunc((club.finance.wageBudgetPerWeek * 9500) / 10000));
+      // New career: bills rescaled into budget.worldGenBillBandBp of WB (82-92%); only a roster at the minimum may stay above.
+      const band = content.economy.budget.worldGenBillBandBp;
+      const wb = club.finance.wageBudgetPerWeek;
+      expect(wageBill(s, club.id)).toBeGreaterThanOrEqual(Math.trunc((wb * band.minBp) / 10_000));
+      if (roster.length > content.economy.ai.rosterMinimum) expect(wageBill(s, club.id)).toBeLessThanOrEqual(Math.trunc((wb * band.maxBp) / 10_000));
       for (const f of roster) {
         expect(f.contract!.wagePerWeek % 5).toBe(0);
         expect(f.contract!.wagePerWeek).toBeGreaterThanOrEqual(content.tierProfile(content.tiers.require(club.tierId).level).tierMinWage);

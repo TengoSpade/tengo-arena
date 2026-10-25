@@ -207,6 +207,27 @@ describe('free-agent decisions at week processing (le-013)', () => {
     expect(f.clubId).toBe(B);
   });
 
+  it('the tie-break order comes from economy.json market.tieBreakers', () => {
+    const lotOnly = { ...content, economy: { ...content.economy, market: { ...content.economy.market, tieBreakers: ['lot' as const] } } };
+    const run = (prestigeA: number, prestigeX: number, db = content) => {
+      const s = world();
+      const X = asId<ClubId>('gullhaven-ropebinders'); // Banner, prestige 52
+      rateRoster(s, A, 50);
+      rateRoster(s, X, 50);
+      s.clubs[A]!.prestige = prestigeA;
+      s.clubs[X]!.prestige = prestigeX;
+      const f = brannoc(s);
+      makeOffer(s, { clubId: A, fighterId: f.id, wagePerWeek: 360, seasons: 2, acceptCounter: false }, db);
+      makeOffer(s, { clubId: X, fighterId: f.id, wagePerWeek: 360, seasons: 2, acceptCounter: false }, db);
+      resolveFreeAgentOffers(s, db);
+      return f.clubId;
+    };
+    // Prestige decides with the default list; with ['lot'] only the seeded lot does, whatever the prestige.
+    expect([run(51, 50), run(50, 51)]).toEqual([A, asId<ClubId>('gullhaven-ropebinders')]);
+    const byLot = run(50, 50, lotOnly);
+    expect([run(51, 50, lotOnly), run(50, 51, lotOnly)]).toEqual([byLot, byLot]);
+  });
+
   it('counter within the flex, valid through the next processing; accepting it signs at the counter price', () => {
     const s = world();
     s.playerClubId = A;

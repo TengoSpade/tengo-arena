@@ -11,6 +11,7 @@ import type { ContentDB } from '../content';
 import type { Fighter, StatId } from '../model';
 import { effectSources, hasEffect, statAdds } from './effects';
 import { BP, roundN, truncN } from './fixed';
+import { FighterMemo } from './memo';
 import { tables, type StatGroup } from './tables';
 
 /** humanAge in hundredths of a year: floor(age × 80 × 100 / lifespan). */
@@ -103,7 +104,16 @@ export function ratingFromStats(classId: string, stats: Readonly<Record<string, 
   return r < ratingMin ? ratingMin : r > ratingMax ? ratingMax : r;
 }
 
+const ratingMemo = new FighterMemo();
+const potentialMemo = new FighterMemo();
+
+/** Rating, memoized inside engine transitions (./memo.ts). */
 export function ratingOf(fighter: Fighter, content: ContentDB): number {
+  return ratingMemo.get(fighter, content, () => freshRatingOf(fighter, content));
+}
+
+/** Rating computed now, never memoized: for scratch copies that are changed between calls. */
+export function freshRatingOf(fighter: Fighter, content: ContentDB): number {
   return ratingFromStats(fighter.classId, effectiveStatsOf(fighter, content), content);
 }
 
@@ -117,5 +127,5 @@ export function potentialStats(fighter: Fighter, content: ContentDB): Record<Sta
 }
 
 export function potentialOf(fighter: Fighter, content: ContentDB): number {
-  return ratingFromStats(fighter.classId, potentialStats(fighter, content), content);
+  return potentialMemo.get(fighter, content, () => ratingFromStats(fighter.classId, potentialStats(fighter, content), content));
 }

@@ -3,7 +3,8 @@
  * player's Continue blockers (02 §3 transitions table).
  */
 import type { ContentDB } from '../content';
-import type { Blocker, ClubId, Command, Fighter, FighterId, GameState, Gold, StatId } from '../model';
+import type { SnubExemption } from '../fighters';
+import { freeAgentList, type Blocker, type ClubId, type Command, type Fighter, type FighterId, type GameState, type Gold, type StatId } from '../model';
 import type { GamePorts } from './ports';
 import { compareIds, onRoster, rosterOf } from './shared';
 
@@ -79,7 +80,7 @@ export function roster(ports: GamePorts, state: GameState, clubId: ClubId, conte
 
 /** Free agents visible on the market screen, best market wage first (when content is given), then id. */
 export function freeAgents(ports: GamePorts, state: GameState, content?: ContentDB): Fighter[] {
-  const list = Object.values(state.fighters).filter((f) => f.status === 'free-agent');
+  const list = [...freeAgentList(state)];
   const wage = new Map<string, number>();
   if (content) for (const f of list) wage.set(f.id, ports.economy.marketWage(state, f.id, content));
   return list.sort((a, b) => (wage.get(b.id) ?? 0) - (wage.get(a.id) ?? 0) || compareIds(a.id, b.id));
@@ -143,5 +144,62 @@ export function releasePreview(ports: GamePorts, state: GameState, clubId: ClubI
     balanceAfter: club.finance.balance - payout,
     capRelief: ports.economy.capReliefAllowance(state, clubId, content) > 0,
     holdsCaptaincy: club.captainId === fighterId || club.viceCaptainId === fighterId,
+  };
+}
+
+/** One side of the captaincy preview. */
+export interface CaptaincyPick {
+  fighterId: FighterId;
+  cq: number;
+  gradeId: string;
+  letter: string;
+}
+
+/**
+ * Captaincy-change preview for the captaincy screen: the proposed captain and
+ * vice with their CQ and grade, what the change does at the next lineup lock
+ * (measured against the captain at the last lock, so switching back is free,
+ * cap-003), and lineup chemistry of the current lineup with the current and
+ * the proposed club captain (status effects of the change not included).
+ */
+export interface CaptaincyPreview {
+  captain: CaptaincyPick | null;
+  vice: CaptaincyPick | null;
+  /** The previous captain who will be Snubbed at the next lock, if any. */
+  snubbedId: FighterId | null;
+  /** Why the previous captain is spared, when the captaincy changes hands and he is not Snubbed. */
+  snubExemption: SnubExemption | null;
+  /** Club-mates who will be Passed Over. */
+  passedOverIds: FighterId[];
+  chemistryBefore: number;
+  chemistryAfter: number;
+}
+
+export function captaincyPreview(
+  ports: GamePorts,
+  state: GameState,
+  clubId: ClubId,
+  captainId: FighterId | null,
+  viceCaptainId: FighterId | null,
+  content: ContentDB,
+): CaptaincyPreview | null {
+  const club = state.clubs[clubId];
+  if (!club) return null;
+  for (const id of [captainId, viceCaptainId]) if (id !== null && onRoster(state, clubId, id) === null) return null;
+  const pick = (id: FighterId | null): CaptaincyPick | null => {
+    if (id === null) return null;
+    const c = ports.fighters.captaincy(state, id, clubId, content);
+    return { fighterId: id, cq: c.cq, gradeId: c.grade.id, letter: c.grade.letter };
+  };
+  const consequences = ports.fighters.captainChangeConsequences(state, clubId, club.captainAtLastLock, captainId, viceCaptainId, club.captainSince, content);
+  const lineup = club.lineup.fighters.map((e) => e.fighterId);
+  return {
+    captain: pick(captainId),
+    vice: pick(viceCaptainId),
+    snubbedId: consequences.snubbedId,
+    snubExemption: consequences.snubExemption,
+    passedOverIds: [...consequences.passedOverIds],
+    chemistryBefore: lineup.length > 0 ? ports.fighters.lineupChemistry(state, clubId, lineup, club.captainId, content) : 0,
+    chemistryAfter: lineup.length > 0 ? ports.fighters.lineupChemistry(state, clubId, lineup, captainId, content) : 0,
   };
 }

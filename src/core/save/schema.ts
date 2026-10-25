@@ -95,6 +95,8 @@ const club = z.strictObject({
 
 // ---- fighter -----------------------------------------------------------------------------------------------
 
+const personName = z.strictObject({ given: str, family: str.nullable(), epithet: str.nullable(), full: str });
+
 const careerStats = z.strictObject({
   matches: nonNegInt,
   roundsStarted: nonNegInt,
@@ -142,6 +144,7 @@ const injury = z.strictObject({
   causeFighterId: nullableId,
   damageBp: int,
   since: gameTime,
+  careerEnding: z.boolean().optional(),
 });
 
 const contract = z.strictObject({
@@ -151,11 +154,12 @@ const contract = z.strictObject({
   endSeason: int,
   signedAt: gameTime,
   dropClauseApplied: z.boolean(),
+  next: z.strictObject({ wagePerWeek: nonNegInt, endSeason: int }).nullable().optional(),
 });
 
 const fighter = z.strictObject({
   id,
-  name: z.strictObject({ given: str, family: str.nullable(), epithet: str.nullable(), full: str }),
+  name: personName,
   raceId: id,
   classId: id,
   originRegionId: id,
@@ -171,6 +175,7 @@ const fighter = z.strictObject({
       formerClubId: nullableId,
       releasedByClubId: nullableId,
       releasedSeason: int.nullable(),
+      enteredAt: gameTime.optional(),
     })
     .nullable(),
   potentialRoll: int,
@@ -345,6 +350,8 @@ const fighterMatchStats = z.strictObject({
   rulesNeverFired: z.array(int),
   downs: z.array(downRecord),
   opponentIds: z.array(id),
+  roundDamageTaken: z.array(int).optional(),
+  roundMaxHp: z.array(int).optional(),
 });
 
 const matchResult = z.strictObject({
@@ -424,6 +431,24 @@ const newsItem = z.strictObject({
   read: z.boolean(),
 });
 
+const reckoningStage = z.enum(['quarterfinal', 'semifinal', 'final', 'champion']);
+
+const alumnus = z.strictObject({
+  id,
+  name: personName,
+  raceId: id,
+  classId: id,
+  originRegionId: id,
+  debutSeason: int,
+  leftSeason: int,
+  age: nonNegInt,
+  lastClubId: nullableId,
+  cause: z.enum(['age', 'career-ending-injury', 'left-unsigned', 'hired-blade']),
+  career: careerStats,
+  traitIds: z.array(id),
+  seasons: z.array(z.strictObject({ season: int, clubId: nullableId, rating: int })),
+});
+
 const seasonRecord = z.strictObject({
   season: int,
   tiers: z.array(
@@ -436,6 +461,7 @@ const seasonRecord = z.strictObject({
       shieldWinnerId: nullableId,
       promotedIds: z.array(id),
       relegatedIds: z.array(id),
+      reckoningStages: z.record(z.string(), reckoningStage).optional(),
     }),
   ),
   retirements: z.array(
@@ -477,6 +503,7 @@ export const GameStateSchema = z.strictObject({
   news: z.array(newsItem),
   history: z.array(seasonRecord),
   knowledge: z.null(),
+  alumni: z.record(z.string(), alumnus),
 });
 
 export const SaveMetaSchema = z.strictObject({

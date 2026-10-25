@@ -14,7 +14,19 @@
  * season's calendar (core/economy reads the ending season as season - 1).
  */
 import type { ContentDB } from '../content';
-import type { ClubSeasonRow, FighterId, GameState, NewsItem, RetirementRecord, SeasonEndReport, SeasonRecord } from '../model';
+import {
+  alumnusOf,
+  beginTransition,
+  removeFighter,
+  type ClubSeasonRow,
+  type FighterId,
+  type GameState,
+  type NewsItem,
+  type RetirementRecord,
+  type SeasonEndReport,
+  type SeasonRecord,
+} from '../model';
+import { RESULT_RETENTION_SEASONS } from '../league';
 import { NotImplementedError, cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
 import { clubsInOrder, newsSince, rosterOf, tidyAll } from './shared';
@@ -24,6 +36,44 @@ export interface SeasonEndOutcome {
   state: GameState;
   report: SeasonEndReport;
   log: PhaseLog;
+}
+
+/**
+ * Move fighters who left for good (status retired: retirements, career-ending
+ * injuries, left unsigned) and this season's hired blades into alumni, and
+ * drop references the UI keeps to them (shortlists, negotiations). Hired-blade
+ * alumni are dropped once no retained result names them (RESULT_RETENTION_SEASONS).
+ */
+function compactDeparted(draft: GameState, season: number, record: SeasonRecord): void {
+  const retirements = new Map(record.retirements.map((r) => [r.fighterId, r] as const));
+  const gone = new Set<string>();
+  for (const f of Object.values(draft.fighters)) {
+    if (f.status === 'retired') {
+      const r = retirements.get(f.id);
+      draft.alumni[f.id] = alumnusOf(f, season, r?.cause ?? 'age', r?.lastClubId ?? f.freeAgency?.formerClubId ?? null);
+    } else if (f.status === 'hired-blade' && f.clubId === null) {
+      draft.alumni[f.id] = alumnusOf(f, season, 'hired-blade', null);
+    } else continue;
+    gone.add(f.id);
+    removeFighter(draft, f.id);
+  }
+  if (gone.size > 0) {
+    for (const club of Object.values(draft.clubs)) {
+      if (club.shortlist.some((id) => gone.has(id))) club.shortlist = club.shortlist.filter((id) => !gone.has(id));
+      const lineup = club.lineup;
+      if (lineup.fighters.some((e) => gone.has(e.fighterId))) lineup.fighters = lineup.fighters.filter((e) => !gone.has(e.fighterId));
+      if (lineup.matchCaptainId !== null && gone.has(lineup.matchCaptainId)) lineup.matchCaptainId = null;
+      for (const id of Object.keys(lineup.tactics)) if (gone.has(id)) delete lineup.tactics[id as FighterId];
+    }
+    draft.market.negotiations = draft.market.negotiations.filter((n) => !gone.has(n.fighterId));
+  }
+  // Alumni nobody looks up once their results and news are gone: past hired blades and
+  // leavers who never played a match (05 §5 retention; records and history keep the rest).
+  const keepFrom = draft.calendar.season - RESULT_RETENTION_SEASONS + 1;
+  for (const a of Object.values(draft.alumni)) {
+    if (a.leftSeason >= keepFrom) continue;
+    if (a.cause === 'hired-blade' || (a.cause === 'left-unsigned' && a.career.matches === 0)) delete draft.alumni[a.id];
+  }
 }
 
 /** News retention: the current and the previous season (05 §5). */
@@ -58,7 +108,7 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
   if (state.calendar.phase !== 'season-end') {
     return err(engineError('phase.not-season-end', `The season-end step runs after the last week (now ${state.calendar.weekId ?? state.calendar.phase})`));
   }
-  const draft = cloneJson(state);
+  const draft = beginTransition(state);
   const season = draft.calendar.season;
   const newsFrom = draft.ids.news;
   const log: PhaseLog = { rejections: [] };
@@ -117,7 +167,6 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
     // 13. Next-season setup.
     ports.league.setupSeason(draft, season + 1, content);
     draft.calendar = ports.league.seasonStartCalendar(season + 1, content);
-    ports.league.compactHistory(draft, content);
     const rookies = ports.fighters.generateRookies(draft, content);
     archived.rookieIds = [...rookies];
     ports.economy.nextSeasonFinanceSetup(draft, rookies, content);
@@ -129,6 +178,10 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
     // 14. AI phase for the new season.
     runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content), log);
     tidyAll(ports, draft, content);
+    // Retention (05 §5 size): older seasons dropped, last season compacted (after every
+    // season-end step has read it), then fighters who left become slim alumni records.
+    ports.league.compactHistory(draft, content);
+    compactDeparted(draft, season, archived);
   } catch (e) {
     if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
     return err(engineError('engine.failure', `Season end failed: ${e instanceof Error ? e.message : String(e)}`, { name: e instanceof Error ? e.name : 'unknown' }));

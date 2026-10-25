@@ -6,7 +6,8 @@
  * browser, files in the desktop build) and calls these functions.
  *
  * parseSave order (05 §3.3): JSON -> format -> schemaVersion not newer
- * (save.too-new) -> checksum of the state as written (save.checksum) ->
+ * (save.too-new) -> checksum of the state as written, by the rule of the
+ * save's schema version (save.checksum; ./encode.ts) ->
  * stepwise migrations (save.migration) -> structure (save.structure) ->
  * content ids (save.content-missing; a different content hash with every id
  * present loads with a warning) -> references and the ledger invariant
@@ -24,26 +25,20 @@ import {
   type SaveKind,
   type SaveMeta,
 } from '../model';
-import { err, hashString, ok, stableStringify, type Result } from '../util';
+import { err, ok, type Result } from '../util';
+import { checksumFor, checksumV2, stateText } from './encode';
+import { MIGRATIONS, type Migration } from './migrations';
 import { EnvelopeHeaderSchema, formatZodPath } from './schema';
 import { checkState, type StateIssue } from './validate';
 
 export type { StateIssue } from './validate';
 export { GameStateSchema } from './schema';
+export { MIGRATIONS, migrateV1ToV2, type Migration } from './migrations';
+export { checksumV1 } from './encode';
 
-/** One migration step of the GameState shape. */
-export interface Migration {
-  from: number;
-  to: number;
-  migrate(state: unknown): unknown;
-}
-
-/** Ordered migrations; empty while STATE_SCHEMA_VERSION is 1. */
-export const MIGRATIONS: readonly Migration[] = [];
-
-/** hashString(stableStringify(state)). */
+/** Checksum of a current-version state (v2 rule: the state as written, ./encode.ts). */
 export function checksumState(state: GameState): string {
-  return hashString(stableStringify(state));
+  return checksumV2(state);
 }
 
 /** Meta for a save of the current state (clock values come from the platform). */
@@ -87,9 +82,20 @@ export function createSave(
   return envelope;
 }
 
-/** Plain JSON (key order does not matter: the checksum is over stableStringify). */
+/**
+ * Plain JSON, identical to JSON.stringify(envelope); the state's write-once
+ * parts reuse their cached text (./encode.ts), so an autosave costs about the
+ * mutable part of the state, not the whole career.
+ */
 export function serializeSave(envelope: SaveEnvelope): string {
-  return JSON.stringify(envelope);
+  const parts: string[] = [];
+  const env = envelope as unknown as Record<string, unknown>;
+  for (const key of Object.keys(env)) {
+    const v = env[key];
+    if (v === undefined) continue;
+    parts.push(`${JSON.stringify(key)}:${key === 'state' && v !== null && typeof v === 'object' ? stateText(v) : JSON.stringify(v)}`);
+  }
+  return `{${parts.join(',')}}`;
 }
 
 export interface ParsedSave {
@@ -136,7 +142,7 @@ export function parseSaveWith(
 
   let actual: string;
   try {
-    actual = hashString(stableStringify(env.state));
+    actual = checksumFor(env.schemaVersion, env.state);
   } catch (e) {
     return fail('save.structure', `State is not plain JSON: ${e instanceof Error ? e.message : String(e)}`);
   }

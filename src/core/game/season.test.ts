@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asId, type ClubId, type FighterId, type GameState } from '../model';
+import { asId, personName, type ClubId, type FighterId, type GameState } from '../model';
 import { STREAM, deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
 import { cloneJson, deepFreeze, hashString, stableStringify } from '../util';
@@ -120,9 +120,31 @@ describe('a full season', () => {
     expect(next.history[0]!.season).toBe(1);
     expect(next.history[0]!.tiers).toHaveLength(content.leagues.tiers.length);
     const aged = Object.values(end.fighters).filter((f) => f.status === 'active');
-    for (const f of aged.slice(0, 20)) expect(next.fighters[f.id]!.age).toBe(f.age + 1);
+    for (const f of aged.slice(0, 20)) {
+      // A fighter who retired at this season end is an alumnus now.
+      const now = next.fighters[f.id];
+      if (now) expect(now.age).toBe(f.age + 1);
+      else expect(next.alumni[f.id]).toBeDefined();
+    }
     expect(Object.values(next.fixtures).some((x) => x.season === 2)).toBe(true);
     for (const c of Object.values(next.clubs)) expect(c.history.some((h) => h.season === 1)).toBe(true);
+  });
+
+  it('season end: fighters who left become alumni and nothing on a roster still names them', () => {
+    const record = next.history[0]!;
+    expect(record.retirements.length).toBeGreaterThan(0);
+    for (const r of record.retirements) {
+      expect(next.fighters[r.fighterId]).toBeUndefined();
+      expect(next.alumni[r.fighterId]).toMatchObject({ id: r.fighterId, leftSeason: 1, lastClubId: r.lastClubId });
+      expect(personName(next, r.fighterId)).toEqual(end.fighters[r.fighterId]!.name);
+    }
+    expect(Object.values(next.fighters).some((f) => f.status === 'retired' || (f.status === 'hired-blade' && f.clubId === null))).toBe(false);
+    const gone = new Set<string>(Object.keys(next.alumni));
+    for (const c of Object.values(next.clubs)) {
+      expect(c.shortlist.filter((id) => gone.has(id))).toEqual([]);
+      expect(c.lineup.fighters.filter((e) => gone.has(e.fighterId))).toEqual([]);
+      expect(Object.keys(c.lineup.tactics).filter((id) => gone.has(id))).toEqual([]);
+    }
   });
 
   it('advanceWeek and runSeasonEnd never mutate their input (frozen states work)', () => {

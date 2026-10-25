@@ -1,4 +1,5 @@
 import type { Seed } from '../rng';
+import type { Alumnus } from './alumni';
 import type { Calendar } from './calendar';
 import type { Club } from './club';
 import type { Competition, Fixture } from './competition';
@@ -14,7 +15,7 @@ import type { NewsItem } from './news';
  * Version of the GameState shape. Any change to a persisted type in
  * core/model bumps this and adds a migration in core/save (architect-owned).
  */
-export const STATE_SCHEMA_VERSION = 1;
+export const STATE_SCHEMA_VERSION = 2;
 
 /**
  * The complete, authoritative, JSON-safe state of one career. Everything
@@ -51,6 +52,12 @@ export interface GameState {
 
   /** Reserved for M4 knowledge (per viewing club, per fighter). Always null in M1 (open-026: true values visible). */
   knowledge: IdMap<ClubId, IdMap<FighterId, KnowledgeEntry>> | null;
+  /**
+   * Fighters who left for good (retired, career-ending injury, left unsigned)
+   * and past hired blades, as slim immutable records (v2). Look names up with
+   * personOf / personName (core/model alumni.ts).
+   */
+  alumni: IdMap<FighterId, Alumnus>;
 }
 
 /** Content identity: theme folder name + hash of the raw content files. */

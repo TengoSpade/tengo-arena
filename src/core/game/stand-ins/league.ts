@@ -10,6 +10,9 @@ import {
   asId,
   leagueCompetitionId,
   leagueFixtureId,
+  putFixture,
+  removeFixture,
+  removeResult,
   reckoningCompetitionId,
   reckoningFixtureId,
   type Bracket,
@@ -47,7 +50,7 @@ function weekOfMatchweek(content: ContentDB, mw: number): { index: number; id: W
 }
 
 function addFixture(draft: GameState, comp: Competition, f: Fixture): void {
-  draft.fixtures[f.id] = f;
+  putFixture(draft, f);
   comp.fixtureIds.push(f.id);
 }
 
@@ -204,7 +207,7 @@ function createTieFixtures(draft: GameState, comp: Competition, content: Content
       const id = reckoningFixtureId(comp.season, comp.tierId, round.roundId, tie.slot);
       tie.fixtureId = id;
       const venue = (def as { venueId?: string }).venueId;
-      draft.fixtures[id] = {
+      putFixture(draft, {
         id,
         competitionId: comp.id,
         season: comp.season,
@@ -219,7 +222,7 @@ function createTieFixtures(draft: GameState, comp: Competition, content: Content
         bestOf: round.bestOf,
         venueId: venue ? asId<VenueId>(venue) : null,
         status: 'scheduled',
-      };
+      });
       comp.fixtureIds.push(id);
     }
   }
@@ -384,8 +387,8 @@ function archiveSeason(state: GameState, moves: readonly TierMove[], content: Co
 
 function compactHistory(draft: GameState): void {
   const keepFrom = draft.calendar.season - 1;
-  for (const [id, r] of Object.entries(draft.results)) if (r.season < keepFrom) delete draft.results[id as keyof typeof draft.results];
-  for (const [id, f] of Object.entries(draft.fixtures)) if (f.season < keepFrom) delete draft.fixtures[id as keyof typeof draft.fixtures];
+  for (const r of Object.values(draft.results)) if (r.season < keepFrom) removeResult(draft, r.fixtureId);
+  for (const f of Object.values(draft.fixtures)) if (f.season < keepFrom) removeFixture(draft, f.id);
   for (const [id, c] of Object.entries(draft.competitions)) if (c.season < keepFrom) delete draft.competitions[id as keyof typeof draft.competitions];
 }
 

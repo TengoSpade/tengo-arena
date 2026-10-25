@@ -29,7 +29,7 @@ import type {
   TierId,
   WingId,
 } from '../model';
-import { leagueCompetitionId } from '../model';
+import { leagueCompetitionId, weekFixtures } from '../model';
 import { invariant } from '../util';
 import * as cal from './calendar';
 import { compareFixtures, requireCompetition, seasonFixtures } from './common';
@@ -77,24 +77,15 @@ export function setupSeason(draft: GameState, season: number, content: ContentDB
   setupSeasonImpl(draft, season, content);
 }
 
-/**
- * Fixtures of a week in simulation order (tier level, then fixture id).
- * Pass `content` for the tier-level order; without it the order is fixture
- * id only (deterministic, but tiers interleave alphabetically). CHANGE
- * REQUEST (WP3): make `content` required.
- */
-export function fixturesForWeek(state: GameState, weekIndex: number, content?: ContentDB): Fixture[] {
-  const level = (f: Fixture): number => (content ? content.tiers.require(f.tierId).level : 0);
-  return seasonFixtures(state, state.calendar.season)
-    .filter((f) => f.weekIndex === weekIndex)
-    .sort((a, b) => level(a) - level(b) || compareFixtures(a, b));
+/** Fixtures of a week of the current season in simulation order (tier level, then fixture id). */
+export function fixturesForWeek(state: GameState, weekIndex: number, content: ContentDB): Fixture[] {
+  const level = (f: Fixture): number => content.tiers.require(f.tierId).level;
+  return [...weekFixtures(state, state.calendar.season, weekIndex)].sort((a, b) => level(a) - level(b) || compareFixtures(a, b));
 }
 
 /** A club's fixture in a week, if any. */
 export function clubFixture(state: GameState, clubId: ClubId, weekIndex: number): Fixture | null {
-  const found = seasonFixtures(state, state.calendar.season).filter(
-    (f) => f.weekIndex === weekIndex && (f.homeClubId === clubId || f.awayClubId === clubId),
-  );
+  const found = weekFixtures(state, state.calendar.season, weekIndex).filter((f) => f.homeClubId === clubId || f.awayClubId === clubId);
   invariant(found.length <= 1, `club ${clubId} has ${found.length} fixtures in week ${weekIndex}`);
   return found[0] ?? null;
 }

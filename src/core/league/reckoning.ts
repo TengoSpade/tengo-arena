@@ -13,6 +13,7 @@
  */
 import type { ContentDB, TournamentRoundDef } from '../content';
 import {
+  putFixture,
   asId,
   leagueCompetitionId,
   reckoningCompetitionId,
@@ -193,7 +194,7 @@ function createReadyFixtures(draft: GameState, comp: Competition, content: Conte
         status: 'scheduled',
       };
       invariant(!draft.fixtures[fixture.id], `reckoning: fixture ${fixture.id} already exists`);
-      draft.fixtures[fixture.id] = fixture;
+      putFixture(draft, fixture);
       tie.fixtureId = fixture.id;
       comp.fixtureIds.push(fixture.id);
     }

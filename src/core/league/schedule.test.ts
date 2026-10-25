@@ -213,8 +213,8 @@ describe('setupSeason on the 48-club world', () => {
     const levels = mw1.map((f) => content.tiers.require(f.tierId).level);
     expect(levels).toEqual([...Array(8).fill(1), ...Array(8).fill(2), ...Array(8).fill(3)]);
     for (let i = 1; i < 8; i++) expect(compareStrings(mw1[i - 1]!.id, mw1[i]!.id)).toBeLessThan(0);
-    // Without content: deterministic fixture-id order.
-    expect(fixturesForWeek(state, 5).map((f) => f.id)).toEqual(mw1.map((f) => f.id).sort(compareStrings));
+    // Repeatable: the same order on every call (tier level, then fixture id).
+    expect(fixturesForWeek(state, 5, content).map((f) => f.id)).toEqual(mw1.map((f) => f.id));
 
     const club = asId<ClubId>('varrow-lanternguard');
     const sched = clubSchedule(state, club);

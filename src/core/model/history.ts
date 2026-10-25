@@ -23,7 +23,11 @@ export interface TierSeasonRecord {
   shieldWinnerId: ClubId | null;
   promotedIds: ClubId[];
   relegatedIds: ClubId[];
+  /** Furthest Reckoning stage of every qualifier (v2; core/league always writes it; absent in hand-built fixtures). */
+  reckoningStages?: Partial<Record<ClubId, ReckoningStage>>;
 }
+
+export type ReckoningStage = 'quarterfinal' | 'semifinal' | 'final' | 'champion';
 
 export interface RetirementRecord {
   fighterId: FighterId;

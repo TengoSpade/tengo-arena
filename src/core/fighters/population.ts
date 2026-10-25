@@ -13,6 +13,7 @@
  */
 import type { ContentDB } from '../content';
 import {
+  setMembership,
   createEmptyGameState,
   idNumber,
   type Club,
@@ -140,8 +141,7 @@ function capOf(content: ContentDB, club: Club): number {
 }
 
 function sign(state: GameState, f: Fighter, club: Club, rng: Rng): void {
-  f.clubId = club.id;
-  f.status = 'active';
+  setMembership(state, f, club.id, 'active');
   f.freeAgency = null;
   const season = state.calendar.season;
   f.contract = {
@@ -151,13 +151,13 @@ function sign(state: GameState, f: Fighter, club: Club, rng: Rng): void {
     endSeason: season + rng.int(0, 2),
     signedAt: { season, weekIndex: state.calendar.weekIndex },
     dropClauseApplied: false,
+    next: null,
   };
 }
 
-function release(f: Fighter): void {
-  f.freeAgency = { unsignedSeasonEnds: 0, formerClubId: f.clubId, releasedByClubId: null, releasedSeason: null };
-  f.clubId = null;
-  f.status = 'free-agent';
+function release(state: GameState, f: Fighter): void {
+  f.freeAgency = { unsignedSeasonEnds: 0, formerClubId: f.clubId, releasedByClubId: null, releasedSeason: null, enteredAt: { season: state.calendar.season, weekIndex: state.calendar.weekIndex } };
+  setMembership(state, f, null, 'free-agent');
   f.contract = null;
   f.career.matchweeksAtClub = 0;
 }
@@ -522,7 +522,7 @@ export function runPopulation(options: PopulationOptions): PopulationReport {
       roster.forEach((x, i) => {
         if (!x.f.contract || x.f.contract.endSeason > season) return;
         if (i < keep) x.f.contract.endSeason = season + 1 + xRng.int(0, 2);
-        else release(x.f);
+        else release(state, x.f);
       });
     }
     offseasonRecoveryOn(state, content);
@@ -531,11 +531,11 @@ export function runPopulation(options: PopulationOptions): PopulationReport {
     const record = state.history[state.history.length - 1]!;
     for (const f of Object.values(state.fighters).sort(byId)) {
       if (f.status !== 'free-agent') continue;
-      const fa = f.freeAgency ?? { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null };
+      const fa = f.freeAgency ?? { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null, enteredAt: { season: state.calendar.season, weekIndex: state.calendar.weekIndex } };
       fa.unsignedSeasonEnds += 1;
       f.freeAgency = fa;
       if (fa.unsignedSeasonEnds >= content.development.retirement.unsignedSeasonEndsBeforeLeaving) {
-        f.status = 'retired';
+        setMembership(state, f, null, 'retired');
         record.retirements.push({ fighterId: f.id, age: f.age, lastClubId: null, proSeasons: f.career.proSeasons, peakRating: f.career.peakRating, cause: 'left-unsigned' });
         leavers++;
       }

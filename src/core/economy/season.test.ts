@@ -252,7 +252,7 @@ describe('expiries, pool maintenance and pool floors', () => {
 });
 
 describe('new career finances', () => {
-  it('starting balance from prestige; contracts at asks with lengths 1/2/3; budgets; trim to 95% of WB keeping 8', () => {
+  it('starting balance from prestige; contracts of 1/2/3 seasons; budgets; bills rescaled into 82-92% of WB (tuning CR-1)', () => {
     const s = buildFixtureWorld({ freeAgents: 0 });
     const star = asId<ClubId>('varrow-lanternguard'); // Crown, prestige 84
     const small = asId<ClubId>('brightskerry-puffin-lancers'); // Muster, prestige 12
@@ -264,16 +264,31 @@ describe('new career finances', () => {
     initialFinances(s, content);
     expect(s.ledger.openingBalances[star]).toBe(57_000);
     expect(s.ledger.openingBalances[small]).toBe(7_360);
+    const band = content.economy.budget.worldGenBillBandBp;
+    expect(band).toEqual({ minBp: 8200, maxBp: 9200 });
+    const edge = (id: ClubId, bp: number) => Math.trunc((s.clubs[id]!.finance.wageBudgetPerWeek * bp) / 10_000);
     const signed = rosterOf(s, star);
-    for (const f of signed) expect(f.contract!.wagePerWeek).toBe(ask(s, f.id, star, f.contract!.endSeason, content));
+    expect(wageBill(s, star)).toBeGreaterThanOrEqual(edge(star, band.minBp));
+    expect(wageBill(s, star)).toBeLessThanOrEqual(edge(star, band.maxBp));
+    // The rescale keeps each wage's place: a higher ask never gets a lower wage.
+    const asks = signed.map((f) => ask(s, f.id, star, f.contract!.endSeason, content));
+    signed.forEach((f, i) => {
+      expect(f.contract!.wagePerWeek % 5).toBe(0);
+      signed.forEach((g, j) => {
+        if (asks[i]! > asks[j]!) expect(f.contract!.wagePerWeek).toBeGreaterThanOrEqual(g.contract!.wagePerWeek);
+      });
+    });
     const lengths = signed.map((f) => f.contract!.endSeason).sort();
     expect(new Set(lengths)).toEqual(new Set([1, 2, 3]));
     const club = s.clubs[small]!;
     expect(club.finance.wageBudgetPerWeek).toBeGreaterThan(0);
-    // Asks of about 220 against a WB near 1,100: the trim stops at the roster minimum of 8; the 2 dropped join the pool.
-    expect(rosterOf(s, small).length).toBe(8);
-    expect(wageBill(s, small)).toBeGreaterThan(Math.trunc((club.finance.wageBudgetPerWeek * 9500) / 10000));
-    expect(Object.values(s.fighters).filter((f) => f.status === 'free-agent').length).toBe(2);
+    // Asks of about 220 against a WB near 1,100: the wages are scaled down into the band and nobody is dropped.
+    expect(rosterOf(s, small)).toHaveLength(10);
+    expect(wageBill(s, small)).toBeGreaterThanOrEqual(edge(small, band.minBp));
+    expect(wageBill(s, small)).toBeLessThanOrEqual(edge(small, band.maxBp));
+    const min = content.tierProfile(content.tiers.require(club.tierId).level).tierMinWage;
+    for (const f of rosterOf(s, small)) expect(f.contract!.wagePerWeek).toBeGreaterThanOrEqual(min);
+    expect(Object.values(s.fighters).filter((f) => f.status === 'free-agent')).toHaveLength(0);
     expect(currentSeasonBudgetParts(s, s.clubs[star]!, content).grantDue).toBe(82_000);
     expect(s.ledger.entries.filter((e) => e.category === 'centralGrant').length).toBe(48);
     expect(ledgerInvariantViolations(s)).toEqual([]);
@@ -310,6 +325,14 @@ describe('ledger', () => {
     expect(v.projectedSeasonEndBalance).toBe(10_000 + remaining - 4 * (wageBill(s, id) + 530));
     expect(v.seasonBudgetParts.map((p) => p.label)).toEqual(['centralGrant', 'parachute', 'promotionGrant', 'sponsorRetainer', 'projectedGate']);
     expect(v.status).toBe('healthy');
+    const weeks = v.weeklyProjection ?? [];
+    expect(weeks.map((w) => w.weekIndex)).toEqual([20, 21, 22, 23]);
+    expect(weeks.map((w) => w.weekId)).toEqual([20, 21, 22, 23].map((k) => content.weekByIndex(k).id));
+    for (const w of weeks) {
+      expect(w.costs).toBe(wageBill(s, id) + 530);
+      expect(w.net).toBe(w.income - w.costs);
+    }
+    expect(weeks.at(-1)!.balance).toBe(v.projectedSeasonEndBalance);
     weeklyCosts(s, content);
     expect(financeView(s, id, content).byCategory).toEqual({ wages: -wageBill(s, id), operations: -530 });
   });

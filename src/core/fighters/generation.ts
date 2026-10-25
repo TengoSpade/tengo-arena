@@ -11,6 +11,7 @@
  */
 import type { ContentDB, RaceDef } from '../content';
 import {
+  putFighter,
   allocateId,
   emptyCareerStats,
   emptySeasonCounters,
@@ -185,7 +186,10 @@ export function createFighterOn(draft: GameState, spec: GenerationSpec, content:
     status: spec.kind === 'hired-blade' ? 'hired-blade' : 'free-agent',
     contract: null,
     contractProfile: { greedBp: 0 },
-    freeAgency: spec.kind === 'hired-blade' ? null : { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null },
+    freeAgency:
+      spec.kind === 'hired-blade'
+        ? null
+        : { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null, enteredAt: { season: draft.calendar.season, weekIndex: draft.calendar.weekIndex } },
     potentialRoll,
     paceId: pace.id as PaceId,
     cap100: capsFor(potentialRoll),
@@ -236,7 +240,7 @@ export function createFighterOn(draft: GameState, spec: GenerationSpec, content:
 
   fighter.career.peakRating = ratingOf(fighter, content);
   fighter.name = generateNameWith(Rng.create(root, STREAM.names, season, id), fighter.raceId, content, livingNames(draft));
-  draft.fighters[id] = fighter;
+  putFighter(draft, fighter);
   return id;
 }
 

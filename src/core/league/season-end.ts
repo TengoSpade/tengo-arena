@@ -19,9 +19,10 @@ import {
   type TierId,
   type TierSeasonRecord,
 } from '../model';
+import { putResult, removeFixture, removeResult } from '../model';
 import { compareStrings, invariant } from '../util';
 import { tiersByLevel } from './common';
-import { reckoningStageForSeason, type ReckoningStage } from './reckoning';
+import { reckoningStageForSeason, reckoningStageIn, type ReckoningStage } from './reckoning';
 import { standingsImpl } from './standings';
 
 export interface TierMove {
@@ -120,8 +121,16 @@ export function archiveSeasonImpl(state: GameState, moves: readonly TierMove[], 
     const league = state.competitions[leagueCompetitionId(season, tierId)];
     if (!league) continue;
     const tierTable = standingsImpl(state, league.id, 'tier', content);
-    const bracket = state.competitions[reckoningCompetitionId(season, tierId)]?.bracket ?? null;
+    const reckoning = state.competitions[reckoningCompetitionId(season, tierId)];
+    const bracket = reckoning?.bracket ?? null;
     const out = moves.filter((m) => m.from === tierId);
+    const reckoningStages: Partial<Record<ClubId, ReckoningStage>> = {};
+    if (reckoning && bracket) {
+      for (const clubId of bracket.seeds) {
+        const stage = reckoningStageIn(reckoning, clubId);
+        if (stage !== null) reckoningStages[clubId] = stage;
+      }
+    }
     tiers.push({
       tierId,
       wingTables: league.wings.map((w) => ({ wingId: w.wingId, rows: standingsImpl(state, league.id, w.wingId, content) })),
@@ -131,6 +140,7 @@ export function archiveSeasonImpl(state: GameState, moves: readonly TierMove[], 
       shieldWinnerId: tierTable[0]?.clubId ?? null,
       promotedIds: out.filter((m) => m.reason !== 'relegated').map((m) => m.clubId),
       relegatedIds: out.filter((m) => m.reason === 'relegated').map((m) => m.clubId),
+      reckoningStages,
     });
   }
   return { season, tiers, retirements: [], rookieIds: [] };
@@ -175,10 +185,13 @@ export function leagueSeasonColumnsImpl(state: GameState, record: SeasonRecord, 
 // ---- compaction ----------------------------------------------------------------------------------------------------
 
 /**
- * Seasons whose full MatchResults are kept: the current and the previous
- * season (05 §5, TUNABLE (tech)). Older results keep their scores, round
- * summaries, winner, MVP and hired blades; sim inputs (fighters), per-round
- * final HP and per-fighter stats are dropped.
+ * Seasons whose fixtures, results and competitions are kept: the current and
+ * the previous season (05 §5, TUNABLE (tech)). Within that window only the
+ * current season and the player club's matches of the previous season keep
+ * full detail; the previous season's other results are compacted (scores,
+ * round summaries, winner, MVP and hired blades stay; sim fighters, per-round
+ * final HP and per-fighter stats go). Older seasons are dropped entirely:
+ * their tables, titles and movements live in history (SeasonRecord).
  */
 export const RESULT_RETENTION_SEASONS = 2;
 
@@ -187,17 +200,37 @@ export function isCompactedResult(result: MatchResult): boolean {
   return result.input.home.fighters.length === 0 && result.input.away.fighters.length === 0;
 }
 
+/** A compacted copy (results are write-once and shared between states: never edit one in place). */
+export function compactedResult(result: MatchResult): MatchResult {
+  const side = (s: MatchResult['input']['home']): MatchResult['input']['home'] => ({ ...s, fighters: [], captainIndex: 0, viceCaptainIndex: null });
+  return {
+    ...result,
+    input: { ...result.input, home: side(result.input.home), away: side(result.input.away) },
+    rounds: result.rounds.map((r) => ({ ...r, finalHp: [] })),
+    fighterStats: {},
+  };
+}
+
+/**
+ * Run at the end of the season-end step (calendar on the new season N): drop
+ * seasons before N - 1, compact season N - 1 except the player club's matches.
+ */
 export function compactHistoryImpl(draft: GameState): void {
-  const keepFrom = draft.calendar.season - RESULT_RETENTION_SEASONS + 1;
-  for (const result of Object.values(draft.results)) {
-    if (result.season >= keepFrom || isCompactedResult(result)) continue;
-    for (const side of [result.input.home, result.input.away]) {
-      side.fighters = [];
-      side.captainIndex = 0;
-      side.viceCaptainIndex = null;
+  const season = draft.calendar.season;
+  const keepFrom = season - RESULT_RETENTION_SEASONS + 1;
+  for (const comp of Object.values(draft.competitions)) {
+    if (comp.season >= keepFrom) continue;
+    for (const id of comp.fixtureIds) {
+      removeResult(draft, id);
+      removeFixture(draft, id);
     }
-    for (const round of result.rounds) round.finalHp = [];
-    result.fighterStats = {};
+    delete draft.competitions[comp.id];
+  }
+  const player = draft.playerClubId;
+  for (const result of Object.values(draft.results)) {
+    if (result.season >= season || isCompactedResult(result)) continue;
+    if (player !== null && (result.homeClubId === player || result.awayClubId === player)) continue;
+    putResult(draft, compactedResult(result));
   }
 }
 
