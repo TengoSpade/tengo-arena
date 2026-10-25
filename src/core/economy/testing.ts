@@ -221,37 +221,52 @@ export function addPlayedFixture(
   };
   state.fixtures[id] = fixture;
   if (p.played === false) return fixture;
-  const side = (clubId: ClubId, ids: readonly FighterId[] | undefined): SideInput => ({
+  recordResult(state, fixture, p.winner, p.homeFighters ?? [], p.awayFighters ?? []);
+  return fixture;
+}
+
+/** Commit a minimal result for a fixture (2-1 by default) and mark it played. */
+export function recordResult(
+  state: GameState,
+  fixture: Fixture,
+  winner: ClubId,
+  homeFighters: readonly FighterId[],
+  awayFighters: readonly FighterId[],
+  margin: '2-0' | '2-1' = '2-1',
+): MatchResult {
+  const side = (clubId: ClubId, ids: readonly FighterId[]): SideInput => ({
     clubId,
-    fighters: (ids ?? []).map(
+    fighters: ids.map(
       (fighterId, slot) => ({ fighterId, slot, traitIds: state.fighters[fighterId]?.traits.map((t) => t.id) ?? [] }) as unknown as FightFighterInput,
     ),
     captainIndex: 0,
     viceCaptainIndex: null,
     chemistry: 0,
   });
-  const homeWon = p.winner === p.home;
+  const homeWon = winner === fixture.homeClubId;
+  const loserRounds = margin === '2-0' ? 0 : 1;
   const result: MatchResult = {
-    fixtureId: id,
+    fixtureId: fixture.id,
     competitionId: fixture.competitionId,
-    stage,
-    season,
-    weekIndex: p.weekIndex,
+    stage: fixture.stage,
+    season: fixture.season,
+    weekIndex: fixture.weekIndex,
     weekId: fixture.weekId,
-    homeClubId: p.home,
-    awayClubId: p.away,
+    homeClubId: fixture.homeClubId,
+    awayClubId: fixture.awayClubId,
     engineVersion: 0,
     contentHash: 'test',
-    input: { seed: 'test', bestOf: fixture.bestOf, home: side(p.home, p.homeFighters), away: side(p.away, p.awayFighters) },
+    input: { seed: 'test', bestOf: fixture.bestOf, home: side(fixture.homeClubId, homeFighters), away: side(fixture.awayClubId, awayFighters) },
     rounds: [],
-    score: { home: homeWon ? 2 : 1, away: homeWon ? 1 : 2 },
-    winnerClubId: p.winner,
+    score: { home: homeWon ? 2 : loserRounds, away: homeWon ? loserRounds : 2 },
+    winnerClubId: winner,
     fighterStats: {},
     mvpFighterId: null,
     hiredBladeIds: [],
   };
-  state.results[id] = result;
-  return fixture;
+  state.results[fixture.id] = result;
+  fixture.status = 'played';
+  return result;
 }
 
 /** A standings row with only the fields economy reads (club and position). */
