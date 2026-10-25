@@ -81,38 +81,6 @@ export function newsSince(state: GameState, fromCounter: number): NewsId[] {
 }
 
 /**
- * Lineup captain (development.json captaincy.lineupCaptain): the club captain
- * if fielded; else the vice-captain; else the manager's match-captain
- * override (open-011); else the highest-CQ fielded fighter (ties: seniority,
- * rating, fighter id).
- */
-export function lineupCaptain(
-  ports: GamePorts,
-  state: GameState,
-  club: Club,
-  fighterIds: readonly FighterId[],
-  content: ContentDB,
-): FighterId | null {
-  if (club.captainId !== null && fighterIds.includes(club.captainId)) return club.captainId;
-  if (club.viceCaptainId !== null && fighterIds.includes(club.viceCaptainId)) return club.viceCaptainId;
-  if (club.lineup.matchCaptainId !== null && fighterIds.includes(club.lineup.matchCaptainId)) return club.lineup.matchCaptainId;
-  let best: { id: FighterId; cq: number; seniority: number; rating: number } | null = null;
-  for (const id of fighterIds) {
-    const f = state.fighters[id];
-    if (!f) continue;
-    const c = { id, cq: ports.fighters.captaincy(state, id, club.id, content).cq, seniority: f.career.matchweeksAtClub, rating: ports.fighters.rating(f, content) };
-    if (
-      best === null ||
-      c.cq > best.cq ||
-      (c.cq === best.cq && (c.seniority > best.seniority || (c.seniority === best.seniority && (c.rating > best.rating || (c.rating === best.rating && compareIds(c.id, best.id) < 0)))))
-    ) {
-      best = c;
-    }
-  }
-  return best?.id ?? null;
-}
-
-/**
  * Keep game-owned club fields consistent with the roster after anything that
  * can move fighters: lineup entries, tactics, match-captain override and
  * captaincy of fighters who left are removed. A club captain who left is

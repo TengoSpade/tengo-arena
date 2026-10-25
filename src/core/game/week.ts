@@ -15,7 +15,7 @@ import { cloneJson, engineError, err, ok, type EngineError, type Result } from '
 import { applyToDraft } from './commands';
 import { addMatchNews, buildMatchInput, eligibleEntries, toResult } from './match';
 import type { GamePorts } from './ports';
-import { clubsInOrder, newsSince, rosterOf, tidyAll } from './shared';
+import { clubsInOrder, defaultTactics, newsSince, rosterOf, tidyAll } from './shared';
 import { getBlockers } from './views';
 
 /** Commands an AI club issued that the rulebook refused (diagnostics; the soak counts them). */
@@ -82,6 +82,9 @@ function lockLineups(
     if (entries.length < 5) throw new LineupError(club.id, entries.length);
     lineups.set(club.id, entries);
     blades.set(club.id, used);
+    // The locked lineup (hired blades labelled in it) is what the club fields; blades leave after the match.
+    club.lineup.fighters = entries.map((e) => ({ fighterId: e.fighterId, row: e.row }));
+    for (const e of entries) if (!club.lineup.tactics[e.fighterId]) club.lineup.tactics[e.fighterId] = defaultTactics(content, draft.fighters[e.fighterId]!);
   }
   return { lineups, blades };
 }
@@ -119,7 +122,7 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
     if (cal.season === 1 && cal.weekIndex === 1) runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content), log);
 
     // 1. Simulate every fixture of the week (all fixtures are simulated here in M1).
-    const fixtures = ports.league.fixturesForWeek(draft, cal.weekIndex).filter((f) => f.status === 'scheduled');
+    const fixtures = ports.league.fixturesForWeek(draft, cal.weekIndex, content).filter((f) => f.status === 'scheduled');
     if (fixtures.length > 0) {
       const { lineups, blades } = lockLineups(ports, draft, fixtures, content);
       for (const fx of fixtures) {
@@ -150,10 +153,9 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
     runAiPhase(ports, draft, content, (s, c) => ports.ai.planWeek(s, c, content), log);
     // 10. Pool floors.
     ports.economy.topUpFreeAgentPool(draft, content);
-    // 11. Calendar; the Reckoning is seeded when the regular season ends.
-    const next = ports.league.nextCalendar(cal, content);
-    draft.calendar = next;
-    if (cal.phase === 'regular' && next.phase !== 'regular') ports.league.seedReckonings(draft, content);
+    // 11. The Reckoning is seeded after the last regular week, then the calendar moves on.
+    if (cal.weekIndex === ports.league.lastRegularWeekIndex(content)) ports.league.seedReckonings(draft, content);
+    draft.calendar = ports.league.nextCalendar(cal, content);
     tidyAll(ports, draft, content);
   } catch (e) {
     if (e instanceof LineupError) return err(engineError('lineup.unfillable', e.message, { clubId: e.clubId, have: e.have }));

@@ -182,7 +182,9 @@ function seasonEndRetirements(draft: GameState, content: ContentDB): RetirementR
   for (const f of Object.values(draft.fighters).sort((a, b) => idNum(a.id) - idNum(b.id))) {
     if (f.status === 'retired' || f.status === 'hired-blade') continue;
     if (humanAge100(f, content) < 3600) continue;
-    out.push({ fighterId: f.id, age: f.age, lastClubId: f.clubId, proSeasons: f.career.proSeasons, peakRating: f.career.peakRating, cause: 'age' });
+    const rec: RetirementRecord = { fighterId: f.id, age: f.age, lastClubId: f.clubId, proSeasons: f.career.proSeasons, peakRating: f.career.peakRating, cause: 'age' };
+    out.push(rec);
+    draft.history[draft.history.length - 1]?.retirements.push(rec);
     f.status = 'retired';
     f.clubId = null;
     f.contract = null;
@@ -194,7 +196,7 @@ function seasonEndRetirements(draft: GameState, content: ContentDB): RetirementR
 function generateRookies(draft: GameState, content: ContentDB): FighterId[] {
   const clubs = Object.keys(draft.clubs).length;
   const prev = draft.history[draft.history.length - 1];
-  const retired = prev?.season === draft.calendar.season - 1 ? prev.retirements.filter((r) => r.cause !== 'left-unsigned').length : 0;
+  const retired = prev ? prev.retirements.filter((r) => r.cause !== 'left-unsigned').length : 0;
   const count = Math.round(clubs * 0.6) + retired;
   const ids: FighterId[] = [];
   const region = content.regions.list[0]!.id;
@@ -215,6 +217,19 @@ export function standInFighters(): Port {
     injuryChanceBp: () => 150,
     retirementChanceBp: (state, id, content) => (humanAge100(state.fighters[id]!, content) >= 3600 ? 10000 : 0),
     trend: (_f, content) => content.development.trend.levels[2]?.id ?? 'holding',
+    lineupCaptain: (state, clubId, ids, content) => {
+      if (ids.length === 0) return null;
+      const club = state.clubs[clubId];
+      let index = club?.captainId ? ids.indexOf(club.captainId) : -1;
+      const viceIndex = club?.viceCaptainId ? ids.indexOf(club.viceCaptainId) : -1;
+      if (index < 0) index = viceIndex;
+      if (index < 0 && club?.lineup.matchCaptainId) index = ids.indexOf(club.lineup.matchCaptainId);
+      if (index < 0) index = 0;
+      const fighterId = ids[index]!;
+      const isClubCaptain = club?.captainId === fighterId;
+      const cq = captaincy(state, fighterId, clubId, content).cq - (isClubCaptain ? 0 : content.development.captaincy.actingCaptainCqPenalty);
+      return { fighterId, index, cqForFight: Math.max(0, cq), isClubCaptain, viceIndex: viceIndex >= 0 && viceIndex !== index ? viceIndex : null };
+    },
     lineupLock: () => [],
     applyMatchLifecycle,
     weeklyLifecycle,

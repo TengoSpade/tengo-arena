@@ -35,7 +35,6 @@ export { createGameEngine } from './engine';
 export type { CommandOutcome, GameEngine } from './engine';
 export type { FighterView } from './views';
 export type { NewGameParams } from './world';
-export { PROVISIONAL_WORLDGEN_BILL_SHARE_BP } from './world';
 export type { AiRejection, PhaseLog } from './week';
 export { realGamePorts, aiPortsOf } from './ports';
 export type { GamePorts } from './ports';

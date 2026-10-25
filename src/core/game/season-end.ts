@@ -9,9 +9,12 @@
  *   6 aging and development             14 AI phase (trials signings, cap relief, opening offers, captains)
  *   7 retirements                       15 autosave (UI store)
  * Steps 5, 10 and 11 are M4-M6. It is not a week: no wages, no debt week.
+ * Step 13 follows core/league's documented order: setupSeason, the new
+ * calendar, then compaction; rookies and the finance setup run on the new
+ * season's calendar (core/economy reads the ending season as season - 1).
  */
 import type { ContentDB } from '../content';
-import type { ClubId, ClubSeasonRow, FighterId, GameState, NewsItem, RetirementRecord, SeasonEndReport, SeasonRecord, StandingRow, TierId } from '../model';
+import type { ClubSeasonRow, FighterId, GameState, NewsItem, RetirementRecord, SeasonEndReport, SeasonRecord } from '../model';
 import { cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
 import { clubsInOrder, newsSince, rosterOf, tidyAll } from './shared';
@@ -23,51 +26,32 @@ export interface SeasonEndOutcome {
   log: PhaseLog;
 }
 
-
-function clubSeasonRow(
-  ports: GamePorts,
-  draft: GameState,
-  clubId: ClubId,
-  tierId: TierId,
-  wingId: ClubSeasonRow['wingId'],
-  record: SeasonRecord,
-): ClubSeasonRow {
-  const tier = record.tiers.find((t) => t.tierId === tierId);
-  const rowIn = (rows: readonly StandingRow[] | undefined): StandingRow | undefined => rows?.find((r) => r.clubId === clubId);
-  const tierRow = rowIn(tier?.tierTable);
-  const wingRow = rowIn(tier?.wingTables.find((w) => w.wingId === wingId)?.rows);
-  let income = 0;
-  let costs = 0;
-  for (const e of draft.ledger.entries) {
-    if (e.clubId !== clubId) continue;
-    if (e.amount > 0) income += e.amount;
-    else costs -= e.amount;
-  }
-  const club = draft.clubs[clubId]!;
-  return {
-    season: record.season,
-    tierId,
-    wingId,
-    wingPosition: wingRow?.position ?? 0,
-    tierPosition: tierRow?.position ?? 0,
-    points: tierRow?.points ?? 0,
-    matchWins: tierRow?.matchWins ?? 0,
-    matchLosses: tierRow?.matchLosses ?? 0,
-    reckoning: ports.league.reckoningStage(draft, clubId),
-    shield: tier?.shieldWinnerId === clubId,
-    promoted: tier?.promotedIds.includes(clubId) ?? false,
-    relegated: tier?.relegatedIds.includes(clubId) ?? false,
-    income,
-    costs,
-    endBalance: club.finance.balance,
-    prestigeEnd: club.prestige,
-  };
-}
-
 /** News retention: the current and the previous season (05 §5). */
 function pruneNews(draft: GameState): void {
   const keepFrom = draft.calendar.season - 1;
   draft.news = draft.news.filter((n: NewsItem) => n.at.season >= keepFrom);
+}
+
+/**
+ * Club season rows: league columns from core/league (leagueSeasonColumns),
+ * prestige after the update, money from the ending season's ledger
+ * (core/economy rewrites income/costs/endBalance at setup from the same ledger).
+ */
+function writeClubRows(ports: GamePorts, draft: GameState, record: SeasonRecord, content: ContentDB): void {
+  for (const club of clubsInOrder(draft, content)) {
+    if (club.history.some((h) => h.season === record.season)) continue;
+    const league = ports.league.leagueSeasonColumns(draft, record, club.id);
+    if (!league) continue;
+    let income = 0;
+    let costs = 0;
+    for (const e of draft.ledger.entries) {
+      if (e.clubId !== club.id || e.season !== record.season) continue;
+      if (e.amount > 0) income += e.amount;
+      else costs -= e.amount;
+    }
+    const row: ClubSeasonRow = { ...league, income, costs, endBalance: club.finance.balance, prestigeEnd: club.prestige };
+    club.history.push(row);
+  }
 }
 
 export function processSeasonEnd(ports: GamePorts, state: GameState, content: ContentDB): Result<SeasonEndOutcome, EngineError> {
@@ -85,8 +69,7 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
   let developedIds: FighterId[] = [];
   let record: SeasonRecord;
   try {
-    const tiersBefore = new Map(Object.values(draft.clubs).map((c) => [c.id, { tierId: c.tierId, wingId: c.wingId }] as const));
-    // 1 + 3 (decided from the same final tables): placings, titles and movements.
+    // 1 + 3 (decided from the same final tables): placings, titles and movements; the archive goes to history.
     const moves = ports.league.promotionRelegation(draft, content);
     record = cloneJson(ports.league.archiveSeason(draft, moves, content));
     draft.history.push(record);
@@ -100,16 +83,11 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
     ports.league.applyTierMoves(draft, moves);
     // 4. Prestige.
     ports.economy.updatePrestige(draft, record, content);
-    // Club season rows (league columns from the archive, money from the season's ledger before setup clears it).
-    for (const club of clubsInOrder(draft, content)) {
-      if (club.history.some((h) => h.season === season)) continue;
-      const before = tiersBefore.get(club.id)!;
-      club.history.push(clubSeasonRow(ports, draft, club.id, before.tierId, before.wingId, record));
-    }
+    writeClubRows(ports, draft, record, content);
     // 6. Aging and development.
     if (player !== null) developedIds = rosterOf(draft, player).map((f) => f.id);
     ports.fighters.seasonEndDevelopment(draft, content);
-    // 7. Retirements.
+    // 7. Retirements (core/fighters appends them to the archived record).
     const retirements: RetirementRecord[] = draft.options.retirement ? ports.fighters.seasonEndRetirements(draft, content) : [];
     // 8. Contract expiries (remember the clubs first: expiry clears the contract).
     const holder = new Map(Object.values(draft.fighters).map((f) => [f.id, f.clubId] as const));
@@ -118,30 +96,36 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
       retiredIds = retirements.filter((r) => r.lastClubId === player).map((r) => r.fighterId);
       expiredIds = expired.filter((id) => holder.get(id) === player);
     }
+    tidyAll(ports, draft, content);
     // 9. Off-season recovery.
     ports.fighters.offseasonRecovery(draft, content);
-    // 12. Pool maintenance: long-unsigned free agents leave the league.
-    const left = ports.economy.poolMaintenance(draft, content);
-    const leavers: RetirementRecord[] = left
-      .filter((id) => !retirements.some((r) => r.fighterId === id))
-      .map((id) => {
-        const f = draft.fighters[id]!;
-        return { fighterId: id, age: f.age, lastClubId: f.freeAgency?.formerClubId ?? null, proSeasons: f.career.proSeasons, peakRating: f.career.peakRating, cause: 'left-unsigned' };
+    // 12. Pool maintenance: long-unsigned free agents leave the league (recorded as 'left-unsigned').
+    const archived = draft.history[draft.history.length - 1]!;
+    for (const r of retirements) if (!archived.retirements.some((x) => x.fighterId === r.fighterId)) archived.retirements.push(r);
+    for (const id of ports.economy.poolMaintenance(draft, content)) {
+      if (archived.retirements.some((r) => r.fighterId === id)) continue;
+      const f = draft.fighters[id]!;
+      archived.retirements.push({
+        fighterId: id,
+        age: f.age,
+        lastClubId: f.freeAgency?.formerClubId ?? null,
+        proSeasons: f.career.proSeasons,
+        peakRating: f.career.peakRating,
+        cause: 'left-unsigned',
       });
-    record.retirements = [...retirements, ...leavers];
+    }
     // 13. Next-season setup.
-    ports.league.compactHistory(draft, content);
-    draft.calendar = ports.league.seasonStartCalendar(season + 1, content);
     ports.league.setupSeason(draft, season + 1, content);
+    draft.calendar = ports.league.seasonStartCalendar(season + 1, content);
+    ports.league.compactHistory(draft, content);
     const rookies = ports.fighters.generateRookies(draft, content);
-    record.rookieIds = [...rookies];
+    archived.rookieIds = [...rookies];
     ports.economy.nextSeasonFinanceSetup(draft, rookies, content);
     for (const memory of Object.values(draft.ai)) memory.voluntaryReleasesThisSeason = 0;
     pruneNews(draft);
     ports.fighters.announceFinalSeasons(draft, content);
     tidyAll(ports, draft, content);
-    // The archived record in history is the same object we amended above.
-    draft.history[draft.history.length - 1] = record;
+    record = archived;
     // 14. AI phase for the new season.
     runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content), log);
     tidyAll(ports, draft, content);
@@ -149,7 +133,7 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
     return err(engineError('engine.failure', `Season end failed: ${e instanceof Error ? e.message : String(e)}`, { name: e instanceof Error ? e.name : 'unknown' }));
   }
   const report: SeasonEndReport = {
-    record,
+    record: cloneJson(record),
     playerClub:
       player === null
         ? null

@@ -24,6 +24,8 @@ function fakePorts(opts: { ratings?: Map<string, number>; cqs?: Map<string, numb
       checkOffer: () => ok({ signingCost: 0, wageRoomAfter: 0 }),
       wageBill: (s, clubId) => Object.values(s.fighters).reduce((sum, f) => sum + (f.clubId === clubId && f.contract ? f.contract.wagePerWeek : 0), 0),
       pendingWages: (s, clubId) => s.market.offers.filter((o) => o.clubId === clubId).reduce((sum, o) => sum + o.wagePerWeek, 0),
+      agreedRenewal: () => null,
+      preferredLength: () => 2,
     },
   };
 }

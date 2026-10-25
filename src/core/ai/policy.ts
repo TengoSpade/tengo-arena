@@ -252,21 +252,12 @@ class Ctx {
     return this.content.tierProfile(this.tierLevel).tierMinWage;
   }
 
-  /** Contract length by personality; 'fighter' = the length with the lowest ask (his preferred length). */
+  /** Contract length by personality; 'fighter' = his preferred length (economy). */
   lengthFor(f: Fighter): number {
     const pref = this.personality.preferredLength;
     if (typeof pref === 'number') return pref;
     if (pref === 'young3_else1') return this.humanAge(f) <= this.content.economy.ai.youthMinutes.maxHumanAge ? 3 : 1;
-    let best = 2;
-    let bestAsk = Number.POSITIVE_INFINITY;
-    for (const L of this.content.economy.contracts.lengthsSeasons) {
-      const a = this.ports.economy.ask(this.state, f.id, this.clubId, L, this.content);
-      if (a < bestAsk) {
-        bestAsk = a;
-        best = L;
-      }
-    }
-    return best;
+    return this.ports.economy.preferredLength(this.state, f.id, this.content);
   }
 
   // ---- value ---------------------------------------------------------------------------------------------
@@ -475,6 +466,7 @@ function renewals(ctx: Ctx, roster: readonly Fighter[]): Command[] {
   ranked.forEach((f, rank) => {
     const c = f.contract;
     if (!c || c.endSeason !== season || f.finalSeason) return;
+    if (ctx.ports.economy.agreedRenewal(state, f.id) !== null) return; // already renewed
     if (rank >= target || !ctx.ageRuleAllows(f, roster)) return;
     const nego = state.market.negotiations.find((n) => n.fighterId === f.id && n.clubId === clubId && n.season === season && n.kind === 'renewal');
     if (nego && nego.patienceLeft <= 0) return;
@@ -575,7 +567,7 @@ function freeAgentOffers(ctx: Ctx, roster: readonly Fighter[], extraRostered: nu
   }
   if (pool.length === 0) return cmds;
   // Stars: the top share of the pool by rating get the star overbid.
-  const byRating = [...pool].sort(ctx.byRating);
+  const byRating = [...pool].sort((a, b) => ctx.rating(b) - ctx.rating(a) || byIdNumber(a, b));
   const starCount = Math.trunc((pool.length * content.economy.ai.starFreeAgentTopShareBp) / BP);
   const stars = new Set(byRating.slice(0, starCount).map((f) => f.id));
 

@@ -305,8 +305,28 @@ export function makeStandInEconomy(fighters: GamePorts['fighters']): Port {
     },
     initialFinances: (draft, content) => {
       for (const club of Object.values(draft.clubs)) club.finance.balance = profile(draft, club.id, content).startingBalanceBase;
+      const lengths = content.economy.contracts.lengthsSeasons;
+      for (const club of Object.values(draft.clubs)) {
+        let i = 0;
+        for (const f of Object.values(draft.fighters)) {
+          if (f.clubId !== club.id || f.status !== 'active' || f.contract) continue;
+          const seasons = lengths[i++ % lengths.length]!;
+          sign(draft, club.id, f.id, ask(draft, f.id, club.id, seasons, content), seasons);
+        }
+      }
       resetSeasonLedger(draft, content);
     },
+    assignTrialsRookies: (draft, rookieIds) => {
+      draft.market.trialsRookies = {};
+      const clubs = Object.keys(draft.clubs).sort() as ClubId[];
+      rookieIds.forEach((id, i) => {
+        const c = clubs[i % clubs.length]!;
+        (draft.market.trialsRookies[c] ??= []).push(id);
+      });
+    },
+    committedWageBill: wageBill,
+    agreedRenewal: () => null,
+    preferredLength: () => 2,
     rollContractProfile: () => undefined,
   };
 }

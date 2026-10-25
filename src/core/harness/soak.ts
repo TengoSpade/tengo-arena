@@ -192,9 +192,9 @@ export function scheduleProblems(state: GameState, content: ContentDB): string[]
 export function dynastyFlags(history: readonly SeasonRecord[], content: ContentDB): string[] {
   const d = content.economy.balanceTargets.dynasty;
   const out: string[] = [];
-  const windows = (key: 'reckoningChampionId' | 'shieldWinnerId', window: number, flag: number, label: string): void => {
+  const windows = (key: 'reckoningChampionId' | 'shieldWinnerId', size: number, flag: number, label: string): void => {
     for (let start = 0; start < history.length; start++) {
-      const span = history.slice(start, start + window);
+      const span = history.slice(start, start + size);
       const counts = new Map<string, number>();
       for (const rec of span) for (const t of rec.tiers) if (t[key]) counts.set(`${t.tierId}/${t[key]}`, (counts.get(`${t.tierId}/${t[key]}`) ?? 0) + 1);
       for (const [k, n] of counts) {

@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asId, type ClubId, type Command, type FighterId, type GameState, type NewsId, type TacticsPresetId } from '../model';
-import { checksumState } from '../save';
 import { fixtureContent } from '../testkit';
-import { cloneJson } from '../util';
+import { cloneJson, hashString, stableStringify } from '../util';
 import { createGameEngine, createStandInPorts } from './index';
 
+const checksumState = (state: unknown): string => hashString(stableStringify(state));
 const content = fixtureContent();
 const engine = createGameEngine(createStandInPorts());
 let base: GameState;

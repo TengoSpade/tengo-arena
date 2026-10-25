@@ -25,7 +25,7 @@ import type {
 import { STREAM, deriveSeed } from '../rng';
 import { clamp, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
-import { addNews, defaultTactics, fail, lineupCaptain, onRoster } from './shared';
+import { addNews, defaultTactics, fail, onRoster } from './shared';
 
 export function matchSeed(state: GameState, fixtureId: FixtureId): string {
   return deriveSeed(state.rng.root, STREAM.match, state.calendar.season, fixtureId);
@@ -50,14 +50,17 @@ function sideInput(
   content: ContentDB,
 ): SideInput {
   const ids = entries.map((e) => e.fighterId);
-  const captainId = lineupCaptain(ports, state, club, ids, content);
-  const chemistry = ports.fighters.lineupChemistry(state, club.id, ids, captainId, content);
-  const penalty = content.development.captaincy.actingCaptainCqPenalty;
+  // Lineup captain by the lifecycle rule (club captain, vice, match-captain override, best CQ).
+  const lead = ports.fighters.lineupCaptain(state, club.id, ids, content);
+  if (lead === null) throw new RangeError(`${club.id}: empty lineup`);
+  // Chemistry: trait terms (the club captain's count double) and the club captain's grade (03 sys-chemistry).
+  const chemistry = ports.fighters.lineupChemistry(state, club.id, ids, club.captainId, content);
   const matchType = fixture.stage === 'league' ? 'league' : 'tournament';
   const fighters: FightFighterInput[] = entries.map((e, slot) => {
     const f = state.fighters[e.fighterId]!;
-    const acting = e.fighterId === captainId && captainId !== club.captainId;
-    const cq = ports.fighters.captaincy(state, f.id, club.id, content).cq;
+    const isLead = slot === lead.index;
+    const acting = isLead && !lead.isClubCaptain;
+    const cq = isLead ? lead.cqForFight : ports.fighters.captaincy(state, f.id, club.id, content).cq;
     return {
       fighterId: f.id,
       classId: f.classId,
@@ -65,16 +68,13 @@ function sideInput(
       row: e.row,
       slot,
       stats: ports.fighters.effectiveStats(f, content, { matchType, chemistry, actingCaptain: acting }),
-      captainQuality: clamp(acting ? cq - penalty : cq, 0, 100),
+      captainQuality: clamp(cq, 0, 100),
       traitIds: f.traits.map((t) => t.id),
       tactics: club.lineup.tactics[f.id] ?? defaultTactics(content, f),
       rating: ports.fighters.rating(f, content),
     };
   });
-  const captainIndex = captainId === null ? 0 : Math.max(0, ids.indexOf(captainId));
-  const vice = club.viceCaptainId;
-  const viceIndex = vice !== null && vice !== ids[captainIndex] ? ids.indexOf(vice) : -1;
-  return { clubId: club.id, fighters, captainIndex, viceCaptainIndex: viceIndex >= 0 ? viceIndex : null, chemistry };
+  return { clubId: club.id, fighters, captainIndex: lead.index, viceCaptainIndex: lead.viceIndex, chemistry };
 }
 
 /** Sim input of a fixture from explicit (locked) lineups. */
@@ -240,7 +240,7 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
   if (!result) return fail('report.not-played', `Fixture "${fixtureId}" has not been played`);
   // Re-simulate at 'summary' only when the build matches the one that played it (05 §6).
   let logs: FightLog[] | null = null;
-  if (result.engineVersion === ports.sim.engineVersion && result.contentHash === content.ref.hash) {
+  if (result.engineVersion === ports.sim.engineVersion && result.contentHash === content.ref.hash && !ports.league.isCompactedResult(result)) {
     try {
       const out = ports.sim.simulateMatch(result.input, content, { record: 'summary' });
       const same = out.rounds.length === result.rounds.length && out.rounds.every((r, i) => r.checksum === result.rounds[i]!.checksum);

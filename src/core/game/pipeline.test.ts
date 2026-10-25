@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { asId, type ClubId, type GameState, type WeekId } from '../model';
-import { checksumState } from '../save';
 import { fixtureContent } from '../testkit';
+import { hashString, stableStringify } from '../util';
 import { createGameEngine, createStandInPorts, type GamePorts } from './index';
 
+const checksumState = (state: unknown): string => hashString(stableStringify(state));
 const content = fixtureContent();
 
 /** Wrap every port function so calls are logged as "module.fn" in call order. */
@@ -114,7 +115,8 @@ describe('week processing order (leagues.json calendar.weekProcessingOrder)', ()
     calls.length = 0;
     const r = engine.advanceWeek(mw16, content);
     expect(r.ok).toBe(true);
-    expectOrder(calls, ['league.nextCalendar', 'league.seedReckonings']);
+    // core/league: seed after the last regular week is processed, then move the calendar.
+    expectOrder(calls, ['ai.planWeek', 'league.seedReckonings', 'league.nextCalendar']);
     if (r.ok) expect(r.value.state.calendar.weekId).toBe('TW1');
   });
 
@@ -144,8 +146,9 @@ describe('week processing order (leagues.json calendar.weekProcessingOrder)', ()
       'economy.contractExpiries',
       'fighters.offseasonRecovery',
       'economy.poolMaintenance',
-      'league.seasonStartCalendar',
       'league.setupSeason',
+      'league.seasonStartCalendar',
+      'league.compactHistory',
       'fighters.generateRookies',
       'economy.nextSeasonFinanceSetup',
       'ai.planSeasonEnd',

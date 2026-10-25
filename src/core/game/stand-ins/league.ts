@@ -408,7 +408,31 @@ export function standInLeague(): Port {
       for (const m of moves) draft.clubs[m.clubId]!.tierId = m.to;
     },
     archiveSeason,
+    leagueSeasonColumns: (state, record, clubId) => {
+      for (const t of record.tiers) {
+        const row = t.tierTable.find((r) => r.clubId === clubId);
+        if (!row) continue;
+        const wing = t.wingTables.find((w) => w.rows.some((r) => r.clubId === clubId));
+        return {
+          season: record.season,
+          tierId: t.tierId,
+          wingId: wing?.wingId ?? null,
+          wingPosition: wing?.rows.find((r) => r.clubId === clubId)?.position ?? 0,
+          tierPosition: row.position,
+          points: row.points,
+          matchWins: row.matchWins,
+          matchLosses: row.matchLosses,
+          reckoning: reckoningStage(state, clubId),
+          shield: t.shieldWinnerId === clubId,
+          promoted: t.promotedIds.includes(clubId),
+          relegated: t.relegatedIds.includes(clubId),
+        };
+      }
+      return null;
+    },
     compactHistory,
+    lastRegularWeekIndex: (content) => Math.max(...content.leagues.calendar.weeks.filter((w) => w.phase === 'regular').map((w) => w.index)),
+    isCompactedResult: (r) => r.input.home.fighters.length === 0 && r.input.away.fighters.length === 0,
   };
 }
 

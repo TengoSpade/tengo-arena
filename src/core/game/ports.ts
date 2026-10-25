@@ -28,6 +28,7 @@ export interface GamePorts {
     | 'injuryChanceBp'
     | 'retirementChanceBp'
     | 'trend'
+    | 'lineupCaptain'
     | 'lineupLock'
     | 'applyMatchLifecycle'
     | 'weeklyLifecycle'
@@ -51,7 +52,10 @@ export interface GamePorts {
     | 'promotionRelegation'
     | 'applyTierMoves'
     | 'archiveSeason'
+    | 'leagueSeasonColumns'
     | 'compactHistory'
+    | 'lastRegularWeekIndex'
+    | 'isCompactedResult'
   >;
   economy: Pick<
     typeof economy,
@@ -80,6 +84,10 @@ export interface GamePorts {
     | 'nextSeasonFinanceSetup'
     | 'initialFinances'
     | 'rollContractProfile'
+    | 'assignTrialsRookies'
+    | 'committedWageBill'
+    | 'agreedRenewal'
+    | 'preferredLength'
   >;
   ai: AiApi;
 }
@@ -99,6 +107,7 @@ export const realGamePorts: GamePorts = {
     injuryChanceBp: fighters.injuryChanceBp,
     retirementChanceBp: fighters.retirementChanceBp,
     trend: fighters.trend,
+    lineupCaptain: fighters.lineupCaptain,
     lineupLock: fighters.lineupLock,
     applyMatchLifecycle: fighters.applyMatchLifecycle,
     weeklyLifecycle: fighters.weeklyLifecycle,
@@ -121,7 +130,10 @@ export const realGamePorts: GamePorts = {
     promotionRelegation: league.promotionRelegation,
     applyTierMoves: league.applyTierMoves,
     archiveSeason: league.archiveSeason,
+    leagueSeasonColumns: league.leagueSeasonColumns,
     compactHistory: league.compactHistory,
+    lastRegularWeekIndex: league.lastRegularWeekIndex,
+    isCompactedResult: league.isCompactedResult,
   },
   economy: {
     post: economy.post,
@@ -149,6 +161,10 @@ export const realGamePorts: GamePorts = {
     nextSeasonFinanceSetup: economy.nextSeasonFinanceSetup,
     initialFinances: economy.initialFinances,
     rollContractProfile: economy.rollContractProfile,
+    assignTrialsRookies: economy.assignTrialsRookies,
+    committedWageBill: economy.committedWageBill,
+    agreedRenewal: economy.agreedRenewal,
+    preferredLength: economy.preferredLength,
   },
   ai: ai.createAi(ai.realAiPorts),
 };
@@ -166,8 +182,10 @@ export function aiPortsOf(ports: GamePorts): AiPorts {
     economy: {
       ask: ports.economy.ask,
       checkOffer: ports.economy.checkOffer,
-      wageBill: ports.economy.wageBill,
+      wageBill: ports.economy.committedWageBill,
       pendingWages: ports.economy.pendingWages,
+      agreedRenewal: ports.economy.agreedRenewal,
+      preferredLength: ports.economy.preferredLength,
     },
   };
 }
