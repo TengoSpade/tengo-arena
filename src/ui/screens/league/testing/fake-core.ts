@@ -23,6 +23,8 @@ import {
   type WingId,
 } from '../../../../core/model';
 import { compareStrings, engineError, err, ok, type EngineError, type Result } from '../../../../core/util';
+import { coreEngine, type GameEngine } from '../../../store';
+import type { Wp7Engine } from '../lib/engine';
 
 // ---- league ---------------------------------------------------------------------------------
 
@@ -332,3 +334,8 @@ export function financeView(state: GameState, clubId: ClubId, content: ContentDB
 export const FAKE_LEAGUE = { standings };
 export const FAKE_GAME = { fighterView, freeAgents, buildMatchReport };
 export const FAKE_ECONOMY = { wageBill, pendingWages, ask, checkOffer, financeView, marketWage };
+
+/** The real engine seam with WP7's test doubles over the views WP7 reads. */
+export function fakeEngine(base: GameEngine = coreEngine): Wp7Engine {
+  return { ...base, ...FAKE_LEAGUE, ...FAKE_GAME, ...FAKE_ECONOMY };
+}

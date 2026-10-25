@@ -7,7 +7,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
 import type { ContentDB } from '../../../core/content';
-import { standings } from '../../../core/league';
 import type { ClubId, GameState, StandingRow, TierId, WingId } from '../../../core/model';
 import { BracketView, projectedBracket, storedBracket, type BracketModel } from './Bracket';
 import { StandingsTable, type Zones } from './StandingsTable';
@@ -19,6 +18,7 @@ import { leagueCompetition, nextFixture, opponentOf, reckoningCompetition } from
 import { useCareer, type Career } from './lib/store';
 import { Callout, Empty, NoCareer, Segmented, Unavailable } from './lib/ui';
 import { tryView } from './lib/views';
+import { useWp7Engine, type Wp7Engine } from './lib/engine';
 import { t } from './text';
 import './league.css';
 
@@ -37,12 +37,12 @@ function wingName(content: ContentDB, wingId: WingId): string {
   return content.leagues.wings.list.find((w) => w.id === wingId)?.name ?? String(wingId);
 }
 
-function computeTables(game: GameState, content: ContentDB, season: number, tierId: TierId) {
+function computeTables(engine: Wp7Engine, game: GameState, content: ContentDB, season: number, tierId: TierId) {
   const league = leagueCompetition(game, season, tierId);
   if (!league) return null;
   return tryView<Tables>(() => ({
-    wings: league.wings.map((w) => ({ wingId: w.wingId, name: wingName(content, w.wingId), rows: standings(game, league.id, w.wingId, content) })),
-    tier: standings(game, league.id, 'tier', content),
+    wings: league.wings.map((w) => ({ wingId: w.wingId, name: wingName(content, w.wingId), rows: engine.standings(game, league.id, w.wingId, content) })),
+    tier: engine.standings(game, league.id, 'tier', content),
   }));
 }
 
@@ -71,7 +71,8 @@ function League({ career }: { career: Career }) {
   const tier = content.tiers.get(tierId);
   const tiers = [...content.tiers.list].sort((a, b) => a.level - b.level);
   const lowest = tiers[tiers.length - 1]?.level ?? 1;
-  const tables = computeTables(game, content, season, tierId);
+  const engine = useWp7Engine();
+  const tables = computeTables(engine, game, content, season, tierId);
   const total = content.leagues.regularSeason.matchesPerClub;
   const played = matchweeksPlayed(content, game.calendar);
   const phase = game.calendar.phase;
@@ -287,18 +288,20 @@ function ReckoningPanel({
     }
     body = (
       <>
-        <Callout title={t('bracket.projectionTitle')} style={{ marginBottom: 'var(--sp-4)' }}>
-          {t('bracket.projectionText')} {usLine}
-        </Callout>
+        <div class="league-callout">
+          <Callout title={t('bracket.projectionTitle')}>
+            {t('bracket.projectionText')} {usLine}
+          </Callout>
+        </div>
         <BracketView state={game} content={content} model={model} usId={usId} tierId={tierId} />
       </>
     );
   } else {
     body = (
       <>
-        <Callout title={t('bracket.notYet', { from, last: lastMw })} style={{ marginBottom: 'var(--sp-4)' }}>
-          {t('bracket.notYetText', { n: qualifiers })}
-        </Callout>
+        <div class="league-callout">
+          <Callout title={t('bracket.notYet', { from, last: lastMw })}>{t('bracket.notYetText', { n: qualifiers })}</Callout>
+        </div>
         <BracketView
           state={game}
           content={content}

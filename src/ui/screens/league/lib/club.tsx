@@ -4,33 +4,12 @@
  * colours are very light or both very dark, swap the rim so the shield keeps
  * its outline.
  */
-import type { ComponentChildren, JSX } from 'preact';
+import type { ComponentChildren } from 'preact';
 import type { ContentDB } from '../../../../core/content';
 import type { Club, ClubId, GameState } from '../../../../core/model';
+import * as C from '../../../components';
 
 export type CrestSize = 'sm' | 'xs' | 'md' | 'lg' | 'xl';
-
-/** Relative luminance (WCAG) of "#rrggbb"; 0.5 for anything unparseable. */
-export function luminance(hex: string): number {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return 0.5;
-  const n = parseInt(m[1]!, 16);
-  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * ch[0]! + 0.7152 * ch[1]! + 0.0722 * ch[2]!;
-}
-
-/** Inline custom properties for `.crest`. */
-export function crestVars(colors: { primary: string; secondary: string }): Record<string, string> {
-  const a = luminance(colors.primary);
-  const b = luminance(colors.secondary);
-  const vars: Record<string, string> = { '--crest-a': colors.primary, '--crest-b': colors.secondary };
-  if (a > 0.6 && b > 0.6) vars['--crest-rim'] = 'rgba(29, 28, 25, 0.7)';
-  else if (a < 0.05 && b < 0.05) vars['--crest-rim'] = 'rgba(235, 230, 218, 0.85)';
-  return vars;
-}
 
 /** Two-letter crest code from the club name ("Thornwick Wardens" -> "TW"). */
 export function crestCode(club: Pick<Club, 'name' | 'code'>): string {
@@ -40,13 +19,9 @@ export function crestCode(club: Pick<Club, 'name' | 'code'>): string {
 }
 
 export function Crest({ club, size }: { club: Pick<Club, 'name' | 'code' | 'colors'> | null | undefined; size?: CrestSize }) {
-  const cls = size && size !== 'xs' ? `crest crest--${size}` : 'crest';
-  if (!club) return <span class={cls} aria-hidden="true" />;
-  return (
-    <span class={cls} style={crestVars(club.colors) as JSX.CSSProperties} aria-hidden="true">
-      {size === 'sm' ? null : crestCode(club)}
-    </span>
-  );
+  const sz = size === 'xs' ? undefined : size;
+  if (!club) return <span class={sz ? `crest crest--${sz}` : 'crest'} aria-hidden="true" />;
+  return <C.Crest primary={club.colors.primary} secondary={club.colors.secondary} code={crestCode(club)} size={sz} />;
 }
 
 export function clubOf(state: GameState, id: ClubId | null | undefined): Club | null {

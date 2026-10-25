@@ -2,27 +2,23 @@
  * Display formatting shared by the WP7 screens (04 "Formatting": money
  * "11,840 ts", signed changes with U+2212, durations "0:38", weeks "2 wk").
  *
- * Deliberately locale-free (no Intl): src/ui/format (WP6) owns locale-aware
- * formatting; these helpers only produce the fixed formats of document 04 so
- * the screens work before WP6's format module lands. Swap-in point: if WP6
- * exports equivalents, re-export them from here.
+ * Thin layer over src/ui/format (WP6): integers and fight time delegate to
+ * it; money takes the content explicitly so screens and tests do not depend
+ * on the app having called configureFormat() first.
  */
 import type { ContentDB } from '../../../../core/content';
+import { formatInt, formatTicks } from '../../../format';
 
 export const MINUS = '−';
 export const EN_DASH = '–';
 export const MID_DOT = '·';
 
 /** Integer with thousands separators: 11840 -> "11,840", -497 -> "−497". */
-export function fmtInt(n: number, separator = ','): string {
+export function fmtInt(n: number, separator?: string): string {
+  if (separator === undefined || separator === ',') return formatInt(n);
   const v = Math.trunc(n);
-  const digits = String(Math.abs(v));
-  let out = '';
-  for (let i = 0; i < digits.length; i++) {
-    if (i > 0 && (digits.length - i) % 3 === 0) out += separator;
-    out += digits[i];
-  }
-  return v < 0 ? MINUS + out : out;
+  const grouped = Math.abs(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, separator);
+  return v < 0 ? MINUS + grouped : grouped;
 }
 
 /** Signed integer: "+1,200", "−340", "0". */
@@ -47,10 +43,7 @@ export function currencyAbbr(content: ContentDB | null): string {
 
 /** Fight time from ticks: 760 ticks at 50 ms -> "0:38". */
 export function fmtTicks(ticks: number, tickMs = 50): string {
-  const totalSec = Math.floor((ticks * tickMs) / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${s < 10 ? '0' : ''}${s}`;
+  return formatTicks(ticks, 1000 / tickMs);
 }
 
 /** Seconds with one decimal from ticks: 284 ticks -> "14.2". */

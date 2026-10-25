@@ -11,7 +11,8 @@ import type { FighterId, FixtureId, MatchReport } from '../../../core/model';
 import { weekTitle } from '../league/lib/calendar';
 import { clubShort } from '../league/lib/club';
 import { href, go, useCareer, type Career } from '../league/lib/store';
-import { Callout, Empty, NoCareer, NoticeRegion, Tabs, useNotices } from '../league/lib/ui';
+import { showToast } from '../../components';
+import { Callout, Empty, NoCareer, Tabs } from '../league/lib/ui';
 import { adjacentReports, eventLogText, fighterInfos, moments, perspective } from './analysis';
 import { BoxScore } from './BoxScore';
 import { Aftermath, Downs, Moments } from './Moments';
@@ -56,7 +57,6 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
   const { game, content, club } = career;
   const [round, setRound] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<FighterId | null>(null);
-  const { notices, push, dismiss } = useNotices();
   const result = game.results[fixtureId] ?? null;
   const fixture = game.fixtures[fixtureId];
   const persp = perspective(report, club.id);
@@ -104,9 +104,9 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
     const text = eventLogText(report, all, game, tickMs);
     try {
       await navigator.clipboard.writeText(text);
-      push({ kind: 'good', title: t('action.logCopied'), sub: t('action.logCopiedSub', { n: text.split('\n').length }) });
+      showToast({ kind: 'good', title: t('action.logCopied'), sub: t('action.logCopiedSub', { n: text.split('\n').length }) });
     } catch {
-      push({ kind: 'bad', title: t('action.logFailed') });
+      showToast({ kind: 'bad', title: t('action.logFailed') });
     }
   };
 
@@ -178,7 +178,6 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
           <Aftermath state={game} content={content} report={report} infos={infos} persp={persp} />
         </div>
       </div>
-      <NoticeRegion notices={notices} dismiss={dismiss} />
     </section>
   );
 }

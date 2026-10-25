@@ -1,18 +1,11 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { buildFixtureWorld, fixtureContent } from '../../../core/testkit';
-import type * as LeagueModule from '../../../core/league';
-import { StoreContext } from '../../store';
 import LeagueScreen from './index';
 import { createFakeStore } from './testing/fake-store';
+import { Providers } from './testing/providers';
 import { makeSampleWorld } from './testing/worlds';
 import type { SampleStage } from './testing/sample-season';
-
-vi.mock('../../../core/league', async (importOriginal) => {
-  const actual = await importOriginal<typeof LeagueModule>();
-  const fake = await import('./testing/fake-core');
-  return { ...actual, standings: fake.standings };
-});
 
 afterEach(cleanup);
 
@@ -21,9 +14,9 @@ const kit = { buildFixtureWorld, fixtureContent };
 function renderAt(stage: SampleStage) {
   const world = makeSampleWorld(kit, stage);
   render(
-    <StoreContext.Provider value={world.store}>
+    <Providers store={world.store}>
       <LeagueScreen params={{}} />
-    </StoreContext.Provider>,
+    </Providers>,
   );
   return world;
 }
@@ -102,9 +95,9 @@ describe('League screen', () => {
     const world = makeSampleWorld(kit, 'mid');
     const store = createFakeStore({ game: { ...world.state, competitions: {} }, content: world.content });
     render(
-      <StoreContext.Provider value={store}>
+      <Providers store={store}>
         <LeagueScreen params={{}} />
-      </StoreContext.Provider>,
+      </Providers>,
     );
     expect(screen.getByTestId('panel-standings').textContent).toContain('No league table for this tier yet');
   });

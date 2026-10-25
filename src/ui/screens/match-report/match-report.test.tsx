@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildFixtureWorld, fixtureContent } from '../../../core/testkit';
 import type { FixtureId, GameState, MatchReport } from '../../../core/model';
 import { engineError, err, ok } from '../../../core/util';
-import { StoreContext } from '../../store';
 import { buildMatchReport } from '../league/testing/fake-core';
 import { createFakeStore } from '../league/testing/fake-store';
+import { Providers } from '../league/testing/providers';
 import { makeSampleWorld } from '../league/testing/worlds';
 import { fillLabel, ruleText } from './rule-sentence';
 import { perspective, roundList, selectTraces, fighterInfos } from './analysis';
@@ -39,9 +39,9 @@ function renderReport(fixtureId: FixtureId, mutate?: (r: MatchReport) => MatchRe
     },
   });
   render(
-    <StoreContext.Provider value={store}>
+    <Providers store={store}>
       <MatchReportScreen params={{ fixtureId }} />
-    </StoreContext.Provider>,
+    </Providers>,
   );
   return world;
 }
@@ -161,9 +161,9 @@ describe('Match report screen', () => {
     const world = makeSampleWorld(kit, 'mid');
     const store = createFakeStore({ game: world.state, content: world.content, matchReport: () => err(engineError('report.version', 'Engine changed')) });
     render(
-      <StoreContext.Provider value={store}>
+      <Providers store={store}>
         <MatchReportScreen params={{ fixtureId: 'nope' }} />
-      </StoreContext.Provider>,
+      </Providers>,
     );
     expect(screen.getByText('This report could not be built')).toBeTruthy();
     expect(screen.getByText(/report.version/)).toBeTruthy();

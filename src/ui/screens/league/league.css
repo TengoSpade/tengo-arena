@@ -45,3 +45,7 @@
 .league-bracket {
   --bracket-gap: 1.5rem;
 }
+
+.league-callout {
+  margin-bottom: var(--sp-4);
+}
