@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/pre
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildFixtureWorld, fixtureContent } from '../../../core/testkit';
 import type { GameState } from '../../../core/model';
+import { NotImplementedError } from '../../../core/util';
 import { EngineContext, StoreContext, coreEngine } from '../../store';
 import { createFakeStore } from '../league/testing/fake-store';
 import { Providers } from '../league/testing/providers';
@@ -70,7 +71,8 @@ describe('Finances screen', () => {
     const world = makeSampleWorld(kit, 'mid');
     render(
       <StoreContext.Provider value={world.store}>
-        <EngineContext.Provider value={coreEngine}>
+        {/* Integrator (WP5): economy.financeView is real since WP4 merged, so the stub is simulated here. */}
+        <EngineContext.Provider value={{ ...coreEngine, financeView: () => { throw new NotImplementedError('economy.financeView'); } }}>
           <FinancesScreen params={{}} />
         </EngineContext.Provider>
       </StoreContext.Provider>,

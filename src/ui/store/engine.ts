@@ -41,6 +41,10 @@ export interface GameEngine {
   financeView: typeof economy.financeView;
   wageBill: typeof economy.wageBill;
   pendingWages: typeof economy.pendingWages;
+  /** Integrator (WP5) addition for WP7's market (additive). */
+  ask: typeof economy.ask;
+  checkOffer: typeof economy.checkOffer;
+  marketWage: typeof economy.marketWage;
   presetsForClass: typeof tactics.presetsForClass;
   describeRule: typeof tactics.describeRule;
   // saves (core/save)
@@ -71,6 +75,9 @@ export const coreEngine: GameEngine = {
   financeView: economy.financeView,
   wageBill: economy.wageBill,
   pendingWages: economy.pendingWages,
+  ask: economy.ask,
+  checkOffer: economy.checkOffer,
+  marketWage: economy.marketWage,
   presetsForClass: tactics.presetsForClass,
   describeRule: tactics.describeRule,
   saveMetaFor: save.saveMetaFor,
