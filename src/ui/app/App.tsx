@@ -10,7 +10,7 @@
 import { effect } from '@preact/signals';
 import type { ComponentType } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { showToast } from '../components';
+import { ToastRegion, TooltipLayer, showToast } from '../components';
 import { DebugOverlay } from '../debug/DebugOverlay';
 import { StoreContext, type AppStore } from '../store';
 import { EngineContext } from '../store/engine';
@@ -94,7 +94,15 @@ function AppRoutes({ store, onToggleDebug }: { store: AppStore; onToggleDebug?: 
     );
   }
   if (!route || target) return <main class="page" aria-busy="true" />;
-  if (BARE.includes(route.id)) return <ScreenHost route={route} params={params} />;
+  if (BARE.includes(route.id)) {
+    return (
+      <>
+        <ScreenHost route={route} params={params} />
+        <TooltipLayer />
+        <ToastRegion />
+      </>
+    );
+  }
   return (
     <Frame onToggleDebug={onToggleDebug}>
       <ScreenHost route={route} params={params} />

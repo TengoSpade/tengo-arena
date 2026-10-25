@@ -50,9 +50,10 @@ if (dev) {
   const content = store.content.value;
   if (week !== null && content) {
     const { buildDevWorld } = await import('./ui/debug/dev-world');
-    const club = query.get('club') ?? content.clubs.list.find((c) => c.startTierLevel === 2)?.id ?? content.clubs.list[0]!.id;
+    const clubParam = query.get('club');
+    const club = clubParam === 'none' ? null : (clubParam ?? content.clubs.list.find((c) => c.startTierLevel === 2)?.id ?? content.clubs.list[0]!.id);
     store.replaceWorld(buildDevWorld(content, { playerClubId: club, weekIndex: Number(week) || 11 }));
-    if (!location.hash || location.hash === '#/' || location.hash === '#/new-game') location.hash = '#/home';
+    if (!location.hash || location.hash === '#/' || location.hash === '#/new-game') location.hash = club ? '#/home' : '#/club-select';
   }
 }
 
