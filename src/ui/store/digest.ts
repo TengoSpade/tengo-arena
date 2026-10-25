@@ -11,7 +11,7 @@ import type { Blocker, ClubId, GameState, NewsId, NewsItem } from '../../core/mo
 import { formatMoney } from '../format';
 import { format } from '../text';
 import { blockerTarget } from './digest-targets';
-import { blockerText } from './messages';
+import { blockerText, distinctBlockers } from './messages';
 
 export type DigestKind = 'medical' | 'contract' | 'result' | 'market' | 'league' | 'development';
 
@@ -138,11 +138,11 @@ export function newsToDigest(item: NewsItem, names: DigestNames = {}): DigestIte
   };
 }
 
-function blockerToDigest(b: Blocker, i: number): DigestItem {
+function blockerToDigest(b: Blocker, i: number, state: GameState): DigestItem {
   return {
     id: `blocker-${i}-${b.code}`,
     kind: b.code.startsWith('roster.') ? 'contract' : 'medical',
-    title: blockerText(b),
+    title: blockerText(b, state),
     text: 'Continue is blocked until this is decided.',
     needsAction: true,
     unread: true,
@@ -159,7 +159,7 @@ export function buildDigest(state: GameState, content: ContentDB, clubId: ClubId
   const news = state.news.filter(
     (n) => (n.clubId === clubId || n.clubId === null) && n.at.season === state.calendar.season && n.at.weekIndex >= recentWeek,
   );
-  const items = [...blockers.filter((b) => b.code !== 'phase.season-end').map(blockerToDigest), ...news.map((n) => newsToDigest(n, { state, content }))];
+  const items = [...distinctBlockers(blockers.filter((b) => b.code !== 'phase.season-end')).map((b, i) => blockerToDigest(b, i, state)), ...news.map((n) => newsToDigest(n, { state, content }))];
   const rank = (d: DigestItem, i: number) => (d.id.startsWith('blocker-') ? 0 : d.needsAction ? 1 : ORDER[d.kind]) * 1000 + i;
   const sorted = items.map((d, i) => ({ d, r: rank(d, i) })).sort((a, b) => a.r - b.r).map((x) => x.d);
   // Notification budget: at most 2 "Needs action" (extra ones stay listed without the tag), at most 6 items.

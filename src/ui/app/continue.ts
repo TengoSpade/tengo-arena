@@ -67,7 +67,7 @@ export function continueModel(input: ContinueInput): ContinueModel {
     const first = blocking[0]!;
     return {
       main: t('continue.decideFirst'),
-      sub: blockerText(first),
+      sub: blockerText(first, state),
       state: 'blocked',
       tip: t('continue.tipBlocked'),
       action: { kind: 'navigate', to: blockerTarget(first.code) },

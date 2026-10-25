@@ -170,7 +170,9 @@ export const en = {
   // ---- blockers (core Blocker codes; 02 §3) ---------------------------------------------------------
   'blocker.lineup.incomplete': 'Lineup needs 5 fit fighters',
   'blocker.lineup.unavailable': 'A lineup fighter is unavailable',
+  'blocker.lineup.unavailable.named': '{name} is unfit to play',
   'blocker.lineup.not-on-roster': 'A lineup fighter left the roster',
+  'blocker.lineup.not-on-roster.named': '{name} left the roster',
   'blocker.roster.over-cap': 'Release {n} {n?fighter|fighters}',
   'blocker.club.not-chosen': 'Pick a club',
   'blocker.phase.season-end': 'Season review',

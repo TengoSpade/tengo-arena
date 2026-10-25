@@ -4,7 +4,7 @@ import { NotImplementedError, engineError, err } from '../../core/util';
 import { createDevEngine } from '../debug/dev-engine';
 import { createTestStore } from '../debug/test-store';
 import { coreEngine, type GameEngine } from './engine';
-import { errorText } from './messages';
+import { blockerText, distinctBlockers, errorText } from './messages';
 import { AUTOSAVE_SLOTS } from './create-store';
 import { newsToDigest } from './digest';
 import type { NewsItem } from '../../core/model';
@@ -304,5 +304,20 @@ describe('digest copy from core news', () => {
     expect(newsToDigest(item, { state }).needsAction).toBe(true);
     club.lineup.fighters = club.lineup.fighters.slice(1);
     expect(newsToDigest(item, { state }).needsAction).toBe(false);
+  });
+});
+
+describe('blocker copy', () => {
+  it('names the unfit starter and lists the cause once', () => {
+    const { store } = createTestStore();
+    const state = store.game.value!;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const id = club.lineup.fighters[0]!.fighterId;
+    const unfit = { code: 'lineup.unavailable', fighterId: id };
+    expect(blockerText(unfit, state)).toBe(`${state.fighters[id]!.name.full} is unfit to play`);
+    expect(blockerText(unfit)).toBe('A lineup fighter is unavailable');
+    const both = [unfit, { code: 'lineup.incomplete', details: { have: 4, need: 5 } }];
+    expect(distinctBlockers(both).map((b) => b.code)).toEqual(['lineup.unavailable']);
+    expect(distinctBlockers([both[1]!]).map((b) => b.code)).toEqual(['lineup.incomplete']);
   });
 });

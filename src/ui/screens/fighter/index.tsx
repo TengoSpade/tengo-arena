@@ -328,7 +328,12 @@ function ProfileHeader(props: {
                   { label: T.releasePayout, value: payout !== null ? formatMoney(payout) : '—', tip: T.releasePayoutTip },
                   ...(payout !== null && balance !== null ? [{ label: T.releaseBalance, value: formatMoney(balance - payout) }] : []),
                   { label: T.releaseWage, value: f.contract ? formatMoney(f.contract.wagePerWeek, { perWeek: true }) : '—' },
-                  { label: T.releaseLeft, value: f.contract ? format(T.contractEndsValue, { season: f.contract.endSeason, n: contract.seasonsLeft }) : '—' },
+                  {
+                    label: T.releaseLeft,
+                    value: f.contract
+                      ? format(contract.final ? T.contractFinal : T.contractEndsValue, { season: f.contract.endSeason, n: contract.seasonsLeft })
+                      : '—',
+                  },
                   { label: T.releaseRoster, value: `${rosterAfter} / ${ctx.rosterCap}` },
                   { label: T.releaseBill, value: billAfter !== null ? formatMoney(billAfter, { perWeek: true }) : '—' },
                   ...(isCaptain ? [{ label: T.releaseCaptain, value: T.releaseCaptainNone }] : []),
