@@ -455,7 +455,9 @@ function inTab(d: DigestItem, tab: DigestTab): boolean {
 
 function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const { state, content, club } = ctx;
-  const items = withAwaySummary([...buildDigest(state, content, club.id, store.blockers.value), ...homeAdvice(ctx)], ctx, store);
+  // Advice ranks after what needs action and before routine news.
+  const base = buildDigest(state, content, club.id, store.blockers.value);
+  const items = withAwaySummary([...base.filter((d) => d.needsAction), ...homeAdvice(ctx), ...base.filter((d) => !d.needsAction)], ctx, store);
   const tab = digestTab.value;
   const shown = items.filter((d) => inTab(d, tab));
   const action = needsActionCount(items);

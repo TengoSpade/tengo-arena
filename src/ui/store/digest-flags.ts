@@ -47,8 +47,11 @@ export function digestBlockers(blockers: readonly Blocker[]): Blocker[] {
   return distinctBlockers(blockers.filter((b) => b.code !== 'phase.season-end'));
 }
 
+/** News keys the digest shows as one item when several arrive together (one per fighter in core). */
+export const GROUPED_KEYS: ReadonlySet<string> = new Set(['contract.expiring', 'contract.minimum_raise']);
+
 /** How many digest items carry "Needs action" (capped by the notification budget): the badges. */
 export function needsActionNow(state: GameState, clubId: ClubId, blockers: readonly Blocker[]): number {
-  const n = digestBlockers(blockers).length + digestNews(state, clubId).filter((item) => newsNeedsAction(item, state)).length;
-  return Math.min(NEEDS_ACTION_LIMIT, n);
+  const keys = new Set(digestNews(state, clubId).filter((item) => newsNeedsAction(item, state)).map((item) => (GROUPED_KEYS.has(item.key) ? item.key : item.id)));
+  return Math.min(NEEDS_ACTION_LIMIT, digestBlockers(blockers).length + keys.size);
 }

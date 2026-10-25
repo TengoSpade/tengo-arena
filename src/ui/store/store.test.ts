@@ -7,7 +7,8 @@ import { coreEngine, type GameEngine } from './engine';
 import { blockerText, distinctBlockers, errorText } from './messages';
 import { resetToasts, toasts } from '../components/Toast';
 import { AUTOSAVE_SLOTS, MAX_IMPORT_BYTES } from './create-store';
-import { newsToDigest } from './digest';
+import { buildDigest, newsToDigest } from './digest';
+import { needsActionNow } from './digest-flags';
 import type { NewsItem } from '../../core/model';
 
 function playerClub(state: GameState) {
@@ -378,5 +379,25 @@ describe('blocker copy', () => {
     const both = [unfit, { code: 'lineup.incomplete', details: { have: 4, need: 5 } }];
     expect(distinctBlockers(both).map((b) => b.code)).toEqual(['lineup.unavailable']);
     expect(distinctBlockers([both[1]!]).map((b) => b.code)).toEqual(['lineup.incomplete']);
+  });
+});
+
+describe('digest grouping', () => {
+  it('shows several expiring contracts as one item, and the badge agrees', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const state = structuredClone(store.game.value!) as GameState;
+    const clubId = state.playerClubId as ClubId;
+    state.news = [];
+    const mine = Object.values(state.fighters).filter((f) => f.clubId === clubId).slice(0, 3);
+    mine.forEach((f, i) =>
+      state.news.push({ id: `n-x${i}`, at: { season: state.calendar.season, weekIndex: state.calendar.weekIndex - 1 }, key: 'contract.expiring', params: { count: 3, season: 1, weeksLeft: 4 }, clubId, refs: { fighterId: f.id }, importance: 'urgent', read: false } as unknown as NewsItem),
+    );
+    const items = buildDigest(state, store.content.value!, clubId, []);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('3 contracts end this season');
+    expect(items[0]!.text).toContain(mine[0]!.name.full);
+    expect(items[0]!.action?.href).toBe('#/market?view=renewals');
+    expect(items[0]!.newsIds).toHaveLength(3);
+    expect(needsActionNow(state, clubId, [])).toBe(1);
   });
 });

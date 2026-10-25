@@ -11,7 +11,7 @@ import { personName, type Blocker, type ClubId, type GameState, type NewsId, typ
 import { formatMoney } from '../format';
 import { format } from '../text';
 import { blockerTarget } from './digest-targets';
-import { NEEDS_ACTION_LIMIT, digestBlockers, digestNews, newsNeedsAction } from './digest-flags';
+import { GROUPED_KEYS, NEEDS_ACTION_LIMIT, digestBlockers, digestNews, newsNeedsAction } from './digest-flags';
 import { blockerText } from './messages';
 
 export type DigestKind = 'medical' | 'contract' | 'result' | 'market' | 'league' | 'development';
@@ -172,8 +172,49 @@ function blockerToDigest(b: Blocker, i: number, state: GameState): DigestItem {
 const ORDER: Record<DigestKind, number> = { medical: 2, contract: 2, result: 3, development: 4, market: 5, league: 6 };
 
 /** This week's digest for a club: blockers first, then news of the last processed week and this week. */
+/** Several news of a grouped key (one per fighter) become one item naming them all. */
+function groupNews(news: readonly NewsItem[], state: GameState, content: ContentDB): DigestItem[] {
+  const out: DigestItem[] = [];
+  const groups = new Map<string, NewsItem[]>();
+  for (const n of news) {
+    if (!GROUPED_KEYS.has(n.key)) {
+      out.push(newsToDigest(n, { state, content }));
+      continue;
+    }
+    const g = groups.get(n.key);
+    if (g) g.push(n);
+    else {
+      groups.set(n.key, [n]);
+      out.push({ id: `group-${n.key}`, kind: 'contract', title: '', text: '', needsAction: false, unread: false, newsIds: [] });
+    }
+  }
+  return out.map((d) => {
+    if (!d.id.startsWith('group-')) return d;
+    const list = groups.get(d.id.slice('group-'.length))!;
+    if (list.length === 1) return newsToDigest(list[0]!, { state, content });
+    const one = newsToDigest(list[0]!, { state, content });
+    const names = list.map((n) => (n.refs.fighterId ? (personName(state, n.refs.fighterId)?.full ?? '') : '')).filter(Boolean).join(', ');
+    const tpl = GROUP_TEMPLATES[list[0]!.key]!;
+    return {
+      ...one,
+      id: `group-${list[0]!.key}-${list[0]!.id}`,
+      title: format(tpl.title, { n: list.length }),
+      text: format(tpl.text, { names }),
+      action: { label: tpl.action[0], href: tpl.action[1] },
+      unread: list.some((n) => !n.read),
+      needsAction: list.some((n) => newsNeedsAction(n, state)),
+      newsIds: list.map((n) => n.id),
+    };
+  });
+}
+
+const GROUP_TEMPLATES: Record<string, { title: string; text: string; action: [string, string] }> = {
+  'contract.expiring': { title: '{n} contracts end this season', text: '{names}. Unrenewed fighters leave at season end.', action: ['Renewals', '#/market?view=renewals'] },
+  'contract.minimum_raise': { title: '{n} wages rise to the new tier minimum', text: '{names}.', action: ['Finances', '#/finances'] },
+};
+
 export function buildDigest(state: GameState, content: ContentDB, clubId: ClubId, blockers: readonly Blocker[]): DigestItem[] {
-  const items = [...digestBlockers(blockers).map((b, i) => blockerToDigest(b, i, state)), ...digestNews(state, clubId).map((n) => newsToDigest(n, { state, content }))];
+  const items = [...digestBlockers(blockers).map((b, i) => blockerToDigest(b, i, state)), ...groupNews(digestNews(state, clubId), state, content)];
   const rank = (d: DigestItem, i: number) => (d.id.startsWith('blocker-') ? 0 : d.needsAction ? 1 : ORDER[d.kind]) * 1000 + i;
   const sorted = items.map((d, i) => ({ d, r: rank(d, i) })).sort((a, b) => a.r - b.r).map((x) => x.d);
   // Notification budget: at most 2 "Needs action" (extra ones stay listed without the tag), at most 6 items.

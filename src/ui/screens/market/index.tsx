@@ -31,7 +31,7 @@ type View = 'agents' | 'pending' | 'renewals' | 'rookies' | 'shortlist';
 export default function MarketScreen(props: ScreenProps) {
   const career = useCareer();
   if (!career) return <NoCareer testId="screen-market" />;
-  return <Market career={career} renewId={props.params['renew'] ?? null} />;
+  return <Market career={career} renewId={props.params['renew'] ?? null} viewParam={props.params['view'] ?? null} />;
 }
 
 interface Filters {
@@ -73,14 +73,16 @@ function rowMatches(r: MarketRow, f: Filters, content: ContentDB, m: ClubMarket)
   return true;
 }
 
-function Market({ career, renewId }: { career: Career; renewId: string | null }) {
+function Market({ career, renewId, viewParam }: { career: Career; renewId: string | null; viewParam: string | null }) {
   const { store, game, content, club } = career;
   const engine = useWp7Engine();
   // Another screen may ask for a view (the expiring-contracts dialog opens Renewals).
   const [view, setView] = useState<View>(() => {
     const asked = marketViewRequest.value;
     marketViewRequest.value = null;
-    return asked ?? (renewId ? 'renewals' : 'agents');
+    // #/market?view=renewals (digest "Renewals"), or the Renewals view for a renew link.
+    const fromParam = viewParam && ['agents', 'pending', 'renewals', 'rookies', 'shortlist'].includes(viewParam) ? (viewParam as View) : null;
+    return asked ?? fromParam ?? (renewId ? 'renewals' : 'agents');
   });
   const [filters, setFilters] = useState<Filters>(() => defaultFilters(content));
   const [selected, setSelected] = useState<string | null>(null);

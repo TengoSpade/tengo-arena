@@ -446,7 +446,6 @@ function DevelopmentStep({ game, content, record, clubId }: { game: GameState; c
     {
       id: 'attributes',
       header: t('col.attributes'),
-      class: 'col-mid',
       cell: (r) => {
         if (r.dev) {
           // The notable changes inline (largest first), every change in the tooltip.
