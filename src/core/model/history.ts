@@ -1,5 +1,5 @@
 import type { StandingRow } from './competition';
-import type { ClubId, FighterId, TierId, WingId } from './ids';
+import type { ClubId, FighterId, StatId, TierId, WingId } from './ids';
 
 /**
  * Archive of a finished season, written once by the season-end step
@@ -11,6 +11,36 @@ export interface SeasonRecord {
   tiers: TierSeasonRecord[];
   retirements: RetirementRecord[];
   rookieIds: FighterId[];
+  /**
+   * Season-end aging and development of every rostered fighter (core/game
+   * developmentSummary). Kept on the latest record only: the next season end
+   * removes it from older ones.
+   */
+  development?: FighterDevelopment[];
+  /** Contracts raised to the new tier minimum at next-season setup (promotion; tier-minimum raise). */
+  wageRaises?: WageRaise[];
+}
+
+/** One fighter's season-end development (before = before the aging and development step). */
+export interface FighterDevelopment {
+  fighterId: FighterId;
+  ageBefore: number;
+  ageAfter: number;
+  ratingBefore: number;
+  ratingAfter: number;
+  /** Change of every display attribute (after − before; 0 when unchanged). */
+  attributeDeltas: Record<StatId, number>;
+  /** Potential after − before, when it changed (scars, physique traits). */
+  potentialChange?: number;
+  /** He retired at this season end. */
+  retired?: boolean;
+}
+
+export interface WageRaise {
+  clubId: ClubId;
+  fighterId: FighterId;
+  from: number;
+  to: number;
 }
 
 export interface TierSeasonRecord {

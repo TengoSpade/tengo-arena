@@ -58,7 +58,7 @@ describe('20-season population without matches (usage at the floor)', () => {
     checkAgeAndPopulation(report);
   });
   it('turns the league over: by season 20 world generation survives in elves and mentally weighted veterans (D-T)', () => {
-    const survivors = Object.values(report.finalState.fighters).filter((f) => f.debutSeason === 1 && f.status !== 'retired');
+    const survivors = Object.values(report.finalState.fighters).filter((f) => f.debutSeason <= 1 && f.status !== 'retired');
     const others = survivors.filter((f) => f.raceId !== 'elf');
     for (const f of survivors) expect(humanAge(f)).toBeLessThan(content.development.retirement.forcedHumanAge);
     // Mental stats hold until human-age 60, physical ones fall from 31: the non-elf survivors are mostly mental classes.

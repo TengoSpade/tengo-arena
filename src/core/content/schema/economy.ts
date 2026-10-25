@@ -205,6 +205,8 @@ export const EconomyFileSchema = z.object({
       weeklyWage: z.enum(['tierMinWage']),
     }).strict(),
     marketWorthWeeks: z.number(),
+    /** Weeks before the end of the season at which the player is told about unrenewed contracts (contract.expiring). */
+    expiryReminderWeeksBeforeEnd: z.number().int().min(0).default(4),
   }).strict(),
   market: z.object({
     _doc: z.string().optional(),

@@ -4,7 +4,7 @@
  */
 import type { ContentDB } from '../content';
 import type { SnubExemption } from '../fighters';
-import { freeAgentList, type Blocker, type ClubId, type Command, type Fighter, type FighterId, type GameState, type Gold, type StatId } from '../model';
+import { freeAgentList, type FighterDevelopment, type Blocker, type ClubId, type Command, type Fighter, type FighterId, type GameState, type Gold, type StatId } from '../model';
 import type { GamePorts } from './ports';
 import { getOwn } from '../util';
 import { compareIds, onRoster, rosterOf } from './shared';
@@ -203,4 +203,13 @@ export function captaincyPreview(
     chemistryBefore: lineup.length > 0 ? ports.fighters.lineupChemistry(state, clubId, lineup, club.captainId, content) : 0,
     chemistryAfter: lineup.length > 0 ? ports.fighters.lineupChemistry(state, clubId, lineup, captainId, content) : 0,
   };
+}
+
+/**
+ * Season-end aging and development of every fighter rostered at that season end (season review
+ * "Aging and development"): age, rating and attributes before and after the step, potential change,
+ * retirement. Kept for the latest finished season only (until the next season end); [] otherwise.
+ */
+export function developmentSummary(state: GameState, season: number): FighterDevelopment[] {
+  return state.history.find((h) => h.season === season)?.development ?? [];
 }

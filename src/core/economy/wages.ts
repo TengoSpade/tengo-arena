@@ -11,7 +11,6 @@ import { clamp, getOwn } from '../util';
 import { fighterHumanAge, fighterPotential, fighterRating } from './fighter-values';
 import { floorTo, interpolate, mulDiv, stepLookup } from './math';
 import { requireClub, requireFighter, tierOf } from './queries';
-import { marketTime } from './time';
 
 const BP = 10_000;
 
@@ -190,7 +189,8 @@ export function askDetails(state: GameState, fighter: Fighter, clubId: ClubId, s
   let situationBp = 0;
   if (isRenewal) {
     const s = e.ask.renewalSituation;
-    const { started, played } = seasonStarts(state, fighter.id, clubId, marketTime(state).season);
+    // The season being played (also during the pending season-end step).
+    const { started, played } = seasonStarts(state, fighter.id, clubId, state.calendar.season);
     if (played > 0) {
       const shareBp = mulDiv(started, BP, played);
       if (shareBp < s.lowStartShareBelowBp) situationBp += s.lowStartAdjBp;

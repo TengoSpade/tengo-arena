@@ -126,3 +126,5 @@ export function captaincyPreview(
 ): CaptaincyPreview | null {
   return engine.captaincyPreview(state, clubId, captainId, viceCaptainId, content);
 }
+
+export { developmentSummary } from './views';

@@ -80,6 +80,23 @@ export function autoCaptain(ports: GamePorts, draft: GameState, club: Club, cont
   return pick;
 }
 
+/**
+ * "Needs action" (contract.expiring, urgent): at the processing that leaves
+ * economy.json contracts.expiryReminderWeeksBeforeEnd weeks in the season, one
+ * item per player-club fighter whose contract ends this season, is not renewed
+ * and is not retiring. Renewals stay open until the season-end expiry step.
+ */
+function remindExpiringContracts(draft: GameState, weekIndex: number, content: ContentDB): void {
+  const club = draft.playerClubId;
+  const weeks = content.leagues.calendar.weeks.length;
+  if (club === null || weekIndex !== weeks - content.economy.contracts.expiryReminderWeeksBeforeEnd) return;
+  const season = draft.calendar.season;
+  const expiring = rosterOf(draft, club).filter((f) => f.contract?.endSeason === season && !f.contract.next && !f.finalSeason);
+  for (const f of expiring) {
+    addNews(draft, { key: GAME_NEWS_KEYS.contractExpiring, clubId: club, refs: { fighterId: f.id }, params: { count: expiring.length, season, weeksLeft: weeks - weekIndex }, importance: 'urgent' });
+  }
+}
+
 /** Lock the lineups of the clubs playing this week; hired blades fill short-handed sides (open-006). */
 function lockLineups(
   ports: GamePorts,
@@ -191,6 +208,7 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
     runAiPhase(ports, draft, content, (s, c) => ports.ai.planWeek(s, c, content), log);
     // 10. Pool floors.
     ports.economy.topUpFreeAgentPool(draft, content);
+    remindExpiringContracts(draft, cal.weekIndex, content);
     // 11. The Reckoning is seeded after the last regular week, then the calendar moves on.
     if (cal.weekIndex === ports.league.lastRegularWeekIndex(content)) ports.league.seedReckonings(draft, content);
     draft.calendar = ports.league.nextCalendar(cal, content);

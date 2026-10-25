@@ -5,7 +5,7 @@
  * sys-contracts; 05 §3.3 pipelines.
  */
 import type { ContentDB } from '../content';
-import type { Club, ClubId, Fighter, FighterId, GameState, GameTime, NewsId, SeasonRecord, TierId } from '../model';
+import type { Club, ClubId, Fighter, FighterId, GameState, GameTime, NewsId, SeasonRecord, TierId, WageRaise } from '../model';
 import { reckoningCompetitionId, setMembership, weekFixtures } from '../model';
 import { Rng, STREAM } from '../rng';
 import { clamp } from '../util';
@@ -366,7 +366,7 @@ function setupClubFinances(draft: GameState, club: Club, s: ClubSetup, content: 
   setStatus(draft, club, s.season, SETUP_WEEK_INDEX, content, news);
 }
 
-function applyContractSetupRules(draft: GameState, club: Club, relegated: boolean, season: number, content: ContentDB): void {
+function applyContractSetupRules(draft: GameState, club: Club, relegated: boolean, season: number, content: ContentDB, raises: WageRaise[]): void {
   const c = content.economy.contracts;
   const min = profileOf(club, content).tierMinWage;
   const step = content.economy.wage.roundDownToMultiple;
@@ -385,7 +385,10 @@ function applyContractSetupRules(draft: GameState, club: Club, relegated: boolea
       contract.wagePerWeek = Math.max(min, floorTo(mulDiv(contract.wagePerWeek, BP - c.dropClauseBp, BP), step));
       contract.dropClauseApplied = true;
     }
-    if (c.raiseToTierMinimumAtSetup && contract.wagePerWeek < min) contract.wagePerWeek = min;
+    if (c.raiseToTierMinimumAtSetup && contract.wagePerWeek < min) {
+      raises.push({ clubId: club.id, fighterId: f.id, from: contract.wagePerWeek, to: min });
+      contract.wagePerWeek = min;
+    }
   }
 }
 
@@ -416,12 +419,13 @@ export function nextSeasonFinanceSetupImpl(draft: GameState, rookieIds: readonly
   draft.ledger.entries = [];
   draft.ledger.openingBalances = {};
   for (const club of clubs) draft.ledger.openingBalances[club.id] = club.finance.balance;
+  const raises: WageRaise[] = [];
   for (const club of clubs) {
     const before = tierLevelInSeason(draft, club.id, ending, content);
     const now = tierOf(club, content).level;
     const promoted = before !== null && now < before;
     const relegated = before !== null && now > before;
-    applyContractSetupRules(draft, club, relegated, season, content);
+    applyContractSetupRules(draft, club, relegated, season, content, raises);
     setupClubFinances(draft, club, { season, balanceAtSetup: club.finance.balance, promoted, relegated }, content, news);
   }
   // Season memory of the market resets; agreed renewals were applied above.
@@ -432,6 +436,16 @@ export function nextSeasonFinanceSetupImpl(draft: GameState, rookieIds: readonly
   draft.market.offers = draft.market.offers.filter((o) => live.has(o.fighterId));
   for (const f of Object.values(draft.fighters)) if (f.status === 'free-agent' && !f.freeAgency) makeFreeAgent(draft, f);
   assignTrialsRookies(draft, rookieIds, season, content);
+  // Tier-minimum raises: on the ending season's record (season review) and, for the player's club, as news.
+  const record = draft.history.find((h) => h.season === ending);
+  if (record && raises.length > 0) {
+    // Written in this season-end step, so still editable; a shared (frozen) record is replaced instead.
+    if (Object.isFrozen(record)) draft.history[draft.history.indexOf(record)] = { ...record, wageRaises: raises };
+    else record.wageRaises = raises;
+  }
+  for (const r of raises) {
+    pushNews(news, addClubNews(draft, { key: 'contract.minimum_raise', clubId: r.clubId, fighterId: r.fighterId, params: { from: r.from, to: r.to }, importance: 'notable' }));
+  }
   return news;
 }
 

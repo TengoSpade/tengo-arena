@@ -10,8 +10,11 @@ import { getOwn, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
 import { defaultTactics, fail, onRoster, rosterOf, tidyClub } from './shared';
 
-/** Commands allowed while the season-end step is pending (no club decisions then). */
-const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set(['news.markRead', 'news.setRead', 'shortlist.toggle', 'club.choose']);
+/**
+ * Commands allowed while the season-end step is pending. Renewals stay open until the expiry
+ * step runs: it is still every expiring contract's final season.
+ */
+const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set(['news.markRead', 'news.setRead', 'shortlist.toggle', 'club.choose', 'contract.renew']);
 
 function clubCheck(state: GameState, clubId: ClubId): EngineError | null {
   return getOwn(state.clubs, clubId) ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };
