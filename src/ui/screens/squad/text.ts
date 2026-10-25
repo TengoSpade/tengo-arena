@@ -96,4 +96,6 @@ export const T = {
   toastAuto: 'Lineup auto-picked',
   toastLast: 'Last lineup restored',
   apps: 'Apps this season {n}',
+  rowCountTip: '{n} fighters in the {row}',
+  slotTip: 'Lineup slot {n} (slot order breaks targeting ties)',
 } as const;

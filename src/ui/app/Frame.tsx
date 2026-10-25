@@ -11,7 +11,7 @@ import type { ClubId, WeekReport } from '../../core/model';
 import { Crest, Icon, Modal, ToastRegion, TooltipLayer, showToast, tipAttrs, undoLast, type Tip } from '../components';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
-import { useStore, type AppStore } from '../store';
+import { slotName, useStore, type AppStore } from '../store';
 import { buildDigest, needsActionCount } from '../store/digest';
 import { useEngine } from '../store/engine';
 import { effectiveTheme, pacingStops, reducedMotion, settings, updateSettings } from '../store/settings';
@@ -131,7 +131,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const quickSave = async () => {
     if (!store.game.value?.playerClubId) return;
     const res = await store.quickSave();
-    if (res.ok) showToast({ title: t('save.saved', { slot: res.value.label }), sub: res.value.slotId, kind: 'good' });
+    if (res.ok) showToast({ title: t('save.saved', { slot: slotName(res.value.slotId) }), sub: res.value.label, kind: 'good' });
   };
 
   // Global shortcuts (04 §6.4). Screens add their own layers with useShortcuts().

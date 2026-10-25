@@ -35,7 +35,7 @@ import {
 import { formatInt, formatMoney, formatPercent, formatSigned, ordinal } from '../../format';
 import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
 import { contractEnds, injuryLabel, injuryTip, rolesOf } from '../../format/fighter';
-import { useStore, type AppStore } from '../../store';
+import { slotName, useStore, type AppStore } from '../../store';
 import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf, usePlayerClub, type ClubContext } from '../../store/views';
@@ -99,7 +99,7 @@ export default function HomeScreen(_props: ScreenProps) {
               type="button"
               onClick={async () => {
                 const res = await store.quickSave?.();
-                if (res?.ok) showToast({ title: t('save.saved', { slot: res.value.label }), sub: res.value.slotId, kind: 'good' });
+                if (res?.ok) showToast({ title: t('save.saved', { slot: slotName(res.value.slotId) }), sub: res.value.label, kind: 'good' });
               }}
             >
               <Icon name="save" />
@@ -186,6 +186,7 @@ function FixtureHero({ ctx, fixture, engine }: { ctx: ClubContext; fixture: Fixt
       title={T.nextFixture}
       icon="swords"
       subtitle={format(T.fixtureSub, { stage, n: fixture.bestOf })}
+      subtitleTip={format(T.fixtureSubTip, { n: fixture.bestOf, win: Math.ceil(fixture.bestOf / 2) })}
       body="none"
       testId="next-fixture"
       actions={
@@ -303,7 +304,7 @@ function LineupTile({ ctx, club, label, ours }: { ctx: ClubContext; club: Club; 
           {injuredReserve ? ` · ${injuredReserve.name.full}: ${injuryLabel(injuredReserve.injury!, content)}` : ''}
         </span>
       ) : (
-        <span class="stat-tile__sub">
+        <span class="stat-tile__sub" {...tipAttrs(T.theirLineupTip)}>
           {[hasHealer ? null : T.noHealer, mean !== null ? format(T.meanRating, { n: mean }) : null].filter(Boolean).join(' · ')}
         </span>
       )}
@@ -600,6 +601,7 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
       title={T.availability}
       icon="injury"
       subtitle={format(T.availabilitySub, { fit: roster.length - injured.length, inj: injured.length })}
+      subtitleTip={T.availabilityTip}
       body="flush"
       testId="availability"
     >
@@ -653,7 +655,7 @@ function WingTable({ ctx }: { ctx: ClubContext }) {
     .map(([k, v]) => `${v} for ${k.replace('-', '–')}`)
     .join(', ')}`;
   const columns: Column<StandingRow>[] = [
-    { id: 'pos', header: '#', class: 'cell-tight', cell: (r) => r.position },
+    { id: 'pos', header: '#', headerLabel: T.colPos, class: 'cell-tight', cell: (r) => <span {...tipAttrs(format(T.posTip, { pos: ordinal(r.position), wing: wing?.name ?? tier.name }))}>{r.position}</span> },
     {
       id: 'club',
       header: T.colClub,

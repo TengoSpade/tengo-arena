@@ -473,7 +473,8 @@ function decorateDevCareer(state: GameState, content: ContentDB, clubId: ClubId)
     .sort((a, b) => b.weekIndex - a.weekIndex)[0];
   if (last) {
     const other = last.homeClubId === clubId ? last.awayClubId : last.homeClubId;
-    news('match.result', { won: last.winnerClubId === clubId ? 1 : 0, home: last.score.home, away: last.score.away, opponent: state.clubs[other]?.name ?? other }, 'info', {
+    const home = last.homeClubId === clubId;
+    news('match.result', { won: last.winnerClubId === clubId ? 1 : 0, for: home ? last.score.home : last.score.away, against: home ? last.score.away : last.score.home, opponent: state.clubs[other]?.name ?? other }, 'info', {
       fixtureId: last.fixtureId,
       otherClubId: other,
     });

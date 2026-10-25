@@ -36,7 +36,7 @@ const TEMPLATES: Record<string, { kind: DigestKind; title: string; text?: string
   'fighter.injured': { kind: 'medical', title: '{fighter} is out for {weeks} wk', text: 'Check the lineup before the next match.', action: ['Review lineup', '#/squad'], needsAction: true },
   'fighter.recovered': { kind: 'medical', title: '{fighter} is fit again', action: ['Squad', '#/squad'] },
   'contract.expiring': { kind: 'contract', title: '{count} contracts end this season', text: 'Unrenewed fighters leave at season end. Renewal opens in the final contract season.', action: ['Squad', '#/squad'], needsAction: true },
-  'match.result': { kind: 'result', title: '{result} {home}–{away} against {opponent}', action: ['Report', '#/match/{fixtureId}'] },
+  'match.result': { kind: 'result', title: '{result} {score} against {opponent}', action: ['Report', '#/match/{fixtureId}'] },
   'offer.accepted': { kind: 'market', title: '{fighter} accepted your offer', action: ['Squad', '#/squad'] },
   'offer.refused': { kind: 'market', title: '{fighter} refused your offer', action: ['Market', '#/market'] },
   'offer.countered': { kind: 'market', title: '{fighter} countered your offer', action: ['Market', '#/market'], needsAction: true },
@@ -66,6 +66,9 @@ function paramsOf(item: NewsItem): Record<string, string | number> {
   if (item.refs.fixtureId) p['fixtureId'] = item.refs.fixtureId;
   if (item.refs.fighterId) p['fighterId'] = item.refs.fighterId;
   if (p['won'] !== undefined && p['result'] === undefined) p['result'] = Number(p['won']) ? 'Won' : 'Lost';
+  // Score from our side ("2–1"), from explicit for/against or home/away params.
+  if (p['score'] === undefined && p['for'] !== undefined && p['against'] !== undefined) p['score'] = `${p['for']}–${p['against']}`;
+  if (p['score'] === undefined && p['home'] !== undefined && p['away'] !== undefined) p['score'] = `${p['home']}–${p['away']}`;
   return p;
 }
 

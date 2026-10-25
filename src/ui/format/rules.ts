@@ -48,7 +48,7 @@ export function ruleParts(rule: RuleDef, klass: ClassDef | null, content: Conten
     return c.not ? `not (${lowerFirst(text)})` : lowerFirst(text);
   });
   const actionDef = v.actions.find((d) => d.id === rule.then.type);
-  const action = actionDef ? fillLabel(actionDef.label, rule.then as Params, klass, content) : rule.then.type;
+  const action = lowerFirst(actionDef ? fillLabel(actionDef.label, rule.then as Params, klass, content) : rule.then.type);
   const selDef = v.selectors.find((d) => d.id === rule.on.sel);
   const target = selDef ? fillLabel(selDef.label, rule.on as Params, klass, content) : rule.on.sel;
   const pred = (p: RuleDef['only']) => {

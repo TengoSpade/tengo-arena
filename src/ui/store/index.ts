@@ -11,6 +11,7 @@ export {
   createGameStore,
   engineErrorFrom,
   isAutosaveSlot,
+  slotName,
   MANUAL_SLOT_IDS,
   AUTOSAVE_SLOTS,
   type AppStore,
