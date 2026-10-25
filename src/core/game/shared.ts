@@ -1,0 +1,153 @@
+/**
+ * Small helpers shared by the season engine: news, rosters, ordering, the
+ * lineup-captain rule and post-transition tidying of game-owned club fields
+ * (lineup, tactics, captaincy; 05 §3.2).
+ */
+import type { ContentDB } from '../content';
+import {
+  allocateId,
+  idNumber,
+  type Club,
+  type ClubId,
+  type Fighter,
+  type FighterId,
+  type GameState,
+  type LineupEntry,
+  type NewsId,
+  type NewsItem,
+  type TacticsAssignment,
+  type TacticsPresetId,
+} from '../model';
+import { engineError, type EngineError } from '../util';
+import type { GamePorts } from './ports';
+
+export function fail(code: string, message: string, details?: Record<string, unknown>): { ok: false; error: EngineError } {
+  return { ok: false, error: engineError(code, message, details) };
+}
+
+export function compareIds(a: string, b: string): number {
+  return idNumber(a) - idNumber(b) || (a < b ? -1 : a > b ? 1 : 0);
+}
+
+/** Clubs in tier level, then club id order (05 §3.1). */
+export function clubsInOrder(state: GameState, content: ContentDB): Club[] {
+  return Object.values(state.clubs).sort((a, b) => {
+    const la = content.tiers.get(a.tierId)?.level ?? 99;
+    const lb = content.tiers.get(b.tierId)?.level ?? 99;
+    return la - lb || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  });
+}
+
+/** Active roster of a club, in fighter id order. */
+export function rosterOf(state: GameState, clubId: ClubId): Fighter[] {
+  const out: Fighter[] = [];
+  for (const f of Object.values(state.fighters)) if (f.clubId === clubId && f.status === 'active') out.push(f);
+  return out.sort((a, b) => compareIds(a.id, b.id));
+}
+
+export function onRoster(state: GameState, clubId: ClubId, fighterId: FighterId): Fighter | null {
+  const f = state.fighters[fighterId];
+  return f && f.clubId === clubId && f.status === 'active' ? f : null;
+}
+
+export function defaultTactics(content: ContentDB, f: Fighter): TacticsAssignment {
+  return { kind: 'preset', presetId: content.classes.require(f.classId).defaultPresetId as TacticsPresetId };
+}
+
+/** Append a news item (game is the writer of news; other modules may also allocate and push). */
+export function addNews(
+  draft: GameState,
+  item: { key: string; clubId: ClubId | null; params?: NewsItem['params']; refs?: NewsItem['refs']; importance?: NewsItem['importance'] },
+): NewsId {
+  const id = allocateId(draft.ids, 'news');
+  draft.news.push({
+    id,
+    at: { season: draft.calendar.season, weekIndex: draft.calendar.weekIndex },
+    key: item.key,
+    params: item.params ?? {},
+    clubId: item.clubId,
+    refs: item.refs ?? {},
+    importance: item.importance ?? 'info',
+    read: false,
+  });
+  return id;
+}
+
+/** News allocated since the counter had the value `fromCounter`. */
+export function newsSince(state: GameState, fromCounter: number): NewsId[] {
+  const out: NewsId[] = [];
+  for (const n of state.news) if (idNumber(n.id) >= fromCounter) out.push(n.id);
+  return out;
+}
+
+/**
+ * Lineup captain (development.json captaincy.lineupCaptain): the club captain
+ * if fielded; else the vice-captain; else the manager's match-captain
+ * override (open-011); else the highest-CQ fielded fighter (ties: seniority,
+ * rating, fighter id).
+ */
+export function lineupCaptain(
+  ports: GamePorts,
+  state: GameState,
+  club: Club,
+  fighterIds: readonly FighterId[],
+  content: ContentDB,
+): FighterId | null {
+  if (club.captainId !== null && fighterIds.includes(club.captainId)) return club.captainId;
+  if (club.viceCaptainId !== null && fighterIds.includes(club.viceCaptainId)) return club.viceCaptainId;
+  if (club.lineup.matchCaptainId !== null && fighterIds.includes(club.lineup.matchCaptainId)) return club.lineup.matchCaptainId;
+  let best: { id: FighterId; cq: number; seniority: number; rating: number } | null = null;
+  for (const id of fighterIds) {
+    const f = state.fighters[id];
+    if (!f) continue;
+    const c = { id, cq: ports.fighters.captaincy(state, id, club.id, content).cq, seniority: f.career.matchweeksAtClub, rating: ports.fighters.rating(f, content) };
+    if (
+      best === null ||
+      c.cq > best.cq ||
+      (c.cq === best.cq && (c.seniority > best.seniority || (c.seniority === best.seniority && (c.rating > best.rating || (c.rating === best.rating && compareIds(c.id, best.id) < 0)))))
+    ) {
+      best = c;
+    }
+  }
+  return best?.id ?? null;
+}
+
+/**
+ * Keep game-owned club fields consistent with the roster after anything that
+ * can move fighters: lineup entries, tactics, match-captain override and
+ * captaincy of fighters who left are removed. A club captain who left is
+ * replaced by an interim captain named by the AI rule (03 sys-captaincy:
+ * "the game names an interim captain by the AI rule and flags it in the
+ * digest").
+ */
+export function tidyClub(ports: GamePorts, draft: GameState, clubId: ClubId, content: ContentDB): void {
+  const club = draft.clubs[clubId];
+  if (!club) return;
+  const keep = (id: FighterId | null): boolean => id !== null && onRoster(draft, clubId, id) !== null;
+  const entries: LineupEntry[] = club.lineup.fighters.filter((e) => keep(e.fighterId));
+  if (entries.length !== club.lineup.fighters.length) club.lineup.fighters = entries;
+  if (club.lineup.matchCaptainId !== null && !entries.some((e) => e.fighterId === club.lineup.matchCaptainId)) club.lineup.matchCaptainId = null;
+  for (const fid of Object.keys(club.lineup.tactics) as FighterId[]) if (!keep(fid)) delete club.lineup.tactics[fid];
+  const captainLeft = club.captainId !== null && !keep(club.captainId);
+  if (club.viceCaptainId !== null && !keep(club.viceCaptainId)) club.viceCaptainId = null;
+  if (captainLeft) {
+    club.captainId = null;
+    if (rosterOf(draft, clubId).length > 0) {
+      const pick = ports.ai.chooseCaptains(draft, clubId, content, 'week');
+      club.captainId = pick.captainId;
+      if (club.viceCaptainId === null || club.viceCaptainId === club.captainId) club.viceCaptainId = pick.viceCaptainId === club.captainId ? null : pick.viceCaptainId;
+      if (clubId === draft.playerClubId && pick.captainId !== null) {
+        addNews(draft, { key: 'captain.interim', clubId, refs: { fighterId: pick.captainId }, importance: 'notable' });
+      }
+    }
+  }
+}
+
+export function tidyAll(ports: GamePorts, draft: GameState, content: ContentDB): void {
+  for (const id of Object.keys(draft.clubs).sort() as ClubId[]) tidyClub(ports, draft, id, content);
+}
+
+/** Calendar week id of the trials day (the first week of the calendar). */
+export function isFirstWeek(state: GameState): boolean {
+  return state.calendar.weekIndex === 1;
+}

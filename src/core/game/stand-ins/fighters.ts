@@ -1,0 +1,229 @@
+/**
+ * STAND-IN for core/fighters (WP2). Deliberately simple, deterministic and
+ * rule-light: it exists so the season engine, AI and soak can run end to end
+ * in tests before (and independently of) the real module. It is NOT the
+ * game's lifecycle; never wire it into the shipped game.
+ */
+import type { CaptaincyGradeDef, ContentDB } from '../../content';
+import type { CaptaincyValue, FighterSpec, MatchLifecycleOutcome, StatContext } from '../../fighters';
+import {
+  allocateId,
+  asId,
+  emptyCareerStats,
+  emptySeasonCounters,
+  type ClassId,
+  type ClubId,
+  type Fighter,
+  type FighterId,
+  type GameState,
+  type MatchResult,
+  type PaceId,
+  type RaceId,
+  type RetirementRecord,
+  type StatId,
+} from '../../model';
+import { Rng, STREAM } from '../../rng';
+import { clamp } from '../../util';
+import type { GamePorts } from '../ports';
+
+type Port = GamePorts['fighters'];
+
+function statIds(content: ContentDB): StatId[] {
+  return content.stats.list.map((s) => s.id as StatId);
+}
+
+function humanAge100(f: Fighter, content: ContentDB): number {
+  return Math.trunc((f.age * 8000) / content.races.require(f.raceId).lifespan);
+}
+
+function createFighter(draft: GameState, spec: FighterSpec, content: ContentDB): FighterId {
+  const id = allocateId(draft.ids, 'fighter');
+  const rng = Rng.create(draft.rng.root, STREAM.rookies, 'stand-in', id);
+  const race = spec.raceId ? content.races.require(spec.raceId) : rng.pick(content.races.list);
+  const klass = spec.classId ? content.classes.require(spec.classId) : rng.pick(content.classes.list);
+  const band =
+    spec.humanAge ??
+    (spec.kind === 'rookie' ? null : spec.kind === 'journeyman' || spec.kind === 'hired-blade' ? { min: 24, max: 33 } : { min: 18, max: 35 });
+  const age = band === null ? rng.int(race.debutAge.min, race.debutAge.max) : Math.max(race.debutAge.min, Math.trunc((rng.int(band.min, band.max) * race.lifespan) / 80));
+  const base = (spec.kind === 'hired-blade' && spec.ratingTarget ? spec.ratingTarget * 20 : 900) + spec.potentialShift * 30 + rng.int(-100, 300);
+  const per = (f: (i: number) => number): Record<StatId, number> => Object.fromEntries(statIds(content).map((s, i) => [s, f(i)])) as Record<StatId, number>;
+  const cap100 = per(() => clamp(base + rng.int(-250, 250), 200, 2000));
+  const f: Fighter = {
+    id,
+    name: { given: `Stand${idNum(id)}`, family: null, epithet: null, full: `Stand ${idNum(id)}` },
+    raceId: asId<RaceId>(race.id),
+    classId: asId<ClassId>(klass.id),
+    originRegionId: spec.regionId,
+    age,
+    debutSeason: draft.calendar.season,
+    clubId: null,
+    status: spec.kind === 'hired-blade' ? 'hired-blade' : 'free-agent',
+    contract: null,
+    contractProfile: { greedBp: 0 },
+    freeAgency: spec.kind === 'hired-blade' ? null : { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null },
+    potentialRoll: clamp(Math.trunc(base / 20) + rng.int(0, 15), 1, 100),
+    paceId: asId<PaceId>(content.development.pace.levels[0]!.id),
+    cap100,
+    bloom: per(() => 0),
+    dev100: { physical: 2400, mental: 2400 },
+    wear100: per(() => 0),
+    traits: [],
+    statuses: [],
+    injury: null,
+    trainingEmphasis: 'balanced',
+    finalSeason: false,
+    career: emptyCareerStats(),
+    season: emptySeasonCounters(),
+    history: [],
+    learnedAbilityIds: [],
+    academy: null,
+  };
+  draft.fighters[id] = f;
+  return id;
+}
+
+function idNum(id: string): number {
+  return Number(id.slice(id.indexOf('-') + 1));
+}
+
+function effectiveStats(f: Fighter, content: ContentDB, context?: StatContext): Record<StatId, number> {
+  const out = {} as Record<StatId, number>;
+  for (const s of statIds(content)) out[s] = clamp(Math.trunc(((f.cap100[s] ?? 1000) - (f.wear100[s] ?? 0)) / 100), 1, 20);
+  const cmp = 'cmp' as StatId;
+  if (context?.chemistry) out[cmp] = clamp((out[cmp] ?? 10) + Math.trunc(context.chemistry / 2), 1, 20);
+  return out;
+}
+
+function rating(f: Fighter, content: ContentDB): number {
+  const stats = effectiveStats(f, content);
+  const w = content.classes.require(f.classId).ratingWeights as Record<string, number>;
+  let sumBp = 0;
+  for (const [s, v] of Object.entries(stats)) sumBp += Math.round((w[s] ?? 0) * 10000) * v;
+  return clamp(Math.trunc((5 * sumBp) / 10000), 1, 100);
+}
+
+function grade(content: ContentDB, cq: number): CaptaincyGradeDef {
+  const grades = content.development.captaincy.grades;
+  return grades.find((g) => cq >= g.minCq) ?? grades[grades.length - 1]!;
+}
+
+function captaincy(state: GameState, fighterId: FighterId, _clubId: ClubId, content: ContentDB): CaptaincyValue {
+  const f = state.fighters[fighterId]!;
+  const s = effectiveStats(f, content);
+  const cq = clamp(Math.trunc(((s['ldr' as StatId] ?? 10) * 5 * 45 + (s['cmp' as StatId] ?? 10) * 5 * 25 + 50 * 30) / 100), 1, 100);
+  return { cq, grade: grade(content, cq) };
+}
+
+function isFit(f: Fighter): boolean {
+  return f.status !== 'retired' && (f.injury === null || f.injury.weeksOut <= 0);
+}
+
+function applyMatchLifecycle(draft: GameState, result: MatchResult, content: ContentDB): MatchLifecycleOutcome {
+  const out: MatchLifecycleOutcome = { xp: {}, injuries: [], newsIds: [] };
+  for (const [id, st] of Object.entries(result.fighterStats)) {
+    const fid = id as FighterId;
+    const f = draft.fighters[fid];
+    if (!f) continue;
+    const xp = st.roundsPlayed * content.development.xp.perRoundStarted;
+    out.xp[fid] = xp;
+    f.season.xp += xp;
+    f.season.roundsStarted += st.roundsPlayed;
+    f.season.matchesStarted += 1;
+    f.career.matches += 1;
+    f.career.roundsStarted += st.roundsPlayed;
+    f.career.xpTotal += xp;
+    const rng = Rng.create(draft.rng.root, STREAM.injury, result.season, result.fixtureId, fid);
+    if (f.status === 'active' && rng.chanceBp(150)) {
+      f.injury = { severity: 'knock', weeksOut: 1, fixtureId: result.fixtureId, round: 1, causeFighterId: null, damageBp: 0, since: { season: result.season, weekIndex: result.weekIndex } };
+      f.season.injuries += 1;
+      out.injuries.push({ fighterId: fid, severity: 'knock', weeksOut: 1 });
+    }
+  }
+  return out;
+}
+
+function weeklyLifecycle(draft: GameState): [] {
+  for (const f of Object.values(draft.fighters)) {
+    if (f.injury === null) continue;
+    if (f.injury.since.season === draft.calendar.season && f.injury.since.weekIndex === draft.calendar.weekIndex) continue;
+    f.injury.weeksOut -= 1;
+    if (f.injury.weeksOut <= 0) f.injury = null;
+  }
+  return [];
+}
+
+function seasonEndDevelopment(draft: GameState, content: ContentDB): [] {
+  for (const f of Object.values(draft.fighters)) {
+    if (f.status === 'retired') continue;
+    const r = rating(f, content);
+    f.history.push({
+      season: draft.calendar.season,
+      age: f.age,
+      clubId: f.clubId,
+      rating: r,
+      potential: f.potentialRoll,
+      stats: effectiveStats(f, content),
+      xp: f.season.xp,
+      usageBp: clamp(Math.trunc((f.season.xp * 10000) / content.development.xp.seasonTarget), 0, 10000),
+      injuries: f.season.injuries,
+      traitsGained: [],
+      traitsLost: [],
+    });
+    if (f.clubId !== null) f.career.proSeasons += 1;
+    f.career.peakRating = Math.max(f.career.peakRating, r);
+    f.age += 1;
+    f.season = emptySeasonCounters();
+  }
+  return [];
+}
+
+function seasonEndRetirements(draft: GameState, content: ContentDB): RetirementRecord[] {
+  const out: RetirementRecord[] = [];
+  for (const f of Object.values(draft.fighters).sort((a, b) => idNum(a.id) - idNum(b.id))) {
+    if (f.status === 'retired' || f.status === 'hired-blade') continue;
+    if (humanAge100(f, content) < 3600) continue;
+    out.push({ fighterId: f.id, age: f.age, lastClubId: f.clubId, proSeasons: f.career.proSeasons, peakRating: f.career.peakRating, cause: 'age' });
+    f.status = 'retired';
+    f.clubId = null;
+    f.contract = null;
+    f.freeAgency = null;
+  }
+  return out;
+}
+
+function generateRookies(draft: GameState, content: ContentDB): FighterId[] {
+  const clubs = Object.keys(draft.clubs).length;
+  const prev = draft.history[draft.history.length - 1];
+  const retired = prev?.season === draft.calendar.season - 1 ? prev.retirements.filter((r) => r.cause !== 'left-unsigned').length : 0;
+  const count = Math.round(clubs * 0.6) + retired;
+  const ids: FighterId[] = [];
+  const region = content.regions.list[0]!.id;
+  for (let i = 0; i < count; i++) ids.push(createFighter(draft, { kind: 'rookie', potentialShift: 0, regionId: asId(region) }, content));
+  return ids;
+}
+
+export function standInFighters(): Port {
+  return {
+    createFighter,
+    humanAge100,
+    effectiveStats,
+    rating,
+    potential: (f) => f.potentialRoll,
+    captaincy,
+    lineupChemistry: () => 0,
+    isFit,
+    injuryChanceBp: () => 150,
+    retirementChanceBp: (state, id, content) => (humanAge100(state.fighters[id]!, content) >= 3600 ? 10000 : 0),
+    trend: (_f, content) => content.development.trend.levels[2]?.id ?? 'holding',
+    lineupLock: () => [],
+    applyMatchLifecycle,
+    weeklyLifecycle,
+    seasonEndDevelopment,
+    seasonEndRetirements,
+    offseasonRecovery: (draft) => {
+      for (const f of Object.values(draft.fighters)) if (f.injury) f.injury = null;
+    },
+    generateRookies,
+    announceFinalSeasons: () => [],
+  };
+}
