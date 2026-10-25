@@ -84,6 +84,9 @@ export function clubActions(store: GameStore, state: GameState, content: Content
   const captaincy = (captainId: FighterId | null, viceCaptainId: FighterId | null): Command => ({ type: 'captaincy.set', clubId: club.id, captainId, viceCaptainId });
   const prevCaptaincy = captaincy(club.captainId, club.viceCaptainId);
 
+  // TODO(m1/fix-perf): core adds a captaincy-change preview (who is Snubbed or Passed Over, the
+  // chemistry cost; 03 sys-captaincy "player information"). When it lands, show it in the toast sub
+  // line (and before the change on the squad screen) instead of the generic captainSub text.
   const setCaptain = (id: FighterId): boolean => {
     if (club.captainId === id) return false;
     const vice = club.viceCaptainId === id ? club.captainId : club.viceCaptainId;

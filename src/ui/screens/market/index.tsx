@@ -387,6 +387,8 @@ function FilterRail({
             <span>{t('filters.noNeg')}</span>
           </label>
           <label class="l-row u-sm">
+            {/* TODO(m1/fix-perf): core adds FreeAgency.enteredAt. When it lands, add the 04 ui-market switch
+                "Only new this week" (enteredAt === this week) next to these filters, and a "New" tag in the table. */}
             <input class="switch" type="checkbox" role="switch" checked={filters.starter} onChange={(e) => set({ starter: (e.target as HTMLInputElement).checked })} />
             <span>{t('filters.starter')}</span>
           </label>

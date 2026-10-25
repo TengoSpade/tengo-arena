@@ -424,6 +424,8 @@ function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
       title: T.markedDone,
       sub: d.title,
       kind: 'good',
+      // TODO(m1/fix-perf): core adds a news read flag with Undo (a "news.markUnread" or equivalent
+      // command). When it lands, dispatch it here and drop the session-only `restored` set above.
       undo: () => {
         restored.value = new Set([...restored.value, d.id]);
       },

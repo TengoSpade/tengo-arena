@@ -169,6 +169,9 @@ function FinanceBody({
           <div class="stat-tile" data-tip={t('tip.projected')} tabIndex={0}>
             <span class="stat-tile__label">{t('tile.projected')}</span>
             <span class={view.projectedSeasonEndBalance < 0 ? 'stat-tile__value u-bad' : 'stat-tile__value'}>{fmtMoney(view.projectedSeasonEndBalance, content)}</span>
+            {/* TODO(m1/fix-perf): core adds a weekly finance projection. When it lands, draw it as the dashed
+                line of BalanceChart (today a straight line to the season-end projection) and show next
+                week's expected net here. */}
             <span class="stat-tile__sub">{t('tile.projectedSub')}</span>
           </div>
         </div>
