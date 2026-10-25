@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildFixtureWorld, fixtureContent } from '../../../core/testkit';
+import type * as LeagueModule from '../../../core/league';
 import { StoreContext } from '../../store';
 import LeagueScreen from './index';
 import { createFakeStore } from './testing/fake-store';
@@ -8,7 +9,7 @@ import { makeSampleWorld } from './testing/worlds';
 import type { SampleStage } from './testing/sample-season';
 
 vi.mock('../../../core/league', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/league')>();
+  const actual = await importOriginal<typeof LeagueModule>();
   const fake = await import('./testing/fake-core');
   return { ...actual, standings: fake.standings };
 });

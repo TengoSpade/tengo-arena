@@ -263,18 +263,17 @@ function ReckoningPanel({
   const clubsIn = qualifiers * content.leagues.wings.list.length;
 
   let body;
-  let model: BracketModel | null = null;
   if (bracketView === 'last' && hasLast) {
-    model = prev ? storedBracket(game, content, prev) : null;
-    body = model ? (
-      <BracketView state={game} content={content} model={model} usId={usId} tierId={tierId} />
+    const lastModel: BracketModel | null = prev ? storedBracket(game, content, prev) : null;
+    body = lastModel ? (
+      <BracketView state={game} content={content} model={lastModel} usId={usId} tierId={tierId} />
     ) : (
       <Callout title={t('bracket.lastChampion', { club: clubShort(game, prevRecord?.reckoningChampionId), season: season - 1 })} />
     );
   } else if (stored) {
     body = <BracketView state={game} content={content} model={stored} usId={usId} tierId={tierId} />;
   } else if (projecting) {
-    model = projectedBracket(content, seeds);
+    const model = projectedBracket(content, seeds);
     const idx = seeds.indexOf(usId);
     let usLine: string | null = null;
     if (game.clubs[usId]?.tierId === tierId) {
