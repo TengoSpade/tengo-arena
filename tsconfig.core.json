@@ -1,0 +1,10 @@
+{
+  "//": "Purity gate for the simulation core: ECMAScript lib only. No DOM, no Node, no Vite globals, so window/document/console/setTimeout/process fail to typecheck here. Test files are excluded (they import vitest) and are typechecked by tsconfig.json.",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src/core/**/*.ts"],
+  "exclude": ["src/core/**/*.test.ts"]
+}
