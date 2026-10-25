@@ -41,6 +41,16 @@ describe('App', () => {
     expect(document.querySelectorAll('.btn--primary, .continue').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('says no matches yet instead of a draw-order position before matchweek 1', async () => {
+    const { store } = createTestStore({ world: 'dev', weekIndex: 1 });
+    navigate('#/home');
+    render(<App store={store} />);
+    await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy());
+    const stats = document.querySelector('.topbar')!.textContent!;
+    expect(stats).toContain('StandingNo matches yet');
+    expect(stats).not.toMatch(/Standing\d/);
+  });
+
   it('routes a career without a club to the club select', async () => {
     const { store } = createTestStore({ world: 'dev', playerClubId: null });
     navigate('#/squad');

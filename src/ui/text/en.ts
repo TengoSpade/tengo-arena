@@ -97,6 +97,8 @@ export const en = {
   'topbar.standingTip': '{pos} of {size} in the {wing}. The top 4 of each wing reach the {tournament}.',
   'topbar.standingNone': 'No table yet: the wing draw happens at the season start.',
   'topbar.standingValue': '{pos} · {pts} pts',
+  'topbar.standingNotStarted': 'No matches yet',
+  'topbar.standingUnplayed': 'The {wing} ({size} clubs) has not played yet. Positions start with matchweek 1.',
   'topbar.tier': 'Tier {n}',
   'topbar.topEarner': 'Top earner: {name}',
   'topbar.lineupWages': 'Lineup ({n})',

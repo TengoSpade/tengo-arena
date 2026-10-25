@@ -401,13 +401,18 @@ function TopbarStats({ ctx }: { ctx: ClubContext }) {
         class="topbar__stat"
         tabIndex={0}
         {...tipAttrs(
-          standing && ctx.wing
-            ? t('topbar.standingTip', { pos: ordinal(standing.position), size: ctx.wingRows.length, wing: ctx.wing.name, tournament: tier.tournamentName })
-            : t('topbar.standingNone'),
+          standing && standing.played === 0 && ctx.wing
+            ? t('topbar.standingUnplayed', { wing: ctx.wing.name, size: ctx.wingRows.length })
+            : standing && ctx.wing
+              ? t('topbar.standingTip', { pos: ordinal(standing.position), size: ctx.wingRows.length, wing: ctx.wing.name, tournament: tier.tournamentName })
+              : t('topbar.standingNone'),
         )}
       >
         <span class="topbar__stat-label">{t('topbar.standing')}</span>
-        <span class="topbar__stat-value">{standing ? t('topbar.standingValue', { pos: ordinal(standing.position), pts: standing.points }) : '—'}</span>
+        <span class="topbar__stat-value">
+          {/* Before the first match a position is only the draw order: say so instead of "4th". */}
+          {standing && standing.played === 0 ? t('topbar.standingNotStarted') : standing ? t('topbar.standingValue', { pos: ordinal(standing.position), pts: standing.points }) : '—'}
+        </span>
       </div>
     </div>
   );
