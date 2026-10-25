@@ -55,7 +55,7 @@
       "slot": "a1",
       "kind": "active",
       "name": "Interpose",
-      "description": "Dashes to an ally within 7 m and guards it for 4 s: 40% of its damage is redirected to the Oathguard, which gains 15% Fortified.",
+      "description": "Dashes to an ally within 7 m and guards it for 4 s: 30% of its damage is redirected to the Oathguard, which gains 15% Fortified.",
       "tags": [
         "dash",
         "protect",
@@ -79,7 +79,7 @@
       "effects": [
         {
           "type": "guard",
-          "pct": 0.4,
+          "pct": 0.3,
           "durationS": 4,
           "radiusM": 3.5
         }
@@ -244,7 +244,7 @@
       "slot": "a1",
       "kind": "active",
       "name": "Clangor",
-      "description": "Rings the gong: taunts every enemy within 3.5 m for 1.6 s and gains 20% Fortified for 3 s.",
+      "description": "Rings the gong: taunts every enemy within 3.5 m for 1 s and gains 20% Fortified for 3 s.",
       "tags": [
         "taunt",
         "aoe",
@@ -273,7 +273,7 @@
         {
           "type": "status",
           "status": "taunt",
-          "durationS": 1.6
+          "durationS": 1
         }
       ],
       "allyEffects": [],
@@ -294,7 +294,7 @@
       "slot": "a2",
       "kind": "active",
       "name": "Brace",
-      "description": "Gains a shield worth 18% of its max HP for 4 s.",
+      "description": "Gains a shield worth 14% of its max HP for 4 s.",
       "tags": [
         "shield",
         "self"
@@ -319,7 +319,7 @@
             "scale": [
               {
                 "stat": "maxHp",
-                "coef": 0.18
+                "coef": 0.14
               }
             ]
           },
@@ -337,7 +337,7 @@
       "slot": "passive",
       "kind": "passive",
       "name": "Hollow Ring",
-      "description": "While 2 or more enemies are targeting it, gains 25 armor and 25 ward.",
+      "description": "While 2 or more enemies are targeting it, gains 15 armor and 15 ward.",
       "tags": [
         "passive"
       ],
@@ -361,7 +361,7 @@
         "statMods": [
           {
             "stat": "armor",
-            "value": 25,
+            "value": 15,
             "if": {
               "p": "self_targeted_by",
               "count": 2
@@ -369,7 +369,7 @@
           },
           {
             "stat": "ward",
-            "value": 25,
+            "value": 15,
             "if": {
               "p": "self_targeted_by",
               "count": 2
@@ -545,7 +545,7 @@
       "slot": "passive",
       "kind": "passive",
       "name": "Thick Blood",
-      "description": "Regenerates 0.8% of max HP per second, doubled while below 40% HP.",
+      "description": "Regenerates 0.5% of max HP per second, doubled while below 40% HP.",
       "tags": [
         "passive"
       ],
@@ -569,11 +569,11 @@
         "statMods": [
           {
             "stat": "hpRegenPct",
-            "value": 0.008
+            "value": 0.005
           },
           {
             "stat": "hpRegenPct",
-            "value": 0.008,
+            "value": 0.005,
             "if": {
               "p": "self_hp_below",
               "pct": 40
@@ -1528,7 +1528,7 @@
       "slot": "passive",
       "kind": "passive",
       "name": "Bloodrush",
-      "description": "Deals up to 40% more damage the lower its HP: +0.6% for every 1% of HP missing.",
+      "description": "Deals up to 25% more damage the lower its HP: +0.6% for every 1% of HP missing.",
       "tags": [
         "passive"
       ],
@@ -1556,7 +1556,7 @@
             "per": {
               "source": "selfMissingHpPct",
               "coef": 0.6,
-              "max": 0.4
+              "max": 0.25
             }
           }
         ],
@@ -5459,7 +5459,7 @@
       "slot": "a1",
       "kind": "active",
       "name": "Rejuvenate",
-      "description": "After 0.2 s, heals an ally for 15% Support every 0.5 s for 5 s.",
+      "description": "After 0.2 s, heals an ally for 20% Support every 0.5 s for 5 s.",
       "tags": [
         "hot",
         "heal"
@@ -5489,7 +5489,7 @@
               "scale": [
                 {
                   "stat": "support",
-                  "coef": 0.15
+                  "coef": 0.2
                 }
               ]
             }
@@ -5507,7 +5507,7 @@
       "slot": "a2",
       "kind": "active",
       "name": "Bloomburst",
-      "description": "After 0.5 s, heals allies within 4 m of the target ally for 80% Support.",
+      "description": "After 0.5 s, heals allies within 4 m of the target ally for 100% Support.",
       "tags": [
         "heal",
         "aoe"
@@ -5538,7 +5538,7 @@
             "scale": [
               {
                 "stat": "support",
-                "coef": 0.8
+                "coef": 1
               }
             ]
           }
@@ -5882,7 +5882,7 @@
       "slot": "a2",
       "kind": "active",
       "name": "Rally Beat",
-      "description": "After 0.3 s, heals it and allies within 4.5 m for 70% Support and removes slows and roots.",
+      "description": "After 0.3 s, heals it and allies within 4.5 m for 100% Support and removes slows and roots.",
       "tags": [
         "heal",
         "aoe",
@@ -5923,7 +5923,7 @@
             "scale": [
               {
                 "stat": "support",
-                "coef": 0.7
+                "coef": 1
               }
             ]
           }
@@ -8366,7 +8366,7 @@
       "slot": "a2",
       "kind": "active",
       "name": "Torpor Field",
-      "description": "After 0.4 s, mires enemies within 2.5 m of the target: slowed 35% and Sluggish 25% for 3 s.",
+      "description": "After 0.4 s, mires enemies within 2.5 m of the target: slowed 30% and Sluggish 25% for 3 s.",
       "tags": [
         "aoe",
         "cc",
@@ -8396,7 +8396,7 @@
           "type": "status",
           "status": "slow",
           "durationS": 3,
-          "magnitude": 0.35
+          "magnitude": 0.3
         },
         {
           "type": "status",
