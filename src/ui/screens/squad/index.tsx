@@ -548,6 +548,9 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
         props.onSelect(r.f.id);
       }}
       onDblClick={() => navigate(`#/fighter/${r.f.id}`)}
+      onFocus={(e) => {
+        if (e.target === e.currentTarget) props.onSelect(r.f.id);
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && e.target === e.currentTarget) navigate(`#/fighter/${r.f.id}`);
       }}
