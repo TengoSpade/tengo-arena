@@ -9,7 +9,28 @@
  */
 import type { ContentDB } from '../content';
 import type { FighterSpec } from '../fighters';
-import type { ClassId, Fighter, FighterId, GameState, PaceId, RaceId, StatId } from '../model';
+import type {
+  ClassId,
+  ClubId,
+  CompetitionId,
+  Fighter,
+  FighterId,
+  FightFighterInput,
+  Fixture,
+  FixtureId,
+  FixtureStage,
+  GameState,
+  MatchResult,
+  PaceId,
+  RaceId,
+  SideInput,
+  StandingRow,
+  StatId,
+  TierId,
+  TierSeasonRecord,
+  VenueId,
+  WeekId,
+} from '../model';
 import { allocateId, asId, emptyCareerStats, emptySeasonCounters } from '../model';
 import { Rng } from '../rng';
 
@@ -111,3 +132,173 @@ export const fightersDouble = {
     return id;
   },
 };
+
+// ---- state builders for economy tests (no testkit import: callers pass the fixture state and content) ----------
+
+/** Add a fighter with pinned double values; on a roster when clubId is given (contract wage/endSeason). */
+export function addFighter(
+  state: GameState,
+  content: ContentDB,
+  opts: { values: DoubleValues; clubId?: ClubId | null; wage?: number; endSeason?: number; overrides?: Partial<Fighter> },
+): Fighter {
+  const id = allocateId(state.ids, 'fighter');
+  const clubId = opts.clubId ?? null;
+  const season = state.calendar.season;
+  const f = plainFighter(id, content, {
+    clubId,
+    status: clubId ? 'active' : 'free-agent',
+    contract: clubId
+      ? {
+          clubId,
+          wagePerWeek: opts.wage ?? 100,
+          startSeason: season,
+          endSeason: opts.endSeason ?? season,
+          signedAt: { season, weekIndex: 0 },
+          dropClauseApplied: false,
+        }
+      : null,
+    freeAgency: clubId ? null : { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null },
+    ...opts.overrides,
+  });
+  state.fighters[id] = f;
+  values.set(id, opts.values);
+  return f;
+}
+
+/** Remove every fighter of a club from its roster (they become retired placeholders). */
+export function clearRoster(state: GameState, clubId: ClubId): void {
+  for (const f of Object.values(state.fighters)) {
+    if (f.clubId === clubId) {
+      f.clubId = null;
+      f.contract = null;
+      f.status = 'retired';
+    }
+  }
+}
+
+/** Put the calendar on a week index (phase from leagues.json). */
+export function setWeek(state: GameState, content: ContentDB, weekIndex: number, season = state.calendar.season): void {
+  const week = content.weekByIndex(weekIndex);
+  state.calendar = { season, weekIndex, weekId: asId<WeekId>(week.id), phase: week.phase };
+}
+
+/** A played fixture with a minimal committed result (enough for gates, bonuses and usage). */
+export function addPlayedFixture(
+  state: GameState,
+  content: ContentDB,
+  p: {
+    weekIndex: number;
+    home: ClubId;
+    away: ClubId;
+    winner: ClubId;
+    homeFighters?: readonly FighterId[];
+    awayFighters?: readonly FighterId[];
+    stage?: FixtureStage;
+    season?: number;
+    played?: boolean;
+  },
+): Fixture {
+  const season = p.season ?? state.calendar.season;
+  const week = content.weekByIndex(p.weekIndex);
+  const stage = p.stage ?? 'league';
+  const tierId = state.clubs[p.home]!.tierId;
+  const id = (stage === 'league' ? `lg:${season}:${tierId}:${week.id}:${p.home}:${p.away}` : `rk:${season}:${tierId}:${stage}:${p.home}`) as FixtureId;
+  const fixture: Fixture = {
+    id,
+    competitionId: `${stage === 'league' ? 'lg' : 'rk'}:${season}:${tierId}` as CompetitionId,
+    season,
+    tierId,
+    weekIndex: p.weekIndex,
+    weekId: asId<WeekId>(week.id),
+    stage,
+    matchweek: week.matchweek ?? null,
+    wing: null,
+    homeClubId: p.home,
+    awayClubId: p.away,
+    bestOf: stage === 'final' ? 5 : 3,
+    venueId: stage === 'final' ? asId<VenueId>('charterhall') : null,
+    status: p.played === false ? 'scheduled' : 'played',
+  };
+  state.fixtures[id] = fixture;
+  if (p.played === false) return fixture;
+  const side = (clubId: ClubId, ids: readonly FighterId[] | undefined): SideInput => ({
+    clubId,
+    fighters: (ids ?? []).map(
+      (fighterId, slot) => ({ fighterId, slot, traitIds: state.fighters[fighterId]?.traits.map((t) => t.id) ?? [] }) as unknown as FightFighterInput,
+    ),
+    captainIndex: 0,
+    viceCaptainIndex: null,
+    chemistry: 0,
+  });
+  const homeWon = p.winner === p.home;
+  const result: MatchResult = {
+    fixtureId: id,
+    competitionId: fixture.competitionId,
+    stage,
+    season,
+    weekIndex: p.weekIndex,
+    weekId: fixture.weekId,
+    homeClubId: p.home,
+    awayClubId: p.away,
+    engineVersion: 0,
+    contentHash: 'test',
+    input: { seed: 'test', bestOf: fixture.bestOf, home: side(p.home, p.homeFighters), away: side(p.away, p.awayFighters) },
+    rounds: [],
+    score: { home: homeWon ? 2 : 1, away: homeWon ? 1 : 2 },
+    winnerClubId: p.winner,
+    fighterStats: {},
+    mvpFighterId: null,
+    hiredBladeIds: [],
+  };
+  state.results[id] = result;
+  return fixture;
+}
+
+/** A standings row with only the fields economy reads (club and position). */
+export function standingRow(clubId: ClubId, position: number): StandingRow {
+  return {
+    clubId,
+    position,
+    played: 16,
+    matchWins: 8,
+    matchLosses: 8,
+    points: 24,
+    roundsWon: 0,
+    roundsLost: 0,
+    downsInflicted: 0,
+    downsSuffered: 0,
+    results: { '2-0': 0, '2-1': 0, '1-2': 0, '0-2': 0 },
+    form: [],
+  };
+}
+
+/** Season record for one tier: clubs in tier-table order; optional champion, runner-up and movements. */
+export function tierRecord(
+  tierId: TierId,
+  clubIdsInOrder: readonly ClubId[],
+  extra: Partial<Pick<TierSeasonRecord, 'reckoningChampionId' | 'reckoningRunnerUpId' | 'promotedIds' | 'relegatedIds'>> = {},
+): TierSeasonRecord {
+  return {
+    tierId,
+    wingTables: [],
+    tierTable: clubIdsInOrder.map((id, i) => standingRow(id, i + 1)),
+    reckoningChampionId: extra.reckoningChampionId ?? null,
+    reckoningRunnerUpId: extra.reckoningRunnerUpId ?? null,
+    shieldWinnerId: clubIdsInOrder[0] ?? null,
+    promotedIds: extra.promotedIds ?? [],
+    relegatedIds: extra.relegatedIds ?? [],
+  };
+}
+
+/** Put the calendar into the season-end step of its season. */
+export function toSeasonEnd(state: GameState, content: ContentDB): void {
+  state.calendar = { season: state.calendar.season, weekIndex: content.leagues.calendar.weeks.length + 1, weekId: null, phase: 'season-end' };
+}
+
+/** Set a club balance directly as a new opening balance (test setup only; keeps the ledger invariant). */
+export function setOpeningBalance(state: GameState, clubId: ClubId, balance: number): void {
+  const club = state.clubs[clubId]!;
+  const sum = state.ledger.entries.filter((e) => e.clubId === clubId).reduce((s, e) => s + e.amount, 0);
+  club.finance.balance = balance;
+  state.ledger.openingBalances[clubId] = balance - sum;
+}
