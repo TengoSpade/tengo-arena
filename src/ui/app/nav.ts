@@ -1,5 +1,5 @@
 /** Side navigation (04 §6.1): Home 1 · Squad 2 · Fixtures 3 · League 4 · Market 5 · Finances 6 · Class codex 7; footer Save / Load, Settings. */
-import type { IconName } from '../components';
+import type { IconName } from '../components/Icon';
 import type { TextKey } from '../text';
 import type { RouteId } from './routes';
 

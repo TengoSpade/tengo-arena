@@ -8,7 +8,12 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import type { ClubId, WeekReport } from '../../core/model';
-import { Crest, Icon, Modal, ToastRegion, TooltipLayer, clearUndos, crestLetters, showToast, tipAttrs, undoLast, type Tip } from '../components';
+// Direct module imports (not the components barrel) keep screen-only components out of the main bundle.
+import { Icon } from '../components/Icon';
+import { Crest, crestLetters } from '../components/marks';
+import { Modal } from '../components/Modal';
+import { ToastRegion, clearUndos, showToast, undoLast } from '../components/Toast';
+import { TooltipLayer, tipAttrs, type Tip } from '../components/Tooltip';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
 import { slotName, useStore, type AppStore } from '../store';
@@ -19,7 +24,8 @@ import { usePlayerClub, type ClubContext } from '../store/views';
 import { t } from '../text';
 import { continueModel, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
-import { SearchPalette, ShortcutSheet, SimulatingPanel } from './overlays';
+import { SimulatingPanel } from './overlays';
+import type * as Palettes from './palettes';
 import { goBack, navigate, useRoute } from './router';
 import type { RouteId } from './routes';
 import { installShortcuts, type ShortcutMap } from './shortcuts';
@@ -43,6 +49,19 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const [confirm, setConfirm] = useState<'kick-off' | 'season-end' | null>(null);
   const [simulating, setSimulating] = useState<number | null>(null);
   const s = settings.value;
+
+  // The shortcut sheet and search load on first use, or shortly after start (bundle budget).
+  const [palettes, setPalettes] = useState<typeof Palettes | null>(null);
+  useEffect(() => {
+    if (palettes) return;
+    const load = () => void import('./palettes').then(setPalettes);
+    if (sheet || search) {
+      load();
+      return;
+    }
+    const id = setTimeout(load, 1500);
+    return () => clearTimeout(id);
+  }, [sheet, search, palettes]);
 
   // A week processed, a season ended or another career loaded: earlier undos would act on the wrong week.
   const cal = store.game.value?.calendar;
@@ -233,8 +252,8 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       </main>
       <TooltipLayer />
       <ToastRegion />
-      <ShortcutSheet open={sheet} onClose={() => setSheet(false)} />
-      <SearchPalette open={search} onClose={() => setSearch(false)} state={store.game.value} content={store.content.value} />
+      {palettes && <palettes.ShortcutSheet open={sheet} onClose={() => setSheet(false)} />}
+      {palettes && <palettes.SearchPalette open={search} onClose={() => setSearch(false)} state={store.game.value} content={store.content.value} />}
       {simulating !== null && <SimulatingPanel rounds={simulating} />}
       <ContinueConfirm
         variant={confirm}
