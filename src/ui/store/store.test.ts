@@ -145,7 +145,8 @@ describe('store: advance', () => {
     const auto1 = metas.find((m) => m.slotId === 'auto-1')!;
     expect(auto1.weekIndex).toBe(15);
     expect(Math.max(...metas.map((m) => m.weekIndex))).toBe(15);
-  });
+    // Four real week processings: ~2 s alone, slower while the core suites run in parallel.
+  }, 20_000);
 });
 
 describe('store: saves', () => {
