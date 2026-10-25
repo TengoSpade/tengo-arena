@@ -1,25 +1,24 @@
 /**
  * Calendar labels (04 §6.3 "Calendar labels everywhere"): P1 "Trials Day",
  * P2, P3, P4 "Kick-off week", MW1-MW16, TW1 "<tier> Reckoning
- * quarterfinal", TW2 semifinal, TW3 final. Week definitions come from
- * leagues.json calendar.weeks; nothing here assumes 23 weeks (open-005).
+ * quarterfinal", TW2 semifinal, TW3 final. Thin wrappers over WP6's
+ * src/ui/format/calendar (week codes and names) taking a tier id, plus the
+ * WP7 helpers built on them. Nothing here assumes 23 weeks (open-005).
  */
-import type { CalendarWeekDef, ContentDB } from '../../../../core/content';
+import type { ContentDB, TierDef } from '../../../../core/content';
 import type { Calendar, TierId } from '../../../../core/model';
+import { weekCode, weekDefAt, weekName } from '../../../format/calendar';
 import { tc } from './text';
 
-export function weekDefAt(content: ContentDB, weekIndex: number): CalendarWeekDef | null {
-  return content.weeks.list.find((w) => w.index === weekIndex) ?? null;
-}
+export { weekDefAt };
 
 /** Short id ("P1", "MW7", "TW2"). */
 export function weekShort(content: ContentDB, weekIndex: number): string {
-  return weekDefAt(content, weekIndex)?.id ?? tc('week.seasonEnd');
+  return weekDefAt(content, weekIndex) ? weekCode(content, weekIndex) : tc('week.seasonEnd');
 }
 
-function tournamentName(content: ContentDB, tierId: TierId | null): string {
-  const tier = (tierId && content.tiers.get(tierId)) || content.tiers.list[0];
-  return tier?.tournamentName ?? 'Reckoning';
+function tierOf(content: ContentDB, tierId: TierId | null): TierDef | null {
+  return (tierId && content.tiers.get(tierId)) || content.tiers.list[0] || null;
 }
 
 export type RoundId = 'quarterfinal' | 'semifinal' | 'final';
@@ -33,18 +32,9 @@ export function roundName(round: RoundId): string {
   return tc(`round.${round}`);
 }
 
-function roundLabel(round: string): string {
-  return isRoundId(round) ? roundName(round).toLowerCase() : round;
-}
-
 /** Long label: "Trials Day", "Matchweek 7", "Banner Reckoning quarterfinal". */
 export function weekLong(content: ContentDB, weekIndex: number, tierId: TierId | null = null): string {
-  const def = weekDefAt(content, weekIndex);
-  if (!def) return tc('week.seasonEnd');
-  if (def.label) return def.label;
-  if (def.matchweek != null) return tc('week.matchweek', { n: def.matchweek });
-  if (def.round) return tc('week.tournament', { tournament: tournamentName(content, tierId), round: roundLabel(def.round) });
-  return def.id;
+  return weekName(content, weekIndex, tierOf(content, tierId));
 }
 
 /** "P1 · Trials Day", "MW7", "TW1 · Banner Reckoning quarterfinal". */
