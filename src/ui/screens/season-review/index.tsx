@@ -202,7 +202,7 @@ function StandingsStep({ game, content, record, tierRec, clubId }: { game: GameS
             {tierRec.wingTables.map((w) => (
               <div class="span-6" key={w.wingId}>
                 <div class="panel-section__title">{wingName(w.wingId)}</div>
-                <StandingsTable state={game} content={content} rows={w.rows} variant="wing" zones={zones} usId={clubId} caption={wingName(w.wingId)} />
+                <StandingsTable state={game} content={content} rows={w.rows} variant="wing" zones={zones} usId={clubId} caption={wingName(w.wingId)} showForm={false} />
               </div>
             ))}
           </div>

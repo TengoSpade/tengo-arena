@@ -88,3 +88,7 @@
 .settings-palette-sample {
   margin-top: var(--sp-2);
 }
+
+.settings-grid .field > .segmented {
+  align-self: flex-start;
+}

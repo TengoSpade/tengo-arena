@@ -118,8 +118,8 @@ function Saves({ store }: { store: GameStore }) {
       cell: (m) => (
         <span class="entity saves-name">
           <span class="entity__stack">
-            <span class="entity__name">{m.label}</span>
-            <span class="entity__sub">{slotName(m.slotId)}</span>
+            <span class="entity__name">{auto ? slotName(m.slotId) : m.label}</span>
+            <span class="entity__sub">{auto ? (/^autosave$/i.test(m.label) ? m.playerClubName : m.label) : slotName(m.slotId)}</span>
           </span>
           {m.slotId === current && <span class="tag tag--accent">{t('current')}</span>}
         </span>
@@ -265,8 +265,9 @@ function Saves({ store }: { store: GameStore }) {
             columns={columns(false)}
             rows={manual}
             rowKey={(m) => m.slotId}
-            variant={['compact']}
+            variant={[]}
             rowClass={(m) => (m.slotId === current ? 'is-us' : undefined)}
+            testId="manual-table"
             empty={<Empty compact icon="save" title={t('manual.empty')} text={t('manual.emptyText', { max: MANUAL_SLOT_IDS.length })} />}
           />
         </Panel>
@@ -276,7 +277,7 @@ function Saves({ store }: { store: GameStore }) {
             columns={columns(true)}
             rows={autos}
             rowKey={(m) => m.slotId}
-            variant={['compact']}
+            variant={[]}
             empty={<Empty compact icon="refresh" title={t('auto.empty')} text={t('auto.emptyText')} />}
           />
         </Panel>

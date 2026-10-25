@@ -37,6 +37,7 @@ export function StandingsTable({
   seeds,
   wingOf,
   caption,
+  showForm = true,
 }: {
   state: GameState;
   content: ContentDB;
@@ -50,6 +51,8 @@ export function StandingsTable({
   /** Tier table: wing name per club. */
   wingOf?: ReadonlyMap<ClubId, string>;
   caption: string;
+  /** Wing tables: show the last-five strip (off in the season review). */
+  showForm?: boolean;
 }) {
   const { sort, toggle } = useSort<Key>({ key: 'pos', dir: 'asc' });
   const keyOf = (r: StandingRow): number | string => {
@@ -90,11 +93,11 @@ export function StandingsTable({
             <SortTh label={t('col.club')} sortKey="club" sort={sort} onSort={toggle} firstDir="asc" />
             {variant === 'tier' && <SortTh label={t('col.wing')} sortKey="wing" sort={sort} onSort={toggle} firstDir="asc" class="col-mid" />}
             <SortTh label={t('col.wl')} sortKey="wl" sort={sort} onSort={toggle} num tip={t('tip.wl')} />
-            <SortTh label={t('col.rounds')} sortKey="rounds" sort={sort} onSort={toggle} num tip={t('tip.rounds')} />
+            <SortTh label={t('col.rounds')} sortKey="rounds" sort={sort} onSort={toggle} num tip={t('tip.rounds')} class={variant === 'wing' && showForm ? 'col-mid' : undefined} />
             <SortTh label={t('col.rd')} sortKey="rd" sort={sort} onSort={toggle} num tip={t('tip.rd')} />
             <SortTh label={t('col.pts')} sortKey="pts" sort={sort} onSort={toggle} num tip={pointsTip} />
             {variant === 'wing' ? (
-              <th scope="col">{t('col.form')}</th>
+              showForm && <th scope="col">{t('col.form')}</th>
             ) : (
               <SortTh label={t('col.seed')} sortKey="seed" sort={sort} onSort={toggle} num firstDir="asc" tip={t('tip.seed')} />
             )}
@@ -145,15 +148,17 @@ export function StandingsTable({
                 <td class="cell-num" data-tip={t('tip.results', { a: r.results['2-0'], b: r.results['2-1'], c: r.results['1-2'], d: r.results['0-2'] })}>
                   {r.matchWins}–{r.matchLosses}
                 </td>
-                <td class="cell-num">
+                <td class={variant === 'wing' && showForm ? 'cell-num col-mid' : 'cell-num'}>
                   {r.roundsWon}–{r.roundsLost}
                 </td>
                 <td class="cell-num">{fmtSigned(rd)}</td>
                 <td class="cell-num cell-strong">{r.points}</td>
                 {variant === 'wing' ? (
-                  <td>
-                    <FormStrip form={r.form} />
-                  </td>
+                  showForm && (
+                    <td>
+                      <FormStrip form={r.form} />
+                    </td>
+                  )
                 ) : (
                   <td class="cell-num">{seed ? <span data-tip={t('tip.seedN', { n: seed })}>{seed}</span> : <span class="u-faint">—</span>}</td>
                 )}
