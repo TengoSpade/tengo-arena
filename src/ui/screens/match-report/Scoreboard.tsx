@@ -117,7 +117,7 @@ export function Scoreboard({
           const time = fmtTicks(r.durationTicks, tickMs);
           const usWon = r.winner === persp.usSide;
           const main = persp.involved ? t(usWon ? 'pip.won' : 'pip.lost', { time }) : t(r.winner === 'home' ? 'pip.homeWon' : 'pip.awayWon', { time });
-          const sub = r.endReason === 'time-limit' ? t('pip.timeCap') : r.durationTicks > overtimeAt ? t('pip.overtime') : standing !== null ? t('pip.standing', { n: standing }) : '';
+          const sub = r.endReason === 'time-limit' ? t('pip.timeCap') : r.durationTicks > overtimeAt ? t('pip.overtime') : standing !== null ? (persp.involved && !usWon ? t('pip.standingThem', { n: standing }) : t('pip.standing', { n: standing })) : '';
           const extra =
             (r.endReason === 'time-limit' && r.tiebreakStep ? t('pip.tipTiebreak', { step: t(`tiebreak.${r.tiebreakStep}`) }) : '') +
             (r.durationTicks > overtimeAt ? t('pip.tipOvertime', { start: fmtTicks(overtimeAt, tickMs) }) : '');
@@ -155,7 +155,7 @@ export function Scoreboard({
           </div>
           <div class="l-cluster l-cluster--lg u-sm report-mvp-stats">
             <span>
-              <strong class="u-num">{ms.downsInflicted}</strong> <span class="u-muted">{t('mvp.downs')}</span>
+              <strong class="u-num">{ms.downsInflicted}</strong> <span class="u-muted">{ms.downsInflicted === 1 ? t('mvp.down') : t('mvp.downs')}</span>
             </span>
             <span>
               <strong class="u-num">{fmtInt(ms.damageDealt)}</strong> <span class="u-muted">{t('mvp.damage')}</span>

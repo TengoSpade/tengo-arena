@@ -124,6 +124,11 @@ export function abilityName(content: ContentDB, id: string | null | undefined): 
   return content.abilities.get(id)?.name ?? id;
 }
 
+/** "1 down", "3 downs". */
+export function downsText(n: number): string {
+  return n === 1 ? t('downs.one') : t('downs.many', { n });
+}
+
 /** "rounds 1 and 2", "round 3", "rounds 1, 2 and 3". */
 export function roundList(rounds: number[]): string {
   const r = [...rounds].sort((a, b) => a - b);
@@ -178,13 +183,13 @@ export function summary(report: MatchReport, persp: Perspective, infos: FighterI
     const s = best.recap.stats;
     parts.push(
       s.healingDone > s.damageDealt
-        ? t('why.ledHeal', { name: name(state, best.id), healing: fmtInt(s.healingDone), downs: s.downsInflicted })
-        : t('why.led', { name: name(state, best.id), downs: s.downsInflicted, damage: fmtInt(s.damageDealt) }),
+        ? t('why.ledHeal', { name: name(state, best.id), healing: fmtInt(s.healingDone), downs: downsText(s.downsInflicted) })
+        : t('why.led', { name: name(state, best.id), downs: downsText(s.downsInflicted), damage: fmtInt(s.damageDealt) }),
     );
   }
   const theirs = infos.filter((f) => !f.us && f.recap).sort((a, b) => contribution(b.recap!) - contribution(a.recap!))[0];
   if (theirs?.recap && persp.involved) {
-    parts.push(t('why.theirs', { name: name(state, theirs.id), downs: theirs.recap.stats.downsInflicted, damage: fmtInt(theirs.recap.stats.damageDealt) }));
+    parts.push(t('why.theirs', { name: name(state, theirs.id), downs: downsText(theirs.recap.stats.downsInflicted), damage: fmtInt(theirs.recap.stats.damageDealt) }));
   }
   return { title, text: parts.join(' ') };
 }
@@ -243,7 +248,7 @@ export function selectTraces(report: MatchReport, infos: FighterInfo[], _persp: 
       isStance: r.isStance,
       fires: r.fires,
       note: t('trace.helped', {
-        downs: s.downsInflicted,
+        downs: downsText(s.downsInflicted),
         damage: fmtInt(s.damageDealt),
         healing: fmtInt(s.healingDone),
         rule: ruleLabel(r.index, r.isStance, stanceOf(f)),
@@ -263,7 +268,7 @@ export function selectTraces(report: MatchReport, infos: FighterInfo[], _persp: 
         isStance: r.isStance,
         fires: r.fires,
         note: t('trace.theirs', {
-          downs: theirs.recap.stats.downsInflicted,
+          downs: downsText(theirs.recap.stats.downsInflicted),
           damage: fmtInt(theirs.recap.stats.damageDealt),
           rule: ruleLabel(r.index, r.isStance, stanceOf(theirs)),
           fires: r.fires,
