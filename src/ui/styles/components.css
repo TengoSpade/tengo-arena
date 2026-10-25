@@ -1211,6 +1211,29 @@ a.card:hover {
   white-space: nowrap;
 }
 
+/* Stacked key-value: the label above the value, for values that are long or
+   lists (honours, names). Never overlaps at narrow widths. */
+.kv--stacked > div {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  padding: var(--sp-2) 0;
+}
+
+.kv--stacked dt {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  color: var(--c-text-faint);
+}
+
+.kv--stacked dd {
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+}
+
 /* Stat tile: label / big value / context line */
 .stat-tile {
   display: flex;

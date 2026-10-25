@@ -39,6 +39,7 @@ export const REVIEW_TEXT = {
   'move.champion': '{tier} champions',
   'standings.wings': '{tier} final tables',
   'standings.honours': 'Honours',
+  'standings.movements': 'Promotion and relegation',
   'standings.shield': 'Shield',
   'standings.champion': 'Reckoning champion',
   'standings.runnerUp': 'Runner-up',

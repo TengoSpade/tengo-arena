@@ -92,7 +92,7 @@ export interface AppStore extends GameStore {
   /** Clear lastError after it was shown. */
   clearError(): void;
   /** Dev tooling only: replace the world and content (dev fixture world). */
-  replaceWorld(state: GameState, content?: ContentDB): void;
+  replaceWorld(state: GameState, content?: ContentDB, reports?: { seasonEnd?: SeasonEndReport | null }): void;
   /** Default save label for the current state. */
   defaultSaveLabel(): string;
 }
@@ -506,7 +506,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
     platform.files.download(`${club}-s${g.calendar.season}w${g.calendar.weekIndex}.state-dump.json`, JSON.stringify(payload, null, 1));
   };
 
-  const replaceWorld = (state: GameState, newContent?: ContentDB): void => {
+  const replaceWorld = (state: GameState, newContent?: ContentDB, reports?: { seasonEnd?: SeasonEndReport | null }): void => {
     batch(() => {
       if (newContent) {
         content.value = newContent;
@@ -514,7 +514,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
       }
       commit(state);
       lastWeekReport.value = null;
-      lastSeasonEndReport.value = null;
+      lastSeasonEndReport.value = reports?.seasonEnd ?? null;
       commandLog.value = [];
       recentCommands.value = [];
       dirty.value = false;
