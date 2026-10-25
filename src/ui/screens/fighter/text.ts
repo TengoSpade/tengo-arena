@@ -56,7 +56,7 @@ export const T = {
   statTipCap: ' Ceiling {cap}.',
   statTipWear: ' Age wear −{wear}.',
   statTipChange: ' {change} this season.',
-  injuryTitle: '{label} · out for {weeks} wk',
+  injuryTitle: '{label} · out for {weeks}',
   injuryText: 'Unavailable for the lineup until fit.',
   ageCurve: 'Age curve · {race}',
   ageCurveSub: 'Typical for the race, not a forecast',

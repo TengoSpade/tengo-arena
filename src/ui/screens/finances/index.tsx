@@ -9,7 +9,7 @@ import { useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
 import type { ContentDB } from '../../../core/content';
 import type { FinanceView } from '../../../core/economy';
-import { LEDGER_CATEGORIES, type Fighter, type GameState, type LedgerCategory, type LedgerEntry } from '../../../core/model';
+import { LEDGER_CATEGORIES, personName, type Fighter, type GameState, type LedgerCategory, type LedgerEntry } from '../../../core/model';
 import { DataTable, Meter, PageHeader, Panel, Tag, type Column } from '../../components';
 import { weekShort } from '../league/lib/calendar';
 import { clubShort } from '../league/lib/club';
@@ -169,10 +169,11 @@ function FinanceBody({
           <div class="stat-tile" data-tip={t('tip.projected')} tabIndex={0}>
             <span class="stat-tile__label">{t('tile.projected')}</span>
             <span class={view.projectedSeasonEndBalance < 0 ? 'stat-tile__value u-bad' : 'stat-tile__value'}>{fmtMoney(view.projectedSeasonEndBalance, content)}</span>
-            {/* TODO(m1/fix-perf): core adds a weekly finance projection. When it lands, draw it as the dashed
-                line of BalanceChart (today a straight line to the season-end projection) and show next
-                week's expected net here. */}
-            <span class="stat-tile__sub">{t('tile.projectedSub')}</span>
+            <span class="stat-tile__sub">
+              {view.weeklyProjection?.[0]
+                ? t('tile.projectedThisWeek', { week: view.weeklyProjection[0].weekId, net: fmtMoney(view.weeklyProjection[0].net, content, { signed: true }) })
+                : t('tile.projectedSub')}
+            </span>
           </div>
         </div>
       </Panel>
@@ -283,7 +284,7 @@ function FinanceBody({
             </span>
           }
         >
-          <BalanceChart content={content} weeks={weeks} opening={opening} projected={view.projectedSeasonEndBalance} markers={markers} />
+          <BalanceChart content={content} weeks={weeks} opening={opening} projected={view.projectedSeasonEndBalance} projection={view.weeklyProjection ?? []} markers={markers} />
         </Panel>
 
         <Ledger game={game} content={content} entries={entries} opening={opening} />
@@ -369,7 +370,7 @@ function Ledger({ game, content, entries, opening }: { game: GameState; content:
   const used = LEDGER_CATEGORIES.filter((c) => entries.some((e) => e.category === c));
   const itemOf = (e: LedgerEntry) => {
     const parts: string[] = [categoryName(e.category)];
-    if (e.fighterId) parts.push(game.fighters[e.fighterId]?.name.full ?? e.fighterId);
+    if (e.fighterId) parts.push(personName(game, e.fighterId)?.full ?? e.fighterId);
     if (e.fixtureId) {
       const f = game.fixtures[e.fixtureId];
       if (f) parts.push(t('ledger.vs', { club: clubShort(game, f.homeClubId === e.clubId ? f.awayClubId : f.homeClubId) }));

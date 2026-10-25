@@ -44,10 +44,11 @@ interface Filters {
   fits: boolean;
   noNeg: boolean;
   starter: boolean;
+  onlyNew: boolean;
 }
 
 function defaultFilters(content: ContentDB): Filters {
-  return { search: '', roles: [], classId: '', races: content.races.list.map((r) => r.id), ageMin: 15, ageMax: 60, minRating: 1, fits: false, noNeg: false, starter: false };
+  return { search: '', roles: [], classId: '', races: content.races.list.map((r) => r.id), ageMin: 15, ageMax: 60, minRating: 1, fits: false, noNeg: false, starter: false, onlyNew: false };
 }
 
 function rowMatches(r: MarketRow, f: Filters, content: ContentDB, m: ClubMarket): boolean {
@@ -67,6 +68,7 @@ function rowMatches(r: MarketRow, f: Filters, content: ContentDB, m: ClubMarket)
   if (f.fits && r.ask > m.wageRoom) return false;
   if (f.noNeg && r.negativeTraits > 0) return false;
   if (f.starter && !r.wouldStart) return false;
+  if (f.onlyNew && !r.isNew) return false;
   return true;
 }
 
@@ -168,7 +170,7 @@ function Market({ career }: { career: Career }) {
 
       {view === 'agents' && (
         <div class="l-split market-split">
-          <FilterRail content={content} filters={filters} setFilters={setFilters} market={market} searchRef={searchRef} />
+          <FilterRail content={content} filters={filters} setFilters={setFilters} market={market} searchRef={searchRef} newCount={rows.filter((r) => r.isNew).length} />
           <div class="l-stack market-results">
             <Panel
               title={t('results.title')}
@@ -264,12 +266,14 @@ function FilterRail({
   setFilters,
   market,
   searchRef,
+  newCount,
 }: {
   content: ContentDB;
   filters: Filters;
   setFilters: (f: Filters) => void;
   market: ClubMarket;
   searchRef: { current: HTMLInputElement | null };
+  newCount: number;
 }) {
   const set = (patch: Partial<Filters>) => setFilters({ ...filters, ...patch });
   const roles = content.vocabulary.roles;
@@ -387,10 +391,13 @@ function FilterRail({
             <span>{t('filters.noNeg')}</span>
           </label>
           <label class="l-row u-sm">
-            {/* TODO(m1/fix-perf): core adds FreeAgency.enteredAt. When it lands, add the 04 ui-market switch
-                "Only new this week" (enteredAt === this week) next to these filters, and a "New" tag in the table. */}
             <input class="switch" type="checkbox" role="switch" checked={filters.starter} onChange={(e) => set({ starter: (e.target as HTMLInputElement).checked })} />
             <span>{t('filters.starter')}</span>
+          </label>
+          <label class="l-row u-sm" data-tip={t('tip.new')}>
+            <input class="switch" type="checkbox" role="switch" checked={filters.onlyNew} onChange={(e) => set({ onlyNew: (e.target as HTMLInputElement).checked })} />
+            <span>{t('filters.onlyNew')}</span>
+            <span class="l-push u-faint u-num">{newCount}</span>
           </label>
         </div>
       </div>
@@ -481,6 +488,11 @@ function AgentsTable({
         <span class="entity">
           <Portrait content={content} fighter={r.fighter} size="xs" />
           <FighterLink state={game} id={r.fighter.id} />
+          {r.isNew && (
+            <span class="tag tag--info" data-tip={t('tip.new')}>
+              {t('tag.new')}
+            </span>
+          )}
           {r.pending && <span class="tag tag--accent">{t('tag.pending')}</span>}
         </span>
       ),

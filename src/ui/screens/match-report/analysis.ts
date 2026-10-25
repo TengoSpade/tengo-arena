@@ -18,6 +18,7 @@ import type {
   StartingRow,
   TacticsAssignment,
 } from '../../../core/model';
+import { personName } from '../../../core/model';
 import { clubShort } from '../league/lib/club';
 import { fmtInt, fmtTicks } from '../league/lib/format';
 import { presetOf } from './rule-sentence';
@@ -112,11 +113,12 @@ export function totals(infos: FighterInfo[]) {
   return { home: sideTotals(infos, 'home'), away: sideTotals(infos, 'away') };
 }
 
+/** A fighter's name, also for one who has left the league since (alumni, personName). */
 export function name(state: GameState, id: FighterId | null | undefined, short = false): string {
   if (!id) return '';
-  const f = state.fighters[id];
-  if (!f) return String(id);
-  return short ? f.name.given : f.name.full;
+  const n = personName(state, id);
+  if (!n) return String(id);
+  return short ? n.given : n.full;
 }
 
 export function abilityName(content: ContentDB, id: string | null | undefined): string | null {

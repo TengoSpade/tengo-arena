@@ -16,6 +16,7 @@ export function makeText<T extends TextTable>(table: T): (key: keyof T & string,
 /** Copy shared by several WP7 screens (round names, empty states). */
 export const COMMON = {
   'round.quarterfinal': 'Quarterfinal',
+  'alumni.tip': '{name} left the league in season {season}. His record stays in history.',
   'round.semifinal': 'Semifinal',
   'round.final': 'Final',
   'week.seasonEnd': 'Season end',

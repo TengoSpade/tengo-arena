@@ -30,6 +30,8 @@ export interface GameEngine {
   fighterView: typeof game.fighterView;
   freeAgents: typeof game.freeAgents;
   suggestLineup: typeof game.suggestLineup;
+  /** Who a captaincy change would Snub or pass over, and the chemistry before and after (m1/fix-perf). */
+  captaincyPreview: typeof game.captaincyPreview;
   // views (other modules, read-only)
   lineupChemistry: typeof fighters.lineupChemistry;
   captaincy: typeof fighters.captaincy;
@@ -67,6 +69,7 @@ export const coreEngine: GameEngine = {
   fighterView: game.fighterView,
   freeAgents: game.freeAgents,
   suggestLineup: game.suggestLineup,
+  captaincyPreview: game.captaincyPreview,
   lineupChemistry: fighters.lineupChemistry,
   captaincy: fighters.captaincy,
   isFit: fighters.isFit,

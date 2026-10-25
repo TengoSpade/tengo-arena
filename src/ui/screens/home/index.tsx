@@ -35,7 +35,7 @@ import {
 } from '../../components';
 import { formatInt, formatMoney, formatPercent, formatSigned, ordinal } from '../../format';
 import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
-import { contractEnds, injuryLabel, injuryTip, rolesOf } from '../../format/fighter';
+import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
 import { slotName, useStore, type AppStore } from '../../store';
 import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
@@ -46,8 +46,6 @@ import './home.css';
 
 type DigestTab = 'all' | 'action' | 'results' | 'squad' | 'market';
 const digestTab = signal<DigestTab>('all');
-/** Items marked done this session but restored with Undo (no "mark unread" command in M1). */
-const restored = signal<ReadonlySet<string>>(new Set());
 
 export default function HomeScreen(_props: ScreenProps) {
   const store = useStore() as AppStore;
@@ -303,7 +301,7 @@ function LineupTile({ ctx, club, label, ours }: { ctx: ClubContext; club: Club; 
         <span class="stat-tile__sub">
           {blockers.length === 0 ? <span class="u-good">{T.ready}</span> : <span class="u-warn">{T.notReady}</span>}
           {injuredReserve
-            ? ` · ${format(T.outInjured, { name: injuredReserve.name.full, injury: injuryLabel(injuredReserve.injury!, content).toLowerCase(), n: injuredReserve.injury!.weeksOut })}`
+            ? ` · ${format(T.outInjured, { name: injuredReserve.name.full, injury: injuryLabel(injuredReserve.injury!, content).toLowerCase(), weeks: weeksOutText(injuredReserve.injury!) })}`
             : ''}
         </span>
       ) : (
@@ -412,25 +410,15 @@ function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const tab = digestTab.value;
   const shown = items.filter((d) => inTab(d, tab));
   const action = needsActionCount(items);
-  const isDone = (d: DigestItem) => d.newsIds.length > 0 && !d.unread && !restored.value.has(d.id);
-  const markDone = (d: DigestItem) => {
-    if (d.newsIds.length === 0) return;
-    const res = store.dispatch({ type: 'news.markRead', newsIds: d.newsIds });
+  const isDone = (d: DigestItem) => d.newsIds.length > 0 && !d.unread;
+  // The read flag is game state (news.setRead), so Undo is a real command and survives a save.
+  const setRead = (newsIds: DigestItem['newsIds'], title: string, sub?: string) => {
+    if (newsIds.length === 0) return;
+    const res = store.dispatch({ type: 'news.setRead', newsIds: [...newsIds], read: true });
     if (!res.ok) return;
-    const next = new Set(restored.value);
-    next.delete(d.id);
-    restored.value = next;
-    showToast({
-      title: T.markedDone,
-      sub: d.title,
-      kind: 'good',
-      // TODO(m1/fix-perf): core adds a news read flag with Undo (a "news.markUnread" or equivalent
-      // command). When it lands, dispatch it here and drop the session-only `restored` set above.
-      undo: () => {
-        restored.value = new Set([...restored.value, d.id]);
-      },
-    });
+    showToast({ title, sub, kind: 'good', undo: () => void store.dispatch({ type: 'news.setRead', newsIds: [...newsIds], read: false }) });
   };
+  const markDone = (d: DigestItem) => setRead(d.newsIds, T.markedDone, d.title);
   const unreadIds = items.filter((d) => d.unread).flatMap((d) => d.newsIds);
   return (
     <Panel
@@ -445,7 +433,7 @@ function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
           class="btn btn--sm btn--ghost"
           type="button"
           aria-disabled={unreadIds.length === 0 ? 'true' : undefined}
-          onClick={() => unreadIds.length > 0 && store.dispatch({ type: 'news.markRead', newsIds: unreadIds })}
+          onClick={() => setRead(unreadIds, format(T.markedAll, { n: items.filter((d) => d.unread).length }))}
         >
           {T.markAllRead}
         </button>
@@ -541,6 +529,7 @@ function ClubPanel({ ctx }: { ctx: ClubContext }) {
   const room = budget - bill - pending;
   const share = budget > 0 ? bill / budget : 0;
   const free = ctx.rosterCap - roster.length;
+  const thisWeek = finance?.weeklyProjection?.[0] ?? null;
   return (
     <Panel
       title={T.club}
@@ -569,15 +558,37 @@ function ClubPanel({ ctx }: { ctx: ClubContext }) {
             )}
           </span>
         </div>
-        {/* TODO(m1/fix-perf): with core's weekly finance projection, this tile becomes the mockup's
-            "This week" (projected net, e.g. "away, no gate"); the season-end projection moves to Finances. */}
-        <div class="stat-tile" tabIndex={0} {...tipAttrs(T.projectedTip)}>
-          <span class="stat-tile__label">{T.projected}</span>
-          <span class="stat-tile__value">
-            {finance ? formatInt(finance.projectedSeasonEndBalance) : '—'} <small>{currencyUnit()}</small>
-          </span>
-          <span class="stat-tile__sub">{T.projectedSub}</span>
-        </div>
+        {thisWeek ? (
+          // The mockup's "This week": what this week's processing is expected to book (core weeklyProjection).
+          <div
+            class="stat-tile"
+            tabIndex={0}
+            {...tipAttrs({
+              kicker: T.thisWeek,
+              title: formatMoney(thisWeek.net, { signed: true }),
+              rows: [
+                { label: T.thisWeekIncome, value: formatMoney(thisWeek.income) },
+                { label: T.thisWeekCosts, value: formatMoney(-thisWeek.costs) },
+                { label: T.thisWeekAfter, value: formatMoney(thisWeek.balance), total: true },
+              ],
+              meta: format(T.thisWeekSeasonEnd, { balance: formatMoney(finance!.projectedSeasonEndBalance) }),
+            })}
+          >
+            <span class="stat-tile__label">{T.thisWeek}</span>
+            <span class={thisWeek.net < 0 ? 'stat-tile__value u-bad' : 'stat-tile__value'}>
+              {formatSigned(thisWeek.net)} <small>{currencyUnit()}</small>
+            </span>
+            <span class="stat-tile__sub">{format(T.thisWeekSub, { balance: formatInt(finance!.projectedSeasonEndBalance) })}</span>
+          </div>
+        ) : (
+          <div class="stat-tile" tabIndex={0} {...tipAttrs(T.projectedTip)}>
+            <span class="stat-tile__label">{T.projected}</span>
+            <span class="stat-tile__value">
+              {finance ? formatInt(finance.projectedSeasonEndBalance) : '—'} <small>{currencyUnit()}</small>
+            </span>
+            <span class="stat-tile__sub">{T.projectedSub}</span>
+          </div>
+        )}
       </div>
       <div class="l-stack l-stack--xs" tabIndex={0} {...tipAttrs(T.wageRoomTip)}>
         <div class="l-row u-sm">
@@ -650,7 +661,7 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
                 </td>
                 <td class={`cell-num${out(f) ? '' : ' u-muted'}`}>
                   {f.injury && out(f) ? (
-                    <span {...tipAttrs(format(T.backFor, { n: f.injury.weeksOut }))}>{formatInt(f.injury.weeksOut)} wk</span>
+                    <span {...tipAttrs(isCareerEnding(f.injury) ? injuryTip(f.injury, content) : format(T.backFor, { weeks: weeksOutText(f.injury) }))}>{weeksOutText(f.injury)}</span>
                   ) : (
                     <span {...tipAttrs(fighterViewOf(engine, state, content, f.id) ? `Wage ${formatMoney(f.contract?.wagePerWeek ?? 0, { perWeek: true })}` : null)}>
                       {formatMoney(f.contract?.wagePerWeek ?? 0)}

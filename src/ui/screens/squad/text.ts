@@ -39,7 +39,7 @@ export const T = {
   checkNoCaptain: 'Choose a captain (select a fighter and press C)',
   checkPresets: 'Every fighter has a preset',
   checkPresetsMissing: '{n} {n?fighter|fighters} without a preset',
-  checkInjured: '{name} injured, back in {weeks} wk',
+  checkInjured: '{name} injured, back in {weeks}',
   checkInjuredInLineup: '{name} is injured and cannot play',
   bringIn: 'Bring in {name}',
   bringInTip: '{name} (rating {rating}) takes {out}’s place in the {row}. Ctrl Z undoes it.',

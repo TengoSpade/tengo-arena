@@ -43,6 +43,9 @@ import {
 import { formatInt, formatMoney, formatPercentBp } from '../../format';
 import { weekCode } from '../../format/calendar';
 import {
+  isCareerEnding,
+  weeksOutText,
+  captaincyConsequences,
   captaincyGradeLabel,
   contractEnds,
   fighterTraits,
@@ -96,7 +99,7 @@ export default function FighterScreen({ params }: ScreenProps) {
           captainSub: 'Captaincy costs are evaluated at the next lineup lock, so changing back before then is free.',
           preset: '{name}: preset {preset}',
           emphasis: '{name}: training {emphasis}',
-        })
+        }, (c, v) => captaincyConsequences(safeView(() => engine.captaincyPreview(state, ctx.club.id, c, v, content), null), state, content))
       : null;
 
   useShortcuts({
@@ -289,7 +292,12 @@ function ProfileHeader(props: {
           {own && actions && ctx && (
             <div class="l-cluster l-cluster--xs fighter-actions">
               {!isCaptain && (
-                <button class="btn btn--sm" type="button" onClick={() => actions.setCaptain(f.id)} {...tipAttrs(T.makeCaptainTip)}>
+                <button
+                  class="btn btn--sm"
+                  type="button"
+                  onClick={() => actions.setCaptain(f.id)}
+                  {...tipAttrs(actions.previewCaptain(f.id) ? { title: T.makeCaptain, body: actions.previewCaptain(f.id)!, meta: T.makeCaptainTip } : T.makeCaptainTip)}
+                >
                   <Icon name="crown" />
                   {T.makeCaptain} <kbd>C</kbd>
                 </button>
@@ -386,7 +394,7 @@ function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef
     <>
       {injured && (
         <div class="span-12">
-          <Callout kind="bad" icon="injury" title={format(T.injuryTitle, { label: injuryLabel(injured, content), weeks: injured.weeksOut })}>
+          <Callout kind="bad" icon="injury" title={format(T.injuryTitle, { label: injuryLabel(injured, content), weeks: isCareerEnding(injured) ? 'good' : weeksOutText(injured) })}>
             {injuryTip(injured, content)} {T.injuryText}
           </Callout>
         </div>

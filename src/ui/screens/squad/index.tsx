@@ -48,6 +48,8 @@ import {
 import { attributeBand, formatInt, formatMoney } from '../../format';
 import { weekName } from '../../format/calendar';
 import {
+  weeksOutText,
+  captaincyConsequences,
   contractEnds,
   fighterTraits,
   injuryRiskText,
@@ -122,7 +124,7 @@ export default function SquadScreen(_props: ScreenProps) {
         captainSub: T.toastCaptainSub,
         preset: T.toastPreset,
         emphasis: T.toastEmphasis,
-      })
+      }, (c, v) => captaincyConsequences(safeView(() => engine.captaincyPreview(ctx.state, ctx.club.id, c, v, ctx.content), null), ctx.state, ctx.content))
     : null;
 
   useShortcuts({
@@ -498,7 +500,7 @@ function LineupBoard(props: BoardProps) {
             })}
             {injuredReserves.slice(0, 2).map((r) => (
               <li key={r.f.id} data-state="warn">
-                {format(T.checkInjured, { name: r.f.name.full, weeks: r.f.injury!.weeksOut })}
+                {format(T.checkInjured, { name: r.f.name.full, weeks: weeksOutText(r.f.injury!) })}
               </li>
             ))}
           </ul>
@@ -725,7 +727,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
     cell: (r) =>
       r.f.injury && r.f.injury.weeksOut > 0 ? (
         <Tag kind="bad" icon="injury" tip={injuryTip(r.f.injury, content)}>
-          {formatInt(r.f.injury.weeksOut)} wk
+          {weeksOutText(r.f.injury)}
         </Tag>
       ) : (
         <RowMark row={r.entry ? r.entry.row : 'bench'} />

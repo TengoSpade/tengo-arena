@@ -7,7 +7,7 @@
  * core stores no prose, the UI text table renders it).
  */
 import type { ContentDB } from '../../core/content';
-import type { Blocker, ClubId, GameState, NewsId, NewsItem } from '../../core/model';
+import { personName, type Blocker, type ClubId, type GameState, type NewsId, type NewsItem } from '../../core/model';
 import { formatMoney } from '../format';
 import { format } from '../text';
 import { blockerTarget } from './digest-targets';
@@ -93,7 +93,7 @@ function paramsOf(item: NewsItem, names: DigestNames = {}): Record<string, strin
   if (item.refs.fixtureId) p['fixtureId'] = item.refs.fixtureId;
   if (item.refs.fighterId) {
     p['fighterId'] = item.refs.fighterId;
-    p['fighter'] = names.state?.fighters[item.refs.fighterId]?.name.full ?? 'A fighter';
+    p['fighter'] = (names.state && personName(names.state, item.refs.fighterId)?.full) ?? 'A fighter';
   }
   if (item.refs.otherClubId) p['otherClub'] = names.state?.clubs[item.refs.otherClubId]?.name ?? 'another club';
   if (p['weeksOut'] !== undefined) p['weeks'] = p['weeksOut'];
