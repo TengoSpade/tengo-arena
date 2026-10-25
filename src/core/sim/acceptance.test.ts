@@ -87,13 +87,15 @@ function nextTick(f: Fight): void {
 const OATH_EXAMPLE = { str: 12, agi: 9, pac: 11, tgh: 14, pre: 9, arc: 6, spi: 5, wil: 10, cmp: 13, ldr: 11, awr: 8, dis: 10 };
 
 describe('sys-combat-stats (cs-001 to cs-003)', () => {
-  it('cs-001: the worked-example Oathguard', () => {
+  it('cs-001: the worked-example Oathguard (balance pass 1: base HP 1250, Power 72)', () => {
+    // maxHp trunc(1250 x (1 + 0.04 x 4 + 0.01 x 2)) = trunc(1475.0) = 1475;
+    // Power trunc(72 x (1 + 0.04 x (0.8 x 2 + 0.2 x -1))) = trunc(76.03) = 76; the rest are unchanged.
     const p = combatProfile(fighterInput(content, { classId: 'oathguard', stats: OATH_EXAMPLE }, 0), content);
     expect(p).toEqual({
-      maxHp: 1770,
+      maxHp: 1475,
       armor: 68,
       ward: 45,
-      power: 63,
+      power: 76,
       support: 0,
       attackIntervalTicks: 26,
       moveSpeedMmPerTick: 163,
@@ -206,7 +208,9 @@ function statusEffect(id: string, durationS: number, magnitude = 0, extra: Parti
 }
 
 describe('damage and healing pipelines (worked example, cmb-003 to cmb-005, cmb-007)', () => {
-  it('Behead worked example: 315 damage', () => {
+  // Balance pass 1: Headsman base Power 140 -> trunc(140 x 1.144) = 160. Oathguard at trunc(1475 / 4) = 368 HP (24.9%),
+  // armor 68. 200% x 160 = 320.00 -> x 2 (below 30%) = 640.00 -> x 1.01 = 646.40 -> x 100/168 = 384.76 -> 384.
+  it('Behead worked example: 384 damage', () => {
     const f = arena([{ classId: 'headsman', stats: { str: 14 } }], [{ classId: 'oathguard', stats: OATH_EXAMPLE }]);
     place(f.units[0]!, 10, 9);
     place(f.units[5]!, 11.5, 9);
@@ -214,13 +218,14 @@ describe('damage and healing pipelines (worked example, cmb-003 to cmb-005, cmb-
     oath.hp = Math.trunc(oath.maxHp / 4);
     f.overrides.varianceFactorBp = 10_100;
     prep(f);
-    expect(f.power(f.units[0]!)).toBe(131);
+    expect(f.power(f.units[0]!)).toBe(160);
     expect(f.armor(oath)).toBe(68);
     cast(f, 0, 'a1', 5);
-    expect(f.pendDmg[5]).toBe(315);
+    expect(f.pendDmg[5]).toBe(384);
   });
 
-  it('cmb-003: thorns reflect 35 after a 40-damage blow', () => {
+  // Balance pass 1: Bloodhowler base Power 90. 90.00 x 100/200 = 45; reflect 0.55 x 90.00 = 49.50 x 100/125 = 39.60 -> 39.
+  it('cmb-003: thorns reflect 39 after a 45-damage blow', () => {
     const f = arena(['bloodhowler'], ['briarback']);
     place(f.units[0]!, 10, 9);
     place(f.units[5]!, 11.5, 9);
@@ -231,14 +236,16 @@ describe('damage and healing pipelines (worked example, cmb-003 to cmb-005, cmb-
     expect(f.armor(f.units[5]!)).toBe(100);
     expect(f.units[5]!.mods[ST.thorns]).toBe(5500);
     cast(f, 0, 'basic', 5);
-    expect(f.pendDmg[5]).toBe(40);
+    expect(f.pendDmg[5]).toBe(45);
     f.commit();
     nextTick(f);
     resolution(f);
-    expect(f.pendDmg[0]).toBe(35);
+    expect(f.pendDmg[0]).toBe(39);
   });
 
-  it('cmb-004: a lethal hit and a heal on the same tick are summed (Longeye stands at 197)', () => {
+  // Balance pass 1: Gutterknife base Power 110. Shadowstep 160% x 110 = 176.00 -> Unseen Angle x 1.25 = 220.00
+  // -> armor 15: x 100/115 = 191.30 -> 191. Suture 220% x 100 x 1.3 = 286. HP = 50 - 191 + 286 = 145.
+  it('cmb-004: a lethal hit and a heal on the same tick are summed (Longeye stands at 145)', () => {
     for (const healToo of [true, false]) {
       const f = arena(['longeye', 'chirurgeon'], ['gutterknife']);
       place(f.units[0]!, 10, 9);
@@ -247,41 +254,45 @@ describe('damage and healing pipelines (worked example, cmb-003 to cmb-005, cmb-
       f.units[0]!.hp = 50;
       prep(f);
       cast(f, 5, 'a1', 0); // Shadowstep effects (the dash already happened)
-      expect(f.pendDmg[0]).toBe(139);
+      expect(f.pendDmg[0]).toBe(191);
       if (healToo) cast(f, 1, 'a1', 0); // Suture 220% x 1.3
       f.commit();
       if (healToo) {
-        expect(f.units[0]!.hp).toBe(197);
+        expect(f.units[0]!.hp).toBe(145);
         expect(f.units[0]!.standing).toBe(true);
       } else expect(f.units[0]!.standing).toBe(false);
     }
   });
 
-  it('cmb-005: guard split and aura (Oathguard 26, Longeye 62; 113 unguarded)', () => {
+  // Balance pass 1: Headsman Power 160, Interpose guard 30%. Aura only: 160.00 x 0.92 = 147.20 x 100/115 = 128.
+  // Guarded: 48.00 to the Oathguard x 0.85 = 40.80 x 100/168 = 24.28 -> 24; 112.00 x 0.92 = 103.04 x 100/115 = 89.60 -> 89.
+  // Neither: 160.00 x 100/115 = 139.13 -> 139.
+  it('cmb-005: guard split and aura (Oathguard 24, Longeye 89; 139 unguarded)', () => {
     const f = arena([{ classId: 'oathguard', stats: OATH_EXAMPLE }, 'longeye'], [{ classId: 'headsman', stats: { str: 14 } }]);
     place(f.units[0]!, 10, 9);
     place(f.units[1]!, 10, 11);
     place(f.units[5]!, 11.5, 11);
     prep(f);
     cast(f, 5, 'basic', 1);
-    expect(f.pendDmg[1]).toBe(Math.trunc((Math.trunc((13_100 * 9200) / BP) * 100) / 115 / 100));
+    expect(f.pendDmg[1]).toBe(128);
     f.pendDmg.fill(0);
-    cast(f, 0, 'a1', 1); // Interpose: guard 40% within 3.5 m, Fortified 15%
+    cast(f, 0, 'a1', 1); // Interpose: guard 30% within 3.5 m, Fortified 15%
     f.commit();
     prep(f);
     cast(f, 5, 'basic', 1);
-    expect(f.pendDmg[0]).toBe(26);
-    expect(f.pendDmg[1]).toBe(62);
+    expect(f.pendDmg[0]).toBe(24);
+    expect(f.pendDmg[1]).toBe(89);
     // Without guard and aura.
     const g = arena(['longeye'], [{ classId: 'headsman', stats: { str: 14 } }]);
     place(g.units[0]!, 10, 11);
     place(g.units[5]!, 11.5, 11);
     prep(g);
     cast(g, 5, 'basic', 0);
-    expect(g.pendDmg[0]).toBe(113);
+    expect(g.pendDmg[0]).toBe(139);
   });
 
-  it('cmb-007: Deathward saves at 1 HP plus its heal (96), then ends', () => {
+  // Balance pass 1: Vigilkeeper base Support 105, so the ward heals 100% x 105 = 105: HP 1 + 105 = 106.
+  it('cmb-007: Deathward saves at 1 HP plus its heal (106), then ends', () => {
     const f = arena(['oathguard', 'vigilkeeper'], ['bloodhowler']);
     place(f.units[0]!, 10, 9);
     place(f.units[1]!, 8, 9);
@@ -295,10 +306,10 @@ describe('damage and healing pipelines (worked example, cmb-003 to cmb-005, cmb-
     f.maxHit[0] = 300;
     f.maxHitSrc[0] = 5;
     f.commit();
-    expect(ally.hp).toBe(96);
+    expect(ally.hp).toBe(106);
     expect(ally.standing).toBe(true);
     expect(statusInst(ally, 'deathward')).toBeNull();
-    expect(events(f, 'deathward.save').at(-1)).toMatchObject({ unit: 0, data: { healed: 95 } });
+    expect(events(f, 'deathward.save').at(-1)).toMatchObject({ unit: 0, data: { healed: 105 } });
     nextTick(f);
     f.pendDmg[0] = 300;
     f.maxHitSrc[0] = 5;
@@ -393,7 +404,8 @@ describe('round end (cmb-008, tiebreak chain, overtime, simultaneous downs)', ()
 });
 
 describe('crowd control (cmb-001, cmb-002, cmb-006)', () => {
-  it('cmb-001: Clangor taunts a Gutterknife (CMP 12) for 30 ticks and forces its decision', () => {
+  // Balance pass 1: Clangor taunt 1.0 s = 20 ticks; tenacity 4% (CMP 12): trunc(20 x 0.96) = 19.
+  it('cmb-001: Clangor taunts a Gutterknife (CMP 12) for 19 ticks and forces its decision', () => {
     const f = arena(['gongbearer'], [{ classId: 'gutterknife', stats: { cmp: 12 } }, 'longeye']);
     place(f.units[0]!, 10, 9);
     place(f.units[5]!, 13.8, 9);
@@ -402,7 +414,7 @@ describe('crowd control (cmb-001, cmb-002, cmb-006)', () => {
     f.commit();
     const gk = f.units[5]!;
     const taunt = statusInst(gk, 'taunt')!;
-    expect(taunt.end - f.tick).toBe(30);
+    expect(taunt.end - f.tick).toBe(19);
     expect(gk.committed).toEqual({ rule: -1, action: 'attack', slot: null, target: 0, band: null });
     expect(gk.forced).toBe(true);
     expect(f.dr[5]![0]!.idx).toBe(1);
@@ -487,16 +499,17 @@ describe('the 17 effect types', () => {
   it('damage, heal and status (above); shield with the 50% cap', () => {
     const f = arena(['gongbearer'], []);
     prep(f);
-    cast(f, 0, 'a2', 0); // Brace: 18% of max HP
+    cast(f, 0, 'a2', 0); // Brace: 14% of max HP (balance pass 1: base HP 1260): trunc(176.4) = 176
     f.commit();
-    expect(f.units[0]!.shields.reduce((a, s) => a + s.amount, 0)).toBe(Math.trunc(1600 * 0.18));
+    expect(f.units[0]!.shields.reduce((a, s) => a + s.amount, 0)).toBe(176);
     for (let i = 0; i < 5; i++) {
       f.tick++;
       prep(f);
       cast(f, 0, 'a2', 0);
       f.commit();
     }
-    expect(f.units[0]!.shields.reduce((a, s) => a + s.amount, 0)).toBe(800);
+    // Cap: 50% of 1260 = 630.
+    expect(f.units[0]!.shields.reduce((a, s) => a + s.amount, 0)).toBe(630);
   });
 
   it('knockback (Thunderclap) and pull with taunt (Harpoon)', () => {
@@ -746,8 +759,8 @@ describe('the 34 statuses', () => {
       dot += f.pendDmg[5]!;
       f.commit();
     }
-    // 6 ticks of 20.00 centi... 25% x 80 Power = 20 before armor 60 -> 12 per tick.
-    expect(dot).toBe(6 * 12);
+    // Balance pass 1: 25% x 90 Power = 22.50 per tick; armor 60: x 100/160 = 14.06 -> 14; 6 ticks.
+    expect(dot).toBe(6 * 14);
     expect(f.units[1]!.tally.healingDone + f.units[1]!.tally.overheal).toBeGreaterThan(0);
   });
 
