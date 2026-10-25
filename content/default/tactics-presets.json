@@ -1255,7 +1255,7 @@
       "classId": "gongbearer",
       "style": "aggressive",
       "name": "Rabble-Rouser",
-      "summary": "Charges into the enemy back line and taunts it from the inside.",
+      "summary": "Taunts at first contact and hammers the weakest enemy within reach.",
       "stance": "aggressive",
       "rules": [
         {
@@ -1307,11 +1307,11 @@
             "type": "attack"
           },
           "on": {
-            "sel": "furthest_enemy"
+            "sel": "lowest_hp_enemy"
           },
           "only": {
             "pred": "within",
-            "band": "long"
+            "band": "close"
           },
           "prefer": null,
           "cooldownS": 0
@@ -3662,7 +3662,7 @@
       "classId": "blightbrewer",
       "style": "balanced",
       "name": "Balanced",
-      "summary": "Ruptures fully poisoned enemies, clouds bunched enemies, and spreads poison to fresh targets.",
+      "summary": "Ruptures enemies carrying two or more poison stacks, clouds bunched enemies, and spreads poison to fresh targets.",
       "stance": "cautious",
       "rules": [
         {
@@ -3682,7 +3682,7 @@
           "only": {
             "pred": "has_status",
             "status": "poison",
-            "minStacks": 3
+            "minStacks": 2
           },
           "prefer": null,
           "cooldownS": 0
@@ -5572,7 +5572,7 @@
       "classId": "grovetender",
       "style": "balanced",
       "name": "Balanced",
-      "summary": "Keeps rejuvenation on hurt allies and blooms when three are hurt.",
+      "summary": "Keeps rejuvenation on hurt allies and blooms when two are hurt.",
       "stance": "cautious",
       "rules": [
         {
@@ -5581,7 +5581,7 @@
             {
               "cond": "allies_hp_below",
               "pct": 70,
-              "count": 3
+              "count": 2
             }
           ],
           "then": {
@@ -5824,7 +5824,7 @@
       "classId": "war_drummer",
       "style": "balanced",
       "name": "Balanced",
-      "summary": "Drums once the fighting starts, rallies when two are hurt or anyone is rooted, and stays with the group.",
+      "summary": "Drums once the fighting starts, rallies when two are hurt or anyone is rooted, and fights just behind the front line.",
       "stance": "steady",
       "rules": [
         {
@@ -5885,24 +5885,6 @@
           "only": null,
           "prefer": null,
           "cooldownS": 0
-        },
-        {
-          "id": "r4",
-          "if": [
-            {
-              "cond": "always"
-            }
-          ],
-          "then": {
-            "type": "regroup"
-          },
-          "on": {
-            "sel": "densest_ally",
-            "radiusM": 4
-          },
-          "only": null,
-          "prefer": null,
-          "cooldownS": 0
         }
       ]
     },
@@ -5911,8 +5893,8 @@
       "classId": "war_drummer",
       "style": "aggressive",
       "name": "Charge Beat",
-      "summary": "Drums from the opening and pushes forward with the tank.",
-      "stance": "steady",
+      "summary": "Drums from the opening and whenever enemies come within mid range, and pushes in with the front line.",
+      "stance": "aggressive",
       "rules": [
         {
           "id": "r1",
@@ -5968,24 +5950,6 @@
           },
           "on": {
             "sel": "self"
-          },
-          "only": null,
-          "prefer": null,
-          "cooldownS": 0
-        },
-        {
-          "id": "r4",
-          "if": [
-            {
-              "cond": "always"
-            }
-          ],
-          "then": {
-            "type": "regroup"
-          },
-          "on": {
-            "sel": "ally_role",
-            "role": "tank"
           },
           "only": null,
           "prefer": null,
