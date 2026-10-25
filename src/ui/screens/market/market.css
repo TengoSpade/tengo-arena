@@ -66,12 +66,26 @@
 
 @media (max-width: 1399px) {
   .market-split {
-    --split-side: 14.5rem;
+    --split-side: 13.5rem;
   }
+
+}
+
+/* Over the wage room: the ask in amber (its tip gives the amount over). */
+.market-ask--over {
+  color: var(--c-warn);
 }
 
 /* The agents table carries the most columns of any screen: a slightly lower name floor
    keeps every column in view from 1440 px; the Offer column is sticky (cell-sticky). */
 .market-results .data-table {
-  --cell-fill-min: 8.5rem;
+  --cell-fill-min: 10rem;
+}
+
+/* From 1800 px the wide columns (start, traits, asks by length) join: a slightly lower floor still
+   leaves the names whole. */
+@media (min-width: 1800px) {
+  .market-results .data-table {
+    --cell-fill-min: 9rem;
+  }
 }

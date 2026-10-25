@@ -459,14 +459,12 @@ function AgentsTable({
     }
   };
   // With no room at all the banner above the table says it once, instead of a tag on every row.
-  const overRoomTag = (r: MarketRow) => {
-    const excess = r.ask - (market.wageRoom + (r.pending?.wagePerWeek ?? 0));
-    return excess > 0 && market.wageRoom > 0 ? (
-      <span class="tag tag--warn" data-tip={t('disabled.roomRoom', { n: fmtMoney(excess, content) })}>
-        {t('tag.overRoom', { n: formatInt(excess) })}
-      </span>
-    ) : null;
-  };
+  // At a season start most of the pool is new: then the per-row tag is noise (the filter still works).
+  const showNewTags = rows.filter((r) => r.isNew).length <= Math.max(8, rows.length / 4);
+  // Over the wage room (when there is some room at all): the ask turns amber with the amount in its tip.
+  const excessOf = (r: MarketRow) => r.ask - (market.wageRoom + (r.pending?.wagePerWeek ?? 0));
+  const isOverRoom = (r: MarketRow) => market.wageRoom > 0 && excessOf(r) > 0;
+  const overRoomTip = (r: MarketRow) => (isOverRoom(r) ? t('disabled.roomRoom', { n: fmtMoney(excessOf(r), content) }) : null);
   const columns: Column<MarketRow>[] = [
     {
       id: 'compare',
@@ -494,7 +492,7 @@ function AgentsTable({
         <span class="entity">
           <Portrait content={content} fighter={r.fighter} size="xs" />
           <FighterLink state={game} id={r.fighter.id} />
-          {r.isNew && (
+          {r.isNew && showNewTags && (
             <span class="tag tag--info" data-tip={t('tip.new')}>
               {t('tag.new')}
             </span>
@@ -556,8 +554,9 @@ function AgentsTable({
       cellAttrs: (r) => ({ 'data-tip': t('tip.ask', { n: r.preferred }) }),
       cell: (r) => (
         <span class="market-ask">
-          <span class="u-num">{fmtMoney(r.ask, content)}</span>
-          {overRoomTag(r)}
+          <span class={isOverRoom(r) ? 'u-num market-ask--over' : 'u-num'} {...tipAttrs(overRoomTip(r))}>
+            {fmtMoney(r.ask, content)}
+          </span>
         </span>
       ),
     },
@@ -568,37 +567,27 @@ function AgentsTable({
       class: 'col-wide',
       align: 'num',
       sortValue: (r) => r.ask,
-      cellAttrs: (r) => ({ 'data-tip': t('tip.asks', { list: r.asks.map((a) => `${a.seasons} s: ${fmtMoney(a.ask, content)}`).join(' · ') }) }),
+      cellAttrs: (r) => ({ 'data-tip': `${t('tip.asks', { list: r.asks.map((a) => `${a.seasons} s: ${fmtMoney(a.ask, content)}`).join(' · ') })}${isOverRoom(r) ? ` ${overRoomTip(r)}.` : ''}` }),
       cell: (r) => (
         <span class="market-ask">
           <span class="u-num market-asks">
             {r.asks.map((a, i) => (
-              <span key={a.seasons} class={a.seasons === r.preferred ? 'u-strong' : 'u-muted'}>
+              <span key={a.seasons} class={a.seasons === r.preferred ? (isOverRoom(r) ? 'u-strong market-ask--over' : 'u-strong') : 'u-muted'}>
                 {i > 0 ? ' · ' : ''}
                 {a.seasons === r.preferred ? '▸' : ''}
                 {formatInt(a.ask)}
               </span>
             ))}
           </span>
-          {overRoomTag(r)}
         </span>
       ),
     },
+    // The signing fee is in the Offer button's tip and the offer dialog (one column fewer for the names).
     {
-      id: 'signing',
-      header: <span data-tip={t('tip.signing')}>{t('col.signing')}</span>,
-      headerLabel: t('tip.signingLabel'),
-      class: 'col-wide',
-      align: 'num',
-      sortValue: (r) => (r.check?.ok ? r.check.value.signingCost : Number.MAX_SAFE_INTEGER),
-      cellAttrs: (r) => ({ 'data-tip': r.check && !r.check.ok ? t('tip.signingNa', { reason: r.check.error.message }) : t('tip.signing') }),
-      cell: (r) => (r.check?.ok ? <span class="u-num">{fmtMoney(r.check.value.signingCost, content)}</span> : <span class="u-faint">—</span>),
-    },
-    {
-      // Rival offers are usually 0: below 1400 px the count moves to the Offer button's tooltip.
+      // Rival offers are usually 0: below 1800 px the count is in the Offer button's tooltip.
       id: 'rivals',
       header: t('col.rivals'),
-      class: 'col-mid',
+      class: 'col-wide',
       align: 'num',
       sortValue: (r) => r.rivals,
       cellAttrs: () => ({ 'data-tip': t('tip.rivals') }),
@@ -607,6 +596,7 @@ function AgentsTable({
     {
       id: 'willing',
       header: t('col.willing'),
+      class: 'col-mid',
       sortValue: (r) => r.patience,
       cell: (r) => {
         const level = willingLevel(r.patience, r.maxPatience);
@@ -647,7 +637,10 @@ function AgentsTable({
               class="btn btn--sm"
               type="button"
               aria-disabled={blocked ? 'true' : undefined}
-              data-tip={blocked ?? t('tip.offerRivals', { n: r.rivals })}
+              data-tip={
+                blocked ??
+                t('tip.offerRivals', { n: r.rivals, fee: r.check?.ok ? fmtMoney(r.check.value.signingCost, content) : '—', patience: r.patience, max: r.maxPatience })
+              }
               data-testid="offer-button"
               onClick={(e) => {
                 e.stopPropagation();
