@@ -129,3 +129,7 @@ export function combatProfile(fighter: FightFighterInput, content: ContentDB): C
     focusRegenMilliPerTick: Math.trunc((s.focusRegen0 * (BP + m[ST.focusRegen]!)) / BP),
   };
 }
+
+/** Additive: fight-input builders (harness, tests, dev tools). */
+export { fighterInput, sideInput } from './build';
+export type { FighterSpec } from './build';

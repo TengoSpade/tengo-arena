@@ -592,11 +592,15 @@ export class Fight {
     while (!this.ended) this.step();
   }
 
+  /** Set order(t) and each unit's rank in it. */
+  beginTick(): void {
+    this.order = this.tick % 2 === 0 ? ORDER_EVEN : ORDER_ODD;
+    for (let i = 0; i < 10; i++) this.rank[this.order[i]!] = i;
+  }
+
   step(): void {
     const t = this.tick;
-    const evenFirst = t % 2 === 0 ? 0 : 1;
-    this.order = evenFirst === 0 ? ORDER_EVEN : ORDER_ODD;
-    for (let i = 0; i < 10; i++) this.rank[this.order[i]!] = i;
+    this.beginTick();
     // Positions change only in the movement phase, so last tick's post-movement distances are this tick's start.
     if (t === 0) this.computeDistances();
     this.timers();
@@ -611,7 +615,7 @@ export class Fight {
     this.tick++;
   }
 
-  private emitStart(): void {
+  emitStart(): void {
     this.rec!.emit('fight.start', 0, undefined, undefined, {
       units: this.units.map((u) => ({ unit: u.index, x: cm(u.x), y: cm(u.y), hp: u.hp, maxHp: u.maxHp, focus: Math.trunc(u.focus / 1000) })),
     });
@@ -632,7 +636,7 @@ export class Fight {
   }
 
   /** Phase 1: timers, status expiry, over-time ticks, zones, auras, modifier blocks, accumulators, regeneration. */
-  private timers(): void {
+  timers(): void {
     const t = this.tick;
     const tb = this.tb;
     if (this.touchedDamage) {
@@ -749,7 +753,7 @@ export class Fight {
   }
 
   // ---- Phase 6: commit ------------------------------------------------------------------------------
-  private commit(): void {
+  commit(): void {
     const t = this.tick;
     const prevHpBp = this.prevHpBp;
     if (this.hasAllyHpTrigger) for (const u of this.units) prevHpBp[u.index] = this.hpBp(u);
@@ -988,7 +992,7 @@ export class Fight {
   }
 
   // ---- Phase 7: end check ------------------------------------------------------------------------------
-  private endCheck(): void {
+  endCheck(): void {
     const t = this.tick;
     const homeUp = this.units.some((u) => u.side === 0 && u.standing);
     const awayUp = this.units.some((u) => u.side === 1 && u.standing);

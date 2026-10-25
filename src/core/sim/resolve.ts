@@ -319,7 +319,7 @@ function inArea(f: Fight, ab: CAbility, src: Unit, primary: Unit, cx: number, cy
   return proj >= -r && proj <= area.lengthMm + r && lateral <= area.halfWidthMm + r;
 }
 
-function applyAbility(f: Fight, rel: Release, ab: CAbility, target: number): void {
+export function applyAbility(f: Fight, rel: Release, ab: CAbility, target: number): void {
   const src = f.units[rel.source]!;
   const primary = f.units[target]!;
   if (ab.target !== 'self' && !primary.standing) return;
@@ -367,7 +367,7 @@ function lowestAllyWithin(f: Fight, of: Unit, withinMm: number, includeSelf: boo
   return best;
 }
 
-function applyEffect(f: Fight, rel: Release, e: CEffect, tgt: Unit, primary: number, cx: number, cy: number, falloffBp: number): void {
+export function applyEffect(f: Fight, rel: Release, e: CEffect, tgt: Unit, primary: number, cx: number, cy: number, falloffBp: number): void {
   if (!tgt.standing) return;
   const src = f.units[rel.source]!;
   switch (e.type) {
