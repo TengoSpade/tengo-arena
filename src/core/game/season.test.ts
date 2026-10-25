@@ -3,7 +3,7 @@ import { asId, personName, type ClubId, type FighterId, type GameState } from '.
 import { STREAM, deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
 import { cloneJson, deepFreeze, hashString, stableStringify } from '../util';
-import { createGameEngine, createStandInPorts, realGamePorts, type GameEngine } from './index';
+import { createGameEngine, createStandInPorts, developmentSummary, realGamePorts, type GameEngine } from './index';
 
 const content = fixtureContent();
 const checksum = (state: unknown): string => hashString(stableStringify(state));
@@ -142,6 +142,105 @@ describe('season-1 start (D-P)', () => {
       // P1 balance = starting balance (opening) + the setup credits, nothing else.
       expect(c.finance.balance).toBe(s.ledger.openingBalances[c.id]! + setup.reduce((a, e) => a + e.amount, 0));
     }
+  });
+});
+
+describe('renewals until expiry (real modules)', () => {
+  const engine = createGameEngine(realGamePorts);
+  let end: GameState;
+  let clubId: ClubId;
+  beforeAll(() => {
+    const w = world(engine, 'renew-1');
+    clubId = Object.keys(w.clubs).sort()[4] as ClubId;
+    const chosen = engine.applyCommand(w, { type: 'club.choose', clubId }, content);
+    if (!chosen.ok) throw new Error(chosen.error.message);
+    end = advanceUntil(engine, chosen.value.state, atSeasonEnd);
+  }, 60_000);
+
+  const expiring = (s: GameState) => engine.roster(s, clubId).filter((f) => f.contract?.endSeason === 1 && !f.contract.next && !f.finalSeason);
+
+  it('a contract ending this season renews while the season-end step is pending, and survives the expiry step', () => {
+    const f = expiring(end)[0]!;
+    expect(f).toBeDefined();
+    const seasons = engine.ports.economy.preferredLength(end, f.id, content);
+    const wage = engine.ports.economy.ask(end, f.id, clubId, seasons, content);
+    const check = engine.ports.economy.checkOffer(end, { clubId, fighterId: f.id, wagePerWeek: wage, seasons, kind: 'renewal' }, content);
+    expect(check.ok ? null : check.error).toBeNull();
+    const r = engine.applyCommand(end, { type: 'contract.renew', clubId, fighterId: f.id, wagePerWeek: wage, seasons }, content);
+    expect(r.ok ? r.value.response : r.error).toMatchObject({ kind: 'accepted' });
+    if (!r.ok) return;
+    const next = engine.runSeasonEnd(r.value.state, content);
+    expect(next.ok).toBe(true);
+    if (next.ok) expect(next.value.state.fighters[f.id]).toMatchObject({ clubId, contract: { endSeason: 1 + seasons, wagePerWeek: wage } });
+  });
+
+  it('developmentSummary: each rostered fighter: age, rating and attributes before and after; titles for the champions', () => {
+    const r = engine.runSeasonEnd(end, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const next = r.value.state;
+    const rows = developmentSummary(next, 1);
+    const rostered = Object.values(end.fighters).filter((f) => f.status === 'active');
+    expect(rows.map((x) => x.fighterId).sort()).toEqual(rostered.map((f) => f.id).sort());
+    expect(developmentSummary(next, 2)).toEqual([]);
+    const statIds = content.stats.list.map((s) => s.id).sort();
+    for (const row of rows) {
+      expect(row.ageAfter).toBe(row.ageBefore + 1);
+      expect(Object.keys(row.attributeDeltas).sort()).toEqual(statIds);
+      const now = next.fighters[row.fighterId];
+      if (now && !row.retired) expect(row.ratingAfter).toBe(now.history[now.history.length - 1]!.rating);
+    }
+    expect(rows.some((x) => x.ratingAfter !== x.ratingBefore)).toBe(true);
+    expect(rows.some((x) => Object.values(x.attributeDeltas).some((d) => d !== 0))).toBe(true);
+    for (const id of next.history[0]!.retirements.filter((x) => x.cause === 'age').map((x) => x.fighterId)) {
+      if (rows.some((x) => x.fighterId === id)) expect(rows.find((x) => x.fighterId === id)!.retired).toBe(true);
+    }
+    // Reckoning champions: everyone on their roster at season end gains a title.
+    const champions = new Set<string>(next.history[0]!.tiers.map((x) => x.reckoningChampionId!).filter(Boolean));
+    for (const f of rostered) {
+      const after = next.fighters[f.id] ?? null;
+      if (!after) continue;
+      expect(after.career.titles - f.career.titles).toBe(champions.has(f.clubId!) ? 1 : 0);
+    }
+    // The next season end keeps only the newest season's rows.
+    expect(r.value.report.record.development?.length).toBe(rows.length);
+  }, 60_000);
+
+  it('world-generation veterans have a career line that adds up and a debut in the past', () => {
+    const w = world(engine, 'renew-1');
+    const vets = Object.values(w.fighters).filter((f) => f.career.proSeasons > 0);
+    expect(vets.length).toBeGreaterThan(100);
+    for (const f of vets) {
+      expect(f.debutSeason).toBe(1 - f.career.proSeasons);
+      expect(f.career.matches).toBeGreaterThan(0);
+      expect(f.career.roundsWon).toBeLessThanOrEqual(f.career.roundsStarted);
+      expect(f.career.roundsStarted).toBeLessThanOrEqual(f.career.matches * content.leagues.regularSeason.matchBestOf);
+    }
+  });
+
+  it('match-report key moments: every interrupt names who interrupted (a cast dropped by its caster is not one)', () => {
+    let interrupts = 0;
+    for (const r of Object.values(end.results).slice(0, 60)) {
+      const report = engine.buildMatchReport(end, r.fixtureId, content);
+      if (!report.ok) continue;
+      for (const round of report.value.rounds) {
+        for (const e of round.keyEvents) {
+          if (e.kind !== 'interrupt') continue;
+          interrupts++;
+          expect(e.actorId).not.toBeNull();
+          expect(e.targetId).not.toBeNull();
+        }
+      }
+    }
+    expect(interrupts).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('a few weeks before season end every unrenewed expiring contract of the player gets a Needs action item', () => {
+    const weeks = content.leagues.calendar.weeks.length;
+    const at = weeks - content.economy.contracts.expiryReminderWeeksBeforeEnd;
+    const items = end.news.filter((n) => n.key === 'contract.expiring');
+    expect(items.length).toBeGreaterThan(0);
+    for (const n of items) expect(n).toMatchObject({ clubId, importance: 'urgent', at: { season: 1, weekIndex: at } });
+    for (const f of expiring(end)) expect(items.some((n) => n.refs.fighterId === f.id)).toBe(true);
   });
 });
 

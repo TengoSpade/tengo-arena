@@ -475,6 +475,21 @@ const seasonRecord = z.strictObject({
     }),
   ),
   rookieIds: z.array(id),
+  development: z
+    .array(
+      z.strictObject({
+        fighterId: id,
+        ageBefore: int,
+        ageAfter: int,
+        ratingBefore: int,
+        ratingAfter: int,
+        attributeDeltas: intRecord,
+        potentialChange: int.optional(),
+        retired: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+  wageRaises: z.array(z.strictObject({ clubId: id, fighterId: id, from: nonNegInt, to: nonNegInt })).optional(),
 });
 
 // ---- state and envelope ---------------------------------------------------------------------------------------

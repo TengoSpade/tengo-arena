@@ -19,12 +19,14 @@ import {
   beginTransition,
   removeFighter,
   type ClubSeasonRow,
+  type FighterDevelopment,
   type FighterId,
   type GameState,
   type NewsItem,
   type RetirementRecord,
   type SeasonEndReport,
   type SeasonRecord,
+  type StatId,
 } from '../model';
 import { RESULT_RETENTION_SEASONS } from '../league';
 import { NotImplementedError, cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
@@ -74,6 +76,57 @@ function compactDeparted(draft: GameState, season: number, record: SeasonRecord)
     if (a.leftSeason >= keepFrom) continue;
     if (a.cause === 'hired-blade' || (a.cause === 'left-unsigned' && a.career.matches === 0)) delete draft.alumni[a.id];
   }
+}
+
+interface Snapshot {
+  age: number;
+  rating: number;
+  potential: number;
+  stats: Record<StatId, number>;
+}
+
+function snapshotRostered(ports: GamePorts, draft: GameState, content: ContentDB): Map<FighterId, Snapshot> {
+  const out = new Map<FighterId, Snapshot>();
+  for (const club of clubsInOrder(draft, content)) {
+    for (const f of rosterOf(draft, club.id)) {
+      out.set(f.id, { age: f.age, rating: ports.fighters.rating(f, content), potential: ports.fighters.potential(f, content), stats: ports.fighters.effectiveStats(f, content) });
+    }
+  }
+  return out;
+}
+
+/**
+ * The ending season's development rows on its record (developmentSummary); older records drop theirs,
+ * so only the latest season's stays in the save (05 §5 size).
+ */
+function recordDevelopment(
+  ports: GamePorts,
+  draft: GameState,
+  record: SeasonRecord,
+  before: Map<FighterId, Snapshot>,
+  retirements: readonly RetirementRecord[],
+  content: ContentDB,
+): void {
+  const retired = new Set<string>(retirements.map((r) => r.fighterId));
+  const rows: FighterDevelopment[] = [];
+  for (const [id, b] of before) {
+    const f = draft.fighters[id];
+    if (!f) continue;
+    const stats = ports.fighters.effectiveStats(f, content);
+    const attributeDeltas = {} as Record<StatId, number>;
+    for (const s of Object.keys(b.stats) as StatId[]) attributeDeltas[s] = (stats[s] ?? 0) - (b.stats[s] ?? 0);
+    const row: FighterDevelopment = { fighterId: id, ageBefore: b.age, ageAfter: f.age, ratingBefore: b.rating, ratingAfter: ports.fighters.rating(f, content), attributeDeltas };
+    const potential = ports.fighters.potential(f, content) - b.potential;
+    if (potential !== 0) row.potentialChange = potential;
+    if (retired.has(id)) row.retired = true;
+    rows.push(row);
+  }
+  record.development = rows;
+  draft.history.forEach((h, i) => {
+    if (h === record || h.development === undefined) return;
+    const { development: _dropped, ...rest } = h;
+    draft.history[i] = rest;
+  });
 }
 
 /** News retention: the current and the previous season (05 §5). */
@@ -134,11 +187,13 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
     // 4. Prestige.
     ports.economy.updatePrestige(draft, record, content);
     writeClubRows(ports, draft, record, content);
-    // 6. Aging and development.
+    // 6. Aging and development (every rostered fighter's before/after goes on the record: developmentSummary).
     if (player !== null) developedIds = rosterOf(draft, player).map((f) => f.id);
+    const before = snapshotRostered(ports, draft, content);
     ports.fighters.seasonEndDevelopment(draft, content);
     // 7. Retirements (core/fighters appends them to the archived record).
     const retirements: RetirementRecord[] = draft.options.retirement ? ports.fighters.seasonEndRetirements(draft, content) : [];
+    recordDevelopment(ports, draft, record, before, retirements, content);
     // 8. Contract expiries (remember the clubs first: expiry clears the contract).
     const holder = new Map(Object.values(draft.fighters).map((f) => [f.id, f.clubId] as const));
     const expired = ports.economy.contractExpiries(draft, content);
@@ -199,6 +254,7 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
             retiredIds,
             expiredIds,
             developedIds,
+            wageRaises: (record.wageRaises ?? []).filter((r) => r.clubId === player),
           },
     newsIds: newsSince(draft, newsFrom),
   };

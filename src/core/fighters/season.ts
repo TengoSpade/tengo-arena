@@ -151,8 +151,13 @@ export function seasonEndDevelopmentOn(draft: GameState, content: ContentDB): Ne
   const root = draft.rng.root;
   const mentoring = clubMentoring(draft, content);
   const enabled = trainingEnabled(draft, content);
+  // Titles: the ending season's Reckoning champions (archived before this step); their rosters at season end.
+  const champions = new Set<string>();
+  const ending = latestRecord(draft);
+  if (ending && ending.season === season) for (const t of ending.tiers) if (t.reckoningChampionId) champions.add(t.reckoningChampionId);
   for (const f of Object.values(draft.fighters).sort(byId)) {
     if (f.status === 'retired') continue;
+    if (f.status === 'active' && f.clubId !== null && champions.has(f.clubId)) f.career.titles += 1;
     const info = f.clubId ? mentoring.get(f.clubId) : undefined;
     const inputs: DevelopmentInputs = {
       seasonXp: f.season.xp,

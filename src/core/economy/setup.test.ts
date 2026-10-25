@@ -74,8 +74,12 @@ describe('season budget and wage budget (sys-finance)', () => {
     club.prestige = 30;
     setOpeningBalance(s, id, 12_000);
     const cheap = addFighter(s, content, { values: { rating: 40, potential: 40 }, clubId: id, wage: 60, endSeason: 2 });
+    s.playerClubId = id;
     nextSeasonFinanceSetup(s, [], content);
     expect(cheap.contract!.wagePerWeek).toBe(110);
+    // The raise is on the ending season's record (season review) and in the player's news.
+    expect(s.history[0]!.wageRaises).toEqual([{ clubId: id, fighterId: cheap.id, from: 60, to: 110 }]);
+    expect(s.news.filter((n) => n.key === 'contract.minimum_raise').map((n) => [n.clubId, n.refs.fighterId, n.params])).toEqual([[id, cheap.id, { from: 60, to: 110 }]]);
     expect(club.finance.seasonBudget).toBe(83_076);
     expect(reserveContribution(83_076, 12_000, content)).toBe(0);
     expect(club.finance.wageBudgetPerWeek).toBe(3_106);
