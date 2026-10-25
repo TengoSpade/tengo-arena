@@ -23,3 +23,6 @@ Structure (strict: an unknown key is an error, so a module writing an undeclared
 - **v1 → v2** (`migrations.ts`): retired fighters and past hired blades move to `alumni`, and every shortlist, lineup, offer and negotiation entry naming them is dropped; agreed renewals move from negotiations to `Contract.next`; `FreeAgency.enteredAt`, `Injury.careerEnding` and `TierSeasonRecord.reckoningStages` (from the clubs' season rows) are filled in; fighter history rows keep display stats on the last two rows only.
 - After a migration the envelope carries the checksum of the migrated state and `migratedFrom`.
 - The schema mirrors `core/model`; a model change bumps `STATE_SCHEMA_VERSION`, adds a migration and updates `schema.ts` together (architect).
+
+## Orchestrator decisions (M1 core fix round, pending owner confirmation)
+- **Tampered-save ids.** Names every plain object inherits (`constructor`, `toString`, `hasOwnProperty`, `__proto__`, ...) are never valid: `reservedNameIssues` rejects them anywhere in the state as a map key, as a value under `id` / `...Id` / `captainAtLastLock`, and as any string in an array (id lists, shortlists, seeds), before the zod check (`save.structure`). Reference checks look ids up in null-prototype copies. A save with `playerClubId: "constructor"` no longer loads.

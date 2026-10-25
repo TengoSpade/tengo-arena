@@ -116,7 +116,7 @@
     "reserveCapBp": 1000,
     "ascensionWageRatioBonusBp": 800,
     "ascensionSeasons": 1,
-    "worldGenBillBandBp": { "_doc": "New career only (D-P, orchestrator decision pending owner confirmation): opening wage bills are rescaled into this share of WB. The top edge leaves every club room at P1 for its season-1 Trials Day rookie (at most the rookie scale, 1.25x the tier minimum) plus one tier-minimum depth signing: at most 12.5% of WB (Muster), 12% (Banner), 8% (Crown).", "minBp": 8000, "maxBp": 8700 }
+    "worldGenBillBandBp": { "_doc": "New career (D-P): opening bills are rescaled into this share of WB, leaving room for the trials rookie and a tier-minimum signing.", "minBp": 8000, "maxBp": 8700 }
   },
 
   "wage": {
@@ -223,7 +223,7 @@
       "_doc": "Rookie count per season comes from development.json generation.intake. Each club receives floor(rookies / clubs); the remainder goes one each to clubs drawn by lot (stream rookies). Exclusive to that club during P1; unsigned rookies enter the free-agent pool at P1 week processing, before the AI action phase.",
       "exclusiveWeeks": 1,
       "maxAskBpOfTierMinWage": 12500,
-      "_maxAskNote": "Rookie scale (D-P): during Trials Day a rookie asks his own club at most 1.25x the tier minimum (floored to the wage multiple) (and never less than it). Unsigned, he enters the pool at P1 processing at his full market ask."
+      "_maxAskNote": "Rookie scale (D-P): on Trials Day a rookie asks his club at most this share of the tier minimum."
     },
     "pool": {
       "inSeasonFloor": 60,

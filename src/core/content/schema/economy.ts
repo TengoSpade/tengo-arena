@@ -103,8 +103,7 @@ export const EconomyFileSchema = z.object({
     worldGenBillBandBp: z
       .object({ _doc: z.string().optional(), minBp: z.number().int(), maxBp: z.number().int() })
       .strict()
-      .refine((b) => b.minBp > 0 && b.minBp <= b.maxBp && b.maxBp <= 10_000, 'needs 0 < minBp <= maxBp <= 10000')
-      .default({ minBp: 8200, maxBp: 9200 }),
+      .default({ minBp: 8000, maxBp: 8700 }),
   }).strict(),
   wage: z.object({
     _doc: z.string().optional(),

@@ -14,7 +14,7 @@
     "_capsNote": "TUNABLE (combat cmb-q11): race tendencies |x| <= 4 per stat, trait stat adds |x| <= 3 per stat; fragility/durability is expressed mainly through injury chance and recovery multipliers. Validator-enforced.",
     "ratingMin": 1,
     "ratingMax": 100,
-    "_doc": "Display stat = floor(effective centipoints / 100), clamp 1..20; this integer is what combat receives (fight setup). Effective centipoints = base centipoints + 100 * (sum of whole-point trait, status and chemistry modifiers). Rating = clamp(round(5 * sum(w_i * stat_i)), 1, 100) on the integer display stats (the values combat receives; D-Q: one formula for the displayed rating, fight inputs and every rule), with w_i = classes.json ratingWeights of the fighter's class. Potential = the same formula with every base stat at its cap, no wear, and only permanent modifiers (physique and scar traits); it therefore drops when a scar is gained (P-12 'injury' change)."
+    "_doc": "Display stat = floor(effective centipoints / 100), clamp 1..20; this integer is what combat receives (fight setup). Effective centipoints = base centipoints + 100 * (sum of whole-point trait, status and chemistry modifiers). Rating = clamp(round(5 * sum(w_i * stat_i)), 1, 100) on these integer stats (D-Q: one formula everywhere), with w_i = classes.json ratingWeights of the fighter's class. Potential = the same formula with every base stat at its cap, no wear, and only permanent modifiers (physique and scar traits); it therefore drops when a scar is gained (P-12 'injury' change)."
   },
 
   "time": {
@@ -148,7 +148,7 @@
   },
 
   "retirement": {
-    "_doc": "D-T (orchestrator decision 2026-10, pending owner confirmation): retirement follows effectiveness, not a fixed age. Chance computed live all season (shown on the fighter card) from the age held during the season; rolled once at season-end step 7. 0 below minHumanAge; certain from forcedHumanAge (human-age, so every race is scaled by its lifespan). Otherwise per season p = 1 - (1 - hDrop) * (1 - hAge)^k: hDrop from hazardByRatingDrop on the drop of the current rating below the fighter's career-peak rating (rating points), hAge from hazardPerHumanYearPastPeak on floor(human-age) - physicalPeakHumanAge, k = 80 / race.lifespan. Then the modifiers, clamp [0,1]. Physical stats decline from human-age 31 and mental ones only from 60, so a fighter whose class rating rests on mental stats (healers, controllers, high-leadership captains) keeps his rating and plays on into his 40s and 50s while still good, and a physically weighted fighter loses rating fast and retires in his 30s.",
+    "_doc": "D-T: p = 1 - (1 - hDrop)(1 - hAge)^k with hDrop at careerPeakRating - rating, hAge at human-age - physicalPeakHumanAge, k = 80 / lifespan; then the modifiers; 0 below minHumanAge, 1 from forcedHumanAge. Rolled at season-end step 7.",
     "minHumanAge": 31,
     "forcedHumanAge": 58,
     "physicalPeakHumanAge": 30,
@@ -313,7 +313,7 @@
     "medianHumanAge": [26, 32],
     "shareHumanAgeAtMost22": [0.12, 0.32],
     "shareHumanAgeAtLeast31": [0.2, 0.55],
-    "_ageBandNote": "D-T (2026-10): retirement follows effectiveness, so the mentally weighted classes (about 30% of fighters: healers, controllers) play on to human-age 45-55 while still good. The rostered share at human-age >= 31 rises from about 35-45% to about 45-53% and the median human-age from about 28-30 to 30-31; the bands were widened from [26, 30] and [0.2, 0.4] to keep catching a league that ages without limit. Same cause, same change: fewer retirements mean a smaller rookie intake in the first seasons (share <= 22 from 0.15 to 0.12); more fighters past human-age 36 meet the unchanged injury age multiplier (ashkin, who age fastest, from 0.95 to 1.05 per 40 rounds; career-ending injuries per league-season from 0.6 to 1.0); experienced high-leadership captains stay (AI captain mean CQ from 85 to 88); starters who play on keep growing toward their potential (starter peak over potential from 0.95 to 0.97).",
+    "_ageBandNote": "Widened for D-T (veterans play on): see core/fighters README.",
     "allClubTopFiveRatingDriftMaxPoints": 4,
     "leagueMeanRatingDriftMaxPoints": 3,
     "maxRatingInLeague": 95,
