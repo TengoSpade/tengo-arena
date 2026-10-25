@@ -7,10 +7,11 @@
  */
 import { useMemo, useRef, useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { marketViewRequest } from '../../app/intents';
 import { useShortcuts } from '../../app/shortcuts';
 import type { ContentDB } from '../../../core/content';
 import type { Fighter, FighterId, GameState, Offer } from '../../../core/model';
-import { DataTable, Icon, PageHeader, Panel, showToast, type Column } from '../../components';
+import { DataTable, Icon, PageHeader, Panel, showToast, tipAttrs, type Column } from '../../components';
 import type { GameStore } from '../../store';
 import { useWp7Engine, type Wp7Engine } from '../league/lib/engine';
 import { fmtMoney } from '../league/lib/format';
@@ -27,10 +28,10 @@ import './market.css';
 
 type View = 'agents' | 'pending' | 'renewals' | 'rookies' | 'shortlist';
 
-export default function MarketScreen(_props: ScreenProps) {
+export default function MarketScreen(props: ScreenProps) {
   const career = useCareer();
   if (!career) return <NoCareer testId="screen-market" />;
-  return <Market career={career} />;
+  return <Market career={career} renewId={props.params['renew'] ?? null} viewParam={props.params['view'] ?? null} />;
 }
 
 interface Filters {
@@ -72,15 +73,25 @@ function rowMatches(r: MarketRow, f: Filters, content: ContentDB, m: ClubMarket)
   return true;
 }
 
-function Market({ career }: { career: Career }) {
+function Market({ career, renewId, viewParam }: { career: Career; renewId: string | null; viewParam: string | null }) {
   const { store, game, content, club } = career;
   const engine = useWp7Engine();
-  const [view, setView] = useState<View>('agents');
+  // Another screen may ask for a view (the expiring-contracts dialog opens Renewals).
+  const [view, setView] = useState<View>(() => {
+    const asked = marketViewRequest.value;
+    marketViewRequest.value = null;
+    // #/market?view=renewals (digest "Renewals"), or the Renewals view for a renew link.
+    const fromParam = viewParam && ['agents', 'pending', 'renewals', 'rookies', 'shortlist'].includes(viewParam) ? (viewParam as View) : null;
+    return asked ?? fromParam ?? (renewId ? 'renewals' : 'agents');
+  });
   const [filters, setFilters] = useState<Filters>(() => defaultFilters(content));
   const [selected, setSelected] = useState<string | null>(null);
   const [compare, setCompare] = useState<FighterId[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
-  const [offer, setOffer] = useState<OfferTarget | null>(null);
+  // #/market?renew=<id> (profile Renew, digest "Renew"): Renewals view with that fighter's dialog open.
+  const [offer, setOffer] = useState<OfferTarget | null>(() =>
+    renewId && career.game.fighters[renewId as FighterId]?.clubId === career.club.id ? { fighterId: renewId as FighterId, kind: 'renewal' } : null,
+  );
   const searchRef = useRef<HTMLInputElement>(null);
   const market = useMemo(() => clubMarket(engine, game, content, club.id), [engine, game, content, club.id]);
   const agentsList = useMemo(() => {
@@ -453,14 +464,12 @@ function AgentsTable({
     }
   };
   // With no room at all the banner above the table says it once, instead of a tag on every row.
-  const overRoomTag = (r: MarketRow) => {
-    const excess = r.ask - (market.wageRoom + (r.pending?.wagePerWeek ?? 0));
-    return excess > 0 && market.wageRoom > 0 ? (
-      <span class="tag tag--warn" data-tip={t('disabled.roomRoom', { n: fmtMoney(excess, content) })}>
-        {t('tag.overRoom', { n: formatInt(excess) })}
-      </span>
-    ) : null;
-  };
+  // At a season start most of the pool is new: then the per-row tag is noise (the filter still works).
+  const showNewTags = rows.filter((r) => r.isNew).length <= Math.max(8, rows.length / 4);
+  // Over the wage room (when there is some room at all): the ask turns amber with the amount in its tip.
+  const excessOf = (r: MarketRow) => r.ask - (market.wageRoom + (r.pending?.wagePerWeek ?? 0));
+  const isOverRoom = (r: MarketRow) => market.wageRoom > 0 && excessOf(r) > 0;
+  const overRoomTip = (r: MarketRow) => (isOverRoom(r) ? t('disabled.roomRoom', { n: fmtMoney(excessOf(r), content) }) : null);
   const columns: Column<MarketRow>[] = [
     {
       id: 'compare',
@@ -488,7 +497,7 @@ function AgentsTable({
         <span class="entity">
           <Portrait content={content} fighter={r.fighter} size="xs" />
           <FighterLink state={game} id={r.fighter.id} />
-          {r.isNew && (
+          {r.isNew && showNewTags && (
             <span class="tag tag--info" data-tip={t('tip.new')}>
               {t('tag.new')}
             </span>
@@ -521,16 +530,20 @@ function AgentsTable({
       cell: (r) => <ClassTag content={content} classId={r.fighter.classId} />,
     },
     {
-      id: 'raceAge',
-      header: t('col.raceAge'),
-      class: 'col-mid',
-      sortValue: (r) => r.view?.humanAge ?? r.fighter.age,
+      id: 'race',
+      header: t('col.race'),
+      sortValue: (r) => content.races.get(r.fighter.raceId)?.name ?? r.fighter.raceId,
       firstDir: 'asc',
-      cell: (r) => (
-        <span data-tip={r.view ? `Human-age ${r.view.humanAge}` : undefined}>
-          {content.races.get(r.fighter.raceId)?.name ?? r.fighter.raceId} · {r.fighter.age}
-        </span>
-      ),
+      cell: (r) => content.races.get(r.fighter.raceId)?.name ?? r.fighter.raceId,
+    },
+    {
+      id: 'age',
+      header: t('col.age'),
+      align: 'num',
+      sortValue: (r) => r.fighter.age,
+      firstDir: 'asc',
+      cellAttrs: (r): Record<string, string> => (r.view ? { 'data-tip': t('tip.humanAge', { age: r.fighter.age, human: r.view.humanAge }) } : {}),
+      cell: (r) => r.fighter.age,
     },
     { id: 'rating', header: t('col.rating'), align: 'num', sortValue: (r) => r.rating, cell: (r) => <RatingPill value={r.rating} /> },
     { id: 'potential', header: t('col.potential'), sortValue: (r) => r.potential, cell: (r) => <Stars potential={r.potential} /> },
@@ -546,8 +559,9 @@ function AgentsTable({
       cellAttrs: (r) => ({ 'data-tip': t('tip.ask', { n: r.preferred }) }),
       cell: (r) => (
         <span class="market-ask">
-          <span class="u-num">{fmtMoney(r.ask, content)}</span>
-          {overRoomTag(r)}
+          <span class={isOverRoom(r) ? 'u-num market-ask--over' : 'u-num'} {...tipAttrs(overRoomTip(r))}>
+            {fmtMoney(r.ask, content)}
+          </span>
         </span>
       ),
     },
@@ -558,35 +572,27 @@ function AgentsTable({
       class: 'col-wide',
       align: 'num',
       sortValue: (r) => r.ask,
-      cellAttrs: (r) => ({ 'data-tip': t('tip.asks', { list: r.asks.map((a) => `${a.seasons} s: ${fmtMoney(a.ask, content)}`).join(' · ') }) }),
+      cellAttrs: (r) => ({ 'data-tip': `${t('tip.asks', { list: r.asks.map((a) => `${a.seasons} s: ${fmtMoney(a.ask, content)}`).join(' · ') })}${isOverRoom(r) ? ` ${overRoomTip(r)}.` : ''}` }),
       cell: (r) => (
         <span class="market-ask">
           <span class="u-num market-asks">
             {r.asks.map((a, i) => (
-              <span key={a.seasons} class={a.seasons === r.preferred ? 'u-strong' : 'u-muted'}>
+              <span key={a.seasons} class={a.seasons === r.preferred ? (isOverRoom(r) ? 'u-strong market-ask--over' : 'u-strong') : 'u-muted'}>
                 {i > 0 ? ' · ' : ''}
                 {a.seasons === r.preferred ? '▸' : ''}
                 {formatInt(a.ask)}
               </span>
             ))}
           </span>
-          {overRoomTag(r)}
         </span>
       ),
     },
+    // The signing fee is in the Offer button's tip and the offer dialog (one column fewer for the names).
     {
-      id: 'signing',
-      header: <span data-tip={t('tip.signing')}>{t('col.signing')}</span>,
-      headerLabel: t('tip.signingLabel'),
-      class: 'col-wide',
-      align: 'num',
-      sortValue: (r) => (r.check?.ok ? r.check.value.signingCost : Number.MAX_SAFE_INTEGER),
-      cellAttrs: (r) => ({ 'data-tip': r.check && !r.check.ok ? t('tip.signingNa', { reason: r.check.error.message }) : t('tip.signing') }),
-      cell: (r) => (r.check?.ok ? <span class="u-num">{fmtMoney(r.check.value.signingCost, content)}</span> : <span class="u-faint">—</span>),
-    },
-    {
+      // Rival offers are usually 0: below 1800 px the count is in the Offer button's tooltip.
       id: 'rivals',
       header: t('col.rivals'),
+      class: 'col-wide',
       align: 'num',
       sortValue: (r) => r.rivals,
       cellAttrs: () => ({ 'data-tip': t('tip.rivals') }),
@@ -595,6 +601,7 @@ function AgentsTable({
     {
       id: 'willing',
       header: t('col.willing'),
+      class: 'col-mid',
       sortValue: (r) => r.patience,
       cell: (r) => {
         const level = willingLevel(r.patience, r.maxPatience);
@@ -635,7 +642,10 @@ function AgentsTable({
               class="btn btn--sm"
               type="button"
               aria-disabled={blocked ? 'true' : undefined}
-              data-tip={blocked ?? undefined}
+              data-tip={
+                blocked ??
+                t('tip.offerRivals', { n: r.rivals, fee: r.check?.ok ? fmtMoney(r.check.value.signingCost, content) : '—', patience: r.patience, max: r.maxPatience })
+              }
               data-testid="offer-button"
               onClick={(e) => {
                 e.stopPropagation();
@@ -892,7 +902,14 @@ function RenewalsTable({
       header: <span class="u-sr-only">{t('col.action')}</span>,
       class: 'cell-tight',
       cell: (r) => (
-        <button class="btn btn--sm" type="button" aria-disabled={r.patience <= 0 ? 'true' : undefined} onClick={() => r.patience > 0 && onRenew(r.fighter.id)} data-testid="renew-button">
+        <button
+          class="btn btn--sm"
+          type="button"
+          aria-disabled={r.patience <= 0 ? 'true' : undefined}
+          {...tipAttrs(r.patience <= 0 ? t('disabled.patience') : t('tip.renewOpen'))}
+          onClick={() => r.patience > 0 && onRenew(r.fighter.id)}
+          data-testid="renew-button"
+        >
           {t('action.renew')}
         </button>
       ),
@@ -954,7 +971,13 @@ function RookiesTable({
       header: <span class="u-sr-only">{t('col.action')}</span>,
       class: 'cell-tight',
       cell: (r) => (
-        <button class="btn btn--sm" type="button" onClick={() => onSign(r.fighter.id)} aria-disabled={market.embargo ? 'true' : undefined}>
+        <button
+          class="btn btn--sm"
+          type="button"
+          onClick={() => onSign(r.fighter.id)}
+          aria-disabled={market.embargo ? 'true' : undefined}
+          {...tipAttrs(market.embargo ? t('err.embargo.trials') : null)}
+        >
           {t('action.sign')}
         </button>
       ),

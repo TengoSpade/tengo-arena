@@ -7,6 +7,7 @@
 import { Fragment } from 'preact';
 import type { ContentDB, RuleDef } from '../../../core/content';
 import type { TacticsAssignment } from '../../../core/model';
+import { actionTakesOn } from '../../format/rules';
 import { t } from './text';
 
 type Params = Record<string, string | number | boolean | undefined>;
@@ -46,7 +47,7 @@ function paramValue(content: ContentDB, name: string, params: Params, classId: s
 }
 
 /** Fill a vocabulary label: "{pct}" placeholders, "[optional {band}]" parts, "{status|category}". */
-export function fillLabel(content: ContentDB, label: string, params: Params, classId: string): string {
+export function fillLabel(content: ContentDB, label: string, params: Params, classId: string, defaults: Params = {}): string {
   const withOptional = label.replace(/\[([^\]]*)\]/g, (_, inner: string) => {
     const names = [...inner.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]!);
     const present = names.every((n) => n.split('|').some((x) => params[x] !== undefined));
@@ -55,13 +56,20 @@ export function fillLabel(content: ContentDB, label: string, params: Params, cla
   return withOptional
     .replace(/\{([^}]+)\}/g, (_, name: string) => {
       for (const alt of name.split('|')) {
-        const v = paramValue(content, alt, params, classId);
+        const v = paramValue(content, alt, params, classId) ?? paramValue(content, alt, defaults, classId);
         if (v !== null) return v;
       }
-      return name;
+      return '';
     })
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** Spec defaults for slots a rule leaves unset (as core/tactics describe uses them). */
+function defaultsOf(params: readonly { name: string; default?: unknown }[] | undefined): Params {
+  const out: Params = {};
+  for (const p of params ?? []) if (p.default !== undefined) out[p.name] = p.default as Params[string];
+  return out;
 }
 
 function paramsOf(part: Record<string, unknown>, drop: string): Params {
@@ -84,7 +92,7 @@ export function ruleParts(content: ContentDB, rule: RuleDef, classId: string): R
   const conditions = rule.if.map((c) => {
     const def = v.conditions.find((x) => x.id === c.cond);
     return {
-      text: def ? fillLabel(content, def.label, paramsOf(c, 'cond'), classId) : c.cond,
+      text: def ? fillLabel(content, def.label, paramsOf(c, 'cond'), classId, defaultsOf(def.params)) : c.cond,
       not: Boolean(c.not),
       always: c.cond === 'always',
     };
@@ -94,12 +102,12 @@ export function ruleParts(content: ContentDB, rule: RuleDef, classId: string): R
   const pred = (p: { pred: string } | null) => {
     if (!p) return null;
     const def = v.predicates.find((x) => x.id === p.pred);
-    return def ? fillLabel(content, def.label, paramsOf(p, 'pred'), classId) : p.pred;
+    return def ? fillLabel(content, def.label, paramsOf(p, 'pred'), classId, defaultsOf(def.params)) : p.pred;
   };
   return {
     conditions,
-    action: act ? fillLabel(content, act.label, paramsOf(rule.then, 'type'), classId) : rule.then.type,
-    selector: sel ? fillLabel(content, sel.label, paramsOf(rule.on, 'sel'), classId) : rule.on.sel,
+    action: act ? fillLabel(content, act.label, paramsOf(rule.then, 'type'), classId, defaultsOf(act.params)) : rule.then.type,
+    selector: sel ? fillLabel(content, sel.label, paramsOf(rule.on, 'sel'), classId, defaultsOf(sel.params)) : rule.on.sel,
     only: pred(rule.only),
     prefer: pred(rule.prefer),
     cooldownS: rule.cooldownS,
@@ -111,7 +119,7 @@ export function ruleText(content: ContentDB, rule: RuleDef, classId: string): st
   const p = ruleParts(content, rule, classId);
   const conds = p.conditions.filter((c) => !c.always);
   const head = conds.length === 0 ? t('rule.always') : `${t('rule.if')} ${conds.map((c) => (c.not ? `${t('rule.not')} ${c.text}` : c.text)).join(` ${t('rule.and')} `)} ${t('rule.then')}`;
-  let s = `${head} ${p.action} ${t('rule.on')} ${p.selector}`;
+  let s = `${head} ${p.action}${actionTakesOn(p.action) ? ` ${t('rule.on')}` : ''} ${p.selector}`;
   if (p.only) s += ` ${t('rule.only')} ${p.only}`;
   if (p.prefer) s += ` ${t('rule.prefer')} ${p.prefer}`;
   if (p.cooldownS > 0) s += ` (${t('rule.cooldown', { s: p.cooldownS })})`;
@@ -148,7 +156,8 @@ export function RuleSentence({ content, rule, classId, index }: { content: Conte
           <span class="rule__kw">{t('rule.then')}</span>
         </>
       )}{' '}
-      <span class="rule__v">{p.action}</span> <span class="rule__kw">{t('rule.on')}</span> <span class="rule__v">{p.selector}</span>
+      <span class="rule__v">{p.action}</span> {actionTakesOn(p.action) && <span class="rule__kw">{t('rule.on')} </span>}
+      <span class="rule__v">{p.selector}</span>
       {p.only && (
         <>
           {' '}

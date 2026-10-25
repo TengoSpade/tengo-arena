@@ -8,6 +8,7 @@ import type { ContentDB } from '../../../../core/content';
 import { personName, type Fighter, type FighterId, type GameState } from '../../../../core/model';
 import * as C from '../../../components';
 import type { IconName } from '../../../components';
+import { playerText } from '../../../format';
 import { href } from './store';
 import { tc } from './text';
 
@@ -90,7 +91,7 @@ export function TraitDots({ content, traitIds }: { content: ContentDB; traitIds:
   const traits = traitIds.map((id) => {
     const t = content.traits.get(id);
     const polarity = t ? C.traitPolarity(t) : 'pos';
-    const tip: C.Tip = t ? { kicker: t.category, title: t.name, body: t.effectText ?? '', flavor: t.flavor } : id;
+    const tip: C.Tip = t ? { kicker: t.category, title: t.name, body: playerText(t.effectText ?? ''), flavor: t.flavor } : id;
     return { id, polarity, tip };
   });
   return <C.TraitDots traits={traits} />;

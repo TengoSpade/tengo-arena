@@ -7,7 +7,7 @@ import { Component, type ComponentChildren, type ComponentType } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { formatContentIssues, type ContentIssue } from '../../core/content';
 import { Icon } from '../components/Icon';
-import { Callout, Empty } from '../components/marks';
+import { Callout, Empty } from '../components/basic-marks';
 import { t } from '../text';
 import type { RouteDef, ScreenProps } from './routes';
 

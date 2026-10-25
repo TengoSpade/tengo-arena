@@ -128,4 +128,6 @@ export const GAME_NEWS_KEYS = {
    * whose captain was missing (D-S; params.reason 'vice' | 'starter'). refs.fighterId = the new captain.
    */
   captainInterim: 'captain.interim',
+  /** Player club, a few weeks before season end: one per unrenewed expiring contract (refs.fighterId; params count, season, weeksLeft). */
+  contractExpiring: 'contract.expiring',
 } as const;

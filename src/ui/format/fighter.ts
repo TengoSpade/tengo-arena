@@ -9,7 +9,7 @@ import type { CaptaincyPreview, FighterView } from '../../core/game';
 import { CAREER_ENDING_WEEKS, type Contract, type Fighter, type FighterId, type GameState, type Injury, type StatId } from '../../core/model';
 import type { TipContent } from '../components/Tooltip';
 import { traitPolarity, type TraitPolarity } from '../components/marks';
-import { formatInt, formatMoney, formatPercentBp, potentialStars, starsLabel } from './index';
+import { formatInt, formatMoney, formatPercentBp, playerText, potentialStars, starsLabel } from './index';
 import { presetLines } from './rules';
 
 export function rolesOf(klass: ClassDef): string[] {
@@ -43,11 +43,11 @@ export function traitInfo(traitId: string, content: ContentDB, source?: string):
     id: tr.id,
     name: tr.name,
     polarity,
-    effect: tr.effectText,
+    effect: playerText(tr.effectText),
     tip: {
       kicker: [category, polarityWord, tr.rarity !== 'common' ? tr.rarity : null].filter(Boolean).join(' · '),
       title: tr.name,
-      body: tr.effectText,
+      body: playerText(tr.effectText),
       flavor: tr.flavor ? `“${tr.flavor}”` : undefined,
       meta: [opposites.length ? `Opposite: ${opposites.join(', ')}` : null, source ? `Source: ${source}` : null].filter(Boolean).join(' · ') || undefined,
     },
@@ -93,7 +93,7 @@ export function presetTip(preset: PresetDef, klass: ClassDef | null, content: Co
     title: preset.name,
     body: preset.summary,
     lines: presetLines(preset, klass, content),
-    meta: 'Checked top-down; the first valid rule acts. Rule editing arrives in M3.',
+    meta: 'Checked top-down; the first valid rule acts.',
   };
 }
 

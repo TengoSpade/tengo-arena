@@ -11,10 +11,11 @@ import { readTip, resetToasts, toasts, undoLast } from '../components';
 import { TestProviders, createTestStore } from '../debug/test-store';
 import { formatMoney } from '../format';
 import { coreEngine } from '../store/engine';
+import { clubContext } from '../store/views';
 import ClubSelectScreen from './club-select';
 import CodexScreen from './codex';
 import FighterScreen from './fighter';
-import HomeScreen from './home';
+import HomeScreen, { homeAdvice } from './home';
 import NewGameScreen from './new-game';
 import SquadScreen, { squadSelection } from './squad';
 
@@ -160,6 +161,83 @@ describe('Home', () => {
     expect(rows.length).toBe(8);
     expect(wing.querySelectorAll('tbody tr.is-us')).toHaveLength(1);
     expect(wing.querySelectorAll('tbody tr[data-zone="qualify"]')).toHaveLength(4);
+  });
+
+  it('does not tick the lineup with 4 of 5 places or an empty roster', () => {
+    const { store } = createTestStore({ weekIndex: 1 });
+    const state = structuredClone(store.game.value!);
+    const c = club(state);
+    c.lineup.fighters = c.lineup.fighters.slice(0, 4);
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const items = [...screen.getByTestId('preseason-checklist').querySelectorAll('li')];
+    const lineup = items.find((li) => li.textContent!.startsWith('Lineup'))!;
+    expect(lineup.textContent).toBe('Lineup: 4 of 5 places filled');
+    expect(lineup.getAttribute('data-state')).toBe('warn');
+    cleanup();
+    const empty = structuredClone(store.game.value!);
+    for (const f of Object.values(empty.fighters)) if (f.clubId === club(empty).id) f.clubId = null;
+    club(empty).lineup.fighters = [];
+    store.replaceWorld(empty);
+    mount(<HomeScreen params={{}} />, store);
+    const texts = [...screen.getByTestId('preseason-checklist').querySelectorAll('li')].map((li) => [li.textContent, li.getAttribute('data-state')]);
+    expect(texts).toContainEqual(['Roster 0 of ' + texts.find((x) => x[0]!.startsWith('Roster'))![0]!.split(' of ')[1]!.split(':')[0] + ': sign 5 more to field five', 'bad']);
+    expect(texts.find((x) => x[0]!.startsWith('Lineup'))![1]).toBe('warn');
+  });
+
+  it('never shows an opponent lineup before their first match (D-R, KI-9)', () => {
+    const { store } = createTestStore({ weekIndex: 5 });
+    const state = store.game.value!;
+    expect(Object.values(state.results).filter((r) => r.season === state.calendar.season)).toHaveLength(0);
+    mount(<HomeScreen params={{}} />, store);
+    const theirs = screen.getByTestId('their-lineup');
+    expect(theirs.textContent).toContain('No matches played yet');
+    expect(theirs.querySelectorAll('.role-glyph, [data-role]')).toHaveLength(0);
+    cleanup();
+    mount(<SquadScreen params={{}} />, store);
+    expect(document.querySelector('.lineup-check')!.textContent).not.toContain('their last lineup');
+  });
+
+  it('shows the opponent as they last played once they have', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    // The dev world's results carry no sim input: give the opponent's latest one the five it fielded.
+    const state = structuredClone(store.game.value!) as GameState;
+    const us = club(state).id;
+    const fx = Object.values(state.fixtures).find((f) => f.weekIndex === state.calendar.weekIndex && (f.homeClubId === us || f.awayClubId === us))!;
+    const them = fx.homeClubId === us ? fx.awayClubId : fx.homeClubId;
+    const last = Object.values(state.results)
+      .filter((r) => r.season === state.calendar.season && (r.homeClubId === them || r.awayClubId === them))
+      .sort((a, b) => b.weekIndex - a.weekIndex)[0]!;
+    const five = Object.values(state.fighters).filter((f) => f.clubId === them).slice(0, 5);
+    const side = last.homeClubId === them ? last.input.home : last.input.away;
+    (side as { fighters: unknown[] }).fighters = five.map((f, i) => ({ fighterId: f.id, row: i < 2 ? 'front' : 'back', rating: 60 }));
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const theirs = screen.getByTestId('their-lineup');
+    expect(theirs.textContent).not.toContain('No matches played yet');
+    expect(theirs.textContent).toMatch(/mean rating 60/i);
+  });
+
+  it('warns when the opponent is much stronger and when places and wage room are free', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const state = structuredClone(store.game.value!) as GameState;
+    const us = club(state).id;
+    const fx = Object.values(state.fixtures).find((f) => f.weekIndex === state.calendar.weekIndex && (f.homeClubId === us || f.awayClubId === us))!;
+    const them = fx.homeClubId === us ? fx.awayClubId : fx.homeClubId;
+    const last = Object.values(state.results)
+      .filter((r) => r.season === state.calendar.season && (r.homeClubId === them || r.awayClubId === them))
+      .sort((a, b) => b.weekIndex - a.weekIndex)[0]!;
+    const side = last.homeClubId === them ? last.input.home : last.input.away;
+    const five = Object.values(state.fighters).filter((f) => f.clubId === them).slice(0, 5);
+    (side as { fighters: unknown[] }).fighters = five.map((f) => ({ fighterId: f.id, row: 'front', rating: 99 }));
+    store.replaceWorld(state);
+    const ctx = clubContext(store.game.value!, store.content.value!, coreEngine, us)!;
+    const advice = homeAdvice(ctx);
+    const outclassed = advice.find((d) => d.id === 'advice-outclassed');
+    expect(outclassed?.title).toMatch(/^Outclassed: your five average \d+, .+ last fielded 99$/);
+    const room = ctx.finance!.wageBudgetPerWeek - ctx.finance!.wageBill - ctx.finance!.pendingWages;
+    const places = ctx.rosterCap - ctx.roster.length;
+    expect(advice.some((d) => d.id === 'advice-room')).toBe(places > 0 && room >= store.content.value!.tierProfile(ctx.tier.level).tierMinWage);
   });
 
   it('shows the preseason checklist when there is no fixture', () => {

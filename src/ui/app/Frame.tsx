@@ -10,20 +10,23 @@ import { useEffect, useState } from 'preact/hooks';
 import type { ClubId, WeekReport } from '../../core/model';
 // Direct module imports (not the components barrel) keep screen-only components out of the main bundle.
 import { Icon } from '../components/Icon';
-import { Crest, crestLetters } from '../components/marks';
-import { Modal } from '../components/Modal';
+import { Crest, crestLetters } from '../components/basic-marks';
 import { ToastRegion, clearUndos, showToast, undoLast } from '../components/Toast';
 import { TooltipLayer, tipAttrs, type Tip } from '../components/Tooltip';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
 import { useStore, type AppStore } from '../store';
-import { buildDigest, needsActionCount } from '../store/digest';
+import { digestNews, needsActionNow, newsNeedsAction } from '../store/digest-flags';
 import { useEngine } from '../store/engine';
 import { effectiveTheme, pacingStops, reducedMotion, settings, updateSettings } from '../store/settings';
 import { usePlayerClub, type ClubContext } from '../store/views';
 import { t } from '../text';
 import { continueModel, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
+import type * as ContinueDialogs from './continue-dialogs';
+import type { ConfirmVariant } from './continue-dialogs';
+import { expiringUnrenewed } from './expiring';
+import { skipToKickOffRequest } from './intents';
 import { SimulatingPanel } from './overlays';
 import { quickSaveOrAsk } from './save-intent';
 import type * as Palettes from './palettes';
@@ -47,7 +50,19 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const routeId = route?.id ?? null;
   const [sheet, setSheet] = useState(false);
   const [search, setSearch] = useState(false);
-  const [confirm, setConfirm] = useState<'kick-off' | 'season-end' | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmVariant | null>(null);
+  // The commit dialogs are a lazy chunk: loaded shortly after start, or at once when one opens.
+  const [dialogs, setDialogs] = useState<typeof ContinueDialogs | null>(null);
+  useEffect(() => {
+    if (dialogs) return;
+    const load = () => void import('./continue-dialogs').then(setDialogs);
+    if (confirm) {
+      load();
+      return;
+    }
+    const id = setTimeout(load, 1200);
+    return () => clearTimeout(id);
+  }, [confirm, dialogs]);
   const [simulating, setSimulating] = useState<number | null>(null);
   const s = settings.value;
 
@@ -92,8 +107,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
     stops: pacingStops(s),
   });
 
-  const digest = ctx ? buildDigest(ctx.state, ctx.content, ctx.club.id, store.blockers.value) : [];
-  const needsAction = needsActionCount(digest);
+  const needsAction = ctx ? needsActionNow(ctx.state, ctx.club.id, store.blockers.value) : 0;
 
   const afterMatch = (report: WeekReport) => {
     const state = store.game.value;
@@ -157,13 +171,51 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
         setConfirm(a.variant);
         return;
       case 'season-end': {
-        const res = await store.finishSeason();
-        if (res.ok) navigate('#/season-review');
+        // Contracts that end now and were not renewed: say so before the step lets them go.
+        if (expiringUnrenewed(ctx).length > 0) {
+          setConfirm('expiring');
+          return;
+        }
+        await runSeasonEnd();
         return;
       }
       case 'none':
         return;
     }
+  };
+
+  // "Skip to Matchweek 1": run quiet preseason weeks one by one; stop as soon as something needs the
+  // player (a blocker, a needs-action digest item) or the next stop is not a plain week (kick-off asks).
+  const skipToKickOff = async () => {
+    for (let i = 0; i < 6; i++) {
+      const g = store.game.value;
+      const c = store.content.value;
+      if (!g || !c || g.calendar.phase !== 'preseason') return;
+      const m = continueModel({ state: g, content: c, engine, blockers: store.blockers.value, routeId, busy: false, stops: pacingStops(settings.value) });
+      if (m.action.kind === 'confirm-advance') {
+        setConfirm(m.action.variant);
+        return;
+      }
+      if (m.action.kind !== 'advance' || m.action.playsMatch) return;
+      const res = await store.advance();
+      if (!res.ok) return;
+      const state = store.game.value!;
+      const stop = state.playerClubId ? digestNews(state, state.playerClubId).some((n) => newsNeedsAction(n, state)) : false;
+      if (stop || store.blockers.value.length > 0) {
+        navigate('#/home');
+        showToast({ title: t('skip.stopped', { week: weekLabel(c, state.calendar.weekIndex) }), sub: t('skip.stoppedSub'), kind: 'info' });
+        return;
+      }
+    }
+  };
+  const skipRequest = skipToKickOffRequest.value;
+  useEffect(() => {
+    if (skipRequest > 0) void skipToKickOff();
+  }, [skipRequest]);
+
+  const runSeasonEnd = async () => {
+    const res = await store.finishSeason();
+    if (res.ok) navigate('#/season-review');
   };
 
   const quickSave = () => quickSaveOrAsk(store);
@@ -183,7 +235,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
         'alt+ArrowLeft': () => goBack(),
       };
       if (onToggleDebug) map['`'] = onToggleDebug;
-      for (const n of NAV_ITEMS) if (n.key) map[n.key] = () => navigate(n.href);
+      for (const n of [...NAV_ITEMS, ...NAV_FOOTER]) if (n.key) map[n.key] = () => navigate(n.href);
       return map;
     };
     return installShortcuts(global);
@@ -216,11 +268,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
             <a key={n.id} class="sidenav__item" href={n.href} aria-current={owner === n.id ? 'page' : undefined} {...tipAttrs(collapsed ? t(n.label) : null)}>
               <Icon name={n.icon} />
               <span class="sidenav__label">{t(n.label)}</span>
-              {n.id === 'saves' && (
-                <span class="sidenav__key" title="Ctrl S">
-                  S
-                </span>
-              )}
+              {n.key && <span class="sidenav__key">{n.key.toUpperCase()}</span>}
             </a>
           ))}
           <button
@@ -252,7 +300,8 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       {palettes && <palettes.ShortcutSheet open={sheet} onClose={() => setSheet(false)} />}
       {palettes && <palettes.SearchPalette open={search} onClose={() => setSearch(false)} state={store.game.value} content={store.content.value} />}
       {simulating !== null && <SimulatingPanel rounds={simulating} />}
-      <ContinueConfirm
+      {dialogs && (
+      <dialogs.ContinueConfirm
         variant={confirm}
         ctx={ctx}
         onClose={() => setConfirm(null)}
@@ -261,8 +310,10 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
           setConfirm(null);
           if (v === 'kick-off') await advance(false);
           else if (v === 'season-end') await advanceToSeasonEnd();
+          else if (v === 'expiring') await runSeasonEnd();
         }}
       />
+      )}
     </div>
   );
 }
@@ -294,10 +345,11 @@ function Topbar({
   return (
     <header class="topbar">
       {ctx ? (
-        <a class="topbar__club" href="#/home" data-testid="topbar-club">
+        <a class="topbar__club" href="#/home" data-testid="topbar-club" aria-label={ctx.club.name} {...tipAttrs(ctx.club.name.length > TOPBAR_NAME_MAX ? ctx.club.name : null)}>
           <Crest primary={ctx.club.colors.primary} secondary={ctx.club.colors.secondary} code={crestLetters(ctx.club)} size="md" />
           <span class="topbar__club-text">
-            <span class="topbar__club-name">{ctx.club.name}</span>
+            {/* A long name would be cut in the nav-width block: the short name fits whole. */}
+            <span class="topbar__club-name">{ctx.club.name.length > TOPBAR_NAME_MAX ? ctx.club.shortName : ctx.club.name}</span>
             <span class="topbar__club-tier">
               {ctx.tier.name} · {t('topbar.tier', { n: ctx.tier.level })}
             </span>
@@ -434,69 +486,10 @@ function TopbarStats({ ctx }: { ctx: ClubContext }) {
   );
 }
 
-// ---- Commit dialogs of Continue (Kick off season, Advance to season end) --------------------------
+// ---- Commit dialogs of Continue (Kick off season, Advance to season end, expiring contracts) -------
 
-function ContinueConfirm({
-  variant,
-  ctx,
-  onClose,
-  onConfirm,
-}: {
-  variant: 'kick-off' | 'season-end' | null;
-  ctx: ClubContext | null;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const kick = variant === 'kick-off';
-  return (
-    <Modal
-      open={variant !== null}
-      onClose={onClose}
-      title={kick ? t('continue.kickOffTitle') : t('continue.seasonEndTitle')}
-      icon={kick ? 'play' : 'calendar-check'}
-      size="narrow"
-      onEnter={onConfirm}
-      testId="continue-confirm"
-      footer={
-        <>
-          <button class="btn" type="button" onClick={onClose}>
-            {t('common.cancel')} <kbd>Esc</kbd>
-          </button>
-          <button class="btn btn--primary" type="button" onClick={onConfirm} data-autofocus>
-            {kick ? t('continue.kickOffConfirm') : t('continue.seasonEndConfirm')} <kbd>Enter</kbd>
-          </button>
-        </>
-      }
-    >
-      <div class="l-stack">
-        <p class="u-sm">{kick ? t('continue.kickOffText') : t('continue.seasonEndText')}</p>
-        {ctx && (
-          <dl class="kv">
-            <div>
-              <dt>{t('topbar.roster')}</dt>
-              <dd>
-                {ctx.roster.length} / {ctx.rosterCap}
-              </dd>
-            </div>
-            {ctx.finance && (
-              <>
-                <div>
-                  <dt>{t('topbar.wages')}</dt>
-                  <dd>
-                    {formatMoney(ctx.finance.wageBill)} / {formatMoney(ctx.finance.wageBudgetPerWeek)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('topbar.balance')}</dt>
-                  <dd>{formatMoney(ctx.finance.balance)}</dd>
-                </div>
-              </>
-            )}
-          </dl>
-        )}
-      </div>
-    </Modal>
-  );
-}
+
+/** Longest club name the top bar shows whole at the nav width (display face, md). */
+const TOPBAR_NAME_MAX = 17;
 
 export type { RouteId };

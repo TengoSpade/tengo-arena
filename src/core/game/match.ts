@@ -219,9 +219,12 @@ function keyEvents(log: FightLog): ReportEvent[] {
         amount = ev.data?.hit ?? null;
         break;
       case 'cast.interrupt':
-        actor = ev.data?.by;
+        // Only an interrupt by someone is a key moment; a cast the caster dropped himself (target out of
+        // range or already down) has no actor and read " interrupts X".
+        if (ev.data?.by === null || ev.data?.by === undefined) continue;
+        actor = ev.data.by;
         target = ev.unit;
-        abilityId = ev.data?.ability ?? null;
+        abilityId = ev.data.ability ?? null;
         break;
       case 'deathward.save':
         actor = ev.data?.by;

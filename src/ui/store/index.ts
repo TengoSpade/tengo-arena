@@ -33,5 +33,6 @@ export {
 } from './settings';
 export { useAppStore } from './use-app-store';
 export { clubContext, usePlayerClub, fighterViewOf, type ClubContext } from './views';
-export { buildDigest, newsToDigest, needsActionCount, DIGEST_LIMIT, NEEDS_ACTION_LIMIT, type DigestItem, type DigestKind } from './digest';
+// The digest's copy lives in store/digest.ts (imported directly by Home, kept out of the main bundle).
+export { needsActionNow, NEEDS_ACTION_LIMIT } from './digest-flags';
 export { blockerTarget } from './digest-targets';

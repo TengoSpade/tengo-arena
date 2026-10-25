@@ -598,9 +598,15 @@ function AgeCurve({ f, race, content, humanAge }: { f: Fighter; race: RaceDef; c
   const ticks = [16, 20, 24, 28, 32, 36, 40];
   const hx = xOf(humanAge);
   const mult = (80 / race.lifespan).toFixed(2).replace(/\.?0+$/, '');
+  // Humans age at the human rate by definition: no rate sentence for them.
+  const ageCaption = format(T.ageCaption, {
+    peak: peakAt,
+    wear: wearStart,
+    rate: mult === '1' ? '' : format(T.ageRate, { race: race.plural, mult, name: f.name.given, age: f.age, human: humanAge }),
+  });
   return (
     <Panel title={format(T.ageCurve, { race: race.name })} subtitle={T.ageCurveSub} testId="age-curve">
-      <svg class="chart" viewBox="0 0 400 186" role="img" aria-label={format(T.ageCaption, { peak: peakAt, wear: wearStart, race: race.plural, mult, name: f.name.given, age: f.age, human: humanAge })}>
+      <svg class="chart" viewBox="0 0 400 186" role="img" aria-label={ageCaption}>
         <rect class="chart__zone--grow" x={X0} y="18" width={xOf(peakAt) - X0} height={Y0 - 18} />
         <rect class="chart__zone--peak" x={xOf(peakAt)} y="18" width={xOf(wearStart) - xOf(peakAt)} height={Y0 - 18} />
         <rect class="chart__zone--decline" x={xOf(wearStart)} y="18" width={X1 - xOf(wearStart)} height={Y0 - 18} />
@@ -660,7 +666,7 @@ function AgeCurve({ f, race, content, humanAge }: { f: Fighter; race: RaceDef; c
           {format(T.legendYou, { name: f.name.given, age: f.age })}
         </span>
       </div>
-      <p class="u-sm u-muted fighter-caption">{format(T.ageCaption, { peak: peakAt, wear: wearStart, race: race.plural, mult, name: f.name.given, age: f.age, human: humanAge })}</p>
+      <p class="u-sm u-muted fighter-caption">{ageCaption}</p>
     </Panel>
   );
 }
@@ -762,7 +768,18 @@ function CareerTable({ f, view, state, content }: { f: Fighter; view: FighterVie
       subtitle={T.careerSub}
       body="flush"
       testId="career"
-      footer={<span>{format(T.careerFooter, { matches: c.matches, rw: c.roundsWon, rl: c.roundsStarted - c.roundsWon, downs: c.downsInflicted, titles: c.titles })}</span>}
+      footer={
+        <span>
+          {format(T.careerFooter, {
+            matches: formatInt(c.matches),
+            rw: formatInt(c.roundsWon),
+            // Rounds started minus rounds won, never below 0 (older saves can lag the round counters).
+            rl: formatInt(Math.max(0, c.roundsStarted - c.roundsWon)),
+            downs: formatInt(c.downsInflicted),
+            titles: c.titles > 0 ? format(T.careerTitles, { n: c.titles }) : T.careerNoTitles,
+          })}
+        </span>
+      }
     >
       <DataTable<CareerRow>
         label={T.career}

@@ -16,6 +16,29 @@ import * as game from '../../core/game';
 import * as league from '../../core/league';
 import * as save from '../../core/save';
 import * as tactics from '../../core/tactics';
+import type { FighterId, GameState } from '../../core/model';
+
+/** One fighter's season-end change, as core/game developmentSummary returns it. */
+export interface DevelopmentSummaryRow {
+  fighterId: FighterId;
+  ageBefore: number;
+  ageAfter: number;
+  ratingBefore: number;
+  ratingAfter: number;
+  /** Per attribute change: a map by stat id, or a list of { statId | id, delta }. */
+  attributeDeltas: Readonly<Record<string, number>> | readonly { statId?: string; id?: string; delta: number }[];
+  potentialChange?: number;
+  retired?: boolean;
+}
+
+/** Attribute deltas as a list, whichever shape core used; zeros dropped, largest first. */
+export function attributeDeltaList(row: Pick<DevelopmentSummaryRow, 'attributeDeltas'>): { statId: string; delta: number }[] {
+  const raw = row.attributeDeltas;
+  const list = Array.isArray(raw)
+    ? (raw as readonly { statId?: string; id?: string; delta: number }[]).map((d) => ({ statId: d.statId ?? d.id ?? '', delta: d.delta }))
+    : Object.entries(raw as Readonly<Record<string, number>>).map(([statId, delta]) => ({ statId, delta }));
+  return list.filter((d) => d.statId && d.delta !== 0).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || a.statId.localeCompare(b.statId));
+}
 
 export interface GameEngine {
   // transitions (core/game)
@@ -49,6 +72,11 @@ export interface GameEngine {
   marketWage: typeof economy.marketWage;
   /** Polish pass: the payout a release would cost now (shown before the player confirms). */
   releasePayout: typeof economy.releasePayout;
+  /**
+   * Season-end development per fighter (core/game developmentSummary). Optional so test fakes can
+   * omit it; screens then fall back to the history rows.
+   */
+  developmentSummary?: (state: GameState, season: number) => readonly DevelopmentSummaryRow[];
   presetsForClass: typeof tactics.presetsForClass;
   describeRule: typeof tactics.describeRule;
   // saves (core/save)
@@ -84,6 +112,7 @@ export const coreEngine: GameEngine = {
   checkOffer: economy.checkOffer,
   marketWage: economy.marketWage,
   releasePayout: economy.releasePayout,
+  developmentSummary: game.developmentSummary,
   presetsForClass: tactics.presetsForClass,
   describeRule: tactics.describeRule,
   saveMetaFor: save.saveMetaFor,

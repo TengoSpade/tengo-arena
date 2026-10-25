@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/preact';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetToasts } from '../components';
 import { createTestStore } from '../debug/test-store';
@@ -33,7 +33,9 @@ describe('App', () => {
     render(<App store={store} />);
     const club = store.game.value!.clubs[store.game.value!.playerClubId!]!;
     await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy());
-    expect(screen.getByTestId('topbar-club').textContent).toContain(club.name);
+    // Long names show the short name whole; the full name stays in the label.
+    expect(screen.getByTestId('topbar-club').textContent).toContain(club.name.length > 17 ? club.shortName : club.name);
+    expect(screen.getByTestId('topbar-club').getAttribute('aria-label')).toBe(club.name);
     expect(screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('.sidenav__item').length).toBeGreaterThanOrEqual(9);
     const cont = screen.getAllByTestId('continue');
     expect(cont).toHaveLength(1);
@@ -78,6 +80,31 @@ describe('App', () => {
     const autos = (await saves.list()).filter((m) => m.kind === 'auto');
     expect(autos.some((m) => m.weekIndex === week + 1)).toBe(true);
     updateSettings({ pacing: DEFAULT_SETTINGS.pacing });
+  }, 20_000);
+
+  it('opens Save / Load with S, as the side navigation shows', async () => {
+    const { store } = createTestStore({ world: 'dev', weekIndex: 11 });
+    navigate('#/home');
+    render(<App store={store} />);
+    await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy());
+    fireEvent.keyDown(document.body, { key: 's' });
+    await waitFor(() => expect(location.hash).toBe('#/saves'));
+  });
+
+  it('skips quiet preseason weeks to the kick-off confirm', async () => {
+    const { store } = createTestStore({ world: 'dev', weekIndex: 2 });
+    // The dev world seeds an injury and other needs-action news: a quiet week has none.
+    const quiet = structuredClone(store.game.value!);
+    quiet.news = [];
+    for (const f of Object.values(quiet.fighters)) f.injury = null;
+    store.replaceWorld(quiet);
+    navigate('#/home');
+    render(<App store={store} />);
+    const skip = await screen.findByTestId('skip-to-mw1');
+    skip.click();
+    await waitFor(() => expect(document.querySelector('[data-testid="continue-confirm"][open]')).toBeTruthy(), { timeout: 10_000 });
+    const week = store.content.value!.weekByIndex(store.game.value!.calendar.weekIndex);
+    expect(week.commit).toBe('kick_off');
   }, 20_000);
 
   it('routes a career without a club to the club select', async () => {

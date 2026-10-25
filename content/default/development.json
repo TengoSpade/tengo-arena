@@ -88,7 +88,7 @@
 
   "decline": {
     "_doc": "Wear in stat points per human-year (step table on floor(humanAge during the season) - traitDeclineShift). Per season: wear100_i += 100 * d_g * k * race.declineMult[g] * traitDeclineMult * emphasisWearMult. base100_i = max(100, developed100_i - wear100_i). Wear never heals.",
-    "physicalPerHumanYear": [[0, 0], [31, 0.3], [32, 0.4], [33, 0.5], [34, 0.6], [35, 0.7], [36, 0.8], [37, 0.9], [38, 1.0]],
+    "physicalPerHumanYear": [[0, 0], [31, 0.2], [33, 0.3], [35, 0.4], [37, 0.5], [39, 0.6], [41, 0.7], [44, 0.85], [47, 1.0]],
     "mentalPerHumanYear": [[0, 0], [60, 0.1], [65, 0.2], [70, 0.3]],
     "mentalDeclineStartHumanAge": 60,
     "mentalDeclineScalesWithLifespan": true,
@@ -152,7 +152,7 @@
     "minHumanAge": 31,
     "forcedHumanAge": 58,
     "physicalPeakHumanAge": 30,
-    "hazardByRatingDrop": [[0, 0], [5, 0.003], [8, 0.01], [10, 0.04], [12, 0.08], [14, 0.13], [16, 0.19], [19, 0.29], [22, 0.41], [26, 0.6], [30, 0.8]],
+    "hazardByRatingDrop": [[0, 0], [3, 0.01], [4, 0.025], [5, 0.045], [6, 0.075], [7, 0.12], [8, 0.18], [9, 0.25], [11, 0.35], [13, 0.47], [16, 0.63], [20, 0.82]],
     "hazardPerHumanYearPastPeak": [[0, 0], [1, 0.002], [10, 0.008], [15, 0.015], [18, 0.03], [21, 0.06], [23, 0.1], [25, 0.18], [26, 0.3], [27, 0.5]],
     "modifiers": {
       "usageHighAtLeast": 0.75,

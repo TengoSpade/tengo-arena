@@ -185,7 +185,10 @@ export function evaluateOffer(
     }
   } else if (req.kind === 'renewal') {
     if (f.status !== 'active' || f.clubId !== req.clubId || f.contract?.clubId !== req.clubId) return fail('renewal.not-own', 'Not under contract with this club');
-    if (f.contract.endSeason !== at.season) return fail('renewal.not-final-season', 'Renewals are only allowed in the final season of a contract', { endSeason: f.contract.endSeason });
+    // The final season is the one being played, including the Reckoning and the pending season-end step
+    // (the market's clock already reads the coming season then, but the contract has not expired yet).
+    const playing = state.calendar.season;
+    if (f.contract.endSeason !== playing) return fail('renewal.not-final-season', 'Renewals are only allowed in the final season of a contract', { endSeason: f.contract.endSeason });
     if (f.finalSeason) return fail('renewal.retiring', 'The fighter has announced his final season');
   } else {
     if (trialsClubOf(state, f.id) !== req.clubId) return fail('trials.not-yours', 'Not a trials rookie of this club');

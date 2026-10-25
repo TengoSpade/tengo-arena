@@ -215,6 +215,11 @@ export function createFighterOn(draft: GameState, spec: GenerationSpec, content:
     const vh = dev.generation.veteranHistory;
     fighter.career.proSeasons = proSeasons;
     fighter.career.roundsStarted = roundN((proSeasons * vh.roundsPerSeasonPlayed * uBp) / BP);
+    // Totals that agree with those rounds (the career line): best-of-N matches of about (N + 2) / 2
+    // rounds, half of the rounds won (an average club); he debuted proSeasons seasons ago.
+    fighter.career.matches = roundN((fighter.career.roundsStarted * 2) / (content.leagues.regularSeason.matchBestOf + 2));
+    fighter.career.roundsWon = Math.trunc(fighter.career.roundsStarted / 2);
+    fighter.debutSeason -= proSeasons;
     const sRng = Rng.create(root, STREAM.injury, season, id, 'history');
     const scarBp = bp(vh.scarChancePerSeasonPlayed);
     for (let s = 0; s < proSeasons; s++) {

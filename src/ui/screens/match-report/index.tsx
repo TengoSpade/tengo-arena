@@ -69,8 +69,14 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
   }, [fixtureId]);
 
   // 04 ui-report shortcuts: 1-5 round tabs (0 whole match), ← → previous / next report.
-  const roundKeys: Record<string, () => void | false> = { '0': () => setRound(null) };
-  for (let n = 1; n <= 9; n++) roundKeys[String(n)] = () => (n <= report.rounds.length ? setRound(n) : false);
+  // Alt+digits and [ ] for rounds, so the plain 1–7 screen keys keep working on the report.
+  const last = report.rounds.length;
+  const roundKeys: Record<string, () => void | false> = {
+    'alt+0': () => setRound(null),
+    '[': () => setRound((r) => (r === null ? last : r <= 1 ? null : r - 1)),
+    ']': () => setRound((r) => (r === null ? (last > 0 ? 1 : null) : r >= last ? null : r + 1)),
+  };
+  for (let n = 1; n <= 9; n++) roundKeys[`alt+${n}`] = () => (n <= last ? setRound(n) : false);
   useShortcuts({
     ...roundKeys,
     ArrowLeft: () => (adj.prev ? go(`match/${encodeURIComponent(adj.prev)}`) : false),

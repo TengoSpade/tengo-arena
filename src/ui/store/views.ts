@@ -6,7 +6,7 @@
  */
 import type { ContentDB, TierDef, WingDef } from '../../core/content';
 import type { FighterView } from '../../core/game';
-import type { Club, ClubId, CompetitionId, Fighter, FighterId, Fixture, GameState, StandingRow, WingId } from '../../core/model';
+import type { Club, ClubId, CompetitionId, Fighter, FighterId, Fixture, GameState, MatchResult, StandingRow, WingId } from '../../core/model';
 import type { FinanceView } from '../../core/economy';
 import { useStore } from './contract';
 import { safeView, useEngine, type GameEngine } from './engine';
@@ -63,3 +63,26 @@ export function fighterViewOf(engine: GameEngine, state: GameState, content: Con
   return safeView<FighterView | null>(() => engine.fighterView(state, id, content), null);
 }
 
+/** One fighter of a lineup a club actually fielded, as the stored sim input has it. */
+export interface PlayedEntry {
+  fighterId: FighterId;
+  row: 'front' | 'back';
+  /** Rating at that kickoff. */
+  rating: number;
+}
+
+/**
+ * The lineup a club fielded in its latest match this season (D-R: M1 shows an opponent only as they
+ * last played). Null before its first match: never their planned lineup for the coming one.
+ */
+export function lastPlayedLineup(state: GameState, clubId: ClubId): PlayedEntry[] | null {
+  let latest: MatchResult | undefined;
+  for (const r of Object.values(state.results)) {
+    if (r.season !== state.calendar.season || (r.homeClubId !== clubId && r.awayClubId !== clubId)) continue;
+    if (!latest || r.weekIndex > latest.weekIndex) latest = r;
+  }
+  if (!latest) return null;
+  const side = latest.homeClubId === clubId ? latest.input.home : latest.input.away;
+  if (side.fighters.length === 0) return null;
+  return side.fighters.map((f) => ({ fighterId: f.fighterId, row: f.row, rating: f.rating }));
+}

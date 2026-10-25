@@ -28,7 +28,7 @@ const T = {
   quitTip: 'Close the window or tab to quit. Progress is in your saves.',
   advanced: 'Advanced',
   seed: 'World seed',
-  seedHint: 'Leave empty for a random world. The same seed gives the same world (P-05).',
+  seedHint: 'Leave empty for a random world. The same seed always gives the same world.',
   seedPlaceholder: 'random',
   generating: 'Generating the world',
   latest: 'Latest save',

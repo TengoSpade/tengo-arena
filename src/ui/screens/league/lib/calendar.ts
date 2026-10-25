@@ -13,7 +13,9 @@ import { tc } from './text';
 export { weekDefAt };
 
 /** Short id ("P1", "MW7", "TW2"). */
+/** "MW3", "P1"; week 0 is next-season setup (season start), past the last week the season-end step. */
 export function weekShort(content: ContentDB, weekIndex: number): string {
+  if (weekIndex <= 0) return tc('week.seasonStart');
   return weekDefAt(content, weekIndex) ? weekCode(content, weekIndex) : tc('week.seasonEnd');
 }
 

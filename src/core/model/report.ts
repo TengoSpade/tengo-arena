@@ -3,7 +3,7 @@ import type { FixtureStage } from './competition';
 import type { AbilityId, ClubId, FighterId, FixtureId, NewsId, WeekId } from './ids';
 import type { FighterMatchStats, RoundTiebreakStep } from './match';
 import type { Gold } from './ledger';
-import type { SeasonRecord } from './history';
+import type { SeasonRecord, WageRaise } from './history';
 
 /**
  * Read-only views produced by core/game for the UI. They are derived, never
@@ -99,6 +99,8 @@ export interface SeasonEndReport {
     retiredIds: FighterId[];
     expiredIds: FighterId[];
     developedIds: FighterId[];
+    /** Player contracts raised to the tier minimum at next-season setup (core always writes it). */
+    wageRaises?: WageRaise[];
   } | null;
   newsIds: NewsId[];
 }

@@ -202,7 +202,15 @@ export function OfferDialog({
           <button type="button" class="btn btn--ghost" onClick={onClose}>
             {t('offer.cancel')} <kbd>Esc</kbd>
           </button>
-          <button type="button" class="btn btn--primary" onClick={send} disabled={Boolean(illegal) || sending} data-testid="offer-send">
+          {/* aria-disabled (not disabled) so the reason tooltip still shows on hover and focus. */}
+          <button
+            type="button"
+            class="btn btn--primary"
+            onClick={send}
+            aria-disabled={illegal || sending ? 'true' : undefined}
+            {...tipAttrs(illegal ? t('offer.blockedTip', { reason: illegal }) : null)}
+            data-testid="offer-send"
+          >
             {primary} <kbd>Enter</kbd>
           </button>
         </>
@@ -269,9 +277,12 @@ export function OfferDialog({
           </div>
         </div>
         <div class="span-6 l-stack" data-testid="offer-terms">
-          {/* A broken rule comes first: it is what stops the offer, whatever he would say. */}
-          {(illegal || sendError) && <Callout kind="bad" title={sendError ?? illegal ?? ''} />}
-          {answer && answer.kind === 'countered' ? (
+          {/* One state at a time: a broken rule stops the offer, so his answer is not shown beside it. */}
+          {illegal || sendError ? (
+            <Callout kind="bad" title={sendError ?? illegal ?? ''}>
+              {t('offer.blockedText')}
+            </Callout>
+          ) : answer && answer.kind === 'countered' ? (
             <Callout kind="warn" title={t('offer.countered', { wage: fmtMoney(answer.counterWage, content) })}>
               {t('offer.counteredText', { wage: fmtMoney(answer.counterWage, content) })}
             </Callout>
@@ -280,7 +291,7 @@ export function OfferDialog({
               {answer.reason}
             </Callout>
           ) : terms.verdict === 'acceptable' ? (
-            <Callout kind={illegal ? 'info' : 'good'} title={t('offer.terms.acceptable')}>
+            <Callout kind="good" title={t('offer.terms.acceptable')}>
               {kind === 'free-agent' ? t('offer.terms.acceptableText', { rivals }) : t('offer.terms.acceptableRenew')}
             </Callout>
           ) : terms.verdict === 'counter' ? (

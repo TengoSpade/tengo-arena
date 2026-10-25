@@ -7,9 +7,10 @@
  */
 import { signal } from '@preact/signals';
 import type { ContentDB } from '../../../core/content';
-import type { Club, ClubId, Fighter, Fixture, GameState, StandingRow } from '../../../core/model';
+import type { Club, ClubId, Fighter, FighterId, Fixture, GameState, StandingRow } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
+import { skipToKickOffRequest } from '../../app/intents';
 import { quickSaveOrAsk } from '../../app/save-intent';
 import { useShortcuts } from '../../app/shortcuts';
 import {
@@ -34,13 +35,14 @@ import {
   type Column,
   type IconName,
 } from '../../components';
-import { formatInt, formatMoney, formatPercent, formatSigned, ordinal } from '../../format';
+import { OUTCLASSED_GAP, formatInt, formatMoney, formatPercent, formatSigned, ordinal } from '../../format';
 import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
 import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
 import { useStore, type AppStore } from '../../store';
+import { settings } from '../../store/settings';
 import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
-import { fighterViewOf, usePlayerClub, type ClubContext } from '../../store/views';
+import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from '../../store/views';
 import { format, t } from '../../text';
 import { T } from './text';
 import './home.css';
@@ -259,18 +261,27 @@ function FixtureHero({ ctx, fixture, engine }: { ctx: ClubContext; fixture: Fixt
   );
 }
 
-function lineupFighters(state: GameState, club: Club): { f: Fighter; row: 'front' | 'back' }[] {
-  const last = latestResult(state, club.id);
-  const side = last ? (last.homeClubId === club.id ? last.input.home : last.input.away) : null;
-  if (side && side.fighters.length > 0) {
-    return side.fighters.map((x) => ({ f: state.fighters[x.fighterId]!, row: x.row })).filter((x) => !!x.f);
-  }
-  return club.lineup.fighters.map((e) => ({ f: state.fighters[e.fighterId]!, row: e.row })).filter((x) => !!x.f);
+/** The opponent's last played five (D-R), or null before their first match: never their planned lineup. */
+function lineupFighters(state: GameState, club: Club): { f: Fighter; row: 'front' | 'back'; rating: number }[] | null {
+  const played = lastPlayedLineup(state, club.id);
+  if (!played) return null;
+  return played.map((x) => ({ f: state.fighters[x.fighterId]!, row: x.row, rating: x.rating })).filter((x) => !!x.f);
 }
 
 function LineupTile({ ctx, club, label, ours }: { ctx: ClubContext; club: Club; label: string; ours?: boolean }) {
   const { state, content, engine } = ctx;
-  const list = ours ? club.lineup.fighters.map((e) => ({ f: state.fighters[e.fighterId]!, row: e.row })).filter((x) => !!x.f) : lineupFighters(state, club);
+  const played = ours ? null : lineupFighters(state, club);
+  if (!ours && !played) {
+    return (
+      <div class="stat-tile" data-testid="their-lineup">
+        <span class="stat-tile__label">{label}</span>
+        <span class="u-sm u-muted" {...tipAttrs(T.noMatchesYetTip)}>
+          {T.noMatchesYet}
+        </span>
+      </div>
+    );
+  }
+  const list = ours ? club.lineup.fighters.map((e) => ({ f: state.fighters[e.fighterId]!, row: e.row, rating: null as number | null })).filter((x) => !!x.f) : played!;
   const front = list.filter((x) => x.row === 'front');
   const back = list.filter((x) => x.row === 'back');
   const glyph = (x: { f: Fighter }) => {
@@ -280,13 +291,14 @@ function LineupTile({ ctx, club, label, ours }: { ctx: ClubContext; club: Club; 
     const cap = club.captainId === x.f.id ? ` · ${t('fighter.captain')}` : '';
     return <RoleGlyph key={x.f.id} role={rolesOf(k)[0]!} size="lg" tip={`${x.f.name.full} · ${k.name} (${roleName})${v ? ` · ${v.rating}` : ''}${cap}`} />;
   };
-  const ratings = list.map((x) => fighterViewOf(engine, state, content, x.f.id)?.rating).filter((v): v is number => v !== undefined);
+  // Theirs: the ratings they fielded at; ours: as of now.
+  const ratings = list.map((x) => x.rating ?? fighterViewOf(engine, state, content, x.f.id)?.rating).filter((v): v is number => v !== undefined && v !== null);
   const mean = ratings.length ? Math.round(ratings.reduce((s, v) => s + v, 0) / ratings.length) : null;
   const hasHealer = list.some((x) => content.classes.require(x.f.classId).archetypes.includes('healer'));
   const blockers = ours ? safeView(() => engine.getBlockers(state, content), []).filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')) : [];
   const injuredReserve = ours ? Object.values(state.fighters).find((f) => f.clubId === club.id && f.injury && f.injury.weeksOut > 0) : undefined;
   return (
-    <div class="stat-tile">
+    <div class="stat-tile" data-testid={ours ? 'our-lineup' : 'their-lineup'}>
       <span class="stat-tile__label">{label}</span>
       <span class="l-cluster l-cluster--xs l-cluster--nowrap" aria-label={`${T.front}: ${front.length}. ${T.back}: ${back.length}.`}>
         <RowMark row="front" />
@@ -314,7 +326,8 @@ function LineupTile({ ctx, club, label, ours }: { ctx: ClubContext; club: Club; 
 function StyleTile({ ctx, club }: { ctx: ClubContext; club: Club }) {
   const { state, content, engine } = ctx;
   const personality = content.aiPersonalities.get(club.aiPersonalityId);
-  const list = lineupFighters(state, club);
+  // The threat comes from the five they last fielded; before their first match only the style shows.
+  const list = lineupFighters(state, club) ?? [];
   const best = list
     .map((x) => ({ x, v: fighterViewOf(engine, state, content, x.f.id) }))
     .filter((y) => y.v)
@@ -344,13 +357,39 @@ function StyleTile({ ctx, club }: { ctx: ClubContext; club: Club }) {
 
 // ---- Preseason (no fixture this week) ---------------------------------------------------------------
 
+/** What keeps the lineup from being match-ready: places, fitness, captain, presets (null = ready). */
+function lineupReadiness(ctx: ClubContext): { problem: string | null } {
+  const { club, engine, state } = ctx;
+  const entries = club.lineup.fighters;
+  const fit = entries.filter((e) => {
+    const f = state.fighters[e.fighterId];
+    return f && f.clubId === club.id && safeView(() => engine.isFit(f), !(f.injury && f.injury.weeksOut > 0));
+  }).length;
+  if (entries.length < 5) return { problem: format(T.checkLineupPlaces, { n: entries.length }) };
+  if (fit < 5) return { problem: format(T.checkLineupUnfit, { n: 5 - fit }) };
+  if (!club.captainId) return { problem: T.checkLineupCaptain };
+  if (entries.some((e) => !club.lineup.tactics[e.fighterId])) return { problem: T.checkLineupPresets };
+  return { problem: null };
+}
+
 function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const { state, content, tier, roster } = ctx;
   // Integrator (WP5): during the season-end step weekIndex is W + 1 (core/model calendar), which has no week def.
   const week = content.weeks.list.find((w) => w.index === state.calendar.weekIndex) ?? content.weekByIndex(content.weeks.list.length);
   const over = roster.length - ctx.rosterCap;
   const ending = roster.filter((f) => contractEnds(f.contract, state.calendar.season).final).length;
-  const lineupOk = store.blockers.value.filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')).length === 0;
+  // Checked from the lineup itself: preseason weeks have no fixture, so there are no lineup blockers to read.
+  const lineup = lineupReadiness(ctx);
+  const lineupOk = lineup.problem === null && store.blockers.value.filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')).length === 0;
+  const short = roster.length < 5;
+  // "Skip to Matchweek 1" on quiet preseason weeks before kick-off (not Trials Day, not under Thorough pacing).
+  const quiet =
+    state.calendar.phase === 'preseason' &&
+    week.index > 1 &&
+    week.commit !== 'kick_off' &&
+    settings.value.pacing !== 'thorough' &&
+    store.blockers.value.length === 0 &&
+    needsActionCount(buildDigest(state, content, ctx.club.id, store.blockers.value)) === 0;
   const bill = ctx.finance?.wageBill ?? ctx.wageBill ?? 0;
   const budget = ctx.finance?.wageBudgetPerWeek ?? 0;
   return (
@@ -358,19 +397,31 @@ function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
       hero
       title={state.calendar.phase === 'preseason' ? T.preseasonTitle : T.weekChecklistTitle}
       icon="calendar-check"
-      subtitle={format(T.preseasonSub, { week: weekName(content, week.index, tier) })}
+      subtitle={state.calendar.phase === 'season-end' ? T.seasonEndSub : format(T.preseasonSub, { week: weekName(content, week.index, tier) })}
       testId="preseason-checklist"
+      actions={
+        quiet ? (
+          <button class="btn btn--sm" type="button" data-testid="skip-to-mw1" onClick={() => (skipToKickOffRequest.value += 1)} {...tipAttrs(t('skip.tip'))}>
+            <Icon name="play" />
+            {t('skip.label')}
+          </button>
+        ) : undefined
+      }
     >
       <ul class="checklist" role="list">
         <li data-state={budget > 0 && bill > budget ? 'bad' : undefined}>
           {format(T.checkBudget, { bill: formatMoney(bill, { perWeek: true }), budget: formatMoney(budget, { perWeek: true }) })}
         </li>
-        <li data-state={over > 0 ? 'bad' : undefined}>
-          {over > 0 ? format(T.checkRosterOver, { n: roster.length, cap: ctx.rosterCap, over }) : format(T.checkRoster, { n: roster.length, cap: ctx.rosterCap })}
+        <li data-state={over > 0 || short ? 'bad' : undefined}>
+          {over > 0
+            ? format(T.checkRosterOver, { n: roster.length, cap: ctx.rosterCap, over })
+            : short
+              ? format(T.checkRosterShort, { n: roster.length, cap: ctx.rosterCap, need: 5 - roster.length })
+              : format(T.checkRoster, { n: roster.length, cap: ctx.rosterCap })}
         </li>
         {week.index === 1 && <li data-state="warn">{T.checkTrials}</li>}
         <li data-state={ending > 0 ? 'warn' : undefined}>{format(T.checkContracts, { n: ending })}</li>
-        <li data-state={lineupOk ? undefined : 'warn'}>{lineupOk ? T.checkLineup : T.checkLineupMissing}</li>
+        <li data-state={lineupOk ? undefined : 'warn'}>{lineupOk ? T.checkLineup : (lineup.problem ?? T.checkLineupMissing)}</li>
       </ul>
     </Panel>
   );
@@ -404,7 +455,9 @@ function inTab(d: DigestItem, tab: DigestTab): boolean {
 
 function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const { state, content, club } = ctx;
-  const items = withAwaySummary(buildDigest(state, content, club.id, store.blockers.value), ctx, store);
+  // Advice ranks after what needs action and before routine news.
+  const base = buildDigest(state, content, club.id, store.blockers.value);
+  const items = withAwaySummary([...base.filter((d) => d.needsAction), ...homeAdvice(ctx), ...base.filter((d) => !d.needsAction)], ctx, store);
   const tab = digestTab.value;
   const shown = items.filter((d) => inTab(d, tab));
   const action = needsActionCount(items);
@@ -494,6 +547,70 @@ function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
 }
 
 /** 02 §7 "since you were away": after a load, the first item summarises the last results, standing, decisions and money. */
+/**
+ * Advice the digest adds on top of core news (it never blocks Continue): a much stronger opponent this
+ * week, and free roster places with wage room to fill them. "Nothing needs you" must not hide either.
+ */
+export function homeAdvice(ctx: ClubContext): DigestItem[] {
+  const { state, content, engine, club } = ctx;
+  if (state.calendar.phase === 'season-end') return [];
+  const out: DigestItem[] = [];
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const ratingOf = (id: FighterId) => fighterViewOf(engine, state, content, id)?.rating;
+  if (ctx.fixture) {
+    const themId = ctx.fixture.homeClubId === club.id ? ctx.fixture.awayClubId : ctx.fixture.homeClubId;
+    const them = state.clubs[themId];
+    const ours = mean(club.lineup.fighters.map((e) => ratingOf(e.fighterId)).filter((v): v is number => v !== undefined));
+    // Their last played five (D-R); before their first match, their best five by rating (club strength is public).
+    const played = lastPlayedLineup(state, themId);
+    const theirs = played
+      ? mean(played.map((x) => x.rating))
+      : mean(
+          Object.values(state.fighters)
+            .filter((f) => f.clubId === themId && f.status === 'active')
+            .map((f) => ratingOf(f.id))
+            .filter((v): v is number => v !== undefined)
+            .sort((a, b) => b - a)
+            .slice(0, 5),
+        );
+    if (them && ours !== null && theirs !== null && theirs - ours > OUTCLASSED_GAP) {
+      out.push({
+        id: 'advice-outclassed',
+        kind: 'development',
+        title: format(played ? T.outclassedTitle : T.outclassedTitleBest, {
+          us: ours.toFixed(0),
+          club: them.shortName,
+          // English possessive: "Netcasters’", "Kindler’s".
+          clubs: /s$/i.test(them.shortName) ? `${them.shortName}’` : `${them.shortName}’s`,
+          them: theirs.toFixed(0),
+        }),
+        text: T.outclassedText,
+        needsAction: false,
+        unread: true,
+        action: { label: T.market, href: '#/market' },
+        newsIds: [],
+      });
+    }
+  }
+  const room = ctx.finance ? ctx.finance.wageBudgetPerWeek - ctx.finance.wageBill - ctx.finance.pendingWages : 0;
+  const pendingOffers = state.market.offers.filter((o) => o.clubId === club.id).length;
+  const places = ctx.rosterCap - ctx.roster.length - pendingOffers;
+  const minWage = content.tierProfile(ctx.tier.level).tierMinWage;
+  if (places > 0 && room >= minWage) {
+    out.push({
+      id: 'advice-room',
+      kind: 'market',
+      title: format(T.roomTitle, { room: formatMoney(room, { perWeek: true }), n: places }),
+      text: T.roomText,
+      needsAction: false,
+      unread: true,
+      action: { label: T.market, href: '#/market' },
+      newsIds: [],
+    });
+  }
+  return out;
+}
+
 function withAwaySummary(items: DigestItem[], ctx: ClubContext, store: AppStore): DigestItem[] {
   const justLoaded = store.dirty?.value === false && store.lastWeekReport.value === null && ctx.state.calendar.weekIndex > 1;
   if (!justLoaded) return items;
@@ -630,7 +747,7 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
       testId="availability"
     >
       {list.length === 0 ? (
-        <Empty compact icon="check" title={T.allFit} />
+        roster.length === 0 ? <Empty compact icon="squad" title={T.noRoster} /> : <Empty compact icon="check" title={T.allFit} />
       ) : (
         <table class="data-table data-table--compact" aria-label={T.availability}>
           <tbody>

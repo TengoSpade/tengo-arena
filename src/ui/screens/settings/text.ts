@@ -20,7 +20,7 @@ export const SETTINGS_TEXT = {
   'pacing.custom': 'Custom',
   'pacing.customText': 'Choose each stop yourself.',
   'pacing.default': 'Default',
-  'pacing.note': 'Under every preset the match uses the lineup, captain, rows and presets you would lock, with the same seeds (P-05).',
+  'pacing.note': 'A preset only changes where Continue stops: every match plays out exactly the same under each one.',
   'stop.lineup': 'Stop at the lineup every week',
   'stop.reportAlways': 'Open every match report',
   'stop.reportOnLoss': 'Open the report after a loss',

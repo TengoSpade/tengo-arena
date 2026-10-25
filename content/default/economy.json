@@ -207,7 +207,8 @@
       "payoutBp": 0
     },
     "hiredBlade": { "_doc": "Short-handed rule (open-006): paid the tier minimum wage for the one week of the match; not on the roster.", "weeklyWage": "tierMinWage" },
-    "marketWorthWeeks": 46
+    "marketWorthWeeks": 46,
+    "expiryReminderWeeksBeforeEnd": 4
   },
 
   "market": {

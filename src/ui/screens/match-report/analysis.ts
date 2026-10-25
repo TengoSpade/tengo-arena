@@ -21,6 +21,7 @@ import type {
 import { personName } from '../../../core/model';
 import { clubShort } from '../league/lib/club';
 import { fmtInt, fmtTicks } from '../league/lib/format';
+import { OUTCLASSED_GAP } from '../../format';
 import { presetOf } from './rule-sentence';
 import { t } from './text';
 
@@ -192,6 +193,19 @@ export function summary(report: MatchReport, persp: Perspective, infos: FighterI
   const theirs = infos.filter((f) => !f.us && f.recap).sort((a, b) => contribution(b.recap!) - contribution(a.recap!))[0];
   if (theirs?.recap && persp.involved) {
     parts.push(t('why.theirs', { name: name(state, theirs.id), downs: downsText(theirs.recap.stats.downsInflicted), damage: fmtInt(theirs.recap.stats.damageDealt) }));
+  }
+  // A loss to a much stronger five: say so, it outweighs any rule detail.
+  const input = state.results[report.fixtureId]?.input;
+  if (input && persp.involved && report.winnerClubId !== persp.usClubId) {
+    const mean = (side: SideKey) => {
+      const r = input[side].fighters.map((f) => f.rating);
+      return r.length ? r.reduce((a, b) => a + b, 0) / r.length : null;
+    };
+    const usMean = mean(persp.usSide);
+    const themMean = mean(other(persp.usSide));
+    if (usMean !== null && themMean !== null && themMean - usMean > OUTCLASSED_GAP) {
+      parts.unshift(t('why.gap', { them: themMean.toFixed(1), us: usMean.toFixed(1) }));
+    }
   }
   return { title, text: parts.join(' ') };
 }
