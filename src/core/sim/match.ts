@@ -31,7 +31,11 @@ export function runFight(content: ContentDB, seed: string, round: number, input:
   const finalHp = f.units.map((u) => (u.standing ? u.hp : 0));
   let homeUp = 0;
   let awayUp = 0;
-  for (const u of f.units) if (u.standing) u.side === 0 ? homeUp++ : awayUp++;
+  for (const u of f.units) {
+    if (!u.standing) continue;
+    if (u.side === 0) homeUp++;
+    else awayUp++;
+  }
   const result: Omit<RoundResult, 'round' | 'seed'> = {
     winner: f.winner === 0 ? 'home' : 'away',
     endReason: f.endReason,

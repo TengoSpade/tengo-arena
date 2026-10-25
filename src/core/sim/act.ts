@@ -266,9 +266,10 @@ function tryStart(f: Fight, u: Unit): void {
 
 /** hold: the selected enemy if in range, else the nearest enemy in range. */
 function holdSwing(f: Fight, u: Unit, preferred: number): void {
-  let target = -1;
-  if (preferred >= 0 && f.units[preferred]!.side !== u.side && f.gap(u.index, preferred) <= u.basicRangeMm) target = preferred;
-  else target = nearestEnemyInRange(f, u, u.basicRangeMm);
+  const target =
+    preferred >= 0 && f.units[preferred]!.side !== u.side && f.gap(u.index, preferred) <= u.basicRangeMm
+      ? preferred
+      : nearestEnemyInRange(f, u, u.basicRangeMm);
   if (target >= 0) {
     u.subTarget = target;
     swingAt(f, u, target);

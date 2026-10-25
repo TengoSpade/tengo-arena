@@ -1019,7 +1019,11 @@ export class Fight {
       let away = 0;
       switch (step) {
         case 'fighters_standing':
-          for (const u of this.units) if (u.standing) u.side === 0 ? home++ : away++;
+          for (const u of this.units) {
+            if (!u.standing) continue;
+            if (u.side === 0) home++;
+            else away++;
+          }
           break;
         case 'hp_fraction_sum':
           for (const u of this.units) {
