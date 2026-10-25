@@ -75,6 +75,7 @@ export const T = {
   typical: '/ ~{n} typical',
   ratingBySeason: 'Rating by season',
   noHistory: 'First season · no matches yet',
+  firstSeasonTrend: 'the trend starts after his first full season',
   training: 'Training',
   trainingTip: 'Training emphasis routes earned growth only (Body: physical, Mind: mental). E cycles.',
   traits: 'Traits',

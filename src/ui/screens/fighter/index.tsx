@@ -527,7 +527,7 @@ function RatingHistory({ f, view, state }: { f: Fighter; view: FighterView | nul
       <div class="stat-tile">
         <span class="stat-tile__label">{T.ratingBySeason}</span>
         <span class="u-sm u-muted" {...tipAttrs(T.ratingHistoryTip)}>
-          {view ? `S${state.calendar.season} ${view.rating}` : '—'} · {T.noHistory}
+          {view ? `S${state.calendar.season} ${view.rating}` : '—'} · {T.firstSeasonTrend}
         </span>
       </div>
     );
