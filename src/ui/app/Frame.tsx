@@ -8,7 +8,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import type { ClubId, WeekReport } from '../../core/model';
-import { Crest, Icon, Modal, ToastRegion, TooltipLayer, crestLetters, showToast, tipAttrs, undoLast, type Tip } from '../components';
+import { Crest, Icon, Modal, ToastRegion, TooltipLayer, clearUndos, crestLetters, showToast, tipAttrs, undoLast, type Tip } from '../components';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
 import { slotName, useStore, type AppStore } from '../store';
@@ -43,6 +43,11 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const [confirm, setConfirm] = useState<'kick-off' | 'season-end' | null>(null);
   const [simulating, setSimulating] = useState<number | null>(null);
   const s = settings.value;
+
+  // A week processed, a season ended or another career loaded: earlier undos would act on the wrong week.
+  const cal = store.game.value?.calendar;
+  const commitKey = cal ? `${store.game.value!.rng.root}:${cal.season}:${cal.weekIndex}:${cal.phase}` : '';
+  useEffect(() => clearUndos(), [commitKey]);
 
   const model = continueModel({
     state: store.game.value,

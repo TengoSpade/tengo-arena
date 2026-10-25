@@ -41,6 +41,8 @@ export const T = {
   checkPresetsMissing: '{n} {n?fighter|fighters} without a preset',
   checkInjured: '{name} injured, back in {weeks} wk',
   checkInjuredInLineup: '{name} is injured and cannot play',
+  bringIn: 'Bring in {name}',
+  bringInTip: '{name} (rating {rating}) takes {out}’s place in the {row}. Ctrl Z undoes it.',
   meanRating: 'Mean rating',
   meanRatingTip: 'Mean rating of the five: {list}.{vs}',
   meanRatingVs: ' {club} fielded a mean of {mean}.',

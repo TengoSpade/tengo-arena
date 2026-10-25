@@ -10,6 +10,7 @@ export {
   showToast,
   dismissToast,
   undoLast,
+  clearUndos,
   hasUndo,
   resetToasts,
   toasts,

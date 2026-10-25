@@ -380,6 +380,8 @@ function LineupBoard(props: BoardProps) {
   const missingPresets = entries.filter((e) => !club.lineup.tactics[e.fighterId]).length;
   const injuredInLineup = lineupRows.filter((r) => !engineFit(engine, r.f));
   const injuredReserves = rows.filter((r) => !r.entry && r.f.injury && r.f.injury.weeksOut > 0);
+  // One-click fix for an unfit starter: the best fit reserves, highest rating first, one per unfit place.
+  const fitReserves = rows.filter((r) => !r.entry && engineFit(engine, r.f)).sort((a, b) => (b.view?.rating ?? 0) - (a.view?.rating ?? 0));
   const name = (id: FighterId | null) => (id ? (state.fighters[id]?.name.full ?? id) : '');
 
   const zone = (label: string, list: readonly LineupEntry[], row: 'front' | 'back', empties: number) => (
@@ -473,11 +475,27 @@ function LineupBoard(props: BoardProps) {
                 : T.checkNoCaptain}
             </li>
             <li data-state={missingPresets ? 'warn' : undefined}>{missingPresets ? format(T.checkPresetsMissing, { n: missingPresets }) : T.checkPresets}</li>
-            {injuredInLineup.map((r) => (
-              <li key={r.f.id} data-state="bad">
-                {format(T.checkInjuredInLineup, { name: r.f.name.full })}
-              </li>
-            ))}
+            {injuredInLineup.map((r, i) => {
+              const sub = fitReserves[i];
+              return (
+                <li key={r.f.id} data-state="bad">
+                  <span class="l-cluster l-cluster--xs">
+                    {format(T.checkInjuredInLineup, { name: r.f.name.full })}
+                    {sub && (
+                      <button
+                        class="btn btn--sm"
+                        type="button"
+                        data-testid={`bring-in-${sub.f.id}`}
+                        onClick={() => props.actions.moveTo(sub.f.id, r.entry?.row ?? 'back', r.f.id)}
+                        {...tipAttrs(format(T.bringInTip, { name: sub.f.name.full, rating: sub.view?.rating ?? '—', out: r.f.name.given, row: (r.entry?.row === 'front' ? T.frontRow : T.backRow).toLowerCase() }))}
+                      >
+                        {format(T.bringIn, { name: sub.f.name.given })}
+                      </button>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
             {injuredReserves.slice(0, 2).map((r) => (
               <li key={r.f.id} data-state="warn">
                 {format(T.checkInjured, { name: r.f.name.full, weeks: r.f.injury!.weeksOut })}

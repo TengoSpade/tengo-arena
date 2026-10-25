@@ -68,6 +68,14 @@ describe('Squad', () => {
     expect(check.textContent).toContain('All 5 places filled, but 1 fighter is unfit');
     expect(check.textContent).not.toContain('5 of 5 places filled');
     expect(check.textContent).toContain(`${hurt.name.full} is injured and cannot play`);
+    // One click brings in the best fit reserve in his place.
+    const button = check.querySelector<HTMLButtonElement>('[data-testid^="bring-in-"]')!;
+    expect(button.textContent).toMatch(/^Bring in /);
+    fireEvent.click(button);
+    const after = club(store.game.value!).lineup.fighters;
+    expect(after).toHaveLength(5);
+    expect(after.some((e) => e.fighterId === hurt.id)).toBe(false);
+    expect(after.some((e) => e.fighterId === button.dataset['testid']!.replace('bring-in-', ''))).toBe(true);
   });
 
   it('moves a reserve into the lineup with F and undoes it with Ctrl Z', async () => {

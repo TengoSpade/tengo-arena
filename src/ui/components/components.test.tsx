@@ -9,6 +9,7 @@ import {
   ConfirmButton,
   Delta,
   Pips,
+  clearUndos,
   overflowTipAttrs,
   Crest,
   DataTable,
@@ -321,5 +322,15 @@ describe('polish helpers', () => {
   it('marks overflow-only tips', () => {
     expect(overflowTipAttrs('Fenrra Coppershank')).toEqual({ 'data-tip': 'Fenrra Coppershank', 'data-tip-overflow': '' });
     expect(overflowTipAttrs(undefined)).toEqual({});
+  });
+
+  it('drops pending undos at a commit point but keeps plain toasts', () => {
+    const undo = vi.fn();
+    showToast({ title: 'Moved to the front row', undo });
+    showToast({ title: 'Won 2–0' });
+    clearUndos();
+    expect(toasts.value.map((x) => x.title)).toEqual(['Won 2–0']);
+    expect(undoLast()).toBe(false);
+    expect(undo).not.toHaveBeenCalled();
   });
 });
