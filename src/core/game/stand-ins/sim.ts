@@ -107,6 +107,32 @@ function simulateMatch(input: MatchInput, content: ContentDB, options?: SimOptio
         { seq: 0, tick: 0, type: 'fight.start', data: { units: [] } },
         { seq: 1, tick: Math.trunc(durationTicks / 2), type: 'unit.down', unit: loser, data: { by: winner === 'home' ? 0 : 5, ability: null, hit: 100, overkill: 0, assists: [] } },
         { seq: 2, tick: durationTicks, type: 'fight.end', data: { winner: winner === 'home' ? 0 : 1, reason: 'elimination', tiebreakStep: null } },
+        {
+          seq: 3,
+          tick: durationTicks,
+          type: 'round.summary',
+          data: {
+            units: all.map((_, i) => ({
+              unit: i,
+              damageDealt: 0,
+              damageToShields: 0,
+              damageTaken: 0,
+              healingDone: 0,
+              shieldingDone: 0,
+              overheal: 0,
+              ccAppliedTicks: 0,
+              ccReceivedTicks: 0,
+              downsInflicted: 0,
+              assists: 0,
+              focusSpent: 0,
+              casts: {},
+              ruleFires: [1, 0],
+              ruleCommittedTicks: [durationTicks, 0],
+              ruleSkips: [{}, { no_target: 1 }],
+              stanceTicks: 0,
+            })),
+          },
+        },
       ];
       if (options.record === 'full') round.eventHash = hashEventStream(header, events);
       logs.push({ header, events, hash: hashEventStream(header, events) });

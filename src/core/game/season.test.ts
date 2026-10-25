@@ -192,6 +192,10 @@ describe('match preparation and reports', () => {
     expect(r.value.fighters).toHaveLength(10);
     expect(Object.keys(r.value.aftermath.xp)).toHaveLength(10);
     expect(r.value.aftermath.gold.some((g) => g.reason === 'gate')).toBe(true);
+    // Per-round rule fires and skip reasons from the summary recaps.
+    expect(r.value.ruleDetails).toHaveLength(10);
+    expect(r.value.ruleDetails[0]!.rounds).toHaveLength(played.rounds.length);
+    expect(r.value.ruleDetails[0]!.rounds[0]!.ruleSkips[1]).toEqual({ no_target: 1 });
     const unplayed = Object.values(s.fixtures).find((x) => x.status === 'scheduled')!;
     const e = engine.buildMatchReport(s, unplayed.id, content);
     expect(e.ok ? null : e.error.code).toBe('report.not-played');

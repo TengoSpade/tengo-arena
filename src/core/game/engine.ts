@@ -4,10 +4,10 @@
  * pre-integration soak bind it to stand-ins or spies.
  */
 import type { ContentDB } from '../content';
-import type { Blocker, ClubId, Command, Fighter, FighterId, FixtureId, GameState, MatchInput, MatchReport, SeasonEndReport, WeekReport } from '../model';
+import type { Blocker, ClubId, Command, Fighter, FighterId, FixtureId, GameState, MatchInput, SeasonEndReport, WeekReport } from '../model';
 import { NotImplementedError, cloneJson, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
-import { buildMatchReport, prepareMatchInput } from './match';
+import { buildMatchReport, prepareMatchInput, type DetailedMatchReport } from './match';
 import type { GamePorts } from './ports';
 import { processSeasonEnd, type SeasonEndOutcome } from './season-end';
 import { newsSince } from './shared';
@@ -34,7 +34,7 @@ export interface GameEngine {
   runSeasonEnd(state: GameState, content: ContentDB): Result<{ state: GameState; report: SeasonEndReport }, EngineError>;
   runSeasonEndLogged(state: GameState, content: ContentDB): Result<SeasonEndOutcome, EngineError>;
   prepareMatchInput(state: GameState, fixtureId: FixtureId, content: ContentDB): Result<MatchInput, EngineError>;
-  buildMatchReport(state: GameState, fixtureId: FixtureId, content: ContentDB): Result<MatchReport, EngineError>;
+  buildMatchReport(state: GameState, fixtureId: FixtureId, content: ContentDB): Result<DetailedMatchReport, EngineError>;
   roster(state: GameState, clubId: ClubId, content?: ContentDB): Fighter[];
   fighterView(state: GameState, fighterId: FighterId, content: ContentDB): FighterView;
   freeAgents(state: GameState, content?: ContentDB): Fighter[];

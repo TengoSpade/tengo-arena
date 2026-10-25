@@ -34,6 +34,7 @@ import type { NewGameParams } from './world';
 export { createGameEngine } from './engine';
 export type { CommandOutcome, GameEngine } from './engine';
 export type { FighterView, ReleasePreview } from './views';
+export type { DetailedMatchReport, FighterRuleDetail } from './match';
 export type { NewGameParams } from './world';
 export type { AiRejection, PhaseLog } from './week';
 export { realGamePorts, aiPortsOf } from './ports';

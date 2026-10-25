@@ -20,6 +20,7 @@ import type {
   MatchResult,
   NewsItem,
   ReportEvent,
+  RuleSkipReason,
   SideInput,
 } from '../model';
 import { STREAM, deriveSeed } from '../rng';
@@ -235,7 +236,33 @@ function keyEvents(log: FightLog): ReportEvent[] {
   return out;
 }
 
-export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: FixtureId, content: ContentDB): Result<MatchReport, EngineError> {
+/** Per-round rule fires and skip reasons of one fighter, from the summary-level round recaps (P-22). */
+export interface FighterRuleDetail {
+  fighterId: FighterId;
+  rounds: { round: number; ruleFires: number[]; ruleSkips: Partial<Record<RuleSkipReason, number>>[]; stanceTicks: number }[];
+}
+
+/** MatchReport plus additive detail (assignable to MatchReport). */
+export type DetailedMatchReport = MatchReport & { ruleDetails: FighterRuleDetail[] };
+
+function ruleDetails(logs: readonly FightLog[]): FighterRuleDetail[] {
+  const byFighter = new Map<FighterId, FighterRuleDetail>();
+  for (const log of logs) {
+    for (const ev of log.events) {
+      if (ev.type !== 'round.summary' || !ev.data) continue;
+      for (const u of ev.data.units) {
+        const id = log.header.units.find((x) => x.index === u.unit)?.fighterId;
+        if (!id) continue;
+        let d = byFighter.get(id);
+        if (!d) byFighter.set(id, (d = { fighterId: id, rounds: [] }));
+        d.rounds.push({ round: log.header.round, ruleFires: [...u.ruleFires], ruleSkips: u.ruleSkips.map((s) => ({ ...s })), stanceTicks: u.stanceTicks });
+      }
+    }
+  }
+  return [...byFighter.values()];
+}
+
+export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: FixtureId, content: ContentDB): Result<DetailedMatchReport, EngineError> {
   const result = state.results[fixtureId];
   if (!result) return fail('report.not-played', `Fixture "${fixtureId}" has not been played`);
   // Re-simulate at 'summary' only when the build matches the one that played it (05 §6).
@@ -302,5 +329,6 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
     mvpFighterId: result.mvpFighterId,
     timelineAvailable: logs !== null,
     aftermath: aftermathOf(state, result),
+    ruleDetails: logs ? ruleDetails(logs) : [],
   });
 }
