@@ -30,7 +30,7 @@ The season state machine and the only entry points that change `GameState`: `cre
 3. **Season-1 AI opening phase.** Season 1 has no preceding season end, so the AI's season-start phase (`planSeasonEnd`: trials signings, opening offers, captains) runs at the start of the first P1 processing. A player who picks a club starts with no AI-made offers or signings.
 4. **All matches inside week processing.** M1 has no separate "play own match" call: `advanceWeek` plays the player's fixture with the rest and `WeekReport.playerFixtureId` names it (05 §5).
 5. **Locked lineups.** At lock, ineligible entries drop out, hired blades fill short sides and the locked lineup is written to `club.lineup`; blades and departed fighters are tidied out after the match. A last-resort fill from fit roster fighters protects AI clubs; the player is held by `getBlockers`.
-6. **Aftermath persistence.** XP and injuries of a match are not part of `MatchResult`, so a league-wide `match.result` news item per fixture stores them (`x:<fighterId>`, `i:<fighterId>`); `buildMatchReport` reads it. Gold comes from the ledger (`fixtureId`).
+6. **Aftermath persistence.** XP and injuries of a match are not part of `MatchResult`, so a club-scoped `match.result` news item per club and fixture (in the club's own perspective, matching the UI digest template) stores them (`x:<fighterId>`, `i:<fighterId>`); `buildMatchReport` reads it. Gold comes from the ledger (`fixtureId`).
 7. **Report timeline** is re-simulated at `summary` only when engine version and content hash match and the result is not compacted, and only if every round checksum reproduces.
 8. **World rosters in the tier bands.** World-gen fighters get `FighterSpec.ratingTarget` drawn in `leagues.json tiers.ratingBand` (mean of two uniform draws, `STREAM.world`). Without it the potential shifts alone gave every tier a mean rating of about 47 and Muster bills of about 2× WB, so 30% of clubs were insolvent after season 1 (`WORLDGEN_RATING_IN_TIER_BAND`; remove when generation is retuned).
 9. **Errors.** Expected failures return stable codes (below); a module exception during a transition becomes `engine.failure` (or `lineup.unfillable`) and no state is returned.
@@ -40,7 +40,7 @@ The season state machine and the only entry points that change `GameState`: `cre
 `club.unknown`, `club.already-chosen`, `phase.season-end`, `phase.not-season-end`, `advance.blocked`, `lineup.size`, `lineup.duplicate`, `lineup.row`, `lineup.not-on-roster`, `lineup.captain-not-fielded`, `lineup.incomplete`, `lineup.unfillable`, `tactics.not-on-roster`, `tactics.custom-unavailable`, `captaincy.same`, `captaincy.not-on-roster`, `training.disabled`, `training.emphasis`, `training.not-on-roster`, `offer.not-free-agent`, `offer.trials-rookie`, `offer.wage`, `offer.length`, `renew.not-on-roster`, `trials.not-offered`, `release.not-on-roster`, `shortlist.unknown-fighter`, `news.unknown`, `report.not-played`, `fixture.unknown`, `world.seed`, `world.setup`, `world.roster`, `engine.failure`. Economy and tactics codes pass through unchanged.
 
 ## News keys (stable; `GAME_NEWS_KEYS`)
-`match.result` (league-wide, one per fixture) and `captain.interim` (player club). Other modules document their own keys.
+`match.result` (one per club and fixture: won, for, against, opponent, opponentId, venue, x:/i: aftermath) and `captain.interim` (player club). Other modules document their own keys.
 
 ## Known gaps
 - No "play my match first" step: the player's report is available after Continue (decision 4).

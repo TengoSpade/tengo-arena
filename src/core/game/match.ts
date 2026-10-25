@@ -136,7 +136,7 @@ export function toResult(ports: GamePorts, fixture: Fixture, input: MatchInput, 
 }
 
 // ---- aftermath news ---------------------------------------------------------------------------------------------
-// One league-wide 'match.result' item per fixture carries the score and the
+// One club-scoped 'match.result' item per club and fixture carries the score and the
 // aftermath the lifecycle step returned (XP and injuries are not stored in the
 // MatchResult), so a report can be rebuilt later. Param keys: x:<fighterId> =
 // XP; i:<fighterId> = "<severity>:<weeksOut>".
@@ -146,24 +146,31 @@ export function addMatchNews(
   result: MatchResult,
   outcome: { xp: Record<FighterId, number>; injuries: { fighterId: FighterId; severity: string; weeksOut: number }[] },
 ): void {
-  const params: NewsItem['params'] = {
-    home: result.homeClubId,
-    away: result.awayClubId,
-    scoreHome: result.score.home,
-    scoreAway: result.score.away,
-    winner: result.winnerClubId,
-  };
-  for (const [fid, xp] of Object.entries(outcome.xp)) params[`x:${fid}`] = xp;
-  for (const inj of outcome.injuries) params[`i:${inj.fighterId}`] = `${inj.severity}:${inj.weeksOut}`;
-  const playerInvolved = draft.playerClubId !== null && (result.homeClubId === draft.playerClubId || result.awayClubId === draft.playerClubId);
-  addNews(draft, { key: GAME_NEWS_KEYS.matchResult, clubId: null, params, refs: { fixtureId: result.fixtureId }, importance: playerInvolved ? 'notable' : 'info' });
+  // One item per club, from its own side: the UI digest template reads won/for/against/opponent.
+  for (const side of ['home', 'away'] as const) {
+    const clubId = side === 'home' ? result.homeClubId : result.awayClubId;
+    const otherId = side === 'home' ? result.awayClubId : result.homeClubId;
+    const mine = side === 'home' ? result.score.home : result.score.away;
+    const theirs = side === 'home' ? result.score.away : result.score.home;
+    const params: NewsItem['params'] = {
+      won: result.winnerClubId === clubId ? 1 : 0,
+      for: mine,
+      against: theirs,
+      opponent: draft.clubs[otherId]?.name ?? otherId,
+      opponentId: otherId,
+      venue: side,
+    };
+    for (const [fid, xp] of Object.entries(outcome.xp)) if (result.fighterStats[fid as FighterId]?.clubId === clubId) params[`x:${fid}`] = xp;
+    for (const inj of outcome.injuries) if (result.fighterStats[inj.fighterId]?.clubId === clubId) params[`i:${inj.fighterId}`] = `${inj.severity}:${inj.weeksOut}`;
+    addNews(draft, { key: GAME_NEWS_KEYS.matchResult, clubId, params, refs: { fixtureId: result.fixtureId, otherClubId: otherId }, importance: clubId === draft.playerClubId ? 'notable' : 'info' });
+  }
 }
 
 function aftermathOf(state: GameState, result: MatchResult): MatchAftermath {
   const xp: Record<FighterId, number> = {};
   const injuries: MatchAftermath['injuries'] = [];
-  const item = state.news.find((n) => n.key === GAME_NEWS_KEYS.matchResult && n.refs.fixtureId === result.fixtureId);
-  if (item) {
+  for (const item of state.news) {
+    if (item.key !== GAME_NEWS_KEYS.matchResult || item.refs.fixtureId !== result.fixtureId) continue;
     for (const [k, v] of Object.entries(item.params)) {
       if (k.startsWith('x:') && typeof v === 'number') xp[k.slice(2) as FighterId] = v;
       if (k.startsWith('i:') && typeof v === 'string') {
