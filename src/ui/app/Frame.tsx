@@ -24,7 +24,7 @@ import { usePlayerClub, type ClubContext } from '../store/views';
 import { t } from '../text';
 import { continueModel, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
-import { marketViewRequest } from './intents';
+import { marketViewRequest, skipToKickOffRequest } from './intents';
 import { SimulatingPanel } from './overlays';
 import { quickSaveOrAsk } from './save-intent';
 import type * as Palettes from './palettes';
@@ -170,6 +170,36 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
         return;
     }
   };
+
+  // "Skip to Matchweek 1": run quiet preseason weeks one by one; stop as soon as something needs the
+  // player (a blocker, a needs-action digest item) or the next stop is not a plain week (kick-off asks).
+  const skipToKickOff = async () => {
+    for (let i = 0; i < 6; i++) {
+      const g = store.game.value;
+      const c = store.content.value;
+      if (!g || !c || g.calendar.phase !== 'preseason') return;
+      const m = continueModel({ state: g, content: c, engine, blockers: store.blockers.value, routeId, busy: false, stops: pacingStops(settings.value) });
+      if (m.action.kind === 'confirm-advance') {
+        setConfirm(m.action.variant);
+        return;
+      }
+      if (m.action.kind !== 'advance' || m.action.playsMatch) return;
+      const res = await store.advance();
+      if (!res.ok) return;
+      const state = store.game.value!;
+      const items = state.playerClubId ? buildDigest(state, c, state.playerClubId, store.blockers.value) : [];
+      const stop = items.find((d) => d.needsAction);
+      if (stop || store.blockers.value.length > 0) {
+        navigate('#/home');
+        showToast({ title: t('skip.stopped', { week: weekLabel(c, state.calendar.weekIndex) }), sub: stop?.title, kind: 'info' });
+        return;
+      }
+    }
+  };
+  const skipRequest = skipToKickOffRequest.value;
+  useEffect(() => {
+    if (skipRequest > 0) void skipToKickOff();
+  }, [skipRequest]);
 
   const runSeasonEnd = async () => {
     const res = await store.finishSeason();

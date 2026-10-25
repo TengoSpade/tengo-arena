@@ -10,6 +10,7 @@ import type { ContentDB } from '../../../core/content';
 import type { Club, ClubId, Fighter, FighterId, Fixture, GameState, StandingRow } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
+import { skipToKickOffRequest } from '../../app/intents';
 import { quickSaveOrAsk } from '../../app/save-intent';
 import { useShortcuts } from '../../app/shortcuts';
 import {
@@ -38,6 +39,7 @@ import { OUTCLASSED_GAP, formatInt, formatMoney, formatPercent, formatSigned, or
 import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
 import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
 import { useStore, type AppStore } from '../../store';
+import { settings } from '../../store/settings';
 import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from '../../store/views';
@@ -380,6 +382,14 @@ function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const lineup = lineupReadiness(ctx);
   const lineupOk = lineup.problem === null && store.blockers.value.filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')).length === 0;
   const short = roster.length < 5;
+  // "Skip to Matchweek 1" on quiet preseason weeks before kick-off (not Trials Day, not under Thorough pacing).
+  const quiet =
+    state.calendar.phase === 'preseason' &&
+    week.index > 1 &&
+    week.commit !== 'kick_off' &&
+    settings.value.pacing !== 'thorough' &&
+    store.blockers.value.length === 0 &&
+    needsActionCount(buildDigest(state, content, ctx.club.id, store.blockers.value)) === 0;
   const bill = ctx.finance?.wageBill ?? ctx.wageBill ?? 0;
   const budget = ctx.finance?.wageBudgetPerWeek ?? 0;
   return (
@@ -389,6 +399,14 @@ function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
       icon="calendar-check"
       subtitle={state.calendar.phase === 'season-end' ? T.seasonEndSub : format(T.preseasonSub, { week: weekName(content, week.index, tier) })}
       testId="preseason-checklist"
+      actions={
+        quiet ? (
+          <button class="btn btn--sm" type="button" data-testid="skip-to-mw1" onClick={() => (skipToKickOffRequest.value += 1)} {...tipAttrs(t('skip.tip'))}>
+            <Icon name="play" />
+            {t('skip.label')}
+          </button>
+        ) : undefined
+      }
     >
       <ul class="checklist" role="list">
         <li data-state={budget > 0 && bill > budget ? 'bad' : undefined}>

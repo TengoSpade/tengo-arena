@@ -91,6 +91,22 @@ describe('App', () => {
     await waitFor(() => expect(location.hash).toBe('#/saves'));
   });
 
+  it('skips quiet preseason weeks to the kick-off confirm', async () => {
+    const { store } = createTestStore({ world: 'dev', weekIndex: 2 });
+    // The dev world seeds an injury and other needs-action news: a quiet week has none.
+    const quiet = structuredClone(store.game.value!);
+    quiet.news = [];
+    for (const f of Object.values(quiet.fighters)) f.injury = null;
+    store.replaceWorld(quiet);
+    navigate('#/home');
+    render(<App store={store} />);
+    const skip = await screen.findByTestId('skip-to-mw1');
+    skip.click();
+    await waitFor(() => expect(document.querySelector('[data-testid="continue-confirm"][open]')).toBeTruthy(), { timeout: 10_000 });
+    const week = store.content.value!.weekByIndex(store.game.value!.calendar.weekIndex);
+    expect(week.commit).toBe('kick_off');
+  }, 20_000);
+
   it('routes a career without a club to the club select', async () => {
     const { store } = createTestStore({ world: 'dev', playerClubId: null });
     navigate('#/squad');
