@@ -169,6 +169,7 @@ export const en = {
   'continue.expiringRenew': 'Renew in the Market',
   'continue.expiringAnyway': 'Continue anyway',
   'skip.stopped': 'Stopped at {week}: something needs you',
+  'skip.stoppedSub': 'See This week on Home.',
   'skip.label': 'Skip to Matchweek 1',
   'skip.tip': 'Runs the quiet preseason weeks to kick-off. It stops early if anything needs you, and kick-off still asks to confirm.',
   'continue.simulating': 'Simulating',

@@ -10,21 +10,23 @@ import { useEffect, useState } from 'preact/hooks';
 import type { ClubId, WeekReport } from '../../core/model';
 // Direct module imports (not the components barrel) keep screen-only components out of the main bundle.
 import { Icon } from '../components/Icon';
-import { Crest, crestLetters } from '../components/marks';
-import { Modal } from '../components/Modal';
+import { Crest, crestLetters } from '../components/basic-marks';
 import { ToastRegion, clearUndos, showToast, undoLast } from '../components/Toast';
 import { TooltipLayer, tipAttrs, type Tip } from '../components/Tooltip';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
 import { useStore, type AppStore } from '../store';
-import { buildDigest, needsActionCount } from '../store/digest';
+import { digestNews, needsActionNow, newsNeedsAction } from '../store/digest-flags';
 import { useEngine } from '../store/engine';
 import { effectiveTheme, pacingStops, reducedMotion, settings, updateSettings } from '../store/settings';
 import { usePlayerClub, type ClubContext } from '../store/views';
 import { t } from '../text';
 import { continueModel, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
-import { marketViewRequest, skipToKickOffRequest } from './intents';
+import type * as ContinueDialogs from './continue-dialogs';
+import type { ConfirmVariant } from './continue-dialogs';
+import { expiringUnrenewed } from './expiring';
+import { skipToKickOffRequest } from './intents';
 import { SimulatingPanel } from './overlays';
 import { quickSaveOrAsk } from './save-intent';
 import type * as Palettes from './palettes';
@@ -49,6 +51,18 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const [sheet, setSheet] = useState(false);
   const [search, setSearch] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmVariant | null>(null);
+  // The commit dialogs are a lazy chunk: loaded shortly after start, or at once when one opens.
+  const [dialogs, setDialogs] = useState<typeof ContinueDialogs | null>(null);
+  useEffect(() => {
+    if (dialogs) return;
+    const load = () => void import('./continue-dialogs').then(setDialogs);
+    if (confirm) {
+      load();
+      return;
+    }
+    const id = setTimeout(load, 1200);
+    return () => clearTimeout(id);
+  }, [confirm, dialogs]);
   const [simulating, setSimulating] = useState<number | null>(null);
   const s = settings.value;
 
@@ -93,8 +107,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
     stops: pacingStops(s),
   });
 
-  const digest = ctx ? buildDigest(ctx.state, ctx.content, ctx.club.id, store.blockers.value) : [];
-  const needsAction = needsActionCount(digest);
+  const needsAction = ctx ? needsActionNow(ctx.state, ctx.club.id, store.blockers.value) : 0;
 
   const afterMatch = (report: WeekReport) => {
     const state = store.game.value;
@@ -187,11 +200,10 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       const res = await store.advance();
       if (!res.ok) return;
       const state = store.game.value!;
-      const items = state.playerClubId ? buildDigest(state, c, state.playerClubId, store.blockers.value) : [];
-      const stop = items.find((d) => d.needsAction);
+      const stop = state.playerClubId ? digestNews(state, state.playerClubId).some((n) => newsNeedsAction(n, state)) : false;
       if (stop || store.blockers.value.length > 0) {
         navigate('#/home');
-        showToast({ title: t('skip.stopped', { week: weekLabel(c, state.calendar.weekIndex) }), sub: stop?.title, kind: 'info' });
+        showToast({ title: t('skip.stopped', { week: weekLabel(c, state.calendar.weekIndex) }), sub: t('skip.stoppedSub'), kind: 'info' });
         return;
       }
     }
@@ -288,7 +300,8 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       {palettes && <palettes.ShortcutSheet open={sheet} onClose={() => setSheet(false)} />}
       {palettes && <palettes.SearchPalette open={search} onClose={() => setSearch(false)} state={store.game.value} content={store.content.value} />}
       {simulating !== null && <SimulatingPanel rounds={simulating} />}
-      <ContinueConfirm
+      {dialogs && (
+      <dialogs.ContinueConfirm
         variant={confirm}
         ctx={ctx}
         onClose={() => setConfirm(null)}
@@ -300,6 +313,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
           else if (v === 'expiring') await runSeasonEnd();
         }}
       />
+      )}
     </div>
   );
 }
@@ -474,119 +488,8 @@ function TopbarStats({ ctx }: { ctx: ClubContext }) {
 
 // ---- Commit dialogs of Continue (Kick off season, Advance to season end, expiring contracts) -------
 
-type ConfirmVariant = 'kick-off' | 'season-end' | 'expiring';
 
 /** Longest club name the top bar shows whole at the nav width (display face, md). */
 const TOPBAR_NAME_MAX = 17;
-
-/** Player fighters whose contract ends with this season, not renewed and not retiring. */
-function expiringUnrenewed(ctx: ClubContext | null) {
-  if (!ctx) return [];
-  const season = ctx.state.calendar.season;
-  return ctx.roster.filter((f) => f.contract && f.contract.endSeason <= season && !f.contract.next && !f.finalSeason);
-}
-
-function ContinueConfirm({
-  variant,
-  ctx,
-  onClose,
-  onConfirm,
-}: {
-  variant: ConfirmVariant | null;
-  ctx: ClubContext | null;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const kick = variant === 'kick-off';
-  if (variant === 'expiring') {
-    const expiring = expiringUnrenewed(ctx);
-    const renew = () => {
-      onClose();
-      marketViewRequest.value = 'renewals';
-      navigate('#/market');
-    };
-    return (
-      <Modal
-        open
-        onClose={onClose}
-        title={t('continue.expiringTitle', { n: expiring.length })}
-        icon="contract"
-        size="narrow"
-        onEnter={renew}
-        testId="expiring-confirm"
-        footer={
-          <>
-            <button class="btn" type="button" onClick={onConfirm} data-testid="expiring-continue">
-              {t('continue.expiringAnyway')}
-            </button>
-            <button class="btn btn--primary" type="button" onClick={renew} data-autofocus>
-              {t('continue.expiringRenew')} <kbd>Enter</kbd>
-            </button>
-          </>
-        }
-      >
-        <div class="l-stack">
-          <p class="u-sm">{t('continue.expiringText')}</p>
-          <ul class="checklist" role="list">
-            {expiring.map((f) => (
-              <li key={f.id} data-state="warn">
-                {f.name.full} · {formatMoney(f.contract!.wagePerWeek, { perWeek: true })}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Modal>
-    );
-  }
-  return (
-    <Modal
-      open={variant !== null}
-      onClose={onClose}
-      title={kick ? t('continue.kickOffTitle') : t('continue.seasonEndTitle')}
-      icon={kick ? 'play' : 'calendar-check'}
-      size="narrow"
-      onEnter={onConfirm}
-      testId="continue-confirm"
-      footer={
-        <>
-          <button class="btn" type="button" onClick={onClose}>
-            {t('common.cancel')} <kbd>Esc</kbd>
-          </button>
-          <button class="btn btn--primary" type="button" onClick={onConfirm} data-autofocus>
-            {kick ? t('continue.kickOffConfirm') : t('continue.seasonEndConfirm')} <kbd>Enter</kbd>
-          </button>
-        </>
-      }
-    >
-      <div class="l-stack">
-        <p class="u-sm">{kick ? t('continue.kickOffText') : t('continue.seasonEndText')}</p>
-        {ctx && (
-          <dl class="kv">
-            <div>
-              <dt>{t('topbar.roster')}</dt>
-              <dd>
-                {ctx.roster.length} / {ctx.rosterCap}
-              </dd>
-            </div>
-            {ctx.finance && (
-              <>
-                <div>
-                  <dt>{t('topbar.wages')}</dt>
-                  <dd>
-                    {formatMoney(ctx.finance.wageBill)} / {formatMoney(ctx.finance.wageBudgetPerWeek)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('topbar.balance')}</dt>
-                  <dd>{formatMoney(ctx.finance.balance)}</dd>
-                </div>
-              </>
-            )}
-          </dl>
-        )}
-      </div>
-    </Modal>
-  );
-}
 
 export type { RouteId };

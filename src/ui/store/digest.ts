@@ -11,7 +11,8 @@ import { personName, type Blocker, type ClubId, type GameState, type NewsId, typ
 import { formatMoney } from '../format';
 import { format } from '../text';
 import { blockerTarget } from './digest-targets';
-import { blockerText, distinctBlockers } from './messages';
+import { NEEDS_ACTION_LIMIT, digestBlockers, digestNews, newsNeedsAction } from './digest-flags';
+import { blockerText } from './messages';
 
 export type DigestKind = 'medical' | 'contract' | 'result' | 'market' | 'league' | 'development';
 
@@ -30,16 +31,16 @@ export interface DigestItem {
 }
 
 export const DIGEST_LIMIT = 6;
-export const NEEDS_ACTION_LIMIT = 2;
+export { NEEDS_ACTION_LIMIT };
 
 /**
- * News key -> how the digest shows it. Keys and params follow core (core/fighters/news.ts,
+ * News key -> how the digest shows it (whether it needs action: digest-flags.ts NEEDS_ACTION_KEYS). Keys and params follow core (core/fighters/news.ts,
  * core/economy offers and finance); names are resolved from refs in paramsOf. Unknown keys get a
  * readable fallback.
  */
-const TEMPLATES: Record<string, { kind: DigestKind; title: string; text?: string; action?: [string, string]; needsAction?: boolean }> = {
-  'fighter.injured': { kind: 'medical', title: '{fighter} is out for {weeks} wk', text: '{severity} in round {round}.', action: ['Review lineup', '#/squad'], needsAction: true },
-  'fighter.career_ended': { kind: 'medical', title: '{fighter}’s career is over', text: 'A career-ending injury. He leaves the roster.', action: ['Squad', '#/squad'], needsAction: true },
+const TEMPLATES: Record<string, { kind: DigestKind; title: string; text?: string; action?: [string, string]}> = {
+  'fighter.injured': { kind: 'medical', title: '{fighter} is out for {weeks} wk', text: '{severity} in round {round}.', action: ['Review lineup', '#/squad'] },
+  'fighter.career_ended': { kind: 'medical', title: '{fighter}’s career is over', text: 'A career-ending injury. He leaves the roster.', action: ['Squad', '#/squad'] },
   'fighter.scarred': { kind: 'medical', title: '{fighter} is scarred: {trait}', action: ['Profile', '#/fighter/{fighterId}'] },
   'fighter.trait_gained': { kind: 'development', title: '{fighter} gained {trait}', action: ['Profile', '#/fighter/{fighterId}'] },
   'fighter.trait_lost': { kind: 'development', title: '{fighter} lost {trait}', action: ['Profile', '#/fighter/{fighterId}'] },
@@ -48,22 +49,21 @@ const TEMPLATES: Record<string, { kind: DigestKind; title: string; text?: string
   'fighter.retired': { kind: 'contract', title: '{fighter} retired at {age}', action: ['Profile', '#/fighter/{fighterId}'] },
   'captaincy.snubbed': { kind: 'development', title: '{fighter} feels snubbed', text: 'The former captain: −2 chemistry when fielded, for 6 matchweeks.', action: ['Squad', '#/squad'] },
   'captaincy.passed_over': { kind: 'development', title: '{fighter} feels passed over', text: '−1 chemistry for 6 matchweeks, or until he is made vice-captain.', action: ['Squad', '#/squad'] },
-  'captaincy.losing_the_room': { kind: 'development', title: 'Captain {fighter} is losing the room', text: 'Not fielded for 4 matches: −10 captaincy until he plays again.', action: ['Squad', '#/squad'], needsAction: true },
+  'captaincy.losing_the_room': { kind: 'development', title: 'Captain {fighter} is losing the room', text: 'Not fielded for 4 matches: −10 captaincy until he plays again.', action: ['Squad', '#/squad'] },
   'captaincy.departed': { kind: 'development', title: 'Your long-serving captain has left', text: '−1 chemistry for 4 matchweeks.', action: ['Squad', '#/squad'] },
-  'captaincy.interim': { kind: 'development', title: '{fighter} is interim captain', text: 'Named by the club; choose a captain on the squad screen.', action: ['Squad', '#/squad'], needsAction: true },
+  'captaincy.interim': { kind: 'development', title: '{fighter} is interim captain', text: 'Named by the club; choose a captain on the squad screen.', action: ['Squad', '#/squad'] },
   // core/game (D-S): named at kickoff when the captain is missing (params.reason vice | starter) or after the captain left.
-  'captain.interim': { kind: 'development', title: '{fighter} is interim captain', text: '{interimReason} Choose a captain on the squad screen to change it.', action: ['Squad', '#/squad'], needsAction: true },
+  'captain.interim': { kind: 'development', title: '{fighter} is interim captain', text: '{interimReason} Choose a captain on the squad screen to change it.', action: ['Squad', '#/squad'] },
   'offer.lost': { kind: 'market', title: '{fighter} signed for {otherClub}', action: ['Market', '#/market'] },
   'offer.void': { kind: 'market', title: 'Your offer to {fighter} lapsed', text: 'It no longer met the rules at week processing.', action: ['Market', '#/market'] },
   'finance.embargo-lifted': { kind: 'contract', title: 'Spending embargo lifted', action: ['Finances', '#/finances'] },
-  'finance.registry-advance': { kind: 'contract', title: 'Registry advance of {amount}', text: 'Repaid from future grants (debt {registryDebt}).', action: ['Finances', '#/finances'], needsAction: true },
+  'finance.registry-advance': { kind: 'contract', title: 'Registry advance of {amount}', text: 'Repaid from future grants (debt {registryDebt}).', action: ['Finances', '#/finances'] },
   'fighter.recovered': { kind: 'medical', title: '{fighter} is fit again', action: ['Squad', '#/squad'] },
   'contract.expiring': {
     kind: 'contract',
     title: '{fighter}’s contract ends this season',
     text: '{weeksLeft} {weeksLeft?week|weeks} to the season end; unrenewed fighters leave then. {count} {count?contract ends|contracts end} in all.',
     action: ['Renew', '#/market?renew={fighterId}'],
-    needsAction: true,
   },
   'contract.minimum_raise': {
     kind: 'contract',
@@ -74,10 +74,10 @@ const TEMPLATES: Record<string, { kind: DigestKind; title: string; text?: string
   'match.result': { kind: 'result', title: '{result} {score} against {opponent}', action: ['Report', '#/match/{fixtureId}'] },
   'offer.accepted': { kind: 'market', title: '{fighter} accepted your offer', text: '{wage} for {seasons} {seasons?season|seasons}.', action: ['Squad', '#/squad'] },
   'offer.refused': { kind: 'market', title: '{fighter} refused your offer', text: 'Patience left with your club: {patienceLeft}.', action: ['Market', '#/market'] },
-  'offer.countered': { kind: 'market', title: '{fighter} countered at {counterWage}', text: 'Offer that wage to sign him; the counter lapses after the next week processing.', action: ['Market', '#/market'], needsAction: true },
+  'offer.countered': { kind: 'market', title: '{fighter} countered at {counterWage}', text: 'Offer that wage to sign him; the counter lapses after the next week processing.', action: ['Market', '#/market'] },
   'market.new-free-agent': { kind: 'market', title: 'New free agent: {fighter}', action: ['View', '#/market'] },
-  'finance.watch': { kind: 'contract', title: 'Finances on watch', action: ['Finances', '#/finances'], needsAction: true },
-  'finance.embargo': { kind: 'contract', title: 'Spending embargo', action: ['Finances', '#/finances'], needsAction: true },
+  'finance.watch': { kind: 'contract', title: 'Finances on watch', action: ['Finances', '#/finances'] },
+  'finance.embargo': { kind: 'contract', title: 'Spending embargo', action: ['Finances', '#/finances'] },
   'fighter.developed': { kind: 'development', title: '{fighter} improved', action: ['Profile', '#/fighter/{fighterId}'] },
   'league.standing': { kind: 'league', title: 'Now {position} in the {wing}', action: ['Standings', '#/league'] },
 };
@@ -138,18 +138,12 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** An injury needs action only while the fighter is in the lineup and still out. */
-function injuryNeedsAction(item: NewsItem, state: GameState | undefined): boolean {
-  if (!state || !item.refs.fighterId) return true;
-  const f = state.fighters[item.refs.fighterId];
-  const club = f?.clubId ? state.clubs[f.clubId] : undefined;
-  return !!f?.injury && f.injury.weeksOut > 0 && !!club?.lineup.fighters.some((e) => e.fighterId === f.id);
-}
 
 export function newsToDigest(item: NewsItem, names: DigestNames = {}): DigestItem {
   const tpl = TEMPLATES[item.key];
   const p = paramsOf(item, names);
-  const needsAction = item.key === 'fighter.injured' ? injuryNeedsAction(item, names.state) : item.importance === 'urgent' || (tpl?.needsAction ?? false);
+  // One rule for the badge and the list (digest-flags.ts), so they never disagree.
+  const needsAction = newsNeedsAction(item, names.state);
   return {
     id: item.id,
     kind: tpl?.kind ?? kindOfKey(item.key),
@@ -179,11 +173,7 @@ const ORDER: Record<DigestKind, number> = { medical: 2, contract: 2, result: 3, 
 
 /** This week's digest for a club: blockers first, then news of the last processed week and this week. */
 export function buildDigest(state: GameState, content: ContentDB, clubId: ClubId, blockers: readonly Blocker[]): DigestItem[] {
-  const recentWeek = state.calendar.weekIndex - 1;
-  const news = state.news.filter(
-    (n) => (n.clubId === clubId || n.clubId === null) && n.at.season === state.calendar.season && n.at.weekIndex >= recentWeek,
-  );
-  const items = [...distinctBlockers(blockers.filter((b) => b.code !== 'phase.season-end')).map((b, i) => blockerToDigest(b, i, state)), ...news.map((n) => newsToDigest(n, { state, content }))];
+  const items = [...digestBlockers(blockers).map((b, i) => blockerToDigest(b, i, state)), ...digestNews(state, clubId).map((n) => newsToDigest(n, { state, content }))];
   const rank = (d: DigestItem, i: number) => (d.id.startsWith('blocker-') ? 0 : d.needsAction ? 1 : ORDER[d.kind]) * 1000 + i;
   const sorted = items.map((d, i) => ({ d, r: rank(d, i) })).sort((a, b) => a.r - b.r).map((x) => x.d);
   // Notification budget: at most 2 "Needs action" (extra ones stay listed without the tag), at most 6 items.
