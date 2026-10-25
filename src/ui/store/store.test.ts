@@ -314,12 +314,16 @@ describe('digest copy from core news', () => {
       ['offer.refused', { patienceLeft: 1 }],
       ['offer.void', { reason: 'fighter.unavailable' }],
       ['finance.registry-advance', { amount: 5000, registryDebt: 5000 }],
+      ['contract.expiring', { count: 3, season: 1, weeksLeft: 4 }],
+      ['contract.minimum_raise', { from: 60, to: 120 }],
     ];
     const name = state.fighters[starter]!.name.full;
     for (const [key, params] of cases) {
       const d = newsToDigest(news(key, params, { fighterId: starter }), { state, content });
       expect(`${d.title} ${d.text}`, key).not.toMatch(/[{}]/);
-      if (key.startsWith('fighter.') || key.startsWith('offer.') || key === 'captaincy.interim') expect(d.title, key).toContain(name);
+      if (key.startsWith('fighter.') || key.startsWith('offer.') || key.startsWith('contract.') || key === 'captaincy.interim') expect(d.title, key).toContain(name);
+      if (key === 'contract.expiring') expect(d.action?.href).toBe(`#/market?renew=${starter}`);
+      if (key === 'contract.minimum_raise') expect(d.text).toContain('60 ts/wk → 120 ts/wk');
     }
     const lost = newsToDigest(news('offer.lost', {}, { fighterId: starter, otherClubId: Object.keys(state.clubs).find((id) => id !== club.id) as ClubId }), { state, content });
     expect(lost.title).not.toMatch(/[{}]|another club/);

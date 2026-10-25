@@ -73,8 +73,8 @@ export interface GameEngine {
   /** Polish pass: the payout a release would cost now (shown before the player confirms). */
   releasePayout: typeof economy.releasePayout;
   /**
-   * Season-end development per fighter (core/game developmentSummary, m1/polish-core). Optional:
-   * screens fall back to the history rows while a core build lacks it.
+   * Season-end development per fighter (core/game developmentSummary). Optional so test fakes can
+   * omit it; screens then fall back to the history rows.
    */
   developmentSummary?: (state: GameState, season: number) => readonly DevelopmentSummaryRow[];
   presetsForClass: typeof tactics.presetsForClass;
@@ -112,6 +112,7 @@ export const coreEngine: GameEngine = {
   checkOffer: economy.checkOffer,
   marketWage: economy.marketWage,
   releasePayout: economy.releasePayout,
+  developmentSummary: game.developmentSummary,
   presetsForClass: tactics.presetsForClass,
   describeRule: tactics.describeRule,
   saveMetaFor: save.saveMetaFor,

@@ -28,10 +28,10 @@ import './market.css';
 
 type View = 'agents' | 'pending' | 'renewals' | 'rookies' | 'shortlist';
 
-export default function MarketScreen(_props: ScreenProps) {
+export default function MarketScreen(props: ScreenProps) {
   const career = useCareer();
   if (!career) return <NoCareer testId="screen-market" />;
-  return <Market career={career} />;
+  return <Market career={career} renewId={props.params['renew'] ?? null} />;
 }
 
 interface Filters {
@@ -73,20 +73,23 @@ function rowMatches(r: MarketRow, f: Filters, content: ContentDB, m: ClubMarket)
   return true;
 }
 
-function Market({ career }: { career: Career }) {
+function Market({ career, renewId }: { career: Career; renewId: string | null }) {
   const { store, game, content, club } = career;
   const engine = useWp7Engine();
   // Another screen may ask for a view (the expiring-contracts dialog opens Renewals).
   const [view, setView] = useState<View>(() => {
     const asked = marketViewRequest.value;
     marketViewRequest.value = null;
-    return asked ?? 'agents';
+    return asked ?? (renewId ? 'renewals' : 'agents');
   });
   const [filters, setFilters] = useState<Filters>(() => defaultFilters(content));
   const [selected, setSelected] = useState<string | null>(null);
   const [compare, setCompare] = useState<FighterId[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
-  const [offer, setOffer] = useState<OfferTarget | null>(null);
+  // #/market?renew=<id> (profile Renew, digest "Renew"): Renewals view with that fighter's dialog open.
+  const [offer, setOffer] = useState<OfferTarget | null>(() =>
+    renewId && career.game.fighters[renewId as FighterId]?.clubId === career.club.id ? { fighterId: renewId as FighterId, kind: 'renewal' } : null,
+  );
   const searchRef = useRef<HTMLInputElement>(null);
   const market = useMemo(() => clubMarket(engine, game, content, club.id), [engine, game, content, club.id]);
   const agentsList = useMemo(() => {

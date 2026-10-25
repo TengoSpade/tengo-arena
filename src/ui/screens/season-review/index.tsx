@@ -508,6 +508,8 @@ function DevelopmentStep({ game, content, record, clubId }: { game: GameState; c
 function ContractsStep({ game, content, record, report, clubId }: { game: GameState; content: ContentDB; record: SeasonRecord; report: SeasonEndReport | null; clubId: ClubId }) {
   const retired = record.retirements.filter((r) => r.lastClubId === clubId);
   const expiredIds = report?.playerClub?.expiredIds ?? Object.values(game.fighters).filter((f) => f.freeAgency?.formerClubId === clubId && f.status === 'free-agent').map((f) => f.id);
+  // Wage raises to the new tier's minimum after a promotion (core season-end; report first, else the record).
+  const raises = (report?.playerClub?.wageRaises ?? record.wageRaises ?? []).filter((r) => r.clubId === clubId);
   return (
     <div class="l-grid">
       <Panel title={t('retired.title')} icon="user-minus" class="span-6" testId="review-retired">
@@ -556,6 +558,23 @@ function ContractsStep({ game, content, record, report, clubId }: { game: GameSt
           </ul>
         )}
       </Panel>
+      {raises.length > 0 && (
+        <Panel title={t('raises.title')} icon="coins" subtitle={t('raises.subtitle')} class="span-12" testId="review-raises">
+          <ul class="review-list" role="list">
+            {raises.map((r) => (
+              <li key={r.fighterId}>
+                <span class="entity">
+                  <Portrait content={content} fighter={game.fighters[r.fighterId] ?? null} size="sm" />
+                  <span class="entity__stack">
+                    <FighterLink state={game} id={r.fighterId} />
+                    <span class="entity__sub">{t('raises.line', { from: fmtMoney(r.from, content), to: fmtMoney(r.to, content) })}</span>
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
     </div>
   );
 }

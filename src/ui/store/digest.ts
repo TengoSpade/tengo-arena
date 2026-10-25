@@ -58,7 +58,19 @@ const TEMPLATES: Record<string, { kind: DigestKind; title: string; text?: string
   'finance.embargo-lifted': { kind: 'contract', title: 'Spending embargo lifted', action: ['Finances', '#/finances'] },
   'finance.registry-advance': { kind: 'contract', title: 'Registry advance of {amount}', text: 'Repaid from future grants (debt {registryDebt}).', action: ['Finances', '#/finances'], needsAction: true },
   'fighter.recovered': { kind: 'medical', title: '{fighter} is fit again', action: ['Squad', '#/squad'] },
-  'contract.expiring': { kind: 'contract', title: '{count} contracts end this season', text: 'Unrenewed fighters leave at season end. Renewal opens in the final contract season.', action: ['Squad', '#/squad'], needsAction: true },
+  'contract.expiring': {
+    kind: 'contract',
+    title: '{fighter}’s contract ends this season',
+    text: '{weeksLeft} {weeksLeft?week|weeks} to the season end; unrenewed fighters leave then. {count} {count?contract ends|contracts end} in all.',
+    action: ['Renew', '#/market?renew={fighterId}'],
+    needsAction: true,
+  },
+  'contract.minimum_raise': {
+    kind: 'contract',
+    title: '{fighter}’s wage rises to {to}',
+    text: 'The new tier’s minimum wage applies from this season: {from} → {to}.',
+    action: ['Profile', '#/fighter/{fighterId}'],
+  },
   'match.result': { kind: 'result', title: '{result} {score} against {opponent}', action: ['Report', '#/match/{fixtureId}'] },
   'offer.accepted': { kind: 'market', title: '{fighter} accepted your offer', text: '{wage} for {seasons} {seasons?season|seasons}.', action: ['Squad', '#/squad'] },
   'offer.refused': { kind: 'market', title: '{fighter} refused your offer', text: 'Patience left with your club: {patienceLeft}.', action: ['Market', '#/market'] },
@@ -106,6 +118,8 @@ function paramsOf(item: NewsItem, names: DigestNames = {}): Record<string, strin
   if (item.key === 'captain.interim') p['interimReason'] = interimReasonText(p['reason']);
   if (typeof p['traitId'] === 'string') p['trait'] = names.content?.traits.get(p['traitId'])?.name ?? String(p['traitId']);
   for (const k of ['wage', 'counterWage', 'amount', 'registryDebt'] as const) if (typeof p[k] === 'number') p[k] = formatMoney(p[k], k === 'wage' || k === 'counterWage' ? { perWeek: true } : {});
+  // A wage raise (contract.minimum_raise) carries its wages as from / to.
+  if (item.key === 'contract.minimum_raise') for (const k of ['from', 'to'] as const) if (typeof p[k] === 'number') p[k] = formatMoney(p[k], { perWeek: true });
   if (p['won'] !== undefined && p['result'] === undefined) p['result'] = Number(p['won']) ? 'Won' : 'Lost';
   // Score from our side ("2–1"), from explicit for/against or home/away params.
   if (p['score'] === undefined && p['for'] !== undefined && p['against'] !== undefined) p['score'] = `${p['for']}–${p['against']}`;
