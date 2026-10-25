@@ -212,14 +212,50 @@ export function abilityUsable(_f: Fight, u: Unit, slot: 'a1' | 'a2'): boolean {
   return true;
 }
 
-function tryStart(f: Fight, u: Unit): void {
+/**
+ * The decision the fighter acts on this tick. While the committed decision is
+ * spent or invalid (its ability just released or cannot be used, or its
+ * target is down) and the next decision waits out the reaction delay, the
+ * fighter follows its stance toward the stance target instead of standing
+ * still (orchestrator decision 2026-10-25, research C2.1: idle <= 5%).
+ */
+export function effectiveDecision(f: Fight, u: Unit): Decision | null {
   const d = u.committed;
+  if (!d) return null;
+  let valid = d.target !== null && f.units[d.target]!.standing;
+  if (valid && d.action === 'ability' && !abilityUsable(f, u, d.slot!)) valid = false;
+  if (valid || u.forced) return d;
+  const target = stanceTargetOf(f, u);
+  if (target < 0) return null;
+  u.fallback.rule = u.ruleCount;
+  u.fallback.target = target;
+  return u.fallback;
+}
+
+/** Nearest standing enemy; the current aim is kept within the stickiness gap tolerance; ties to the lower slot. */
+function stanceTargetOf(f: Fight, u: Unit): number {
+  let best = -1;
+  let bestGap = Number.MAX_SAFE_INTEGER;
+  for (const e of f.units) {
+    if (!e.standing || e.side === u.side) continue;
+    const g = f.gap(u.index, e.index);
+    if (g < bestGap) {
+      best = e.index;
+      bestGap = g;
+    }
+  }
+  const aim = f.snapAim[u.index]!;
+  if (aim >= 0 && aim !== best && f.units[aim]!.standing && f.gap(u.index, aim) - bestGap <= f.tb.movement.stickGapMm) return aim;
+  return best;
+}
+
+function tryStart(f: Fight, u: Unit): void {
+  const c = u.committed;
+  if (c && c.target !== null && !f.units[c.target]!.standing) u.nextEval = Math.min(u.nextEval, f.tick + 1);
+  const d = effectiveDecision(f, u);
   if (!d || d.target === null) return;
   const tgt = f.units[d.target]!;
-  if (!tgt.standing) {
-    u.nextEval = Math.min(u.nextEval, f.tick + 1);
-    return;
-  }
+  if (!tgt.standing) return;
   const gap = f.gap(u.index, d.target);
   switch (d.action) {
     case 'attack':

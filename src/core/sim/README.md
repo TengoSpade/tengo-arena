@@ -27,7 +27,7 @@ timers -> decisions (start-of-tick snapshot of targets) -> actions -> movement (
 - Positions in integer mm (orchestrator decision); distances use floor(sqrt) of integer squares; centre distance floors keep gaps exact integers.
 - A status applied at the commit of tick t is active on ticks t+1 .. t+duration (inclusive) and expires at the timers of the next tick; DoTs and HoTs tick one interval after application.
 - Basic-attack swing accumulators keep running during windups and cap at one stored swing; windups refund on cancel.
-- After an ability releases, its rule's decision is spent; the unit holds still until the next decision commits (reaction delay), as specified ("otherwise it holds still"). This is ~5% of fight time (idle detector).
+- Stance fallback (orchestrator decision 2026-10-25, research C2.1): while the committed decision is spent or invalid (its ability just released or cannot be used, or its target is down) and the next decision waits out the reaction delay, the fighter follows its stance toward the stance target (nearest enemy, current aim kept within the stickiness gap) instead of holding still (`act.ts effectiveDecision`). Idle time fell from 8.7% to 1.5% (target <= 5%).
 - `damageTaken` in FighterMatchStats is damage to HP; damage absorbed by shields is counted only on the dealer (`damageToShields`).
 - Summary-level recording = `SUMMARY_EVENT_TYPES` plus `cast.release` for actives and `status.apply` for hard control (per the per-type notes in `core/model/events.ts`).
 - `unit.decide` is emitted when a decision commits (tick = commit tick, `reactTicks` = commit - evaluation).
@@ -37,6 +37,7 @@ timers -> decisions (start-of-tick snapshot of targets) -> actions -> movement (
 - Performance: modifier blocks are rebuilt only when dirty (statuses, HP for HP-conditional mods, targeting, captain, aura ticks, time-dependent mods), status tests use per-code counts, compiled presets are cached per content.
 
 ## Known gaps
+- vis-002 (tailored presets beat defaults by >= 60%) moves to M3 with the tactics editor; in M1 non-default presets losing to defaults is accepted (orchestrator, 2026-10-25). `runBalance` mode `preset-vs-default` reports it.
 - Captain effect cap (10%) is not enforced in code; content values stay inside it.
 - Dash deliveries end 0.1 m from the target ("adjacent", approachInset) or 0.2 m behind it; the endpoint is fixed at release.
 - Cones approximate "expanded by radius" by testing the centre angle (plus units overlapping the caster).

@@ -240,6 +240,8 @@ export class Unit {
   channelEnd = 0;
   disp: Displacement | null = null;
   committed: Decision | null = null;
+  /** Reused stance decision followed while the committed one is spent (see act.ts effectiveDecision). */
+  fallback: Decision = { rule: 0, action: 'stance', slot: null, target: null, band: null };
   committedTrace: TraceEntry[] | null = null;
   forced = false;
   pending: Pending | null = null;
