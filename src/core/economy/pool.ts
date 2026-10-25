@@ -8,7 +8,6 @@ import type { ContentDB } from '../content';
 import type { ClassId, ClubId, Fighter, FighterId, GameState, RegionId } from '../model';
 import { asId } from '../model';
 import { Rng, STREAM } from '../rng';
-import { compareStrings } from '../util';
 import { fighterIsFit, generateFighter, type FighterSpec } from './fighter-values';
 import { clubsInOrder, compareFighterIds, poolFighters, profileOf, roleFamiliesOf, rosterOf, tierOf } from './queries';
 import { processingStamp } from './time';
@@ -234,9 +233,4 @@ export function poolMaintenanceImpl(draft: GameState, content: ContentDB): Fight
   const gone = new Set<string>(leavers);
   draft.market.offers = draft.market.offers.filter((o) => !gone.has(o.fighterId));
   return leavers.sort(compareFighterIds);
-}
-
-/** Clubs sorted for deterministic iteration of a record. */
-export function sortClubIds(ids: readonly ClubId[]): ClubId[] {
-  return [...ids].sort(compareStrings);
 }

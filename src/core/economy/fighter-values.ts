@@ -3,9 +3,9 @@
  * fighters' derived values or creates fighters. Economy never computes
  * ratings itself (05 §3.1: "reads fighters' derived values").
  *
- * Until WP2 lands, the fighters API is a stub that throws; economy tests
- * replace it with the test doubles in ./testing.ts through
- * vi.mock('../fighters', ...). After WP2 merges nothing here changes.
+ * WP2 is merged (m1/wp2-fighters 5b46bf2): these call the real functions.
+ * Unit tests that pin the 03 worked examples replace core/fighters with the
+ * doubles in ./testing.ts (vi.mock); integration.test.ts uses the real module.
  */
 import type { ContentDB } from '../content';
 import { createFighter, humanAge100, isFit, potential, rating, type FighterSpec } from '../fighters';

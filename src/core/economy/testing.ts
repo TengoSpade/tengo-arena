@@ -117,7 +117,7 @@ export const fightersDouble = {
   },
   createFighter(draft: GameState, spec: FighterSpec, content: ContentDB): FighterId {
     const id = allocateId(draft.ids, 'fighter');
-    const rng = Rng.create(draft.rng.root, 'test-double', id);
+    const rng = Rng.create('economy-test-double', id); // test-only seed, not a game stream
     const klass = spec.classId ?? asId<ClassId>(rng.pick(content.classes.list).id);
     const race = spec.raceId ?? asId<RaceId>(content.races.list[0]!.id);
     const ha = spec.humanAge ? rng.int(spec.humanAge.min, spec.humanAge.max) : 25;

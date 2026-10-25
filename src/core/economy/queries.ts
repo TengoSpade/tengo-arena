@@ -6,7 +6,7 @@ import type { ContentDB, TierDef, TierProfile } from '../content';
 import type { Club, ClubId, Fighter, FighterId, GameState, Negotiation, Offer } from '../model';
 import { idNumber } from '../model';
 import { InvariantError, compareStrings } from '../util';
-import { fighterIsFit, fighterRating } from './fighter-values';
+import { fighterRating } from './fighter-values';
 
 export function requireClub(state: GameState, clubId: ClubId): Club {
   const club = state.clubs[clubId];
@@ -47,23 +47,6 @@ export function rosterOf(state: GameState, clubId: ClubId): Fighter[] {
     if (f.clubId === clubId && f.status === 'active') out.push(f);
   }
   return out.sort((a, b) => compareFighterIds(a.id, b.id));
-}
-
-/** Rosters of every club in one pass. */
-export function rostersByClub(state: GameState): Map<ClubId, Fighter[]> {
-  const map = new Map<ClubId, Fighter[]>();
-  for (const f of Object.values(state.fighters)) {
-    if (f.status !== 'active' || f.clubId === null) continue;
-    const list = map.get(f.clubId);
-    if (list) list.push(f);
-    else map.set(f.clubId, [f]);
-  }
-  for (const list of map.values()) list.sort((a, b) => compareFighterIds(a.id, b.id));
-  return map;
-}
-
-export function fitCount(state: GameState, clubId: ClubId): number {
-  return rosterOf(state, clubId).filter((f) => fighterIsFit(f)).length;
 }
 
 /** The club whose exclusive trials rookie this fighter is (Trials Day), or null. */

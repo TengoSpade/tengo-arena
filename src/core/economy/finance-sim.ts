@@ -9,7 +9,7 @@
  * Results are random but seeded. Not used by production code. Pure.
  */
 import type { ContentDB } from '../content';
-import type { Club, ClubId, Competition, Fighter, FighterId, Fixture, GameState, LedgerCategory, SeasonRecord, TierId } from '../model';
+import type { Club, ClubId, Competition, FighterId, Fixture, GameState, LedgerCategory, SeasonRecord, TierId } from '../model';
 import { asId, reckoningCompetitionId } from '../model';
 import { Rng } from '../rng';
 import { compareStrings } from '../util';
@@ -126,7 +126,8 @@ function lineupOf(state: GameState, clubId: ClubId, content: ContentDB): Fighter
 }
 
 function play(state: GameState, fx: Fixture, content: ContentDB): void {
-  const rng = Rng.create(state.rng.root, 'finance-sim', fx.id);
+  // A test-only seed (not a game stream): results are random but fixed per fixture identity.
+  const rng = Rng.create('economy-finance-sim', fx.id);
   const winner = rng.int(0, 1) === 0 ? fx.homeClubId : fx.awayClubId;
   recordResult(state, fx, winner, lineupOf(state, fx.homeClubId, content), lineupOf(state, fx.awayClubId, content), rng.int(0, 1) === 0 ? '2-0' : '2-1');
 }
@@ -358,9 +359,4 @@ export function simulateFinanceSeason(state: GameState, content: ContentDB, chec
   step('pool maintenance', () => poolMaintenance(state, content));
   step('setup', () => nextSeasonFinanceSetup(state, [], content));
   return { flows, record, checks };
-}
-
-/** Fighters of a roster (test convenience). */
-export function rosterFighters(state: GameState, clubId: ClubId): Fighter[] {
-  return rosterOf(state, clubId);
 }
