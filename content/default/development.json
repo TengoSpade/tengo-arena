@@ -221,7 +221,7 @@
     "youthPenalty": { "humanAgeBelow": 22, "add": -10 },
     "standing": { "pivot": 50, "perRatingPointVsTopFiveAvg": 3 },
     "grades": [
-      { "id": "inspiring", "letter": "A", "label": "Inspiring", "minCq": 85, "auraComposure": 2, "rallyComposure": 3, "mentorDevMult": 1.08, "chemistry": 2 },
+      { "id": "inspiring", "letter": "A", "label": "Inspiring", "minCq": 90, "auraComposure": 2, "rallyComposure": 3, "mentorDevMult": 1.08, "chemistry": 2 },
       { "id": "steady", "letter": "B", "label": "Steady", "minCq": 70, "auraComposure": 1, "rallyComposure": 2, "mentorDevMult": 1.05, "chemistry": 1 },
       { "id": "adequate", "letter": "C", "label": "Adequate", "minCq": 55, "auraComposure": 0, "rallyComposure": 1, "mentorDevMult": 1.02, "chemistry": 0 },
       { "id": "shaky", "letter": "D", "label": "Shaky", "minCq": 40, "auraComposure": 0, "rallyComposure": 0, "mentorDevMult": 1.0, "chemistry": 0 },
@@ -289,7 +289,7 @@
     },
     "intake": {
       "_doc": "TUNABLE; coordinate with the league/economy designer (trials day, P-18). rookies = clamp(round(clubs * basePerClub) + retirementsThisSeason, round(clubs * minPerClub), round(clubs * maxPerClub)). retirementsThisSeason counts retirements and career-ending injuries, not unsigned fighters who left the league (that would feed back into itself). Race by race.intakeWeight; age uniform in race.debutAge.",
-      "basePerClub": 0.6,
+      "basePerClub": 0.75,
       "minPerClub": 0.5,
       "maxPerClub": 1.6
     },

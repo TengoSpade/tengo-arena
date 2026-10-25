@@ -119,6 +119,24 @@ export interface FinanceView {
   projectedSeasonEndBalance: Gold;
   registryDebt: Gold;
   byCategory: Partial<Record<LedgerCategory, Gold>>;
+  /**
+   * Week-by-week projection of the rest of the season (current week through the
+   * last): scheduled income (retainer part, grant installment, projected home
+   * gates) and costs (wage bill, operations), with the running balance after
+   * pending signing costs. The last balance equals projectedSeasonEndBalance.
+   * Empty during the season-end step. Optional in the type for hand-built
+   * fakes; core/economy always returns it.
+   */
+  weeklyProjection?: WeekProjection[];
+}
+
+export interface WeekProjection {
+  weekIndex: number;
+  weekId: string;
+  income: Gold;
+  costs: Gold;
+  net: Gold;
+  balance: Gold;
 }
 
 /** Everything the finance screen shows. */
@@ -283,7 +301,7 @@ export {
   validCounter,
 } from './offers';
 export { assignTrialsRookies, poolCounts, PROVISIONAL_JOURNEYMAN_HUMAN_AGE } from './pool';
-export { reckoningStages, watchProjection, PROVISIONAL_WORLDGEN_BILL_SHARE_BP } from './season';
+export { reckoningStages, watchProjection } from './season';
 export { financeDetails, type FinanceDetails } from './view';
 
 /** Initial finances with the digest items it produced (status changes at setup). */

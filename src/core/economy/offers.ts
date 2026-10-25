@@ -8,7 +8,7 @@
  * is void. Pending offers reserve cap, wage room and signing cost.
  */
 import type { ContentDB } from '../content';
-import type { ClubId, Fighter, FighterId, GameState, GameTime, Negotiation, NewsId, Offer, OfferResponse } from '../model';
+import { setMembership, type ClubId, type Fighter, type FighterId, type GameState, type GameTime, type Negotiation, type NewsId, type Offer, type OfferResponse } from '../model';
 import { Rng, STREAM } from '../rng';
 import { compareStrings, engineError, err, ok, type EngineError, type Result } from '../util';
 import { fighterIsFit } from './fighter-values';
@@ -267,9 +267,9 @@ function signContract(draft: GameState, f: Fighter, clubId: ClubId, wage: number
     endSeason: at.season + seasons - 1,
     signedAt: { season: at.season, weekIndex: at.weekIndex },
     dropClauseApplied: false,
+    next: null,
   };
-  f.clubId = clubId;
-  f.status = 'active';
+  setMembership(draft, f, clubId, 'active');
   f.freeAgency = null;
   draft.market.offers = draft.market.offers.filter((o) => o.fighterId !== f.id);
   for (const ids of Object.values(draft.market.trialsRookies)) {
@@ -371,10 +371,8 @@ export function renewContractImpl(
     if (cost > 0) postAt(draft, { clubId: offer.clubId, amount: -cost, category: 'signingCost', fighterId: f.id }, commandStamp(draft));
     contract.endSeason += offer.seasons;
     contract.signedAt = { season: at.season, weekIndex: at.weekIndex };
-    // Agreed terms start at next-season setup; the old wage continues until then.
-    const n = ensureNegotiation(draft, offer, 'renewal', at.season, content);
-    n.counterWage = wage;
-    n.validUntilWeek = null;
+    // Agreed terms start at next-season setup (Contract.next); the old wage continues until then.
+    contract.next = { wagePerWeek: wage, endSeason: contract.endSeason };
   });
 }
 
@@ -427,10 +425,15 @@ export function releaseFighterImpl(draft: GameState, clubId: ClubId, fighterId: 
   const payout = releasePayoutOf(draft, clubId, fighterId, content);
   const at = marketTime(draft);
   postAt(draft, { clubId, amount: -payout, category: 'releasePayout', fighterId }, commandStamp(draft));
-  f.clubId = null;
-  f.status = 'free-agent';
+  setMembership(draft, f, null, 'free-agent');
   f.contract = null;
-  f.freeAgency = { unsignedSeasonEnds: 0, formerClubId: clubId, releasedByClubId: clubId, releasedSeason: at.season };
+  f.freeAgency = {
+    unsignedSeasonEnds: 0,
+    formerClubId: clubId,
+    releasedByClubId: clubId,
+    releasedSeason: at.season,
+    enteredAt: { season: draft.calendar.season, weekIndex: draft.calendar.weekIndex },
+  };
   draft.market.releasedThisSeason.push({ fighterId, clubId });
   draft.market.negotiations = draft.market.negotiations.filter((n) => !(n.fighterId === fighterId && n.kind === 'renewal'));
   return ok({ payout });
@@ -505,7 +508,15 @@ export function resolveFreeAgentOffersImpl(draft: GameState, content: ContentDB)
         lot,
       });
     }
-    candidates.sort((a, b) => b.score - a.score || b.prestige - a.prestige || a.tierLevel - b.tierLevel || a.lot - b.lot);
+    // Equal scores: economy.json market.tieBreakers in order, then the lot and club id (a total order).
+    const tieBreak = (x: Candidate, y: Candidate): number => {
+      for (const rule of e.market.tieBreakers) {
+        const d = rule === 'higherPrestige' ? y.prestige - x.prestige : rule === 'higherTier' ? x.tierLevel - y.tierLevel : x.lot - y.lot;
+        if (d !== 0) return d;
+      }
+      return x.lot - y.lot || compareStrings(x.offer.clubId, y.offer.clubId);
+    };
+    candidates.sort((x, y) => y.score - x.score || tieBreak(x, y));
     const voided = new Set<Candidate>();
     let winner: Candidate | null = null;
     for (const c of candidates) {

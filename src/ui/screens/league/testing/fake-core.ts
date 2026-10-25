@@ -288,14 +288,15 @@ export function checkOffer(
   const ownPending = state.market.offers.find((o) => o.clubId === club.id && o.fighterId === offer.fighterId)?.wagePerWeek ?? 0;
   const room = club.finance.wageBudgetPerWeek - wageBill(state, club.id) - (pendingWages(state, club.id) - ownPending);
   const after = room - offer.wagePerWeek + replaced;
-  if (after < 0) return err(engineError('wage.budget', 'Over the wage budget', { excess: -after }));
+  // Codes and detail keys as core/economy/offers.ts evaluateOffer emits them (embargo is checked first there).
   if (club.finance.status === 'embargo') {
     const tierMin = content.tierProfile(content.tiers.get(club.tierId)?.level ?? 1).tierMinWage;
-    if (offer.wagePerWeek > tierMin) return err(engineError('finance.embargo', 'Embargo', { tierMinWage: tierMin }));
+    if (offer.wagePerWeek > tierMin) return err(engineError('embargo.wage', 'Embargo', { tierMinWage: tierMin }));
   }
+  if (after < 0) return err(engineError('budget.wage', 'Over the wage budget', { over: -after }));
   const bp = offer.kind === 'trials' ? 0 : 1000;
   const signingCost = floorTo((offer.wagePerWeek * remainingPaidWeeks(state, content, offer.seasons) * bp) / 10000, 10);
-  if (signingCost > club.finance.balance) return err(engineError('cash.balance', 'Signing cost exceeds balance', { signingCost }));
+  if (signingCost > club.finance.balance) return err(engineError('budget.cash', 'Signing cost exceeds balance', { signingCost, available: club.finance.balance }));
   return ok({ signingCost, wageRoomAfter: after });
 }
 

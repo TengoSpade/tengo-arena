@@ -87,19 +87,22 @@ export function BalanceChart({
   weeks,
   opening,
   projected,
+  projection = [],
   markers,
 }: {
   content: ContentDB;
   weeks: WeekMoney[];
   opening: number;
   projected: number | null;
+  /** Core's week-by-week projection (FinanceView.weeklyProjection): the dashed line follows it. */
+  projection?: readonly { weekIndex: number; weekId: string; balance: number; net: number }[];
   markers: { weekIndex: number; label: string }[];
 }) {
   const plotW = W - PAD.l - PAD.r;
   const plotH = H - PAD.t - PAD.b;
   const n = weeks.length;
   const booked = weeks.filter((w) => w.balanceAfter !== null);
-  const values = [opening, ...booked.map((w) => w.balanceAfter!), ...(projected !== null ? [projected] : [])];
+  const values = [opening, ...booked.map((w) => w.balanceAfter!), ...(projected !== null ? [projected] : []), ...projection.map((p) => p.balance)];
   const hi = niceMax(Math.max(1, ...values));
   const lo = Math.min(0, ...values);
   const loNice = lo < 0 ? -niceMax(-lo) : 0;
@@ -142,7 +145,26 @@ export function BalanceChart({
         );
       })}
       <polyline class="chart__curve" points={pts.join(' ')} />
-      {projected !== null && last < n && <line class="chart__curve chart__curve--dashed" x1={x(last)} y1={y(lastVal)} x2={x(n)} y2={y(projected)} />}
+      {projection.length > 0 ? (
+        <>
+          <polyline
+            class="chart__curve chart__curve--dashed"
+            points={[`${x(last)},${y(lastVal)}`, ...projection.map((p) => `${x(weeks.findIndex((w) => w.weekIndex === p.weekIndex) + 1)},${y(p.balance)}`)].join(' ')}
+          />
+          {projection.map((p) => (
+            <circle
+              key={p.weekIndex}
+              class="chart__hit"
+              cx={x(weeks.findIndex((w) => w.weekIndex === p.weekIndex) + 1)}
+              cy={y(p.balance)}
+              r={6}
+              data-tip={t('chart.projectedWeek', { week: p.weekId, net: fmtMoney(p.net, content, { signed: true }), balance: fmtMoney(p.balance, content) })}
+            />
+          ))}
+        </>
+      ) : (
+        projected !== null && last < n && <line class="chart__curve chart__curve--dashed" x1={x(last)} y1={y(lastVal)} x2={x(n)} y2={y(projected)} />
+      )}
       <circle class="chart__marker" cx={x(last)} cy={y(lastVal)} r={5} data-tip={fmtMoney(lastVal, content)} />
       {projected !== null && last < n && <circle class="chart__point" cx={x(n)} cy={y(projected)} r={4} data-tip={`${t('chart.projected')}: ${fmtMoney(projected, content)}`} />}
       {weeks.map((w, i) =>

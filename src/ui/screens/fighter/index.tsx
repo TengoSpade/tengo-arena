@@ -43,6 +43,9 @@ import {
 import { formatInt, formatMoney, formatPercentBp } from '../../format';
 import { weekCode } from '../../format/calendar';
 import {
+  isCareerEnding,
+  weeksOutText,
+  captaincyConsequences,
   captaincyGradeLabel,
   contractEnds,
   fighterTraits,
@@ -96,7 +99,7 @@ export default function FighterScreen({ params }: ScreenProps) {
           captainSub: 'Captaincy costs are evaluated at the next lineup lock, so changing back before then is free.',
           preset: '{name}: preset {preset}',
           emphasis: '{name}: training {emphasis}',
-        })
+        }, (c, v) => captaincyConsequences(safeView(() => engine.captaincyPreview(state, ctx.club.id, c, v, content), null), state, content))
       : null;
 
   useShortcuts({
@@ -212,6 +215,9 @@ function ProfileHeader(props: {
   const since = f.contract?.signedAt.season;
   const rosterAfter = ctx ? ctx.roster.length - 1 : 0;
   const billAfter = ctx?.wageBill !== null && ctx?.wageBill !== undefined ? ctx.wageBill - (f.contract?.wagePerWeek ?? 0) : null;
+  const engine = useEngine();
+  const payout = own && ctx ? safeView(() => engine.releasePayout(state, ctx.club.id, f.id, content), null) : null;
+  const balance = ctx?.finance?.balance ?? null;
 
   return (
     <section class="panel panel--hero" aria-labelledby="fighter-name" data-testid="profile-head">
@@ -286,7 +292,12 @@ function ProfileHeader(props: {
           {own && actions && ctx && (
             <div class="l-cluster l-cluster--xs fighter-actions">
               {!isCaptain && (
-                <button class="btn btn--sm" type="button" onClick={() => actions.setCaptain(f.id)} {...tipAttrs(T.makeCaptainTip)}>
+                <button
+                  class="btn btn--sm"
+                  type="button"
+                  onClick={() => actions.setCaptain(f.id)}
+                  {...tipAttrs(actions.previewCaptain(f.id) ? { title: T.makeCaptain, body: actions.previewCaptain(f.id)!, meta: T.makeCaptainTip } : T.makeCaptainTip)}
+                >
                   <Icon name="crown" />
                   {T.makeCaptain} <kbd>C</kbd>
                 </button>
@@ -317,13 +328,20 @@ function ProfileHeader(props: {
                 icon="user-minus"
                 testId="release"
                 title={format(T.releaseTitle, { name: f.name.full })}
-                description={T.releaseText}
+                description={format(T.releaseText, { name: f.name.given })}
                 warning={T.releaseWarning}
                 confirmLabel={format(T.releaseConfirm, { name: f.name.given })}
                 confirmVariant="danger"
                 consequences={[
+                  { label: T.releasePayout, value: payout !== null ? formatMoney(payout) : '—', tip: T.releasePayoutTip },
+                  ...(payout !== null && balance !== null ? [{ label: T.releaseBalance, value: formatMoney(balance - payout) }] : []),
                   { label: T.releaseWage, value: f.contract ? formatMoney(f.contract.wagePerWeek, { perWeek: true }) : '—' },
-                  { label: T.releaseLeft, value: f.contract ? format(T.contractEndsValue, { season: f.contract.endSeason, n: contract.seasonsLeft }) : '—' },
+                  {
+                    label: T.releaseLeft,
+                    value: f.contract
+                      ? format(contract.final ? T.contractFinal : T.contractEndsValue, { season: f.contract.endSeason, n: contract.seasonsLeft })
+                      : '—',
+                  },
                   { label: T.releaseRoster, value: `${rosterAfter} / ${ctx.rosterCap}` },
                   { label: T.releaseBill, value: billAfter !== null ? formatMoney(billAfter, { perWeek: true }) : '—' },
                   ...(isCaptain ? [{ label: T.releaseCaptain, value: T.releaseCaptainNone }] : []),
@@ -376,7 +394,7 @@ function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef
     <>
       {injured && (
         <div class="span-12">
-          <Callout kind="bad" icon="injury" title={format(T.injuryTitle, { label: injuryLabel(injured, content), weeks: injured.weeksOut })}>
+          <Callout kind="bad" icon="injury" title={format(T.injuryTitle, { label: injuryLabel(injured, content), weeks: isCareerEnding(injured) ? 'good' : weeksOutText(injured) })}>
             {injuryTip(injured, content)} {T.injuryText}
           </Callout>
         </div>
@@ -517,7 +535,7 @@ function RatingHistory({ f, view, state }: { f: Fighter; view: FighterView | nul
       <div class="stat-tile">
         <span class="stat-tile__label">{T.ratingBySeason}</span>
         <span class="u-sm u-muted" {...tipAttrs(T.ratingHistoryTip)}>
-          {view ? `S${state.calendar.season} ${view.rating}` : '—'} · {T.noHistory}
+          {view ? `S${state.calendar.season} ${view.rating}` : '—'} · {T.firstSeasonTrend}
         </span>
       </div>
     );
@@ -953,7 +971,7 @@ function ContractTab({ f, view, state }: { f: Fighter; view: FighterView | null;
             {ends.final ? T.renewalOpen : format(T.renewalLater, { season: c.endSeason })}
           </KV>
           {view && (
-            <KV label={T.marketWage} tip="What clubs would pay for this fighter now (economy.json wage curve).">
+            <KV label={T.marketWage} tip="What clubs would pay for this fighter now, from rating, potential, age, traits and role demand.">
               {formatMoney(view.marketWage, { perWeek: true })}
             </KV>
           )}

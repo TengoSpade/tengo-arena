@@ -35,6 +35,7 @@ import { captaincyAt, chemistryBreakdown, isFitFighter } from './captaincy';
 import { createFighterOn } from './generation';
 import { typicalRoundChanceBp } from './injury';
 import { applyMatch } from './match';
+import { enterLifecycleStep, leaveLifecycleStep } from './memo';
 import { generateNameWith, livingNames } from './names';
 import {
   announceFinalSeasonsOn,
@@ -47,6 +48,16 @@ import {
 } from './season';
 import { effectiveStatsOf, fighterHumanAge100, potentialOf, ratingOf } from './stats';
 import { lockLineup, weekly } from './weekly';
+
+/** Run a lifecycle step that can change ratings or fitness: memoized derived values are dropped before and after (./memo.ts). */
+function mutating<T>(step: () => T): T {
+  enterLifecycleStep();
+  try {
+    return step();
+  } finally {
+    leaveLifecycleStep();
+  }
+}
 
 // ---- generation ---------------------------------------------------------------------------
 
@@ -68,7 +79,7 @@ export interface FighterSpec {
 
 /** Create a fighter on the draft (allocates its id, rolls everything, inserts into draft.fighters). Economy fills contractProfile. */
 export function createFighter(draft: GameState, spec: FighterSpec, content: ContentDB): FighterId {
-  return createFighterOn(draft, spec, content);
+  return mutating(() => createFighterOn(draft, spec, content));
 }
 
 /** A unique name for the race (names.json rules). */
@@ -156,7 +167,7 @@ export function trend(fighter: Fighter, content: ContentDB): string {
 
 /** Lineup lock for a club: captain strip/snubbed/passed-over rules, acting captain. */
 export function lineupLock(draft: GameState, clubId: ClubId, content: ContentDB): NewsId[] {
-  return lockLineup(draft, clubId, content);
+  return mutating(() => lockLineup(draft, clubId, content));
 }
 
 export interface MatchLifecycleOutcome {
@@ -167,37 +178,37 @@ export interface MatchLifecycleOutcome {
 
 /** After a match: XP (rounds started only), injury rolls (max 1 per match), career totals, statuses, event traits. */
 export function applyMatchLifecycle(draft: GameState, result: MatchResult, content: ContentDB): MatchLifecycleOutcome {
-  return applyMatch(draft, result, content);
+  return mutating(() => applyMatch(draft, result, content));
 }
 
 /** Week processing step 3: injury and status countdown, emphasis weeks, captain streaks, weekly trait checks. */
 export function weeklyLifecycle(draft: GameState, content: ContentDB): NewsId[] {
-  return weekly(draft, content);
+  return mutating(() => weekly(draft, content));
 }
 
 /** Season end step 6: development and decline (pre-increment age), then +1 age; history rows. */
 export function seasonEndDevelopment(draft: GameState, content: ContentDB): NewsId[] {
-  return seasonEndDevelopmentOn(draft, content);
+  return mutating(() => seasonEndDevelopmentOn(draft, content));
 }
 
 /** Season end step 7: retirements (final-season fighters, rolls, forced). Contracts end without payout. */
 export function seasonEndRetirements(draft: GameState, content: ContentDB): RetirementRecord[] {
-  return seasonEndRetirementsOn(draft, content);
+  return mutating(() => seasonEndRetirementsOn(draft, content));
 }
 
 /** Season end step 9: off-season injury recovery. */
 export function offseasonRecovery(draft: GameState, content: ContentDB): void {
-  offseasonRecoveryOn(draft, content);
+  mutating(() => offseasonRecoveryOn(draft, content));
 }
 
 /** Season end step 13: rookie intake count and generation (economy assigns them to clubs for Trials Day). */
 export function generateRookies(draft: GameState, content: ContentDB): FighterId[] {
-  return generateRookiesOn(draft, content);
+  return mutating(() => generateRookiesOn(draft, content));
 }
 
 /** P1: final-season announcements. */
 export function announceFinalSeasons(draft: GameState, content: ContentDB): NewsId[] {
-  return announceFinalSeasonsOn(draft, content);
+  return mutating(() => announceFinalSeasonsOn(draft, content));
 }
 
 // ---- additive exports (not part of the phase-B contract) ----------------------------------------
@@ -206,7 +217,9 @@ export { CAREER_ENDING_WEEKS, captaincyBreakdown, chemistryBreakdown, gradeFor, 
 export type { CaptaincyBreakdown, ChemistryBreakdown, LineupCaptain } from './captaincy';
 export { chemistryComposure, maturityBp, ratingFromStats } from './stats';
 export { careerEndingChancePerMatchBp, isAtRisk, pronenessIndexBp, pronenessLabel, roundInjuryChanceBp } from './injury';
-export { interimCaptainOf as interimCaptain } from './weekly';
+export { captainChangeConsequences, interimCaptainOf as interimCaptain } from './weekly';
+export { withDerivedMemo } from './memo';
+export type { CaptainChangeConsequences, SnubExemption } from './weekly';
 export { rookieCount, trendDelta } from './season';
 export { rolledPolarity, scarCount } from './traits';
 export { usageBpOf } from './development';

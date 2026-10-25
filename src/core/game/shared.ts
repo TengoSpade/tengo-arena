@@ -6,6 +6,7 @@
 import type { ContentDB } from '../content';
 import {
   allocateId,
+  clubRoster,
   idNumber,
   type Club,
   type ClubId,
@@ -38,11 +39,9 @@ export function clubsInOrder(state: GameState, content: ContentDB): Club[] {
   });
 }
 
-/** Active roster of a club, in fighter id order. */
+/** Active roster of a club, in fighter id order (a copy: callers may sort it). */
 export function rosterOf(state: GameState, clubId: ClubId): Fighter[] {
-  const out: Fighter[] = [];
-  for (const f of Object.values(state.fighters)) if (f.clubId === clubId && f.status === 'active') out.push(f);
-  return out.sort((a, b) => compareIds(a.id, b.id));
+  return [...clubRoster(state, clubId)];
 }
 
 export function onRoster(state: GameState, clubId: ClubId, fighterId: FighterId): Fighter | null {

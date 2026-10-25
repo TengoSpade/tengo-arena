@@ -6,7 +6,8 @@
 import { Component, type ComponentChildren, type ComponentType } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { formatContentIssues, type ContentIssue } from '../../core/content';
-import { Callout, Empty, Icon } from '../components';
+import { Icon } from '../components/Icon';
+import { Callout, Empty } from '../components/marks';
 import { t } from '../text';
 import type { RouteDef, ScreenProps } from './routes';
 

@@ -131,6 +131,8 @@ function statsOf(f: Fight, u: Unit, round: number): FighterMatchStats {
         ]
       : [],
     opponentIds: [...opponents].sort(),
+    roundDamageTaken: [t.damageTaken],
+    roundMaxHp: [u.maxHp],
   };
 }
 
@@ -165,6 +167,8 @@ export function mergeStats(into: FighterMatchStats, add: FighterMatchStats): Fig
     rulesNeverFired: fires.slice(0, ruleCount).flatMap((n, i) => (n === 0 ? [i] : [])),
     downs: [...into.downs, ...add.downs],
     opponentIds: [...new Set([...into.opponentIds, ...add.opponentIds])].sort() as FighterId[],
+    roundDamageTaken: [...(into.roundDamageTaken ?? []), ...(add.roundDamageTaken ?? [])],
+    roundMaxHp: [...(into.roundMaxHp ?? []), ...(add.roundMaxHp ?? [])],
   };
 }
 

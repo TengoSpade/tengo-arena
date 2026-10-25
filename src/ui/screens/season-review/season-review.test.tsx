@@ -55,6 +55,12 @@ describe('Season review screen', () => {
     );
     expect(screen.getByTestId('review-move').textContent).toMatch(/Promoted to|Relegated to|Staying in/);
     expect(within(screen.getByTestId('review-tables')).getAllByTestId('standings-wing')).toHaveLength(2);
+    // Honours stack the label above one club per line (no side-by-side overlap at narrow widths).
+    const honours = screen.getByTestId('review-honours');
+    expect(honours.querySelectorAll('dl.kv--stacked').length).toBe(2);
+    const moves = within(screen.getByTestId('review-moves'));
+    expect(moves.getAllByText(/^Relegated from /).length).toBeGreaterThan(0);
+    for (const dd of honours.querySelectorAll('dd')) expect(dd.querySelectorAll('.review-honour').length + dd.querySelectorAll('.u-faint').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByTestId('review-next'));
     expect(within(screen.getByTestId('review-bracket')).getAllByRole('link')).toHaveLength(7);
     fireEvent.click(screen.getByTestId('review-next'));

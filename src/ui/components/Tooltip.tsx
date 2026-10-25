@@ -36,6 +36,21 @@ const ATTR_PLAIN = 'data-tip';
 const ATTR_RICH = 'data-tip-rich';
 const SELECTOR = `[${ATTR_PLAIN}],[${ATTR_RICH}]`;
 
+const ATTR_OVERFLOW = 'data-tip-overflow';
+
+/**
+ * A tip that only opens while the element's own text is clipped (an ellipsised name in a narrow
+ * column). Full names stay one hover away without a tooltip on every name that already fits.
+ */
+export function overflowTipAttrs(text: string | null | undefined): Record<string, string> {
+  return text ? { [ATTR_PLAIN]: text, [ATTR_OVERFLOW]: '' } : {};
+}
+
+/** True when an overflow-only tip has nothing hidden to reveal. */
+function overflowTipIdle(el: Element): boolean {
+  return el.hasAttribute(ATTR_OVERFLOW) && el instanceof HTMLElement && el.scrollWidth <= el.clientWidth + 1;
+}
+
 /** Attributes that attach a tip to any element. Empty object for no tip. */
 export function tipAttrs(tip: Tip | null | undefined): Record<string, string> {
   if (tip === null || tip === undefined || tip === '') return {};
@@ -80,7 +95,7 @@ export function TooltipLayer() {
     const show = (el: Element, now: boolean) => {
       clear();
       const tip = readTip(el);
-      if (!tip) return;
+      if (!tip || overflowTipIdle(el)) return;
       const go = () => {
         current.current = el;
         setShown(false);

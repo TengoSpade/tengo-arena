@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { asId, type ClassId, type FighterId, type GameState, type SaveEnvelope } from '../model';
+import { STATE_SCHEMA_VERSION, asId, type ClassId, type FighterId, type GameState, type SaveEnvelope } from '../model';
 import { buildFixtureWorld, fixtureContent } from '../testkit';
-import { cloneJson } from '../util';
+import { cloneJson, deepFreeze } from '../util';
 import {
   MIGRATIONS,
   checksumState,
+  checksumV1,
   createSave,
   parseSave,
   parseSaveWith,
@@ -54,10 +55,21 @@ describe('save envelope', () => {
     expect(parsed.value.warnings).toEqual([]);
   });
 
-  it('checksum does not depend on key order', () => {
+  it('checksum v2 covers the state as written: a JSON round trip keeps it, an edit changes it', () => {
     const state = world();
-    const reordered = JSON.parse(JSON.stringify(state, Object.keys(state).sort().reverse())) as GameState;
-    expect(checksumState(state)).toBe(checksumState({ ...reordered, ...state }));
+    const parsed = JSON.parse(JSON.stringify(state)) as GameState;
+    expect(checksumState(parsed)).toBe(checksumState(state));
+    Object.values(parsed.clubs)[0]!.finance.balance += 1;
+    expect(checksumState(parsed)).not.toBe(checksumState(state));
+  });
+
+  it('serializeSave is JSON.stringify of the envelope, also when frozen entries come from the cache', () => {
+    const state = world();
+    state.history = [deepFreeze({ season: 0, tiers: [], retirements: [], rookieIds: [] })];
+    const env = envelopeOf(state);
+    expect(serializeSave(env)).toBe(JSON.stringify(env));
+    expect(serializeSave(env)).toBe(JSON.stringify(env));
+    expect(checksumState(state)).toBe(checksumState(JSON.parse(JSON.stringify(state)) as GameState));
   });
 });
 
@@ -84,7 +96,7 @@ describe('parseSave error codes', () => {
   it('save.too-new for a newer schema version', () => {
     const r = parseSave(JSON.stringify({ ...env, schemaVersion: 99 }), content);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatchObject({ code: 'save.too-new', details: { saveVersion: 99, buildVersion: 1 } });
+    if (!r.ok) expect(r.error).toMatchObject({ code: 'save.too-new', details: { saveVersion: 99, buildVersion: STATE_SCHEMA_VERSION } });
   });
 
   it('save.checksum when the state was edited', () => {
@@ -141,15 +153,63 @@ describe('parseSave error codes', () => {
 });
 
 describe('migrations', () => {
-  it('MIGRATIONS is empty at schema version 1', () => {
-    expect(MIGRATIONS).toEqual([]);
+  it('MIGRATIONS lead from schema version 1 to the current one', () => {
+    expect(MIGRATIONS.map((m) => [m.from, m.to])).toEqual([[1, 2]]);
+    expect(STATE_SCHEMA_VERSION).toBe(2);
+  });
+
+  /** A v1 save of the fixture world: one retired fighter still in `fighters`, an agreed renewal as a negotiation. */
+  function v1Save(): { json: string; retiredId: FighterId; renewedId: FighterId; injuredId: FighterId } {
+    const s = cloneJson(world()) as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    delete s.alumni;
+    s.schemaVersion = 1;
+    const fighters = Object.values(s.fighters) as any[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+    for (const f of fighters) {
+      if (f.contract) delete f.contract.next;
+      if (f.freeAgency) delete f.freeAgency.enteredAt;
+    }
+    const retired = fighters.find((f) => f.status === 'free-agent');
+    retired.status = 'retired';
+    const [renewed, injured] = fighters.filter((f) => f.status === 'active' && f.contract);
+    s.market.negotiations.push({ fighterId: renewed.id, clubId: renewed.contract.clubId, season: 1, kind: 'renewal', patienceLeft: 2, counterWage: 777, validUntilWeek: null });
+    injured.injury = { severity: 'serious', weeksOut: 999, fixtureId: null, round: null, causeFighterId: null, damageBp: 10_000, since: { season: 1, weekIndex: 1 } };
+    const env = { ...envelopeOf(world()), schemaVersion: 1, checksum: checksumV1(s), state: s };
+    return { json: JSON.stringify(env), retiredId: retired.id, renewedId: renewed.id, injuredId: injured.id };
+  }
+
+  it('v1 -> v2: departed fighters become alumni, agreed renewals move to Contract.next, new fields are filled', () => {
+    const v1 = v1Save();
+    const r = parseSave(v1.json, content);
+    expect(r.ok ? null : r.error).toBeNull();
+    if (!r.ok) return;
+    const st = r.value.envelope.state;
+    expect(r.value.migratedFrom).toBe(1);
+    expect(st.schemaVersion).toBe(2);
+    expect(st.fighters[v1.retiredId]).toBeUndefined();
+    expect(st.alumni[v1.retiredId]).toMatchObject({ id: v1.retiredId, cause: 'age' });
+    expect(st.fighters[v1.renewedId]!.contract!.next).toEqual({ wagePerWeek: 777, endSeason: st.fighters[v1.renewedId]!.contract!.endSeason });
+    expect(st.market.negotiations.some((n) => n.fighterId === v1.renewedId)).toBe(false);
+    expect(st.fighters[v1.injuredId]!.injury!.careerEnding).toBe(true);
+    for (const f of Object.values(st.fighters)) {
+      if (f.contract && f.id !== v1.renewedId) expect(f.contract.next).toBeNull();
+      if (f.freeAgency) expect(f.freeAgency.enteredAt).toBeDefined();
+    }
+    expect(r.value.envelope.checksum).toBe(checksumState(st));
+    expect(validateState(st, content)).toEqual([]);
+  });
+
+  it('a v1 save is checked with the v1 checksum rule', () => {
+    const v1 = v1Save();
+    const edited = v1.json.replace('"counterWage":777', '"counterWage":778');
+    const r = parseSave(edited, content);
+    expect(r.ok ? null : r.error.code).toBe('save.checksum');
   });
 
   const state = world();
-  const v1 = serializeSave(envelopeOf(state));
+  const v2 = serializeSave(envelopeOf(state));
   const renameClub: Migration = {
-    from: 1,
-    to: 2,
+    from: 2,
+    to: 3,
     migrate(s) {
       const st = s as GameState;
       for (const c of Object.values(st.clubs)) c.shortName = `${c.shortName}*`;
@@ -158,22 +218,22 @@ describe('migrations', () => {
   };
 
   it('runs each step in order and reports migratedFrom', () => {
-    const r = parseSaveWith(v1, content, { migrations: [renameClub], currentVersion: 2 });
+    const r = parseSaveWith(v2, content, { migrations: [renameClub], currentVersion: 3 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.migratedFrom).toBe(1);
-    expect(r.value.envelope.schemaVersion).toBe(2);
-    expect(r.value.envelope.state.schemaVersion).toBe(2);
+    expect(r.value.migratedFrom).toBe(2);
+    expect(r.value.envelope.schemaVersion).toBe(3);
+    expect(r.value.envelope.state.schemaVersion).toBe(3);
     expect(Object.values(r.value.envelope.state.clubs).every((c) => c.shortName.endsWith('*'))).toBe(true);
     expect(r.value.envelope.checksum).toBe(checksumState(r.value.envelope.state));
   });
 
   it('save.migration when a step is missing or throws', () => {
-    const missing = parseSaveWith(v1, content, { migrations: [], currentVersion: 2 });
+    const missing = parseSaveWith(v2, content, { migrations: [], currentVersion: 3 });
     expect(missing.ok ? null : missing.error.code).toBe('save.migration');
-    const throwing = parseSaveWith(v1, content, {
-      migrations: [{ from: 1, to: 2, migrate: () => { throw new Error('boom'); } }],
-      currentVersion: 2,
+    const throwing = parseSaveWith(v2, content, {
+      migrations: [{ from: 2, to: 3, migrate: () => { throw new Error('boom'); } }],
+      currentVersion: 3,
     });
     expect(throwing.ok ? null : throwing.error.code).toBe('save.migration');
   });

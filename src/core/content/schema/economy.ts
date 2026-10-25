@@ -99,6 +99,12 @@ export const EconomyFileSchema = z.object({
     reserveCapBp: z.number(),
     ascensionWageRatioBonusBp: z.number(),
     ascensionSeasons: z.number(),
+    /** New career: opening wage bills are rescaled into this share of WB (default 82-92%). */
+    worldGenBillBandBp: z
+      .object({ minBp: z.number().int(), maxBp: z.number().int() })
+      .strict()
+      .refine((b) => b.minBp > 0 && b.minBp <= b.maxBp && b.maxBp <= 10_000, 'needs 0 < minBp <= maxBp <= 10000')
+      .default({ minBp: 8200, maxBp: 9200 }),
   }).strict(),
   wage: z.object({
     _doc: z.string().optional(),

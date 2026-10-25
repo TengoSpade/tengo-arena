@@ -5,8 +5,8 @@
  * (FighterView) — nothing here computes a game rule.
  */
 import type { ClassDef, ContentDB, PresetDef, StatDef, TierDef } from '../../core/content';
-import type { FighterView } from '../../core/game';
-import type { Contract, Fighter, Injury, StatId } from '../../core/model';
+import type { CaptaincyPreview, FighterView } from '../../core/game';
+import { CAREER_ENDING_WEEKS, type Contract, type Fighter, type FighterId, type GameState, type Injury, type StatId } from '../../core/model';
 import type { TipContent } from '../components/Tooltip';
 import { traitPolarity, type TraitPolarity } from '../components/marks';
 import { formatInt, formatMoney, formatPercentBp, potentialStars, starsLabel } from './index';
@@ -78,7 +78,7 @@ export function ratingTip(view: FighterView, klass: ClassDef, content: ContentDB
       ...top.map(([id, w], i) => ({ label: `${statName(id)} ${view.stats[id as StatId] ?? '—'}`, value: `${Math.round(w * 100)}%${i === 0 ? ' weight' : ''}` })),
       ...(rest > 0 ? [{ label: `${weights.length - 4} others`, value: `${Math.round(rest * 100)}%` }] : []),
     ],
-    meta: 'Weights from classes.json',
+    meta: 'Each class weights the attributes it fights with',
   };
 }
 
@@ -108,13 +108,25 @@ export function contractEnds(contract: Contract | null, season: number): { text:
   return { text: `S${contract.endSeason}`, final: left <= 0, seasonsLeft: Math.max(0, left) };
 }
 
+/** A career-ending injury never counts down (Injury.careerEnding, weeksOut = CAREER_ENDING_WEEKS). */
+export function isCareerEnding(injury: Pick<Injury, 'weeksOut'> & { careerEnding?: boolean }): boolean {
+  return !!injury.careerEnding || injury.weeksOut >= CAREER_ENDING_WEEKS;
+}
+
+/** "3 wk", or "career over" for a career-ending injury (never "999 wk"). */
+export function weeksOutText(injury: Pick<Injury, 'weeksOut'> & { careerEnding?: boolean }): string {
+  return isCareerEnding(injury) ? 'career over' : `${formatInt(injury.weeksOut)} wk`;
+}
+
 export function injuryLabel(injury: Injury, content: ContentDB): string {
+  if (isCareerEnding(injury)) return 'Career-ending injury';
   return content.development.injury.severityLadder.find((s) => s.id === injury.severity)?.label ?? injury.severity;
 }
 
 export function injuryTip(injury: Injury, content: ContentDB): string {
   const label = injuryLabel(injury, content);
   const where = injury.round ? `, round ${injury.round}` : '';
+  if (isCareerEnding(injury)) return `${label}${where}. He will not fight again and retires at season end.`;
   return `${label}${where}. Out for ${injury.weeksOut} more ${injury.weeksOut === 1 ? 'week' : 'weeks'}.`;
 }
 
@@ -139,7 +151,8 @@ export function statusLabel(statusId: string, content: ContentDB): { label: stri
   return { label: s?.label ?? statusId, text: s?.text ?? '' };
 }
 
-export function injuryRiskText(view: FighterView, content: ContentDB): { word: string; tip: string; atRisk: boolean } {
+/** Injury-risk copy. `notable` is false for the normal case, so callers can keep the quiet default to an icon. */
+export function injuryRiskText(view: FighterView, content: ContentDB): { word: string; tip: string; atRisk: boolean; notable: boolean } {
   const statuses = view.fighter.statuses.map((s) => s.id);
   const atRisk = statuses.includes('at_risk');
   const tender = statuses.includes('still_tender');
@@ -147,7 +160,8 @@ export function injuryRiskText(view: FighterView, content: ContentDB): { word: s
   return {
     word,
     atRisk,
-    tip: `Injury chance ${formatPercentBp(view.injuryChanceBp, 2)} per round started.${atRisk ? ` ${statusLabel('at_risk', content).text}` : ''}${tender ? ` ${statusLabel('still_tender', content).text}` : ''}`,
+    notable: atRisk || tender,
+    tip: `Injury risk: ${word}. ≈${formatPercentBp(view.injuryChanceBp, 2)} injury chance per round started, estimated from typical rounds (not exact).${atRisk ? ` ${statusLabel('at_risk', content).text}` : ''}${tender ? ` ${statusLabel('still_tender', content).text}` : ''}`,
   };
 }
 
@@ -158,3 +172,34 @@ export function wageTip(f: Fighter, view: FighterView | null): string {
 }
 
 export { formatInt };
+
+/** Why the former captain is not Snubbed (core SnubExemption). */
+const SNUB_SPARED: Record<string, string> = {
+  preseason: 'the change is made before matchweek 1',
+  injured: 'the former captain is out injured for a while',
+  'final-season': 'it is the former captain’s final season',
+  'made-vice': 'the former captain becomes vice-captain',
+  'short-tenure': 'the former captain held the armband only briefly',
+};
+
+/**
+ * What a captaincy change costs, in one line (03 sys-captaincy player information): who is Snubbed
+ * or Passed Over and the lineup chemistry before and after. Null when nothing changes.
+ */
+export function captaincyConsequences(preview: CaptaincyPreview | null, state: GameState, content: ContentDB): string | null {
+  if (!preview) return null;
+  const name = (id: FighterId) => state.fighters[id]?.name.full ?? id;
+  const parts: string[] = [];
+  if (preview.snubbedId) {
+    const st = content.development.statuses.find((x) => x.id === 'snubbed');
+    parts.push(`${name(preview.snubbedId)} will be ${(st?.label ?? 'Snubbed').toLowerCase()}${st?.duration ? ` for ${st.duration}` : ''}`);
+  } else if (preview.snubExemption && SNUB_SPARED[preview.snubExemption]) {
+    parts.push(`No snub: ${SNUB_SPARED[preview.snubExemption]}`);
+  }
+  if (preview.passedOverIds.length > 0) parts.push(`${preview.passedOverIds.map(name).join(', ')} ${preview.passedOverIds.length === 1 ? 'feels' : 'feel'} passed over`);
+  if (preview.chemistryAfter !== preview.chemistryBefore) {
+    const sign = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
+    parts.push(`chemistry ${sign(preview.chemistryBefore)} → ${sign(preview.chemistryAfter)}`);
+  }
+  return parts.length > 0 ? `${parts.join(' · ')}. Applied at the next lineup lock.` : null;
+}

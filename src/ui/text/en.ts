@@ -84,7 +84,7 @@ export const en = {
   'topbar.standing': 'Standing',
   'topbar.search': 'Search fighters, clubs, classes',
   'topbar.searchShort': 'Search',
-  'topbar.digest': 'Digest: {n} items need action',
+  'topbar.digest': 'Digest: {n} {n?item needs|items need} action',
   'topbar.digestNone': 'Digest: nothing needs action',
   'topbar.theme': 'Switch light or dark theme',
   'topbar.themeTip': 'Theme: dark or light',
@@ -92,11 +92,13 @@ export const en = {
   'topbar.shortcutsTip': 'Keyboard shortcuts (?)',
   'topbar.rosterTip': 'Roster {n} of {cap}, the {tier} cap. Hired blades do not count.',
   'topbar.balanceTip': 'Cash in hand. Changed only by ledger entries (wages, gates, grants, signings).',
-  'topbar.wagesTip': 'Wage bill: {n} contracts, paid at every week processing. Wage budget {budget} per week.',
+  'topbar.wagesTip': 'Wage bill: {n} {n?contract|contracts}, paid at every week processing. Wage budget {budget} per week.',
   'topbar.calendarTip': 'Season {season}, {week}. Phase: {phase}.',
   'topbar.standingTip': '{pos} of {size} in the {wing}. The top 4 of each wing reach the {tournament}.',
   'topbar.standingNone': 'No table yet: the wing draw happens at the season start.',
   'topbar.standingValue': '{pos} · {pts} pts',
+  'topbar.standingNotStarted': 'No matches yet',
+  'topbar.standingUnplayed': 'The {wing} ({size} clubs) has not played yet. Positions start with matchweek 1.',
   'topbar.tier': 'Tier {n}',
   'topbar.topEarner': 'Top earner: {name}',
   'topbar.lineupWages': 'Lineup ({n})',
@@ -168,8 +170,10 @@ export const en = {
   // ---- blockers (core Blocker codes; 02 §3) ---------------------------------------------------------
   'blocker.lineup.incomplete': 'Lineup needs 5 fit fighters',
   'blocker.lineup.unavailable': 'A lineup fighter is unavailable',
+  'blocker.lineup.unavailable.named': '{name} is unfit to play',
   'blocker.lineup.not-on-roster': 'A lineup fighter left the roster',
-  'blocker.roster.over-cap': 'Release {n} fighters',
+  'blocker.lineup.not-on-roster.named': '{name} left the roster',
+  'blocker.roster.over-cap': 'Release {n} {n?fighter|fighters}',
   'blocker.club.not-chosen': 'Pick a club',
   'blocker.phase.season-end': 'Season review',
   'blocker.captain.missing': 'Choose a captain',
@@ -193,6 +197,10 @@ export const en = {
   'error.save.storage': 'The save storage failed: {message}',
   'error.save.empty': 'That save slot is empty.',
   'error.save.full': 'Every save slot is in use. Delete one first.',
+  'error.save.tooLarge': 'This file is {mb} MB, far larger than any save. Nothing was imported.',
+  'error.save.noSlot': 'Choose a slot for this career first (Save as).',
+  'save.contentChanged': 'This save was made with different game data',
+  'save.contentChangedSub': 'It loaded. Timelines of old matches may be unavailable.',
   'error.generic': '{message}',
 
   // ---- saves -------------------------------------------------------------------------------------------
@@ -206,7 +214,7 @@ export const en = {
   // ---- content error screen ------------------------------------------------------------------------------
   'contentError.title': 'Game content has errors',
   'contentError.text': 'The game cannot start until these content problems are fixed. Each line names the file, the path and the problem.',
-  'contentError.count': '{n} problems',
+  'contentError.count': '{n} {n?problem|problems}',
 
   // ---- crash screen -----------------------------------------------------------------------------------------
   'crash.title': 'Something broke on this screen',

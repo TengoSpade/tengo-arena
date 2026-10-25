@@ -6,7 +6,7 @@
  */
 import type { ContentDB } from '../content';
 import type { Club, ClubId, Fighter, FighterId, GameState, GameTime, NewsId, SeasonRecord, TierId } from '../model';
-import { reckoningCompetitionId } from '../model';
+import { reckoningCompetitionId, setMembership, weekFixtures } from '../model';
 import { Rng, STREAM } from '../rng';
 import { clamp } from '../util';
 import {
@@ -29,7 +29,7 @@ import { postAt } from './ledger';
 import { floorTo, mulDiv } from './math';
 import { addClubNews, pushNews } from './news';
 import { pendingSigningCostsOf } from './offers';
-import { assignTrialsRookies, makeFreeAgent, rollContractProfileImpl } from './pool';
+import { assignTrialsRookies, makeFreeAgent, nowOf, rollContractProfileImpl } from './pool';
 import { agreedRenewal, clubsInOrder, compareFighterIds, poolFighters, profileOf, rosterOf, tierOf, wageBillOf } from './queries';
 import { grantSchedule, processingStamp, seasonEndWeekIndex, SETUP_WEEK_INDEX, setupSeason, weeksPerSeason } from './time';
 import { askOf, potentialBonus } from './wages';
@@ -86,7 +86,7 @@ export function weeklyCostsImpl(draft: GameState, content: ContentDB): void {
       const wage = blade.contract?.wagePerWeek ?? profileOf(club, content).tierMinWage;
       postAt(draft, { clubId: club.id, amount: -wage, category: 'hiredBlades', fighterId: blade.id }, at);
       // The blade leaves after the match (not on any roster, record kept for reports).
-      blade.clubId = null;
+      setMembership(draft, blade, null, 'hired-blade');
       blade.contract = null;
     }
     postAt(draft, { clubId: club.id, amount: -profileOf(club, content).opsCostPerWeek, category: 'operations' }, at);
@@ -96,8 +96,8 @@ export function weeklyCostsImpl(draft: GameState, content: ContentDB): void {
 /** Projected home gates of scheduled fixtures in one week (current form, no fan appeal). */
 function projectedGatesInWeek(state: GameState, club: Club, season: number, weekIndex: number, content: ContentDB): number {
   let total = 0;
-  for (const fx of Object.values(state.fixtures)) {
-    if (fx.season !== season || fx.weekIndex !== weekIndex || fx.status !== 'scheduled') continue;
+  for (const fx of weekFixtures(state, season, weekIndex)) {
+    if (fx.status !== 'scheduled') continue;
     if (fx.homeClubId !== club.id && !(fx.stage === 'final' && fx.awayClubId === club.id)) continue;
     const host = state.clubs[fx.homeClubId];
     if (!host) continue;
@@ -123,6 +123,28 @@ export function projectedCashFlow(state: GameState, club: Club, season: number, 
     total += retainerPart(retainer, k, content) + grantInstallmentAt(grantDue, k, content) + projectedGatesInWeek(state, club, season, k, content) - bill - ops;
   }
   return total;
+}
+
+/** The same flows week by week (finance screen projection). Sum of income - costs equals projectedCashFlow. */
+export function projectedWeeks(
+  state: GameState,
+  club: Club,
+  season: number,
+  fromWeek: number,
+  toWeek: number,
+  content: ContentDB,
+): { weekIndex: number; income: number; costs: number }[] {
+  const w = weeksPerSeason(content);
+  const retainer = retainerOf(club, content);
+  const grantDue = currentSeasonBudgetParts(state, club, content).grantDue;
+  const bill = wageBillOf(state, club.id);
+  const ops = profileOf(club, content).opsCostPerWeek;
+  const out: { weekIndex: number; income: number; costs: number }[] = [];
+  for (let k = fromWeek + 1; k <= Math.min(toWeek, w); k++) {
+    const income = retainerPart(retainer, k, content) + grantInstallmentAt(grantDue, k, content) + projectedGatesInWeek(state, club, season, k, content);
+    out.push({ weekIndex: k, income, costs: bill + ops });
+  }
+  return out;
 }
 
 /** Watch (advisory): balance + next 4 weeks of scheduled flows − pending signing costs < 0. */
@@ -264,16 +286,15 @@ export function contractExpiriesImpl(draft: GameState): FighterId[] {
       // Retirement ends a contract with no payout (lifecycle step 7).
       if (f.contract || f.clubId) {
         f.contract = null;
-        f.clubId = null;
+        setMembership(draft, f, null, 'retired');
       }
       continue;
     }
     if (f.status !== 'active' || !f.contract || f.contract.endSeason > season) continue;
     const formerClubId = f.contract.clubId;
-    f.status = 'free-agent';
-    f.clubId = null;
+    setMembership(draft, f, null, 'free-agent');
     f.contract = null;
-    f.freeAgency = { unsignedSeasonEnds: 0, formerClubId, releasedByClubId: null, releasedSeason: null };
+    f.freeAgency = { unsignedSeasonEnds: 0, formerClubId, releasedByClubId: null, releasedSeason: null, enteredAt: nowOf(draft) };
     expired.push(f.id);
   }
   const live = new Set<string>(poolFighters(draft).map((f) => f.id));
@@ -359,6 +380,7 @@ function applyContractSetupRules(draft: GameState, club: Club, relegated: boolea
       contract.startSeason = season;
       contract.dropClauseApplied = false;
     }
+    if (contract.next) contract.next = null;
     if (relegated && !contract.dropClauseApplied) {
       contract.wagePerWeek = Math.max(min, floorTo(mulDiv(contract.wagePerWeek, BP - c.dropClauseBp, BP), step));
       contract.dropClauseApplied = true;
@@ -408,20 +430,13 @@ export function nextSeasonFinanceSetupImpl(draft: GameState, rookieIds: readonly
   draft.market.releasedThisSeason = [];
   const live = new Set<string>(poolFighters(draft).map((f) => f.id));
   draft.market.offers = draft.market.offers.filter((o) => live.has(o.fighterId));
-  for (const f of Object.values(draft.fighters)) if (f.status === 'free-agent' && !f.freeAgency) makeFreeAgent(f);
+  for (const f of Object.values(draft.fighters)) if (f.status === 'free-agent' && !f.freeAgency) makeFreeAgent(draft, f);
   assignTrialsRookies(draft, rookieIds, season, content);
   return news;
 }
 
 // ---- new career --------------------------------------------------------------------------------------------------
 
-/**
- * PROVISIONAL: world generation drops the lowest value-per-wage fighters to
- * the pool until a club's bill is at most this share of its WB
- * (03-league-economy §7 "95%"). OPEN: CHANGE REQUEST economy.json
- * budget.worldGenBillShareOfWbBp.
- */
-export const PROVISIONAL_WORLDGEN_BILL_SHARE_BP = 9500;
 
 function startingBalance(club: Club, content: ContentDB): number {
   const sb = content.economy.income.startingBalance;
@@ -430,7 +445,56 @@ function startingBalance(club: Club, content: ContentDB): number {
   return floorTo(mulDiv(profileOf(club, content).startingBalanceBase, BP + adj, BP), content.economy.income.tablePrize.roundDownTo);
 }
 
-/** Surplus over the tier's replacement level per gold of wage (world generation trim). */
+/**
+ * New career: rescale a club's opening contracts so its wage bill lands in
+ * economy.json budget.worldGenBillBandBp of WB (default 82-92%), so every club,
+ * the player's included, starts able to sign (tuning CR-1; it replaces the
+ * 95% drop-trim). Wages keep their proportions to the nearest band edge,
+ * floor to the wage multiple and stay within [tier minimum, maxWeeklyWage];
+ * a shortfall after rounding is topped up one multiple at a time (fighter id
+ * order). Only when the tier minimum keeps the bill above the band is the
+ * lowest value-per-wage fighter released (never below the AI roster minimum)
+ * and the rest rescaled again.
+ */
+function fitWorldGenBill(draft: GameState, club: Club, content: ContentDB): void {
+  const band = content.economy.budget.worldGenBillBandBp;
+  const wb = club.finance.wageBudgetPerWeek;
+  const lo = mulDiv(wb, band.minBp, BP);
+  const hi = mulDiv(wb, band.maxBp, BP);
+  const keep = content.economy.ai.rosterMinimum;
+  for (;;) {
+    rescaleBill(draft, club, lo, hi, content);
+    const roster = rosterOf(draft, club.id);
+    if (wageBillOf(draft, club.id) <= hi || roster.length <= keep) return;
+    // The tier minimum keeps the bill above the band: release the lowest value per wage, then rescale again.
+    const worst = roster
+      .map((f) => ({ f, v: valuePerWage(f, club, content) }))
+      .sort((a, b) => a.v - b.v || compareFighterIds(b.f.id, a.f.id))[0]!.f;
+    makeFreeAgent(draft, worst);
+    worst.freeAgency = { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null, enteredAt: nowOf(draft) };
+  }
+}
+
+/** Scale every contract of the club toward the nearest band edge [lo, hi] (no-op inside the band). */
+function rescaleBill(draft: GameState, club: Club, lo: number, hi: number, content: ContentDB): void {
+  const bill = wageBillOf(draft, club.id);
+  if (bill === 0 || (bill >= lo && bill <= hi)) return;
+  const target = bill > hi ? hi : lo;
+  const step = content.economy.wage.roundDownToMultiple;
+  const min = profileOf(club, content).tierMinWage;
+  const max = content.economy.wage.maxWeeklyWage;
+  const signed = rosterOf(draft, club.id).filter((f) => f.contract !== null);
+  for (const f of signed) f.contract!.wagePerWeek = clamp(floorTo(mulDiv(f.contract!.wagePerWeek, target, bill), step), min, max);
+  let now = wageBillOf(draft, club.id);
+  for (let i = 0; now < lo && i < signed.length * 1000; i++) {
+    const c = signed[i % signed.length]!.contract!;
+    if (c.wagePerWeek + step > max) continue;
+    c.wagePerWeek += step;
+    now += step;
+  }
+}
+
+/** Surplus over the tier's replacement level per gold of wage (world generation fallback). */
 function valuePerWage(f: Fighter, club: Club, content: ContentDB): number {
   const rating = fighterRating(f, content);
   const bonus = potentialBonus(rating, fighterPotential(f, content), fighterHumanAge(f, content), content);
@@ -439,7 +503,7 @@ function valuePerWage(f: Fighter, club: Club, content: ContentDB): number {
   return mulDiv(rating + bonus - replacement, 1_000_000, wage);
 }
 
-/** New game: starting balances, greed for every fighter, contracts at asks, budgets, world-gen trim, statuses. */
+/** New game: starting balances, greed for every fighter, contracts at asks, budgets, bills rescaled into the world-gen band, statuses. */
 export function initialFinancesImpl(draft: GameState, content: ContentDB): NewsId[] {
   const news: NewsId[] = [];
   const season = draft.calendar.season;
@@ -448,7 +512,7 @@ export function initialFinancesImpl(draft: GameState, content: ContentDB): NewsI
   for (const f of Object.values(draft.fighters).sort((a, b) => compareFighterIds(a.id, b.id))) {
     if (f.status === 'retired') continue;
     rollContractProfileImpl(draft, f.id, content);
-    if (f.status === 'free-agent' && !f.freeAgency) makeFreeAgent(f);
+    if (f.status === 'free-agent' && !f.freeAgency) makeFreeAgent(draft, f);
   }
   draft.ledger.entries = [];
   draft.ledger.openingBalances = {};
@@ -474,23 +538,13 @@ export function initialFinancesImpl(draft: GameState, content: ContentDB): NewsI
         endSeason: season + seasons - 1,
         signedAt: { season, weekIndex: SETUP_WEEK_INDEX },
         dropClauseApplied: false,
+        next: null,
       };
     });
   }
   for (const club of clubs) {
     setupClubFinances(draft, club, { season, balanceAtSetup: club.finance.balance, promoted: false, relegated: false }, content, news);
-    // Trim: drop the lowest value-per-wage fighters until bill <= 95% WB, keeping the AI roster minimum.
-    const keep = content.economy.ai.rosterMinimum;
-    const limit = mulDiv(club.finance.wageBudgetPerWeek, PROVISIONAL_WORLDGEN_BILL_SHARE_BP, BP);
-    let roster = rosterOf(draft, club.id);
-    while (roster.length > keep && wageBillOf(draft, club.id) > limit) {
-      const worst = roster
-        .map((f) => ({ f, v: valuePerWage(f, club, content) }))
-        .sort((a, b) => a.v - b.v || compareFighterIds(b.f.id, a.f.id))[0]!.f;
-      makeFreeAgent(worst);
-      worst.freeAgency = { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null };
-      roster = rosterOf(draft, club.id);
-    }
+    fitWorldGenBill(draft, club, content);
     setStatus(draft, club, season, SETUP_WEEK_INDEX, content, news);
   }
   draft.market.negotiations = [];

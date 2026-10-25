@@ -80,6 +80,14 @@ export function undoLast(): boolean {
   return true;
 }
 
+/**
+ * Drop every pending undo with its toast. Called at a commit point (week processing, season end,
+ * another career loaded): an undo from before it would act on a different week.
+ */
+export function clearUndos(): void {
+  for (const entry of [...undoStack]) dismissToast(entry.toastId);
+}
+
 export function hasUndo(): boolean {
   return undoStack.length > 0;
 }

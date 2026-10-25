@@ -5,7 +5,7 @@
  */
 import type { ComponentChildren } from 'preact';
 import type { ContentDB } from '../../../../core/content';
-import type { Fighter, FighterId, GameState } from '../../../../core/model';
+import { personName, type Fighter, type FighterId, type GameState } from '../../../../core/model';
 import * as C from '../../../components';
 import type { IconName } from '../../../components';
 import { href } from './store';
@@ -50,16 +50,28 @@ export function ClassTag({ content, classId }: { content: ContentDB; classId: st
 
 export function fighterName(state: GameState, id: FighterId | null | undefined): string {
   if (!id) return '';
-  return state.fighters[id]?.name.full ?? String(id);
+  return personName(state, id)?.full ?? String(id);
 }
 
-/** Fighter name linking to the profile (#/fighter/:id, WP6). */
+/**
+ * Fighter name linking to the profile (#/fighter/:id, WP6). A fighter who has left the league
+ * (state.alumni: retired, career over, left unsigned) has no profile: plain text with a tip.
+ */
 export function FighterLink({ state, id, short = false }: { state: GameState; id: FighterId; short?: boolean }) {
   const f = state.fighters[id];
-  const name = f ? (short ? f.name.given : f.name.full) : String(id);
+  const n = f?.name ?? personName(state, id);
+  const label = n ? (short ? n.given : n.full) : String(id);
+  if (!f) {
+    const a = state.alumni[id];
+    return (
+      <span class="entity__name" {...C.tipAttrs(a ? tc('alumni.tip', { name: a.name.full, season: a.leftSeason }) : null)}>
+        {label}
+      </span>
+    );
+  }
   return (
-    <a class="entity__name" href={href(`fighter/${encodeURIComponent(id)}`)}>
-      {name}
+    <a class="entity__name" href={href(`fighter/${encodeURIComponent(id)}`)} {...C.overflowTipAttrs(f.name.full)}>
+      {label}
     </a>
   );
 }

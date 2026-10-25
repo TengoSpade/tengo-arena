@@ -31,7 +31,9 @@ export type Command =
   /** Release a fighter (payout per economy.json; cap relief after relegation). */
   | { type: 'roster.release'; clubId: ClubId; fighterId: FighterId }
   | { type: 'shortlist.toggle'; clubId: ClubId; fighterId: FighterId }
-  | { type: 'news.markRead'; newsIds: NewsId[] };
+  | { type: 'news.markRead'; newsIds: NewsId[] }
+  /** Set the read flag either way (Undo of mark-read). */
+  | { type: 'news.setRead'; newsIds: NewsId[]; read: boolean };
 
 export type CommandType = Command['type'];
 

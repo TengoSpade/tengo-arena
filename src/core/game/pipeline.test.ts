@@ -148,10 +148,10 @@ describe('week processing order (leagues.json calendar.weekProcessingOrder)', ()
       'economy.poolMaintenance',
       'league.setupSeason',
       'league.seasonStartCalendar',
-      'league.compactHistory',
       'fighters.generateRookies',
       'economy.nextSeasonFinanceSetup',
       'ai.planSeasonEnd',
+      'league.compactHistory', // retention last, after every step has read the ending season (05 §5)
     ]);
     expect(calls).not.toContain('economy.weeklyCosts'); // the season end is not a week
     expect(aiWrites).toEqual([]);

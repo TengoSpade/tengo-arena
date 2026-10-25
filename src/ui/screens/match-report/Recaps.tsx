@@ -7,9 +7,8 @@
 import { useState } from 'preact/hooks';
 import type { ContentDB } from '../../../core/content';
 import type { FighterId, GameState } from '../../../core/model';
-import { href } from '../league/lib/store';
-import { Portrait, Segmented } from '../league/lib/ui';
-import type { FighterInfo, Perspective } from './analysis';
+import { FighterLink, Portrait, Segmented } from '../league/lib/ui';
+import { name, type FighterInfo, type Perspective } from './analysis';
 import { RuleSentence, StanceSentence, presetOf } from './rule-sentence';
 import { t } from './text';
 
@@ -21,13 +20,11 @@ function RecapCard({ state, content, info, focus }: { state: GameState; content:
   const max = Math.max(1, ...(recap?.rules.map((r) => r.fires) ?? [1]));
   const total = recap?.rules.reduce((a, r) => a + r.fires, 0) ?? 0;
   return (
-    <article class={focus ? 'well recap-card is-focus' : 'well recap-card'} data-testid="recap-card" aria-label={f?.name.full}>
+    <article class={focus ? 'well recap-card is-focus' : 'well recap-card'} data-testid="recap-card" aria-label={name(state, info.id)}>
       <header class="recap-card__head">
         <Portrait content={content} fighter={f ?? null} size="sm" />
         <div class="entity__stack">
-          <a class="entity__name" href={href(`fighter/${encodeURIComponent(info.id)}`)}>
-            {f?.name.full ?? info.id}
-          </a>
+          <FighterLink state={state} id={info.id} />
           <span class="entity__sub">
             {klass?.name ?? info.classId} · {preset ? t('recaps.preset', { preset: preset.name }) : t('recaps.custom')}
           </span>

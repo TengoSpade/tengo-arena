@@ -8,7 +8,7 @@ import { currentSeasonBudgetParts, registryDeduction } from './budget';
 import { ledgerByCategory } from './ledger';
 import { capReliefAllowance, pendingSigningCostsOf, pendingWagesOf } from './offers';
 import { committedBillOf, profileOf, requireClub, wageBillOf } from './queries';
-import { projectedCashFlow, watchProjection } from './season';
+import { projectedCashFlow, projectedWeeks, watchProjection } from './season';
 import { weeksPerSeason } from './time';
 
 export interface FinanceViewShape {
@@ -23,6 +23,16 @@ export interface FinanceViewShape {
   projectedSeasonEndBalance: Gold;
   registryDebt: Gold;
   byCategory: Partial<Record<LedgerCategory, Gold>>;
+  weeklyProjection: WeekProjectionShape[];
+}
+
+export interface WeekProjectionShape {
+  weekIndex: number;
+  weekId: string;
+  income: Gold;
+  costs: Gold;
+  net: Gold;
+  balance: Gold;
 }
 
 /** Status reason keys: 'balance-below-zero' (embargo), 'projected-shortfall' (watch). */
@@ -30,11 +40,14 @@ export function financeViewImpl(state: GameState, clubId: ClubId, content: Conte
   const club = requireClub(state, clubId);
   const parts = currentSeasonBudgetParts(state, club, content);
   const inSeason = state.calendar.phase !== 'season-end';
-  const projected = inSeason
-    ? club.finance.balance +
-      projectedCashFlow(state, club, state.calendar.season, state.calendar.weekIndex - 1, weeksPerSeason(content), content) -
-      pendingSigningCostsOf(state, clubId, content)
-    : club.finance.balance;
+  const pendingCosts = inSeason ? pendingSigningCostsOf(state, clubId, content) : 0;
+  const weeks = inSeason ? projectedWeeks(state, club, state.calendar.season, state.calendar.weekIndex - 1, weeksPerSeason(content), content) : [];
+  let running = club.finance.balance - pendingCosts;
+  const weeklyProjection: WeekProjectionShape[] = weeks.map((w) => {
+    running += w.income - w.costs;
+    return { weekIndex: w.weekIndex, weekId: content.weekByIndex(w.weekIndex).id, income: w.income, costs: w.costs, net: w.income - w.costs, balance: running };
+  });
+  const projected = inSeason ? club.finance.balance + projectedCashFlow(state, club, state.calendar.season, state.calendar.weekIndex - 1, weeksPerSeason(content), content) - pendingCosts : club.finance.balance;
   return {
     balance: club.finance.balance,
     seasonBudget: club.finance.seasonBudget,
@@ -53,6 +66,7 @@ export function financeViewImpl(state: GameState, clubId: ClubId, content: Conte
     projectedSeasonEndBalance: projected,
     registryDebt: club.finance.registryDebt,
     byCategory: ledgerByCategory(state, clubId),
+    weeklyProjection,
   };
 }
 

@@ -7,7 +7,7 @@ import type { ComponentChildren } from 'preact';
 import { t } from '../text';
 import { CaptainMark, Portrait, ViceCaptainTag } from './marks';
 import { Tag } from './Tag';
-import { tipAttrs, type Tip } from './Tooltip';
+import { overflowTipAttrs, tipAttrs, type Tip } from './Tooltip';
 
 export interface FighterNameProps {
   name: string;
@@ -29,11 +29,11 @@ export interface FighterNameProps {
 
 export function FighterName(props: FighterNameProps) {
   const nameEl = props.href ? (
-    <a class="entity__name" href={props.href} {...tipAttrs(props.tip ?? props.name)}>
+    <a class="entity__name" href={props.href} {...(props.tip ? tipAttrs(props.tip) : overflowTipAttrs(props.name))}>
       {props.name}
     </a>
   ) : (
-    <span class="entity__name" {...tipAttrs(props.tip ?? props.name)}>
+    <span class="entity__name" {...(props.tip ? tipAttrs(props.tip) : overflowTipAttrs(props.name))}>
       {props.name}
     </span>
   );

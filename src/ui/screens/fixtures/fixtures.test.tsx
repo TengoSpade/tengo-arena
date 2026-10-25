@@ -40,6 +40,15 @@ describe('Fixtures screen', () => {
     expect(rows[10]!.textContent).toContain('Not played');
   });
 
+  it('shows league points as +n or a plain 0, with the points rule as a tip', () => {
+    renderAt('mid');
+    const table = screen.getByTestId('fixtures-season');
+    const cells = [...table.querySelectorAll('td')].filter((td) => td.querySelector('[data-tip^="Rounds "]'));
+    expect(cells.length).toBe(7);
+    for (const td of cells) expect(td.textContent).toMatch(/^(\+[123]|0)$/);
+    expect(cells[0]!.querySelector('[data-tip]')!.getAttribute('data-tip')).toContain('Points by rounds: 2–0 3');
+  });
+
   it('includes our Reckoning fixtures in the season list', () => {
     const world = renderAt('tournament');
     const me = world.state.playerClubId!;
@@ -66,9 +75,9 @@ describe('Fixtures screen', () => {
     const { content } = renderAt('mid');
     fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }));
     const cal = screen.getByTestId('fixtures-calendar');
-    expect(cal.querySelectorAll('.fixtures-cal__week')).toHaveLength(content.weeks.list.length);
-    expect(cal.querySelectorAll('.fixtures-cal__week.is-now')).toHaveLength(1);
+    expect(cal.querySelectorAll('.cal-week')).toHaveLength(content.weeks.list.length);
+    expect(cal.querySelectorAll('.cal-week[aria-current="date"]')).toHaveLength(1);
     expect(within(screen.getByTestId('cal-P1')).getByRole('img', { name: /Trials Day/ })).toBeTruthy();
-    expect(cal.querySelectorAll('.fixtures-cal__week.is-won, .fixtures-cal__week.is-lost')).toHaveLength(7);
+    expect(cal.querySelectorAll('.cal-week[data-result]')).toHaveLength(7);
   });
 });

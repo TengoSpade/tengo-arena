@@ -22,6 +22,7 @@ import {
   Money,
   PageHeader,
   Panel,
+  Pips,
   Portrait,
   Progress,
   Rating,
@@ -220,6 +221,65 @@ export default function Gallery() {
             New contracts above the tier minimum are refused.
           </Callout>
           <Empty compact icon="check" title="Nothing needs you this week" text="Press Continue when you are ready." />
+        </Panel>
+        <Panel span={6} title="Choices: option cards, choice cards, pips" bodyClass="l-stack">
+          <fieldset class="option-group">
+            <legend class="field__label">Pacing</legend>
+            {['Hands-on', 'Balanced'].map((name, i) => (
+              <label key={name} class="option-card">
+                <input type="radio" name="gal-pacing" defaultChecked={i === 1} />
+                <span class="option-card__body">
+                  <span class="option-card__name">{name}</span>
+                  <span class="option-card__text">Stops before every match and at each offer answer.</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <div class="l-autogrid" style={{ '--autogrid-min': '10rem' }}>
+            <button type="button" class="card card--choice" aria-pressed="true">
+              <strong>Selected</strong>
+              <Pips value={2} max={3} label="Complexity 2 of 3" />
+            </button>
+            <button type="button" class="card card--choice" aria-pressed="false">
+              <strong>Not selected</strong>
+              <Pips value={1} max={3} label="Complexity 1 of 3" />
+            </button>
+          </div>
+        </Panel>
+        <Panel span={6} title="Calendar strip, outcome banner" bodyClass="l-stack">
+          <div class="cal-strip">
+            <ol class="cal-strip__weeks" role="list" style={{ '--cols': 4 }}>
+              <li class="cal-week is-past" data-result="won">
+                <div class="cal-week__head"><span class="cal-week__id">MW1</span></div>
+                <div class="cal-week__label" />
+                <span class="cal-week__match">vs Dunsalt</span>
+              </li>
+              <li class="cal-week is-past" data-result="lost">
+                <div class="cal-week__head"><span class="cal-week__id">MW2</span></div>
+                <div class="cal-week__label" />
+                <span class="cal-week__match">at Varrow</span>
+              </li>
+              <li class="cal-week" aria-current="date">
+                <div class="cal-week__head"><span class="cal-week__id">MW3</span><span class="tag tag--accent">Now</span></div>
+                <div class="cal-week__label" />
+                <span class="cal-week__match">vs Gullhaven</span>
+              </li>
+              <li class="cal-week">
+                <div class="cal-week__head"><span class="cal-week__id">MW4</span></div>
+                <div class="cal-week__label">Cross-wing</div>
+                <span class="cal-week__match">at Ironmere</span>
+              </li>
+            </ol>
+          </div>
+          <div class="panel panel--hero">
+            <div class="outcome" data-kind="up">
+              <span class="outcome__icon" aria-hidden="true"><Icon name="arrow-up" size="lg" /></span>
+              <div>
+                <div class="outcome__title u-display">Promoted to the Crown</div>
+                <div class="outcome__text">1st in the East wing, 2nd in the tier, 34 pts</div>
+              </div>
+            </div>
+          </div>
         </Panel>
       </div>
       <Modal open={modal} onClose={() => setModal(false)} title="Sample dialog" icon="info" footer={<button class="btn btn--primary" type="button" onClick={() => setModal(false)}>OK</button>}>

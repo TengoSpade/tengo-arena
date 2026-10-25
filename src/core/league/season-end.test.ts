@@ -154,6 +154,11 @@ describe('archive and next season', () => {
       expect(t.wingTables.map((w) => [w.wingId, w.rows.length])).toEqual([['dawn', 8], ['dusk', 8]]);
       expect(t.reckoningChampionId).toBe(rk.championId);
       expect(t.reckoningRunnerUpId).toBe(rk.runnerUpId);
+      const stages = t.reckoningStages ?? {};
+      expect(Object.keys(stages).sort()).toEqual([...rk.seeds].sort());
+      expect(stages[rk.championId!]).toBe('champion');
+      expect(stages[rk.runnerUpId!]).toBe('final');
+      for (const c of rk.seeds) expect(leagueSeasonColumns(state, record, c)?.reckoning).toBe(stages[c]);
       expect(t.shieldWinnerId).toBe(t.tierTable[0]!.clubId);
       expect(t.promotedIds).toEqual(moves.filter((m) => m.from === t.tierId && m.reason !== 'relegated').map((m) => m.clubId));
       expect(t.relegatedIds).toEqual(moves.filter((m) => m.from === t.tierId && m.reason === 'relegated').map((m) => m.clubId));
@@ -216,21 +221,24 @@ describe('archive and next season', () => {
 });
 
 describe('result compaction', () => {
-  it('keeps the current and previous season in full and strips older results to scores', () => {
+  it('compacts the previous season except the player club matches and drops older seasons (05 §5)', () => {
     const state = seasonWithReckoningHero(tierLeader);
-    const someId = Object.keys(state.results)[0]! as keyof GameState['results'];
-    state.results[someId]!.rounds = [
+    const player = state.playerClubId;
+    const ids = Object.keys(state.results) as (keyof GameState['results'])[];
+    const plays = (id: keyof GameState['results'], club: ClubId | null) => state.results[id]!.homeClubId === club || state.results[id]!.awayClubId === club;
+    const aiId = ids.find((id) => !plays(id, player))!;
+    const ownId = player === null ? undefined : ids.find((id) => plays(id, player));
+    state.results[aiId]!.rounds = [
       { round: 1, seed: 's', winner: 'home', endReason: 'elimination', tiebreakStep: null, durationTicks: 400, survivors: { home: 2, away: 0 }, downs: { home: 3, away: 5 }, finalHp: [1, 2, 3, 4, 5, 0, 0, 0, 0, 0], checksum: 'c', eventHash: null },
     ];
-    state.calendar = seasonStartCalendar(2, content);
     const before = cloneJson(state);
     compactHistory(state, content);
-    expect(state).toEqual(before); // season 1 is the previous season: kept
+    expect(state).toEqual(before); // season 1 is the current season: kept in full
 
-    state.calendar = seasonStartCalendar(3, content);
+    state.calendar = seasonStartCalendar(2, content);
+    const original = cloneJson(state.results[aiId]!);
     compactHistory(state, content);
-    const r = state.results[someId]!;
-    const original = before.results[someId]!;
+    const r = state.results[aiId]!;
     expect(isCompactedResult(r)).toBe(true);
     expect(isCompactedResult(original)).toBe(false);
     expect(r.score).toEqual(original.score);
@@ -238,10 +246,17 @@ describe('result compaction', () => {
     expect(r.input.seed).toBe(original.input.seed);
     expect(r.fighterStats).toEqual({});
     expect(r.rounds[0]).toMatchObject({ winner: 'home', durationTicks: 400, finalHp: [] });
-    expect(Object.keys(state.results)).toHaveLength(Object.keys(before.results).length);
+    if (ownId !== undefined) expect(isCompactedResult(state.results[ownId]!)).toBe(false); // the player's own matches stay in full
+    expect(Object.keys(state.results)).toHaveLength(ids.length);
     const once = cloneJson(state);
     compactHistory(state, content);
     expect(state).toEqual(once);
+
+    state.calendar = seasonStartCalendar(3, content);
+    compactHistory(state, content);
+    expect(Object.keys(state.results)).toHaveLength(0);
+    expect(Object.values(state.fixtures).filter((f) => f.season === 1)).toHaveLength(0);
+    expect(Object.values(state.competitions).filter((c) => c.season === 1)).toHaveLength(0);
   });
 });
 

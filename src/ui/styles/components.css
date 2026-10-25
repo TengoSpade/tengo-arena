@@ -19,7 +19,9 @@
      9  Stat bars             20  Rule sentences and traces
     10  Rating pills          21  Domain blocks (fixture, scoreboard,
     11  Roles, traits            lineup, digest, compare, charts)
-                              22  Callouts and empty states
+                              22  Callouts, outcome banner, empty states
+                              23  Checklist, dense tables, wide columns
+                              24  Title screen and club select shell
    ========================================================================== */
 
 /* ==========================================================================
@@ -881,6 +883,80 @@
   accent-color: var(--c-accent);
 }
 
+/* Option card: a radio (or checkbox) with a name and one sentence; the whole
+   card is the label. The checked state follows the input.
+   <fieldset class="option-group"><legend class="field__label">..</legend>
+     <label class="option-card"><input type="radio" name=".." />
+       <span class="option-card__body"><span class="option-card__name">..</span>
+       <span class="option-card__text">..</span></span></label></fieldset> */
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.option-group > legend {
+  margin-bottom: var(--sp-2);
+}
+
+.option-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--c-surface-0);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+
+.option-card:hover {
+  border-color: var(--c-border-strong);
+}
+
+.option-card:has(input:checked) {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-line);
+}
+
+.option-card:has(input:focus-visible) {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+}
+
+.option-card > input {
+  margin: 0.2rem 0 0;
+  accent-color: var(--c-accent);
+}
+
+.option-card > input:focus-visible {
+  outline: none;
+}
+
+.option-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.option-card__name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: var(--fw-semibold);
+}
+
+.option-card__text {
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+
 /* Toggle switch: <input type="checkbox" class="switch" role="switch"> */
 .switch {
   appearance: none;
@@ -1179,6 +1255,24 @@ a.card:hover {
   transform: translateY(-2px);
 }
 
+/* Choice card: one of a grid of options picked with a click or Enter
+   (club select, class codex). <button class="card card--choice" aria-pressed="true"> */
+.card--choice {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.card--choice:hover {
+  border-color: var(--c-accent-line);
+}
+
+.card--choice[aria-pressed="true"] {
+  border-color: var(--c-accent);
+  box-shadow: inset 0 0 0 1px var(--c-accent), var(--shadow-2);
+}
+
 /* Key-value list: <dl class="kv"><div><dt>..</dt><dd>..</dd></div></dl> */
 .kv {
   display: flex;
@@ -1209,6 +1303,29 @@ a.card:hover {
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
+}
+
+/* Stacked key-value: the label above the value, for values that are long or
+   lists (honours, names). Never overlaps at narrow widths. */
+.kv--stacked > div {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  padding: var(--sp-2) 0;
+}
+
+.kv--stacked dt {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  color: var(--c-text-faint);
+}
+
+.kv--stacked dd {
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
 }
 
 /* Stat tile: label / big value / context line */
@@ -2195,6 +2312,26 @@ a.card:hover {
   opacity: 0.85;
   -webkit-mask-image: var(--i-star-outline);
   mask-image: var(--i-star-outline);
+}
+
+/* Pips: a small n-of-max scale (class complexity). Filled pips read without color too. */
+.pips {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+}
+
+.pips__pip {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--c-text-faint);
+}
+
+.pips__pip--on {
+  background: var(--c-text-muted);
+  border-color: var(--c-text-muted);
 }
 
 /* Recent results: W / L letters carry the meaning; color is secondary */
@@ -3554,6 +3691,97 @@ dialog.modal::backdrop {
 .willing[data-level="3"] .willing__pips > i.is-on { background: var(--c-good); }
 .willing[data-level="1"] .willing__pips > i.is-on { background: var(--c-bad); }
 
+/* ---- Calendar strip (Fixtures) ------------------------------------------------ */
+/* One cell per week, grouped by phase.
+   <div class="cal-strip"><ol class="cal-strip__weeks" style="--cols: 8">
+     <li class="cal-week is-past" data-result="won" aria-current="date">
+       <div class="cal-week__head"><span class="cal-week__id">MW3</span>
+         <span class="cal-week__marks">..</span></div>
+       <div class="cal-week__label">..</div><a class="cal-week__match">..</a></li></ol></div> */
+.cal-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.cal-strip__weeks {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 8), minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cal-strip__legend {
+  margin-top: var(--sp-4);
+}
+
+.cal-week {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  min-height: 5.25rem;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+}
+
+.cal-week.is-past {
+  background: var(--c-surface-1);
+}
+
+.cal-week[aria-current] {
+  border-color: var(--c-accent-line);
+  box-shadow: inset 0 0 0 1px var(--c-accent-line);
+}
+
+.cal-week[data-result="won"] {
+  border-top: 3px solid var(--c-good);
+}
+
+.cal-week[data-result="lost"] {
+  border-top: 3px solid var(--c-border-strong);
+}
+
+.cal-week__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.cal-week__id {
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-week__marks {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-left: auto;
+  color: var(--c-accent-text);
+}
+
+.cal-week__label {
+  min-height: 1em;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.cal-week__match {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  margin-top: auto;
+  font-size: var(--fs-xs);
+  color: var(--c-text);
+}
+
 /* ---- Charts (age curve, trends) ------------------------------------------------ */
 .chart {
   width: 100%;
@@ -3788,6 +4016,52 @@ dialog.modal::backdrop {
   to { background-position: -200% 0; }
 }
 
+/* Outcome banner: a season's result in large type inside a hero panel
+   (season review). data-kind: up | down | level.
+   <div class="outcome" data-kind="up"><span class="outcome__icon">..</span>
+     <div><div class="outcome__title">Promoted to ..</div>
+     <div class="outcome__text">..</div></div></div> */
+.outcome {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6);
+}
+
+.outcome__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  background: var(--c-surface-3);
+  color: var(--c-text-muted);
+}
+
+.outcome[data-kind="up"] .outcome__icon {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-text);
+}
+
+.outcome[data-kind="down"] .outcome__icon {
+  background: var(--c-bad-soft);
+  color: var(--c-bad);
+}
+
+.outcome__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+}
+
+.outcome__text {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+
 /* ==========================================================================
    23  Validation checklist, dense tables, wide-screen columns
    ========================================================================== */
@@ -3948,10 +4222,37 @@ dialog.modal::backdrop {
   }
 }
 
-/* A cell that takes the remaining width and lets its entity truncate. */
+/* Row actions that stay in view while a wide table scrolls sideways. The cell is
+   opaque, so row hover and selection are layered over the panel colour. */
+.data-table .cell-sticky {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--c-surface-1);
+  box-shadow: inset 1px 0 0 var(--c-divider);
+}
+
+.data-table thead .cell-sticky {
+  z-index: calc(var(--z-sticky) + 1);
+  background: var(--c-surface-2);
+}
+
+.data-table tbody tr:hover .cell-sticky {
+  background: var(--c-surface-2);
+}
+
+.data-table tbody tr[aria-selected="true"] .cell-sticky,
+.data-table tbody tr.is-us .cell-sticky {
+  background: linear-gradient(var(--c-accent-soft), var(--c-accent-soft)), var(--c-surface-1);
+}
+
+/* A cell that takes the remaining width and lets its entity truncate. The floor
+   keeps a name readable when a wide screen adds columns (it never collapses to
+   an initial); below it the table scrolls sideways inside .table-wrap. */
 .data-table .cell-fill {
   width: 100%;
   max-width: 0;
+  min-width: var(--cell-fill-min, 9rem);
 }
 
 .data-table .cell-fill .entity {
@@ -4030,4 +4331,77 @@ dialog.modal::backdrop {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   24  Title screen and club select shell (before a career is loaded: no frame)
+   ========================================================================== */
+/* Title screen (flow-state-001): one centred hero panel on the page background. */
+.title-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--sp-8) var(--page-gutter);
+  background: var(--c-bg);
+}
+
+.title-screen__panel {
+  width: min(30rem, 100%);
+  padding: var(--sp-8);
+  gap: var(--sp-6);
+}
+
+.title-screen__head {
+  text-align: center;
+}
+
+.title-screen__title {
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-3xl);
+  line-height: var(--lh-tight);
+}
+
+.title-screen__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.title-screen__latest {
+  margin-top: calc(var(--sp-1) * -1);
+  text-align: center;
+}
+
+.title-screen__advanced {
+  align-self: center;
+}
+
+/* Club select (flow-state-002): a page of choice cards over a sticky action bar. */
+.club-select {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--c-bg);
+}
+
+.club-select__page {
+  flex: 1;
+  width: 100%;
+}
+
+.club-select__bar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  background: var(--c-surface-0);
+  border-top: 1px solid var(--c-border);
+}
+
+.club-select__bar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--sp-3) var(--page-gutter);
 }

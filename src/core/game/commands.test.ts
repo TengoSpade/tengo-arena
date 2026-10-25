@@ -194,6 +194,18 @@ describe('shortlist.toggle and news.markRead', () => {
     expect(apply(withNews, { type: 'news.markRead', newsIds: [asId<NewsId>('n-900')] }).news.at(-1)!.read).toBe(true);
     expect(code(withNews, { type: 'news.markRead', newsIds: [asId<NewsId>('n-1234')] })).toBe('news.unknown');
   });
+
+  it('news.setRead marks read and back to unread (Undo); one unknown id refuses the whole command', () => {
+    const withNews = cloneJson(base);
+    for (const n of [900, 901]) withNews.news.push({ id: asId<NewsId>(`n-${n}`), at: { season: 1, weekIndex: 1 }, key: 'x', params: {}, clubId: null, refs: {}, importance: 'info', read: false });
+    withNews.ids.news = 902;
+    const ids = [asId<NewsId>('n-900'), asId<NewsId>('n-901')];
+    const read = apply(withNews, { type: 'news.setRead', newsIds: ids, read: true });
+    expect(read.news.slice(-2).map((n) => n.read)).toEqual([true, true]);
+    const undone = apply(read, { type: 'news.setRead', newsIds: [ids[1]!], read: false });
+    expect(undone.news.slice(-2).map((n) => n.read)).toEqual([true, false]);
+    expect(code(read, { type: 'news.setRead', newsIds: [ids[0]!, asId<NewsId>('n-1234')], read: false })).toBe('news.unknown');
+  });
 });
 
 describe('one rulebook', () => {

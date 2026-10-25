@@ -35,3 +35,14 @@
 .finance-swatch--dashed {
   background: repeating-linear-gradient(90deg, var(--c-chart-line) 0 3px, transparent 3px 5px);
 }
+
+/* Hover targets on the projected weeks of the balance chart (one tooltip per week). */
+.finance-chart .chart__hit {
+  fill: transparent;
+  cursor: help;
+}
+
+.finance-chart .chart__hit:hover {
+  fill: var(--c-chart-line);
+  fill-opacity: 0.35;
+}

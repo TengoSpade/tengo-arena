@@ -87,6 +87,18 @@ export interface MarketRow {
   pending: { wagePerWeek: number; seasons: number } | null;
   shortlisted: boolean;
   negativeTraits: number;
+  /** Entered the pool at the last week processing or since (FreeAgency.enteredAt). */
+  isNew: boolean;
+}
+
+/**
+ * "New this week": entered the free-agent pool at the last week processing or during this week.
+ * The starting pool is stamped season 1 week 1 at world creation, so that stamp never counts as new.
+ */
+export function isNewAgent(fighter: Fighter, state: GameState): boolean {
+  const at = fighter.freeAgency?.enteredAt;
+  if (!at || (at.season === 1 && at.weekIndex === 1)) return false;
+  return at.season === state.calendar.season && at.weekIndex >= state.calendar.weekIndex - 1;
 }
 
 export function marketRow(engine: Wp7Engine, state: GameState, content: ContentDB, m: ClubMarket, fighter: Fighter, kind: OfferKind = 'free-agent'): MarketRow {
@@ -123,6 +135,7 @@ export function marketRow(engine: Wp7Engine, state: GameState, content: ContentD
     pending: own ? { wagePerWeek: own.wagePerWeek, seasons: own.seasons } : null,
     shortlisted: state.clubs[m.clubId]?.shortlist.includes(fighter.id) ?? false,
     negativeTraits: fighter.traits.filter((tr) => content.traits.get(tr.id)?.polarity === 'negative').length,
+    isNew: isNewAgent(fighter, state),
   };
 }
 

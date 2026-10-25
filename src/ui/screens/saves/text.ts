@@ -9,6 +9,7 @@ export const SAVES_TEXT = {
   'meta.autoOff': 'Autosave is off (Settings)',
   'save': 'Save',
   'saveTip': 'Save to {slot} (Ctrl S)',
+  'saveTipChoose': 'This career has no save slot yet: choose one (Save as)',
   'saveNew': 'Save to a new slot (Ctrl S)',
   'saveAs': 'Save as…',
   'import': 'Import',

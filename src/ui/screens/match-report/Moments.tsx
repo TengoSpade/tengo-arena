@@ -12,6 +12,7 @@ import { fmtInt, fmtMoney, fmtTicks } from '../league/lib/format';
 import { href } from '../league/lib/store';
 import { Callout, Delta } from '../league/lib/ui';
 import { downSummaries, name, type FighterInfo, type Moment, type Perspective } from './analysis';
+import { isCareerEnding, weeksOutText } from '../../format/fighter';
 import { t } from './text';
 
 export function Moments({
@@ -200,13 +201,13 @@ export function Aftermath({
           injuries.map((i) => {
             const f = state.fighters[i.fighterId];
             const inj = f?.injury?.fixtureId === report.fixtureId ? f.injury : null;
-            const back = weekLong(content, weekIndex + i.weeksOut + 1, state.clubs[persp.usClubId]?.tierId ?? null);
+            const back = isCareerEnding(i) ? '' : weekLong(content, weekIndex + i.weeksOut + 1, state.clubs[persp.usClubId]?.tierId ?? null);
             return (
               <Callout
                 key={i.fighterId}
                 kind="bad"
                 icon="injury"
-                title={t('after.injury', { name: name(state, i.fighterId), severity: sevLabel(i.severity).toLowerCase(), weeks: t('after.weeks', { n: i.weeksOut }) })}
+                title={t('after.injury', { name: name(state, i.fighterId), severity: sevLabel(i.severity).toLowerCase(), weeks: weeksOutText(i) })}
               >
                 {inj && inj.round != null
                   ? t('after.injuryText', {
@@ -214,8 +215,10 @@ export function Aftermath({
                       pct: Math.round(inj.damageBp / 100),
                       by: inj.causeFighterId ? t('after.injuryBy', { by: name(state, inj.causeFighterId) }) : '',
                       back,
-                    })
-                  : t('after.injuryTextShort', { back })}
+                    }).replace(/ Back for \.$/, ` ${t('after.careerOver')}`)
+                  : back
+                    ? t('after.injuryTextShort', { back })
+                    : t('after.careerOver')}
               </Callout>
             );
           })

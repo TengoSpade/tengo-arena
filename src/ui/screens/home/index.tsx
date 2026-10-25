@@ -10,10 +10,12 @@ import type { ContentDB } from '../../../core/content';
 import type { Club, ClubId, Fighter, Fixture, GameState, StandingRow } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
+import { quickSaveOrAsk } from '../../app/save-intent';
 import { useShortcuts } from '../../app/shortcuts';
 import {
   CapMeter,
   Crest,
+  crestLetters,
   DataTable,
   Delta,
   Empty,
@@ -34,8 +36,8 @@ import {
 } from '../../components';
 import { formatInt, formatMoney, formatPercent, formatSigned, ordinal } from '../../format';
 import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
-import { contractEnds, injuryLabel, injuryTip, rolesOf } from '../../format/fighter';
-import { slotName, useStore, type AppStore } from '../../store';
+import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
+import { useStore, type AppStore } from '../../store';
 import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf, usePlayerClub, type ClubContext } from '../../store/views';
@@ -45,8 +47,6 @@ import './home.css';
 
 type DigestTab = 'all' | 'action' | 'results' | 'squad' | 'market';
 const digestTab = signal<DigestTab>('all');
-/** Items marked done this session but restored with Undo (no "mark unread" command in M1). */
-const restored = signal<ReadonlySet<string>>(new Set());
 
 export default function HomeScreen(_props: ScreenProps) {
   const store = useStore() as AppStore;
@@ -97,10 +97,7 @@ export default function HomeScreen(_props: ScreenProps) {
             <button
               class="btn btn--ghost"
               type="button"
-              onClick={async () => {
-                const res = await store.quickSave?.();
-                if (res?.ok) showToast({ title: t('save.saved', { slot: slotName(res.value.slotId) }), sub: res.value.label, kind: 'good' });
-              }}
+              onClick={() => void quickSaveOrAsk(store)}
             >
               <Icon name="save" />
               {T.save} <kbd>Ctrl S</kbd>
@@ -226,7 +223,7 @@ function FixtureHero({ ctx, fixture, engine }: { ctx: ClubContext; fixture: Fixt
     >
       <div class="fixture">
         <div class="fixture__side">
-          <Crest primary={club.colors.primary} secondary={club.colors.secondary} code={club.code} size="xl" />
+          <Crest primary={club.colors.primary} secondary={club.colors.secondary} code={crestLetters(club)} size="xl" />
           <div class="fixture__club">
             <span class="fixture__name">{club.name}</span>
             <span class="fixture__record" tabIndex={0} {...tipAttrs(ours.tip)}>
@@ -241,7 +238,7 @@ function FixtureHero({ ctx, fixture, engine }: { ctx: ClubContext; fixture: Fixt
           <span class="fixture__venue">{venue}</span>
         </div>
         <div class="fixture__side fixture__side--away">
-          <Crest primary={other.colors.primary} secondary={other.colors.secondary} code={other.code} size="xl" />
+          <Crest primary={other.colors.primary} secondary={other.colors.secondary} code={crestLetters(other)} size="xl" />
           <div class="fixture__club">
             <span class="fixture__name">{other.name}</span>
             <span class="fixture__record" tabIndex={0} {...tipAttrs(theirs.tip)}>
@@ -301,7 +298,9 @@ function LineupTile({ ctx, club, label, ours }: { ctx: ClubContext; club: Club; 
       {ours ? (
         <span class="stat-tile__sub">
           {blockers.length === 0 ? <span class="u-good">{T.ready}</span> : <span class="u-warn">{T.notReady}</span>}
-          {injuredReserve ? ` · ${injuredReserve.name.full}: ${injuryLabel(injuredReserve.injury!, content)}` : ''}
+          {injuredReserve
+            ? ` · ${format(T.outInjured, { name: injuredReserve.name.full, injury: injuryLabel(injuredReserve.injury!, content).toLowerCase(), weeks: weeksOutText(injuredReserve.injury!) })}`
+            : ''}
         </span>
       ) : (
         <span class="stat-tile__sub" {...tipAttrs(T.theirLineupTip)}>
@@ -355,7 +354,13 @@ function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const bill = ctx.finance?.wageBill ?? ctx.wageBill ?? 0;
   const budget = ctx.finance?.wageBudgetPerWeek ?? 0;
   return (
-    <Panel hero title={T.preseasonTitle} icon="calendar-check" subtitle={format(T.preseasonSub, { week: weekName(content, week.index, tier) })} testId="preseason-checklist">
+    <Panel
+      hero
+      title={state.calendar.phase === 'preseason' ? T.preseasonTitle : T.weekChecklistTitle}
+      icon="calendar-check"
+      subtitle={format(T.preseasonSub, { week: weekName(content, week.index, tier) })}
+      testId="preseason-checklist"
+    >
       <ul class="checklist" role="list">
         <li data-state={budget > 0 && bill > budget ? 'bad' : undefined}>
           {format(T.checkBudget, { bill: formatMoney(bill, { perWeek: true }), budget: formatMoney(budget, { perWeek: true }) })}
@@ -403,23 +408,15 @@ function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const tab = digestTab.value;
   const shown = items.filter((d) => inTab(d, tab));
   const action = needsActionCount(items);
-  const isDone = (d: DigestItem) => d.newsIds.length > 0 && !d.unread && !restored.value.has(d.id);
-  const markDone = (d: DigestItem) => {
-    if (d.newsIds.length === 0) return;
-    const res = store.dispatch({ type: 'news.markRead', newsIds: d.newsIds });
+  const isDone = (d: DigestItem) => d.newsIds.length > 0 && !d.unread;
+  // The read flag is game state (news.setRead), so Undo is a real command and survives a save.
+  const setRead = (newsIds: DigestItem['newsIds'], title: string, sub?: string) => {
+    if (newsIds.length === 0) return;
+    const res = store.dispatch({ type: 'news.setRead', newsIds: [...newsIds], read: true });
     if (!res.ok) return;
-    const next = new Set(restored.value);
-    next.delete(d.id);
-    restored.value = next;
-    showToast({
-      title: T.markedDone,
-      sub: d.title,
-      kind: 'good',
-      undo: () => {
-        restored.value = new Set([...restored.value, d.id]);
-      },
-    });
+    showToast({ title, sub, kind: 'good', undo: () => void store.dispatch({ type: 'news.setRead', newsIds: [...newsIds], read: false }) });
   };
+  const markDone = (d: DigestItem) => setRead(d.newsIds, T.markedDone, d.title);
   const unreadIds = items.filter((d) => d.unread).flatMap((d) => d.newsIds);
   return (
     <Panel
@@ -434,7 +431,7 @@ function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
           class="btn btn--sm btn--ghost"
           type="button"
           aria-disabled={unreadIds.length === 0 ? 'true' : undefined}
-          onClick={() => unreadIds.length > 0 && store.dispatch({ type: 'news.markRead', newsIds: unreadIds })}
+          onClick={() => setRead(unreadIds, format(T.markedAll, { n: items.filter((d) => d.unread).length }))}
         >
           {T.markAllRead}
         </button>
@@ -530,6 +527,7 @@ function ClubPanel({ ctx }: { ctx: ClubContext }) {
   const room = budget - bill - pending;
   const share = budget > 0 ? bill / budget : 0;
   const free = ctx.rosterCap - roster.length;
+  const thisWeek = finance?.weeklyProjection?.[0] ?? null;
   return (
     <Panel
       title={T.club}
@@ -551,20 +549,44 @@ function ClubPanel({ ctx }: { ctx: ClubContext }) {
           <span class="stat-tile__sub">
             {lastWeekNet !== 0 ? (
               <>
-                <Delta value={lastWeekNet} /> {T.lastWeek}
+                <Delta value={lastWeekNet} format={(n) => formatMoney(n)} /> {T.lastWeek}
               </>
             ) : (
-              `${formatSigned(0)} ${T.lastWeek}`
+              `${formatMoney(0)} ${T.lastWeek}`
             )}
           </span>
         </div>
-        <div class="stat-tile" tabIndex={0} {...tipAttrs(T.projectedTip)}>
-          <span class="stat-tile__label">{T.projected}</span>
-          <span class="stat-tile__value">
-            {finance ? formatInt(finance.projectedSeasonEndBalance) : '—'} <small>{currencyUnit()}</small>
-          </span>
-          <span class="stat-tile__sub">{T.projectedSub}</span>
-        </div>
+        {thisWeek ? (
+          // The mockup's "This week": what this week's processing is expected to book (core weeklyProjection).
+          <div
+            class="stat-tile"
+            tabIndex={0}
+            {...tipAttrs({
+              kicker: T.thisWeek,
+              title: formatMoney(thisWeek.net, { signed: true }),
+              rows: [
+                { label: T.thisWeekIncome, value: formatMoney(thisWeek.income) },
+                { label: T.thisWeekCosts, value: formatMoney(-thisWeek.costs) },
+                { label: T.thisWeekAfter, value: formatMoney(thisWeek.balance), total: true },
+              ],
+              meta: format(T.thisWeekSeasonEnd, { balance: formatMoney(finance!.projectedSeasonEndBalance) }),
+            })}
+          >
+            <span class="stat-tile__label">{T.thisWeek}</span>
+            <span class={thisWeek.net < 0 ? 'stat-tile__value u-bad' : 'stat-tile__value'}>
+              {formatSigned(thisWeek.net)} <small>{currencyUnit()}</small>
+            </span>
+            <span class="stat-tile__sub">{format(T.thisWeekSub, { balance: formatInt(finance!.projectedSeasonEndBalance) })}</span>
+          </div>
+        ) : (
+          <div class="stat-tile" tabIndex={0} {...tipAttrs(T.projectedTip)}>
+            <span class="stat-tile__label">{T.projected}</span>
+            <span class="stat-tile__value">
+              {finance ? formatInt(finance.projectedSeasonEndBalance) : '—'} <small>{currencyUnit()}</small>
+            </span>
+            <span class="stat-tile__sub">{T.projectedSub}</span>
+          </div>
+        )}
       </div>
       <div class="l-stack l-stack--xs" tabIndex={0} {...tipAttrs(T.wageRoomTip)}>
         <div class="l-row u-sm">
@@ -593,7 +615,8 @@ function currencyUnit(): string {
 
 function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
   const { state, content, roster, engine } = ctx;
-  const injured = roster.filter((f) => f.injury && f.injury.weeksOut > 0);
+  const out = (f: Fighter) => !!f.injury && f.injury.weeksOut > 0;
+  const injured = roster.filter(out);
   const ending = roster.filter((f) => !injured.includes(f) && contractEnds(f.contract, state.calendar.season).final);
   const list = [...injured, ...ending];
   const role = (f: Fighter) => rolesOf(content.classes.require(f.classId))[0];
@@ -614,22 +637,29 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
             {list.map((f) => (
               <tr key={f.id}>
                 <td class="cell-fill">
-                  <FighterName name={f.name.full} href={`#/fighter/${f.id}`} role={role(f)} race={f.raceId} injured={!!f.injury} />
+                  {/* The status sits under the name so the side column never truncates both. */}
+                  <FighterName
+                    name={f.name.full}
+                    href={`#/fighter/${f.id}`}
+                    role={role(f)}
+                    race={f.raceId}
+                    injured={out(f)}
+                    sub={
+                      f.injury && out(f) ? (
+                        <span class="u-bad" {...tipAttrs(injuryTip(f.injury, content))}>
+                          <Icon name="injury" size="sm" /> {injuryLabel(f.injury, content)}
+                        </span>
+                      ) : (
+                        <span class="u-warn" {...tipAttrs(T.expiresTip)}>
+                          <Icon name="contract" size="sm" /> {format(T.expires, { season: f.contract?.endSeason ?? state.calendar.season })}
+                        </span>
+                      )
+                    }
+                  />
                 </td>
-                <td>
-                  {f.injury ? (
-                    <Tag kind="bad" icon="injury" tip={injuryTip(f.injury, content)}>
-                      {injuryLabel(f.injury, content)}
-                    </Tag>
-                  ) : (
-                    <Tag kind="warn" icon="contract" tip={T.expiresTip}>
-                      {format(T.expires, { season: f.contract?.endSeason ?? state.calendar.season })}
-                    </Tag>
-                  )}
-                </td>
-                <td class={`cell-num${f.injury ? '' : ' u-muted'}`}>
-                  {f.injury ? (
-                    <span {...tipAttrs(format(T.backFor, { n: f.injury.weeksOut }))}>{formatInt(f.injury.weeksOut)} wk</span>
+                <td class={`cell-num${out(f) ? '' : ' u-muted'}`}>
+                  {f.injury && out(f) ? (
+                    <span {...tipAttrs(isCareerEnding(f.injury) ? injuryTip(f.injury, content) : format(T.backFor, { weeks: weeksOutText(f.injury) }))}>{weeksOutText(f.injury)}</span>
                   ) : (
                     <span {...tipAttrs(fighterViewOf(engine, state, content, f.id) ? `Wage ${formatMoney(f.contract?.wagePerWeek ?? 0, { perWeek: true })}` : null)}>
                       {formatMoney(f.contract?.wagePerWeek ?? 0)}

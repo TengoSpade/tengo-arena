@@ -5,7 +5,7 @@
  * No game logic: callers pass content-derived values.
  */
 import type { ComponentChildren, JSX } from 'preact';
-import { potentialStars, ratingBand, starsLabel } from '../format';
+import { formatInt, potentialStars, ratingBand, starsLabel } from '../format';
 import { t } from '../text';
 import { Icon, type IconName } from './Icon';
 import { tipAttrs, type Tip } from './Tooltip';
@@ -24,6 +24,17 @@ export function luminance(hex: string): number {
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * ch[0]! + 0.7152 * ch[1]! + 0.0722 * ch[2]!;
+}
+
+/**
+ * The crest's two letters (04 asset-002: "a 2-letter code in the display
+ * face"): the initials of the first two words of the club name, else the
+ * first two letters of the clubs.json code. One rule for every screen.
+ */
+export function crestLetters(club: { name: string; code: string }): string {
+  const words = club.name.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w));
+  if (words.length >= 2) return (words[0]![0]! + words[1]![0]!).toUpperCase();
+  return club.code.slice(0, 2).toUpperCase();
 }
 
 export interface CrestProps {
@@ -250,12 +261,27 @@ export function FormStrip({ results, label }: { results: readonly { r: 'W' | 'L'
 }
 
 /** Signed change with an arrow; the number is shown without its sign (the arrow carries it). */
-export function Delta({ value, tip }: { value: number; tip?: Tip }) {
+/**
+ * A signed change with an arrow. `format` renders the magnitude (default: grouped integer), so money
+ * deltas read "▲ 7,000 ts" rather than a raw number.
+ */
+export function Delta({ value, tip, format = formatInt }: { value: number; tip?: Tip; format?: (abs: number) => string }) {
   const kind = value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
   return (
     <span class={`delta delta--${kind}`} {...tipAttrs(tip)}>
       <span class="u-sr-only">{value > 0 ? '+' : value < 0 ? '−' : ''}</span>
-      {Math.abs(value)}
+      {format(Math.abs(value))}
+    </span>
+  );
+}
+
+/** n of max as pips (class complexity): the label carries the number for screen readers and the tip. */
+export function Pips({ value, max, label, tip }: { value: number; max: number; label: string; tip?: Tip }) {
+  return (
+    <span class="pips" role="img" aria-label={label} tabIndex={tip ? 0 : undefined} {...tipAttrs(tip ?? label)}>
+      {Array.from({ length: max }, (_, i) => (
+        <span key={i} class={i < value ? 'pips__pip pips__pip--on' : 'pips__pip'} />
+      ))}
     </span>
   );
 }

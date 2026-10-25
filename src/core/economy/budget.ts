@@ -7,7 +7,7 @@
  * here equal the values fixed at setup for the whole season.
  */
 import type { ContentDB } from '../content';
-import type { Club, ClubId, Fixture, GameState, MatchResult } from '../model';
+import { clubResults, type Club, type ClubId, type Fixture, type GameState, type MatchResult } from '../model';
 import { clamp } from '../util';
 import { ledgerSum } from './ledger';
 import { divTrunc, mulDiv } from './math';
@@ -69,9 +69,8 @@ export function projectedRegularGate(club: Club, content: ContentDB): number {
 export function formBefore(state: GameState, clubId: ClubId, season: number, beforeWeekIndex: number): { wins: number; matches: number } {
   let wins = 0;
   let matches = 0;
-  for (const r of Object.values(state.results)) {
-    if (r.season !== season || r.weekIndex >= beforeWeekIndex) continue;
-    if (r.homeClubId !== clubId && r.awayClubId !== clubId) continue;
+  for (const r of clubResults(state, season, clubId)) {
+    if (r.weekIndex >= beforeWeekIndex) continue;
     matches += 1;
     if (r.winnerClubId === clubId) wins += 1;
   }

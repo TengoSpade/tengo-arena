@@ -9,6 +9,8 @@ import type { ClubId, FighterId, GameState } from '../../core/model';
 import { installShortcuts } from '../app/shortcuts';
 import { readTip, resetToasts, toasts, undoLast } from '../components';
 import { TestProviders, createTestStore } from '../debug/test-store';
+import { formatMoney } from '../format';
+import { coreEngine } from '../store/engine';
 import ClubSelectScreen from './club-select';
 import CodexScreen from './codex';
 import FighterScreen from './fighter';
@@ -52,6 +54,28 @@ describe('Squad', () => {
     const table = screen.getByTestId('roster-table');
     expect(table.querySelectorAll('tbody tr')).toHaveLength(roster.length);
     expect(screen.getByText(/5 of 5 places filled|of 5 places filled/)).toBeTruthy();
+  });
+
+  it('says the five are not all fit when an injured fighter is in the lineup', () => {
+    const { store } = createTestStore();
+    const state = structuredClone(store.game.value!);
+    const c = club(state);
+    const hurt = state.fighters[c.lineup.fighters[0]!.fighterId]!;
+    hurt.injury = { severity: 'minor', weeksOut: 2, fixtureId: null, round: null, causeFighterId: null, damageBp: 0, since: { season: state.calendar.season, weekIndex: state.calendar.weekIndex } };
+    store.replaceWorld(state);
+    mount(<SquadScreen params={{}} />, store);
+    const check = document.querySelector('.lineup-check')!;
+    expect(check.textContent).toContain('All 5 places filled, but 1 fighter is unfit');
+    expect(check.textContent).not.toContain('5 of 5 places filled');
+    expect(check.textContent).toContain(`${hurt.name.full} is injured and cannot play`);
+    // One click brings in the best fit reserve in his place.
+    const button = check.querySelector<HTMLButtonElement>('[data-testid^="bring-in-"]')!;
+    expect(button.textContent).toMatch(/^Bring in /);
+    fireEvent.click(button);
+    const after = club(store.game.value!).lineup.fighters;
+    expect(after).toHaveLength(5);
+    expect(after.some((e) => e.fighterId === hurt.id)).toBe(false);
+    expect(after.some((e) => e.fighterId === button.dataset['testid']!.replace('bring-in-', ''))).toBe(true);
   });
 
   it('moves a reserve into the lineup with F and undoes it with Ctrl Z', async () => {
@@ -145,6 +169,23 @@ describe('Home', () => {
     expect(screen.queryByTestId('next-fixture')).toBeNull();
   });
 
+  it('marks a digest item done through news.setRead and Undo makes it unread again', async () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    mount(<HomeScreen params={{}} />, store);
+    const done = within(screen.getByTestId('digest')).queryAllByRole('button', { name: 'Mark done' });
+    expect(done.length).toBeGreaterThan(0);
+    const unread = () => store.game.value!.news.filter((n) => !n.read).length;
+    const before = unread();
+    await act(() => {
+      fireEvent.click(done[0]!);
+    });
+    expect(unread()).toBeLessThan(before);
+    await act(() => {
+      undoLast();
+    });
+    expect(unread()).toBe(before);
+  });
+
   it('gives every number on the screen a tooltip (ux-004)', () => {
     const { store } = createTestStore({ weekIndex: 11 });
     const { container } = mount(<HomeScreen params={{}} />, store);
@@ -193,6 +234,12 @@ describe('Fighter profile', () => {
     const dialog = screen.getByTestId('release-dialog');
     expect(dialog.textContent).toContain('Roster after');
     expect(dialog.textContent).toContain('A release cannot be undone.');
+    // The payout is stated in money before the player confirms, with the balance it leaves.
+    const state = store.game.value!;
+    const payout = coreEngine.releasePayout(state, club(state).id, id, store.content.value!);
+    expect(dialog.textContent).toContain(`Release payout${formatMoney(payout)}`);
+    expect(dialog.textContent).toContain(`Balance after${formatMoney(club(state).finance.balance - payout)}`);
+    expect(dialog.textContent).not.toContain('.json');
   });
 
   it('shows a not-found state for an unknown id', () => {

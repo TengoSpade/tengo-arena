@@ -9,7 +9,7 @@ import { useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
 import type { ContentDB } from '../../../core/content';
 import type { FinanceView } from '../../../core/economy';
-import { LEDGER_CATEGORIES, type Fighter, type GameState, type LedgerCategory, type LedgerEntry } from '../../../core/model';
+import { LEDGER_CATEGORIES, personName, type Fighter, type GameState, type LedgerCategory, type LedgerEntry } from '../../../core/model';
 import { DataTable, Meter, PageHeader, Panel, Tag, type Column } from '../../components';
 import { weekShort } from '../league/lib/calendar';
 import { clubShort } from '../league/lib/club';
@@ -20,8 +20,10 @@ import { useCareer, type Career } from '../league/lib/store';
 import { Callout, Empty, FighterLink, NoCareer, Portrait, Segmented, Unavailable } from '../league/lib/ui';
 import { tryView } from '../league/lib/views';
 import { BalanceChart, WeeklyChart, type WeekMoney } from './Charts';
-import { t } from './text';
+import { FINANCE_TEXT, t } from './text';
 import './finances.css';
+
+type FinanceKey = keyof typeof FINANCE_TEXT;
 
 export default function FinancesScreen(_props: ScreenProps) {
   const career = useCareer();
@@ -167,7 +169,11 @@ function FinanceBody({
           <div class="stat-tile" data-tip={t('tip.projected')} tabIndex={0}>
             <span class="stat-tile__label">{t('tile.projected')}</span>
             <span class={view.projectedSeasonEndBalance < 0 ? 'stat-tile__value u-bad' : 'stat-tile__value'}>{fmtMoney(view.projectedSeasonEndBalance, content)}</span>
-            <span class="stat-tile__sub">{t('tile.projectedSub')}</span>
+            <span class="stat-tile__sub">
+              {view.weeklyProjection?.[0]
+                ? t('tile.projectedThisWeek', { week: view.weeklyProjection[0].weekId, net: fmtMoney(view.weeklyProjection[0].net, content, { signed: true }) })
+                : t('tile.projectedSub')}
+            </span>
           </div>
         </div>
       </Panel>
@@ -175,12 +181,19 @@ function FinanceBody({
       <div class="l-grid">
         <Panel title={t('budget.title')} icon="coins" subtitle={t('budget.subtitle')} class="span-6 span-4@wide" testId="finance-budget">
           <dl class="kv">
-            {view.seasonBudgetParts.map((p) => (
-              <div key={p.label}>
-                <dt>{p.label}</dt>
-                <dd>{fmtMoney(p.amount, content)}</dd>
-              </div>
-            ))}
+            {view.seasonBudgetParts
+              // Parachute and promotion grant only apply after a tier move: hide them at zero.
+              .filter((p) => p.amount !== 0 || !OPTIONAL_PARTS.has(p.label))
+              .map((p) => (
+                <div key={p.label}>
+                  <dt>
+                    <span class="term" tabIndex={0} data-tip={partTip(p.label)}>
+                      {partLabel(p.label)}
+                    </span>
+                  </dt>
+                  <dd>{fmtMoney(p.amount, content)}</dd>
+                </div>
+              ))}
             <div class="finance-total">
               <dt>{t('budget.total')}</dt>
               <dd>{fmtMoney(view.seasonBudget || sbTotal, content)}</dd>
@@ -271,7 +284,7 @@ function FinanceBody({
             </span>
           }
         >
-          <BalanceChart content={content} weeks={weeks} opening={opening} projected={view.projectedSeasonEndBalance} markers={markers} />
+          <BalanceChart content={content} weeks={weeks} opening={opening} projected={view.projectedSeasonEndBalance} projection={view.weeklyProjection ?? []} markers={markers} />
         </Panel>
 
         <Ledger game={game} content={content} entries={entries} opening={opening} />
@@ -357,7 +370,7 @@ function Ledger({ game, content, entries, opening }: { game: GameState; content:
   const used = LEDGER_CATEGORIES.filter((c) => entries.some((e) => e.category === c));
   const itemOf = (e: LedgerEntry) => {
     const parts: string[] = [categoryName(e.category)];
-    if (e.fighterId) parts.push(game.fighters[e.fighterId]?.name.full ?? e.fighterId);
+    if (e.fighterId) parts.push(personName(game, e.fighterId)?.full ?? e.fighterId);
     if (e.fixtureId) {
       const f = game.fixtures[e.fixtureId];
       if (f) parts.push(t('ledger.vs', { club: clubShort(game, f.homeClubId === e.clubId ? f.awayClubId : f.homeClubId) }));
@@ -427,3 +440,20 @@ function Ledger({ game, content, entries, opening }: { game: GameState; content:
     </Panel>
   );
 }
+
+/** Season-budget parts that are zero for most clubs most seasons. */
+const OPTIONAL_PARTS = new Set(['parachute', 'promotionGrant']);
+
+/** Core part ids ("centralGrant") to their copy; an unknown id still reads as words. */
+function partLabel(id: string): string {
+  const key = `part.${id}` as const;
+  if (key in FINANCE_TEXT) return t(key as FinanceKey);
+  // An id we have no copy for ("someNewPart") still reads as words; a label that is already prose stays.
+  return /^[a-z][A-Za-z]*$/.test(id) ? id.replace(/([A-Z])/g, ' $1').toLowerCase().replace(/^./, (c) => c.toUpperCase()) : id;
+}
+
+function partTip(id: string): string | undefined {
+  const key = `part.${id}.tip`;
+  return key in FINANCE_TEXT ? t(key as FinanceKey) : undefined;
+}
+

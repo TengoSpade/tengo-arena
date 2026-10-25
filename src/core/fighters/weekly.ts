@@ -94,37 +94,111 @@ export function lockLineup(draft: GameState, clubId: ClubId, content: ContentDB)
   return news;
 }
 
-function evaluateCaptainChange(draft: GameState, club: Club, previousId: FighterId, content: ContentDB): NewsId[] {
-  const news: NewsId[] = [];
-  const t = now(draft);
-  const prev = draft.fighters[previousId];
+/** Why a replaced club captain is not Snubbed (or null when he is). */
+export type SnubExemption = 'preseason' | 'injured' | 'final-season' | 'made-vice' | 'short-tenure' | 'not-at-club';
+
+export interface CaptainChangeConsequences {
+  /** The replaced captain who gets Snubbed at the next lineup lock, if any. */
+  snubbedId: FighterId | null;
+  /** Why the replaced captain is spared, when there is one and he is not Snubbed. */
+  snubExemption: SnubExemption | null;
+  /** Club-mates who get Passed Over. */
+  passedOverIds: FighterId[];
+}
+
+/** Whether replacing previousId Snubs him at a lineup lock in the current week (pure). */
+export function snubOutcome(
+  state: GameState,
+  clubId: ClubId,
+  previousId: FighterId | null,
+  captainId: FighterId | null,
+  viceId: FighterId | null,
+  captainSince: { season: number; weekIndex: number } | null,
+  content: ContentDB,
+): { snubbedId: FighterId | null; snubExemption: SnubExemption | null } {
+  if (previousId === null || previousId === captainId) return { snubbedId: null, snubExemption: null };
+  const t = now(state);
+  const prev = state.fighters[previousId];
   // "Change made before MW1": at the season's first match lock every change since the
   // previous lock happened in the off-season or preseason.
   const firstMatchweek = tables(content).matchweekIndexes[0];
-  const preseason = draft.calendar.phase === 'preseason' || draft.calendar.weekIndex === firstMatchweek;
+  const preseason = state.calendar.phase === 'preseason' || state.calendar.weekIndex === firstMatchweek;
   // Snubbed: the previous captain, still at the club and fit, who held the role >= 4 matchweeks, unless exempt.
-  if (prev && atClub(prev, club.id) && isFitFighter(prev) && club.captainSince) {
-    const held = matchweeksBetween(club.captainSince, t, content);
+  if (prev && atClub(prev, clubId) && isFitFighter(prev) && captainSince) {
+    const held = matchweeksBetween(captainSince, t, content);
     const injuredLong = prev.injury !== null && prev.injury.weeksOut >= PROVISIONAL_STRIP_INJURY_EXEMPT_WEEKS;
-    const exempt = injuredLong || prev.finalSeason || preseason || club.viceCaptainId === prev.id;
-    if (held >= PROVISIONAL_STRIP_MIN_MATCHWEEKS && !exempt) {
-      setStatus(prev, content.development.captaincy.strip.penaltyStatus || SNUBBED, PROVISIONAL_SNUBBED_WEEKS, t);
-      news.push(pushNews(draft, { key: 'captaincy.snubbed', clubId: club.id, fighterId: prev.id, importance: 'notable' }));
-    }
+    const exemption: SnubExemption | null = injuredLong
+      ? 'injured'
+      : prev.finalSeason
+        ? 'final-season'
+        : preseason
+          ? 'preseason'
+          : viceId === prev.id
+            ? 'made-vice'
+            : held < PROVISIONAL_STRIP_MIN_MATCHWEEKS
+              ? 'short-tenure'
+              : null;
+    return exemption === null ? { snubbedId: prev.id, snubExemption: null } : { snubbedId: null, snubExemption: exemption };
   }
-  // Passed Over: fit club-mates with human-age >= 30 and CQ >= new captain's CQ + 15, not vice-captain.
-  const newCaptain = club.captainId ? draft.fighters[club.captainId] : undefined;
-  if (newCaptain) {
-    const po = content.development.captaincy.passedOver;
-    const mean = topFiveMean(draft, club.id, content);
-    const newCq = captaincyBreakdown(newCaptain, content, mean).cq;
-    for (const f of clubFighters(draft, club.id)) {
-      if (f.id === newCaptain.id || f.id === club.viceCaptainId || !isFitFighter(f)) continue;
-      if (fighterHumanAge100(f, content) < po.minHumanAge * 100) continue;
-      if (captaincyBreakdown(f, content, mean).cq < newCq + po.cqGap) continue;
-      setStatus(f, po.status || PASSED_OVER, PROVISIONAL_PASSED_OVER_WEEKS, t);
-      news.push(pushNews(draft, { key: 'captaincy.passed_over', clubId: club.id, fighterId: f.id }));
-    }
+  return { snubbedId: null, snubExemption: prev ? 'not-at-club' : null };
+}
+
+/** Passed Over: fit club-mates with human-age >= 30 and CQ >= new captain's CQ + 15, not vice-captain (pure). */
+export function passedOverIds(state: GameState, clubId: ClubId, captainId: FighterId | null, viceId: FighterId | null, content: ContentDB): FighterId[] {
+  const out: FighterId[] = [];
+  const newCaptain = captainId ? state.fighters[captainId] : undefined;
+  if (!newCaptain) return out;
+  const po = content.development.captaincy.passedOver;
+  const mean = topFiveMean(state, clubId, content);
+  const newCq = captaincyBreakdown(newCaptain, content, mean).cq;
+  for (const f of clubFighters(state, clubId)) {
+    if (f.id === newCaptain.id || f.id === viceId || !isFitFighter(f)) continue;
+    if (fighterHumanAge100(f, content) < po.minHumanAge * 100) continue;
+    if (captaincyBreakdown(f, content, mean).cq < newCq + po.cqGap) continue;
+    out.push(f.id);
+  }
+  return out;
+}
+
+/**
+ * The status consequences of replacing previousId by captainId (vice viceId)
+ * at a lineup lock in the current week, exactly as lockLineup applies them
+ * (Snubbed first, then Passed Over with the Snubbed status in place). Pure:
+ * the captaincy preview (core/game) shows them before the player commits.
+ */
+export function captainChangeConsequences(
+  state: GameState,
+  clubId: ClubId,
+  previousId: FighterId | null,
+  captainId: FighterId | null,
+  viceId: FighterId | null,
+  captainSince: { season: number; weekIndex: number } | null,
+  content: ContentDB,
+): CaptainChangeConsequences {
+  if (previousId === null || previousId === captainId) return { snubbedId: null, snubExemption: null, passedOverIds: [] };
+  const snub = snubOutcome(state, clubId, previousId, captainId, viceId, captainSince, content);
+  let view = state;
+  if (snub.snubbedId !== null) {
+    const prev: Fighter = { ...state.fighters[snub.snubbedId]!, statuses: [...state.fighters[snub.snubbedId]!.statuses] };
+    setStatus(prev, content.development.captaincy.strip.penaltyStatus || SNUBBED, PROVISIONAL_SNUBBED_WEEKS, now(state));
+    view = { ...state, fighters: { ...state.fighters, [prev.id]: prev } };
+  }
+  return { ...snub, passedOverIds: passedOverIds(view, clubId, captainId, viceId, content) };
+}
+
+function evaluateCaptainChange(draft: GameState, club: Club, previousId: FighterId, content: ContentDB): NewsId[] {
+  const news: NewsId[] = [];
+  const t = now(draft);
+  const snub = snubOutcome(draft, club.id, previousId, club.captainId, club.viceCaptainId, club.captainSince, content);
+  if (snub.snubbedId !== null) {
+    const prev = draft.fighters[snub.snubbedId]!;
+    setStatus(prev, content.development.captaincy.strip.penaltyStatus || SNUBBED, PROVISIONAL_SNUBBED_WEEKS, t);
+    news.push(pushNews(draft, { key: 'captaincy.snubbed', clubId: club.id, fighterId: prev.id, importance: 'notable' }));
+  }
+  const po = content.development.captaincy.passedOver;
+  for (const id of passedOverIds(draft, club.id, club.captainId, club.viceCaptainId, content)) {
+    setStatus(draft.fighters[id]!, po.status || PASSED_OVER, PROVISIONAL_PASSED_OVER_WEEKS, t);
+    news.push(pushNews(draft, { key: 'captaincy.passed_over', clubId: club.id, fighterId: id }));
   }
   return news;
 }

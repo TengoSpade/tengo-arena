@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
 import { useShortcuts } from '../../app/shortcuts';
+import { isCompactedResult } from '../../../core/league';
 import type { FighterId, FixtureId, MatchReport } from '../../../core/model';
 import { weekTitle } from '../league/lib/calendar';
 import { clubShort } from '../league/lib/club';
@@ -54,6 +55,7 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
   const [round, setRound] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<FighterId | null>(null);
   const result = game.results[fixtureId] ?? null;
+  const compacted = result !== null && isCompactedResult(result);
   const fixture = game.fixtures[fixtureId];
   const persp = perspective(report, club.id);
   const infos = useMemo(() => fighterInfos(report, result, persp), [report, result, persp.usSide]);
@@ -140,7 +142,13 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
         <span class="report-tabs__hint u-xs u-faint">{t('tabs.hint', { n: report.rounds.length })}</span>
       </div>
 
-      <div class="l-grid report-grid">
+      {compacted && (
+        // Last season's matches between other clubs keep only the score (core results retention).
+        <Callout kind="info" title={t('compacted.title')}>
+          {t('compacted.text')}
+        </Callout>
+      )}
+      <div class="l-grid report-grid" hidden={compacted}>
         <div class="span-8 l-stack">
           {report.timelineAvailable ? (
             <Traces state={game} content={content} report={report} infos={infos} persp={persp} focusId={focusId} />

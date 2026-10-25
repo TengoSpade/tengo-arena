@@ -14,7 +14,6 @@ import { Icon, showToast, tipAttrs } from '../../components';
 import { formatDateTime, formatPlaytime } from '../../format';
 import { useStore } from '../../store';
 import { t } from '../../text';
-import './new-game.css';
 
 const T = {
   tagline: 'Fantasy arena league manager',

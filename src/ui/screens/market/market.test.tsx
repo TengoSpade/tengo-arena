@@ -3,12 +3,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildFixtureWorld, fixtureContent } from '../../../core/testkit';
 import type { GameState } from '../../../core/model';
 import { ok } from '../../../core/util';
+import * as economy from '../../../core/economy';
 import { resetToasts, toasts } from '../../components';
 import { createFakeStore, type FakeStoreOptions } from '../league/testing/fake-store';
 import { Providers } from '../league/testing/providers';
 import { makeSampleWorld } from '../league/testing/worlds';
 import type { SampleStage } from '../league/testing/sample-season';
-import { termsCheck, willingLevel } from './model';
+import { termsCheck, willingLevel, type ClubMarket } from './model';
+import { offerErrorText } from './OfferDialog';
 import MarketScreen from './index';
 
 afterEach(cleanup);
@@ -173,5 +175,37 @@ describe('terms check', () => {
     expect(willingLevel(2, 3)).toBe(2);
     expect(willingLevel(1, 3)).toBe(1);
     expect(willingLevel(0, 3)).toBe(0);
+  });
+});
+
+describe('offer error copy', () => {
+  const content = fixtureContent();
+  const m = { tierMinWage: 120, pendingOffers: 0, roster: 9, cap: 12 } as ClubMarket;
+
+  it('explains what the real economy.checkOffer returns', () => {
+    const state = buildFixtureWorld() as GameState;
+    const clubId = state.playerClubId!;
+    const agent = Object.values(state.fighters).find((f) => f.status === 'free-agent')!;
+    const offer = { clubId, fighterId: agent.id, wagePerWeek: 1_000_000, seasons: 1, kind: 'free-agent' as const };
+    const over = economy.checkOffer(state, offer, content);
+    expect(over.ok).toBe(false);
+    if (!over.ok) {
+      expect(over.error.code).toBe('budget.wage');
+      expect(offerErrorText(over.error, m, content)).toMatch(/^Over the wage budget by [\d,]+ ts per week\./);
+    }
+    const embargoed = structuredClone(state);
+    embargoed.clubs[clubId]!.finance.status = 'embargo';
+    const emb = economy.checkOffer(embargoed, offer, content);
+    expect(!emb.ok && emb.error.code.startsWith('embargo.')).toBe(true);
+    if (!emb.ok) expect(offerErrorText(emb.error, m, content)).toMatch(/^Spending embargo/);
+  });
+
+  it('reads the real core codes, not the raw message', () => {
+    expect(offerErrorText({ code: 'budget.wage', message: 'Over wage budget by 110 per week', details: { over: 110 } }, m, content)).toMatch(/^Over the wage budget by 110 ts per week\. Release a fighter/);
+    expect(offerErrorText({ code: 'budget.cash', message: 'x', details: { signingCost: 900, available: 100 } }, m, content)).toBe('Signing cost 900 ts is more than the 100 ts you can spend now.');
+    expect(offerErrorText({ code: 'offer.max-pending', message: 'x', details: { max: 3 } }, m, content)).toBe('At most 3 pending offers at a time. Withdraw one first.');
+    expect(offerErrorText({ code: 'renewal.not-final-season', message: 'x', details: { endSeason: 3 } }, m, content)).toContain('season 3');
+    // Unknown codes fall back to the core message.
+    expect(offerErrorText({ code: 'something.new', message: 'Raw core text' }, m, content)).toBe('Raw core text');
   });
 });

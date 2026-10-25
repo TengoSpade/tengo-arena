@@ -8,10 +8,15 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import type { ClubId, WeekReport } from '../../core/model';
-import { Crest, Icon, Modal, ToastRegion, TooltipLayer, showToast, tipAttrs, undoLast, type Tip } from '../components';
+// Direct module imports (not the components barrel) keep screen-only components out of the main bundle.
+import { Icon } from '../components/Icon';
+import { Crest, crestLetters } from '../components/marks';
+import { Modal } from '../components/Modal';
+import { ToastRegion, clearUndos, showToast, undoLast } from '../components/Toast';
+import { TooltipLayer, tipAttrs, type Tip } from '../components/Tooltip';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
-import { slotName, useStore, type AppStore } from '../store';
+import { useStore, type AppStore } from '../store';
 import { buildDigest, needsActionCount } from '../store/digest';
 import { useEngine } from '../store/engine';
 import { effectiveTheme, pacingStops, reducedMotion, settings, updateSettings } from '../store/settings';
@@ -19,7 +24,9 @@ import { usePlayerClub, type ClubContext } from '../store/views';
 import { t } from '../text';
 import { continueModel, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
-import { SearchPalette, ShortcutSheet, SimulatingPanel } from './overlays';
+import { SimulatingPanel } from './overlays';
+import { quickSaveOrAsk } from './save-intent';
+import type * as Palettes from './palettes';
 import { goBack, navigate, useRoute } from './router';
 import type { RouteId } from './routes';
 import { installShortcuts, type ShortcutMap } from './shortcuts';
@@ -43,6 +50,37 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const [confirm, setConfirm] = useState<'kick-off' | 'season-end' | null>(null);
   const [simulating, setSimulating] = useState<number | null>(null);
   const s = settings.value;
+
+  // The shortcut sheet and search load on first use, or shortly after start (bundle budget).
+  const [palettes, setPalettes] = useState<typeof Palettes | null>(null);
+  useEffect(() => {
+    if (palettes) return;
+    const load = () => void import('./palettes').then(setPalettes);
+    if (sheet || search) {
+      load();
+      return;
+    }
+    const id = setTimeout(load, 1500);
+    return () => clearTimeout(id);
+  }, [sheet, search, palettes]);
+
+  // A week processed, a season ended or another career loaded: earlier undos would act on the wrong week.
+  const cal = store.game.value?.calendar;
+  const commitKey = cal ? `${store.game.value!.rng.root}:${cal.season}:${cal.weekIndex}:${cal.phase}` : '';
+  useEffect(() => clearUndos(), [commitKey]);
+
+  // Changes since the last save (signings, releases, lineup) are kept only by the next autosave or a
+  // manual save: ask before the tab closes on them.
+  const dirty = store.dirty?.value ?? false;
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
 
   const model = continueModel({
     state: store.game.value,
@@ -128,11 +166,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
     }
   };
 
-  const quickSave = async () => {
-    if (!store.game.value?.playerClubId) return;
-    const res = await store.quickSave();
-    if (res.ok) showToast({ title: t('save.saved', { slot: slotName(res.value.slotId) }), sub: res.value.label, kind: 'good' });
-  };
+  const quickSave = () => quickSaveOrAsk(store);
 
   // Global shortcuts (04 §6.4). Screens add their own layers with useShortcuts().
   useEffect(() => {
@@ -215,8 +249,8 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       </main>
       <TooltipLayer />
       <ToastRegion />
-      <ShortcutSheet open={sheet} onClose={() => setSheet(false)} />
-      <SearchPalette open={search} onClose={() => setSearch(false)} state={store.game.value} content={store.content.value} />
+      {palettes && <palettes.ShortcutSheet open={sheet} onClose={() => setSheet(false)} />}
+      {palettes && <palettes.SearchPalette open={search} onClose={() => setSearch(false)} state={store.game.value} content={store.content.value} />}
       {simulating !== null && <SimulatingPanel rounds={simulating} />}
       <ContinueConfirm
         variant={confirm}
@@ -261,7 +295,7 @@ function Topbar({
     <header class="topbar">
       {ctx ? (
         <a class="topbar__club" href="#/home" data-testid="topbar-club">
-          <Crest primary={ctx.club.colors.primary} secondary={ctx.club.colors.secondary} code={ctx.club.code} size="md" />
+          <Crest primary={ctx.club.colors.primary} secondary={ctx.club.colors.secondary} code={crestLetters(ctx.club)} size="md" />
           <span class="topbar__club-text">
             <span class="topbar__club-name">{ctx.club.name}</span>
             <span class="topbar__club-tier">
@@ -383,13 +417,18 @@ function TopbarStats({ ctx }: { ctx: ClubContext }) {
         class="topbar__stat"
         tabIndex={0}
         {...tipAttrs(
-          standing && ctx.wing
-            ? t('topbar.standingTip', { pos: ordinal(standing.position), size: ctx.wingRows.length, wing: ctx.wing.name, tournament: tier.tournamentName })
-            : t('topbar.standingNone'),
+          standing && standing.played === 0 && ctx.wing
+            ? t('topbar.standingUnplayed', { wing: ctx.wing.name, size: ctx.wingRows.length })
+            : standing && ctx.wing
+              ? t('topbar.standingTip', { pos: ordinal(standing.position), size: ctx.wingRows.length, wing: ctx.wing.name, tournament: tier.tournamentName })
+              : t('topbar.standingNone'),
         )}
       >
         <span class="topbar__stat-label">{t('topbar.standing')}</span>
-        <span class="topbar__stat-value">{standing ? t('topbar.standingValue', { pos: ordinal(standing.position), pts: standing.points }) : '—'}</span>
+        <span class="topbar__stat-value">
+          {/* Before the first match a position is only the draw order: say so instead of "4th". */}
+          {standing && standing.played === 0 ? t('topbar.standingNotStarted') : standing ? t('topbar.standingValue', { pos: ordinal(standing.position), pts: standing.points }) : '—'}
+        </span>
       </div>
     </div>
   );

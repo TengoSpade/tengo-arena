@@ -4,8 +4,10 @@
  * entropy), the store, validates the content theme, then mounts the app.
  *
  * Dev builds: the dev engine (real core first, provisional stand-ins for
- * unfinished core functions) and `?dev-world=<weekIndex>&club=<clubId>`
- * to open straight into a dev career (screenshots, reviews).
+ * unfinished core functions), `?dev-world=<weekIndex>&club=<clubId>`
+ * to open straight into a dev career, and `?dev-state=<name>` to open a
+ * real career snapshot from /reports/states/<name>.json (`{ state,
+ * seasonEndReport? }`, written by a headless script; screenshots, reviews).
  */
 import { h, render } from 'preact';
 import pkg from '../package.json';
@@ -14,6 +16,7 @@ import { loadThemeFiles } from './platform/content-loader';
 import { createIdbSaveStore } from './platform/save-store.idb';
 import { createMemorySaveStore } from './platform/save-store.memory';
 import { App } from './ui/app/App';
+import type { GameState, SeasonEndReport } from './core/model';
 import { createGameStore, settings, type GameEngine } from './ui/store';
 
 import './ui/styles/tokens.css';
@@ -54,6 +57,20 @@ if (dev) {
     const club = clubParam === 'none' ? null : (clubParam ?? content.clubs.list.find((c) => c.startTierLevel === 2)?.id ?? content.clubs.list[0]!.id);
     store.replaceWorld(buildDevWorld(content, { playerClubId: club, weekIndex: Number(week) || 11 }));
     if (!location.hash || location.hash === '#/' || location.hash === '#/new-game') location.hash = club ? '#/home' : '#/club-select';
+  }
+}
+
+if (dev) {
+  const stateName = query.get('dev-state');
+  if (stateName && /^[\w-]+$/.test(stateName)) {
+    try {
+      const res = await fetch(`/reports/states/${stateName}.json`);
+      const snap = (await res.json()) as { state: GameState; seasonEndReport?: SeasonEndReport | null };
+      store.replaceWorld(snap.state, undefined, { seasonEnd: snap.seasonEndReport ?? null });
+      if (!location.hash || location.hash === '#/' || location.hash === '#/new-game') location.hash = '#/home';
+    } catch (e) {
+      console.error('dev-state could not be loaded', e);
+    }
   }
 }
 

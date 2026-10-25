@@ -38,7 +38,10 @@ export function runUndoable(store: GameStore, command: Command, inverse: Command
   return true;
 }
 
-export function clubActions(store: GameStore, state: GameState, content: ContentDB, club: Club, text: ActionText) {
+/** Describes a captaincy change before it is made (core captaincyPreview), or null when it costs nothing. */
+export type CaptaincyDescriber = (captainId: FighterId | null, viceCaptainId: FighterId | null) => string | null;
+
+export function clubActions(store: GameStore, state: GameState, content: ContentDB, club: Club, text: ActionText, describeCaptaincy?: CaptaincyDescriber) {
   const nameOf = (id: FighterId) => state.fighters[id]?.name.full ?? id;
   const before = lineupCommand(club, club.lineup.fighters.map((e) => ({ ...e })));
 
@@ -84,16 +87,19 @@ export function clubActions(store: GameStore, state: GameState, content: Content
   const captaincy = (captainId: FighterId | null, viceCaptainId: FighterId | null): Command => ({ type: 'captaincy.set', clubId: club.id, captainId, viceCaptainId });
   const prevCaptaincy = captaincy(club.captainId, club.viceCaptainId);
 
+  // The toast states the consequences (Snubbed, Passed Over, chemistry) from core's preview.
+  const captaincySub = (captainId: FighterId | null, viceId: FighterId | null) => describeCaptaincy?.(captainId, viceId) ?? text.captainSub;
+
   const setCaptain = (id: FighterId): boolean => {
     if (club.captainId === id) return false;
     const vice = club.viceCaptainId === id ? club.captainId : club.viceCaptainId;
-    return runUndoable(store, captaincy(id, vice), prevCaptaincy, format(text.captain, { name: nameOf(id) }), text.captainSub);
+    return runUndoable(store, captaincy(id, vice), prevCaptaincy, format(text.captain, { name: nameOf(id) }), captaincySub(id, vice));
   };
 
   const setVice = (id: FighterId): boolean => {
     if (club.viceCaptainId === id) return false;
     const captain = club.captainId === id ? club.viceCaptainId : club.captainId;
-    return runUndoable(store, captaincy(captain, id), prevCaptaincy, format(text.vice, { name: nameOf(id) }), text.captainSub);
+    return runUndoable(store, captaincy(captain, id), prevCaptaincy, format(text.vice, { name: nameOf(id) }), captaincySub(captain, id));
   };
 
   const presetOf = (id: FighterId): TacticsAssignment | undefined => club.lineup.tactics[id];
@@ -146,5 +152,8 @@ export function clubActions(store: GameStore, state: GameState, content: Content
 
   const setLineup = (fighters: LineupEntry[], title: string): boolean => runUndoable(store, lineupCommand(club, fighters), before, title);
 
-  return { moveTo, setCaptain, setVice, setPreset, cyclePreset, setEmphasis, cycleEmphasis, setLineup, presetOf };
+  /** The consequence line of making `id` captain, for a tooltip before the change. */
+  const previewCaptain = (id: FighterId): string | null => (club.captainId === id ? null : describeCaptaincy?.(id, club.viceCaptainId === id ? club.captainId : club.viceCaptainId) ?? null);
+
+  return { moveTo, setCaptain, setVice, previewCaptain, setPreset, cyclePreset, setEmphasis, cycleEmphasis, setLineup, presetOf };
 }

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { ClubId, GameState } from '../../core/model';
+import type { ClubId, GameState, SaveError } from '../../core/model';
 import { NotImplementedError, engineError, err } from '../../core/util';
 import { createDevEngine } from '../debug/dev-engine';
 import { createTestStore } from '../debug/test-store';
 import { coreEngine, type GameEngine } from './engine';
-import { errorText } from './messages';
-import { AUTOSAVE_SLOTS } from './create-store';
+import { blockerText, distinctBlockers, errorText } from './messages';
+import { resetToasts, toasts } from '../components/Toast';
+import { AUTOSAVE_SLOTS, MAX_IMPORT_BYTES } from './create-store';
+import { newsToDigest } from './digest';
+import type { NewsItem } from '../../core/model';
 
 function playerClub(state: GameState) {
   return state.clubs[state.playerClubId as ClubId]!;
@@ -143,7 +146,8 @@ describe('store: advance', () => {
     const auto1 = metas.find((m) => m.slotId === 'auto-1')!;
     expect(auto1.weekIndex).toBe(15);
     expect(Math.max(...metas.map((m) => m.weekIndex))).toBe(15);
-  });
+    // Four real week processings: ~2 s alone, slower while the core suites run in parallel.
+  }, 20_000);
 });
 
 describe('store: saves', () => {
@@ -208,12 +212,42 @@ describe('store: saves', () => {
     expect(!junk.ok && junk.error.code).toBe('save.format');
   });
 
-  it('quick save uses the current slot, else the first free one', async () => {
+  it('quick save uses the current manual slot and asks for one when there is none', async () => {
     const { store } = createTestStore();
-    const a = await store.quickSave();
-    expect(a.ok && a.value.slotId).toBe('manual-1');
+    const none = await store.quickSave();
+    expect(!none.ok && none.error.details?.['noSlot']).toBe(true);
+    expect((await store.save('manual-2')).ok).toBe(true);
     const b = await store.quickSave();
-    expect(b.ok && b.value.slotId).toBe('manual-1');
+    expect(b.ok && b.value.slotId).toBe('manual-2');
+  });
+
+  it("never quick-saves career B into career A's manual slot after loading an autosave", async () => {
+    const { store, saves } = createTestStore();
+    expect((await store.save('manual-1', 'Career A')).ok).toBe(true);
+    const rootA = store.game.value!.rng.root;
+    // Career B, autosaved by a week processing, then career A loaded, then B's autosave loaded.
+    await store.newGame({ seed: 'career-b' });
+    const b = store.game.value!;
+    store.dispatch({ type: 'club.choose', clubId: Object.keys(b.clubs)[0] as ClubId });
+    if (store.blockers.value.length > 0) store.dispatch(coreEngine.suggestLineup(store.game.value!, store.playerClubId.value!, store.content.value!));
+    expect((await store.advance()).ok).toBe(true);
+    const auto = (await saves.list()).find((m) => m.kind === 'auto')!;
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(store.currentSlot.value).toBe('manual-1');
+    expect((await store.load(auto.slotId)).ok).toBe(true);
+    expect(store.currentSlot.value).toBeNull();
+    const q = await store.quickSave();
+    expect(q.ok).toBe(false);
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(store.game.value!.rng.root).toBe(rootA);
+  }, 20_000);
+
+  it('refuses to import a file far larger than any save', async () => {
+    const { store } = createTestStore();
+    const big = { size: MAX_IMPORT_BYTES + 1, text: async () => '{}' } as unknown as File;
+    const r = await store.importSave(big);
+    expect(!r.ok && r.error.details?.['tooLarge']).toBe(true);
+    expect(errorText((r as { error: SaveError }).error)).toMatch(/far larger than any save/);
   });
 
   it('dumps the state with the command log and build info', () => {
@@ -250,3 +284,95 @@ async function metaOf(store: ReturnType<typeof createTestStore>['store']) {
   await store.deleteSave('manual-10');
   return res.value;
 }
+
+describe('digest copy from core news', () => {
+  const news = (key: string, params: Record<string, string | number>, refs: NewsItem['refs'] = {}): NewsItem =>
+    ({ id: 'n-1', at: { season: 1, weekIndex: 3 }, key, params, clubId: null, refs, importance: 'notable', read: false }) as NewsItem;
+
+  it('names the fighter and fills every slot for the keys core writes', () => {
+    const { store } = createTestStore();
+    const state = store.game.value!;
+    const content = store.content.value!;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const starter = club.lineup.fighters[0]!.fighterId;
+    const trait = content.traits.list[0]!.id;
+    const cases: [string, Record<string, string | number>][] = [
+      ['fighter.injured', { severity: content.development.injury.severityLadder[0]!.id, weeksOut: 3, round: 2 }],
+      ['fighter.career_ended', {}],
+      ['fighter.scarred', { traitId: trait }],
+      ['fighter.trait_gained', { traitId: trait }],
+      ['fighter.trait_lost', { traitId: trait }],
+      ['fighter.trait_skipped', { traitId: trait }],
+      ['fighter.final_season', { age: 34 }],
+      ['fighter.retired', { age: 35, cause: 'age' }],
+      ['captaincy.snubbed', {}],
+      ['captaincy.passed_over', {}],
+      ['captaincy.losing_the_room', {}],
+      ['captaincy.interim', {}],
+      ['offer.accepted', { wage: 450, seasons: 2 }],
+      ['offer.countered', { counterWage: 480, validUntilWeek: 5 }],
+      ['offer.refused', { patienceLeft: 1 }],
+      ['offer.void', { reason: 'fighter.unavailable' }],
+      ['finance.registry-advance', { amount: 5000, registryDebt: 5000 }],
+    ];
+    const name = state.fighters[starter]!.name.full;
+    for (const [key, params] of cases) {
+      const d = newsToDigest(news(key, params, { fighterId: starter }), { state, content });
+      expect(`${d.title} ${d.text}`, key).not.toMatch(/[{}]/);
+      if (key.startsWith('fighter.') || key.startsWith('offer.') || key === 'captaincy.interim') expect(d.title, key).toContain(name);
+    }
+    const lost = newsToDigest(news('offer.lost', {}, { fighterId: starter, otherClubId: Object.keys(state.clubs).find((id) => id !== club.id) as ClubId }), { state, content });
+    expect(lost.title).not.toMatch(/[{}]|another club/);
+    expect(newsToDigest(news('offer.accepted', { wage: 450, seasons: 1 }, { fighterId: starter }), { state, content }).text).toBe('450 ts/wk for 1 season.');
+  });
+
+  it('flags an injury as needing action only while the fighter is an unfit starter', () => {
+    const { store } = createTestStore();
+    const state = structuredClone(store.game.value!) as GameState;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const starter = club.lineup.fighters[0]!.fighterId;
+    const item = news('fighter.injured', { severity: 'minor', weeksOut: 2, round: 1 }, { fighterId: starter });
+    state.fighters[starter]!.injury = { severity: 'minor', weeksOut: 2, fixtureId: null, round: 1, causeFighterId: null, damageBp: 0, since: { season: 1, weekIndex: 1 } };
+    expect(newsToDigest(item, { state }).needsAction).toBe(true);
+    club.lineup.fighters = club.lineup.fighters.slice(1);
+    expect(newsToDigest(item, { state }).needsAction).toBe(false);
+  });
+});
+
+describe('load warnings', () => {
+  it('says so when a save was made with different game data, and still loads it', async () => {
+    const base = createDevEngine();
+    const engine: GameEngine = {
+      ...base,
+      parseSave: (json, c) => {
+        const r = base.parseSave(json, c);
+        return r.ok ? { ...r, value: { ...r.value, warnings: ['Save was made with different content'] } } : r;
+      },
+    };
+    const { store } = createTestStore({ engine });
+    expect((await store.save('manual-1')).ok).toBe(true);
+    resetToasts();
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(toasts.value.map((x) => x.title)).toContain('This save was made with different game data');
+  });
+});
+
+describe('blocker copy', () => {
+  it('reads the over-cap count from core details.release', () => {
+    expect(blockerText({ code: 'roster.over-cap', details: { roster: 13, cap: 12, release: 1 } })).toBe('Release 1 fighter');
+    expect(blockerText({ code: 'roster.over-cap', details: { roster: 14, cap: 12, release: 2 } })).toBe('Release 2 fighters');
+  });
+
+  it('names the unfit starter and lists the cause once', () => {
+    const { store } = createTestStore();
+    const state = store.game.value!;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const id = club.lineup.fighters[0]!.fighterId;
+    const unfit = { code: 'lineup.unavailable', fighterId: id };
+    expect(blockerText(unfit, state)).toBe(`${state.fighters[id]!.name.full} is unfit to play`);
+    expect(blockerText(unfit)).toBe('A lineup fighter is unavailable');
+    const both = [unfit, { code: 'lineup.incomplete', details: { have: 4, need: 5 } }];
+    expect(distinctBlockers(both).map((b) => b.code)).toEqual(['lineup.unavailable']);
+    expect(distinctBlockers([both[1]!]).map((b) => b.code)).toEqual(['lineup.incomplete']);
+  });
+});

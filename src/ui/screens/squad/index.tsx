@@ -48,6 +48,8 @@ import {
 import { attributeBand, formatInt, formatMoney } from '../../format';
 import { weekName } from '../../format/calendar';
 import {
+  weeksOutText,
+  captaincyConsequences,
   contractEnds,
   fighterTraits,
   injuryRiskText,
@@ -122,7 +124,7 @@ export default function SquadScreen(_props: ScreenProps) {
         captainSub: T.toastCaptainSub,
         preset: T.toastPreset,
         emphasis: T.toastEmphasis,
-      })
+      }, (c, v) => captaincyConsequences(safeView(() => engine.captaincyPreview(ctx.state, ctx.club.id, c, v, ctx.content), null), ctx.state, ctx.content))
     : null;
 
   useShortcuts({
@@ -380,6 +382,8 @@ function LineupBoard(props: BoardProps) {
   const missingPresets = entries.filter((e) => !club.lineup.tactics[e.fighterId]).length;
   const injuredInLineup = lineupRows.filter((r) => !engineFit(engine, r.f));
   const injuredReserves = rows.filter((r) => !r.entry && r.f.injury && r.f.injury.weeksOut > 0);
+  // One-click fix for an unfit starter: the best fit reserves, highest rating first, one per unfit place.
+  const fitReserves = rows.filter((r) => !r.entry && engineFit(engine, r.f)).sort((a, b) => (b.view?.rating ?? 0) - (a.view?.rating ?? 0));
   const name = (id: FighterId | null) => (id ? (state.fighters[id]?.name.full ?? id) : '');
 
   const zone = (label: string, list: readonly LineupEntry[], row: 'front' | 'back', empties: number) => (
@@ -459,9 +463,11 @@ function LineupBoard(props: BoardProps) {
             <li data-state={entries.length < 5 ? 'warn' : injuredInLineup.length ? 'bad' : undefined}>
               {hiredBlade && entries.length < 5
                 ? format(T.checkHiredBlade, { n: entries.length })
-                : entries.length === 5 && injuredInLineup.length === 0
-                  ? format(T.checkFilled, { n: 5 })
-                  : format(T.checkFilledPartial, { n: entries.length })}
+                : entries.length === 5 && injuredInLineup.length > 0
+                  ? format(T.checkFilledUnfit, { n: injuredInLineup.length })
+                  : entries.length === 5
+                    ? format(T.checkFilled, { n: 5 })
+                    : format(T.checkFilledPartial, { n: entries.length })}
             </li>
             <li data-state={club.captainId ? undefined : 'bad'}>
               {club.captainId
@@ -471,14 +477,30 @@ function LineupBoard(props: BoardProps) {
                 : T.checkNoCaptain}
             </li>
             <li data-state={missingPresets ? 'warn' : undefined}>{missingPresets ? format(T.checkPresetsMissing, { n: missingPresets }) : T.checkPresets}</li>
-            {injuredInLineup.map((r) => (
-              <li key={r.f.id} data-state="bad">
-                {format(T.checkInjuredInLineup, { name: r.f.name.full })}
-              </li>
-            ))}
+            {injuredInLineup.map((r, i) => {
+              const sub = fitReserves[i];
+              return (
+                <li key={r.f.id} data-state="bad">
+                  <span class="l-cluster l-cluster--xs">
+                    {format(T.checkInjuredInLineup, { name: r.f.name.full })}
+                    {sub && (
+                      <button
+                        class="btn btn--sm"
+                        type="button"
+                        data-testid={`bring-in-${sub.f.id}`}
+                        onClick={() => props.actions.moveTo(sub.f.id, r.entry?.row ?? 'back', r.f.id)}
+                        {...tipAttrs(format(T.bringInTip, { name: sub.f.name.full, rating: sub.view?.rating ?? '—', out: r.f.name.given, row: (r.entry?.row === 'front' ? T.frontRow : T.backRow).toLowerCase() }))}
+                      >
+                        {format(T.bringIn, { name: sub.f.name.given })}
+                      </button>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
             {injuredReserves.slice(0, 2).map((r) => (
               <li key={r.f.id} data-state="warn">
-                {format(T.checkInjured, { name: r.f.name.full, weeks: r.f.injury!.weeksOut })}
+                {format(T.checkInjured, { name: r.f.name.full, weeks: weeksOutText(r.f.injury!) })}
               </li>
             ))}
           </ul>
@@ -499,7 +521,12 @@ function LineupBoard(props: BoardProps) {
               )}
             >
               {T.meanRating} <strong>{mean.toFixed(1)}</strong>
-              {opponentMean !== null && <span class="u-faint"> vs {opponentMean.toFixed(1)}</span>}
+              {opponentMean !== null && (
+                <span class="u-faint">
+                  {' '}
+                  · {T.theirLastLineup} {opponentMean.toFixed(1)}
+                </span>
+              )}
             </span>
           )}
           <span class="u-num" tabIndex={0} {...tipAttrs(lineupRows.map((r) => `${r.f.name.full} ${formatMoney(r.f.contract?.wagePerWeek ?? 0)}`).join(' · '))}>
@@ -601,16 +628,17 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
       </div>
       <div class="lineup-card__foot lineup-card__meta">
         {risk && (
-          <span {...tipAttrs(risk.tip)} class={risk.atRisk ? 'u-warn' : undefined}>
-            <Icon name="injury" size="sm" /> {risk.word}
+          // Normal risk is the quiet default: icon only (the word stays for screen readers and the tooltip).
+          <span {...tipAttrs(risk.tip)} class={risk.atRisk ? 'lineup-card__risk u-warn' : 'lineup-card__risk'}>
+            <Icon name="injury" size="sm" /> <span class={risk.notable ? undefined : 'u-sr-only'}>{risk.word}</span>
           </span>
         )}
         <span class="lineup-card__xp" {...tipAttrs(format(T.xpTip, { xp: r.f.season.xp, target }))}>
           <Progress value={r.f.season.xp / Math.max(1, target)} />
         </span>
         {trend && (
-          <span {...tipAttrs(`Trend: ${trend.label}. Projected rating change at season end if this season's XP rate continues.`)}>
-            {trend.dir !== 0 && <Delta value={trend.dir} />} {trend.label}
+          <span class="lineup-card__trend" {...tipAttrs(format(T.trendTip, { label: trend.label }))}>
+            {trend.dir !== 0 && <Delta value={trend.dir} />} <span class="lineup-card__trend-label">{trend.label}</span>
           </span>
         )}
       </div>
@@ -704,7 +732,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
     cell: (r) =>
       r.f.injury && r.f.injury.weeksOut > 0 ? (
         <Tag kind="bad" icon="injury" tip={injuryTip(r.f.injury, content)}>
-          {formatInt(r.f.injury.weeksOut)} wk
+          {weeksOutText(r.f.injury)}
         </Tag>
       ) : (
         <RowMark row={r.entry ? r.entry.row : 'bench'} />
@@ -819,7 +847,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       header: T.colMarket,
       align: 'num',
       sortValue: (r) => r.view?.marketWage ?? 0,
-      cell: (r) => (r.view ? <span {...tipAttrs('Market wage: what clubs would pay for this fighter now (economy.json wage curve).')}>{formatInt(r.view.marketWage)}</span> : '—'),
+      cell: (r) => (r.view ? <span {...tipAttrs('Market wage: what clubs would pay for this fighter now, from rating, potential, age, traits and role demand.')}>{formatInt(r.view.marketWage)}</span> : '—'),
     };
     const left: Column<Row> = {
       id: 'left',

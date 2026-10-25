@@ -50,17 +50,17 @@ export default function SettingsScreen(_props: ScreenProps) {
       <div class="l-grid settings-grid">
         <Panel title={t('gameplay.title')} icon="play" subtitle={t('gameplay.subtitle')} class="span-7" testId="settings-gameplay">
           <div class="l-stack">
-            <fieldset class="settings-presets">
+            <fieldset class="option-group">
               <legend class="field__label">{t('pacing.label')}</legend>
               {PRESETS.map((p) => (
-                <label key={p} class={s.pacing === p ? 'settings-preset is-on' : 'settings-preset'} data-testid={`preset-${p}`}>
+                <label key={p} class="option-card" data-testid={`preset-${p}`}>
                   <input type="radio" name="pacing" value={p} checked={s.pacing === p} onChange={() => change({ pacing: p }, `${t('pacing.label')}: ${t(`pacing.${p}`)}`)} />
-                  <span class="settings-preset__body">
-                    <span class="settings-preset__name">
+                  <span class="option-card__body">
+                    <span class="option-card__name">
                       {t(`pacing.${p}`)}
                       {p === DEFAULT_SETTINGS.pacing && <span class="tag">{t('pacing.default')}</span>}
                     </span>
-                    <span class="settings-preset__text">{t(`pacing.${p}Text`)}</span>
+                    <span class="option-card__text">{t(`pacing.${p}Text`)}</span>
                   </span>
                 </label>
               ))}

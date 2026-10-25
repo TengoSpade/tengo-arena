@@ -13,7 +13,7 @@ import type { ClubId, Fighter, FighterSeasonRow, GameState, SeasonEndReport, Sea
 import { ConfirmButton, DataTable, PageHeader, Panel, type Column } from '../../components';
 import { BracketView, storedBracket } from '../league/Bracket';
 import { StandingsTable, type Zones } from '../league/StandingsTable';
-import { clubName } from '../league/lib/club';
+import { Crest, clubName } from '../league/lib/club';
 import { useWp7Engine } from '../league/lib/engine';
 import { fmtMoney, fmtPctBp, ordinal } from '../league/lib/format';
 import { reckoningCompetition, rosterOf } from '../league/lib/season';
@@ -178,17 +178,17 @@ function StandingsStep({ game, content, record, tierRec, clubId }: { game: GameS
   const isChampion = tierRec.reckoningChampionId === clubId;
   return (
     <div class="l-stack">
-      <section class={`panel panel--hero review-move review-move--${move.kind}`} data-testid="review-move">
-        <div class="review-move__body">
-          <span class="review-move__icon" aria-hidden="true">
+      <section class="panel panel--hero" data-testid="review-move">
+        <div class="outcome" data-kind={move.kind === 'promoted' ? 'up' : move.kind === 'relegated' ? 'down' : 'level'}>
+          <span class="outcome__icon" aria-hidden="true">
             <span class="icon icon--lg" data-icon={move.kind === 'promoted' ? 'arrow-up' : move.kind === 'relegated' ? 'arrow-down' : 'shield'} />
           </span>
           <div>
-            <div class="review-move__title u-display">
+            <div class="outcome__title u-display">
               {move.kind === 'promoted' ? t('move.promoted', { tier: move.tierName }) : move.kind === 'relegated' ? t('move.relegated', { tier: move.tierName }) : t('move.stayed', { tier: move.tierName })}
             </div>
             {wingRow && tierRow && (
-              <div class="u-sm u-muted">
+              <div class="outcome__text">
                 {t('move.finish', { wingPos: ordinal(wingRow.position), wing: wing ? wingName(wing.wingId) : '', tierPos: ordinal(tierRow.position), points: tierRow.points })}
                 {isChampion && ` · ${t('move.champion', { tier: tier?.tournamentName ?? '' })}`}
               </div>
@@ -197,7 +197,7 @@ function StandingsStep({ game, content, record, tierRec, clubId }: { game: GameS
         </div>
       </section>
       <div class="l-grid">
-        <Panel title={t('standings.wings', { tier: tier?.name ?? '' })} icon="league" class="span-8" testId="review-tables">
+        <Panel title={t('standings.wings', { tier: tier?.name ?? '' })} icon="league" class="span-12 span-8@wide" testId="review-tables">
           <div class="l-grid review-wings">
             {tierRec.wingTables.map((w) => (
               <div class="span-6" key={w.wingId}>
@@ -207,42 +207,51 @@ function StandingsStep({ game, content, record, tierRec, clubId }: { game: GameS
             ))}
           </div>
         </Panel>
-        <Panel title={t('standings.honours')} icon="crown" class="span-4" testId="review-honours">
-          <dl class="kv">
-            <div>
-              <dt>{tier?.shieldName ?? t('standings.shield')}</dt>
-              <dd>{tierRec.shieldWinnerId ? clubName(game, tierRec.shieldWinnerId) : t('standings.none')}</dd>
-            </div>
-            <div>
-              <dt>{t('standings.champion')}</dt>
-              <dd>{tierRec.reckoningChampionId ? clubName(game, tierRec.reckoningChampionId) : t('standings.none')}</dd>
-            </div>
-            <div>
-              <dt>{t('standings.runnerUp')}</dt>
-              <dd>{tierRec.reckoningRunnerUpId ? clubName(game, tierRec.reckoningRunnerUpId) : t('standings.none')}</dd>
-            </div>
+        <Panel title={t('standings.honours')} icon="crown" class="span-12 span-4@wide" testId="review-honours" bodyClass="review-honours">
+          <dl class="kv kv--stacked">
+            <HonourRow game={game} label={tier?.shieldName ?? t('standings.shield')} ids={tierRec.shieldWinnerId ? [tierRec.shieldWinnerId] : []} />
+            <HonourRow game={game} label={t('standings.champion')} ids={tierRec.reckoningChampionId ? [tierRec.reckoningChampionId] : []} />
+            <HonourRow game={game} label={t('standings.runnerUp')} ids={tierRec.reckoningRunnerUpId ? [tierRec.reckoningRunnerUpId] : []} />
           </dl>
-          {record.tiers.map((tr) => {
-            const tname = content.tiers.get(tr.tierId)?.shortName ?? tr.tierId;
-            return (
-              <dl class="kv review-moves" key={tr.tierId}>
-                {tr.promotedIds.length > 0 && (
-                  <div>
-                    <dt>{t('standings.promoted', { tier: tname })}</dt>
-                    <dd class="review-names">{tr.promotedIds.map((id) => clubName(game, id)).join(', ')}</dd>
-                  </div>
-                )}
-                {tr.relegatedIds.length > 0 && (
-                  <div>
-                    <dt>{t('standings.relegated', { tier: tname })}</dt>
-                    <dd class="review-names">{tr.relegatedIds.map((id) => clubName(game, id)).join(', ')}</dd>
-                  </div>
-                )}
-              </dl>
-            );
-          })}
+          <dl class="kv kv--stacked" data-testid="review-moves" aria-label={t('standings.movements')}>
+            {record.tiers.flatMap((tr) => {
+              const tname = content.tiers.get(tr.tierId)?.shortName ?? tr.tierId;
+              return [
+                tr.promotedIds.length > 0 && (
+                  <HonourRow key={`${tr.tierId}-up`} game={game} label={t('standings.promoted', { tier: tname })} ids={tr.promotedIds} mark="up" />
+                ),
+                tr.relegatedIds.length > 0 && (
+                  <HonourRow key={`${tr.tierId}-down`} game={game} label={t('standings.relegated', { tier: tname })} ids={tr.relegatedIds} mark="down" />
+                ),
+              ];
+            })}
+          </dl>
         </Panel>
       </div>
+    </div>
+  );
+}
+
+/** One honour or movement: the label above, one club per line below (wraps at any width). */
+function HonourRow({ game, label, ids, mark }: { game: GameState; label: string; ids: readonly ClubId[]; mark?: 'up' | 'down' }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>
+        {ids.length === 0 ? (
+          <span class="u-faint">{t('standings.none')}</span>
+        ) : (
+          <span class="l-stack l-stack--xs">
+            {ids.map((id) => (
+              <span class="entity review-honour" key={id}>
+                {mark && <span class={mark === 'up' ? 'zone-mark' : 'zone-mark zone-mark--down'} aria-hidden="true" />}
+                <Crest club={game.clubs[id]} />
+                <span class="entity__name">{clubName(game, id)}</span>
+              </span>
+            ))}
+          </span>
+        )}
+      </dd>
     </div>
   );
 }
@@ -303,7 +312,7 @@ function MoneyStep({ game, content, record, report, career }: { game: GameState;
         <dl class="kv">
           <div>
             <dt>{t('money.prizes')}</dt>
-            <dd>{report?.playerClub ? fmtMoney(report.playerClub.prizes, content, { signed: true }) : '—'}</dd>
+            <dd {...(report?.playerClub ? {} : { 'data-tip': t('money.prizesLater') })}>{report?.playerClub ? fmtMoney(report.playerClub.prizes, content, { signed: true }) : '—'}</dd>
           </div>
           <div>
             <dt>{t('money.income')}</dt>

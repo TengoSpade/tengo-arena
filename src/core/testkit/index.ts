@@ -188,7 +188,7 @@ export function buildFixtureWorld(options: FixtureWorldOptions = {}): GameState 
   }
   for (let i = 0; i < (options.freeAgents ?? 12); i++, n++) {
     const f = makeFixtureFighter(n, content, {
-      freeAgency: { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null },
+      freeAgency: { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null, enteredAt: { season: 1, weekIndex: 1 } },
     });
     state.fighters[f.id] = f;
   }

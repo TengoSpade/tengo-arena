@@ -10,8 +10,9 @@
  * captain's grade term + captaincy status terms, clamped to [min, max].
  */
 import type { CaptaincyGradeDef, ContentDB } from '../content';
-import { idNumber, type ClubId, type Fighter, type FighterId, type GameState } from '../model';
+import { CAREER_ENDING_WEEKS, clubRoster, idNumber, type ClubId, type Fighter, type FighterId, type GameState } from '../model';
 import { effectSources, hasEffect, sumAdds } from './effects';
+import { lifecycleEpoch, rosterMemoAllowed } from './memo';
 import { BP, bp, roundN } from './fixed';
 import { effectiveStatsOf, fighterHumanAge100, ratingOf } from './stats';
 
@@ -29,16 +30,15 @@ export interface CaptaincyBreakdown {
 }
 
 export function isCareerEnded(fighter: Fighter): boolean {
-  return fighter.injury !== null && fighter.injury.weeksOut >= CAREER_ENDING_WEEKS;
+  return fighter.injury !== null && (fighter.injury.careerEnding === true || fighter.injury.weeksOut >= CAREER_ENDING_WEEKS);
 }
 
 /**
- * A career-ending injury is stored as a serious injury with weeksOut =
- * CAREER_ENDING_WEEKS (the Injury model has no flag; CHANGE REQUEST in the
- * README). The fighter is unavailable for the rest of the season and retires
- * at season end.
+ * A career-ending injury is a serious injury with Injury.careerEnding = true
+ * (v2) and weeksOut = CAREER_ENDING_WEEKS (core/model), so every fitness check
+ * (weeksOut === 0) keeps treating him as unavailable. He retires at season end.
  */
-export const CAREER_ENDING_WEEKS = 999;
+export { CAREER_ENDING_WEEKS };
 
 export function isFitFighter(fighter: Fighter): boolean {
   if (fighter.status === 'retired') return false;
@@ -53,16 +53,27 @@ export function gradeFor(cq: number, content: ContentDB): CaptaincyGradeDef {
   return last;
 }
 
-/** Fighters on a club's roster (status active), in id order. */
+/** Fighters on a club's roster (status active), in id order (a copy). */
 export function clubFighters(state: GameState, clubId: ClubId): Fighter[] {
-  return Object.values(state.fighters)
-    .filter((f) => f.clubId === clubId && f.status === 'active')
-    .sort((a, b) => idNumber(a.id) - idNumber(b.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return [...clubRoster(state, clubId)];
 }
+
+/** Keyed by the indexed roster array (./memo.ts: valid while the lifecycle epoch and the roster are unchanged). */
+const topFiveMemo = new WeakMap<readonly Fighter[], { epoch: number; value: number }>();
 
 /** Mean rating of the club's five best fit fighters (St reference). */
 export function topFiveMean(state: GameState, clubId: ClubId, content: ContentDB): number {
-  const ratings = clubFighters(state, clubId)
+  const roster = clubRoster(state, clubId);
+  if (!rosterMemoAllowed()) return computeTopFiveMean(roster, content);
+  const memo = topFiveMemo.get(roster);
+  if (memo && memo.epoch === lifecycleEpoch()) return memo.value;
+  const value = computeTopFiveMean(roster, content);
+  topFiveMemo.set(roster, { epoch: lifecycleEpoch(), value });
+  return value;
+}
+
+function computeTopFiveMean(roster: readonly Fighter[], content: ContentDB): number {
+  const ratings = roster
     .filter(isFitFighter)
     .map((f) => ratingOf(f, content))
     .sort((a, b) => b - a)

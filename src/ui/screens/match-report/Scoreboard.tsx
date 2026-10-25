@@ -1,11 +1,10 @@
 /** Scoreboard hero: crests, score, result line, round pips and the MVP strip (04 ui-report §1). */
 import type { ContentDB } from '../../../core/content';
-import type { Fixture, GameState, MatchReport, MatchResult } from '../../../core/model';
+import { personOf, type Fixture, type GameState, type MatchReport, type MatchResult } from '../../../core/model';
 import { isRoundId, roundName } from '../league/lib/calendar';
 import { Crest, clubName, clubVenue } from '../league/lib/club';
 import { fmtInt, fmtMoney, fmtTicks } from '../league/lib/format';
-import { href } from '../league/lib/store';
-import { ClassTag, Portrait } from '../league/lib/ui';
+import { ClassTag, FighterLink, Portrait } from '../league/lib/ui';
 import { other, type FighterInfo, type Perspective } from './analysis';
 import { t } from './text';
 
@@ -75,7 +74,10 @@ export function Scoreboard({
   const won = persp.involved && report.winnerClubId === persp.usClubId;
   const outcome = persp.involved ? (won ? t('result.won') : t('result.lost')) : t('result.wins', { club: clubName(state, report.winnerClubId) });
   const mvp = infos.find((f) => f.id === report.mvpFighterId) ?? null;
-  const mvpFighter = mvp ? state.fighters[mvp.id] : undefined;
+  // The MVP may have retired since (alumni): name and class come from personOf.
+  const mvpPerson = mvp ? personOf(state, mvp.id) : null;
+  const mvpFighter = mvpPerson?.kind === 'fighter' ? mvpPerson.fighter : null;
+  const mvpClassId = mvpPerson ? (mvpPerson.kind === 'fighter' ? mvpPerson.fighter.classId : mvpPerson.alumnus.classId) : null;
   const ms = mvp?.recap?.stats;
   const overtimeAt = content.combat.overtime.startS * (1000 / tickMs);
   return (
@@ -138,7 +140,7 @@ export function Scoreboard({
           );
         })}
       </div>
-      {mvp && mvpFighter && ms && (
+      {mvp && mvpPerson && mvpClassId && ms && (
         <div class="mvp" data-testid="mvp">
           <span class="mvp__label">
             <span class="icon icon--sm" data-icon="star" aria-hidden="true" />
@@ -146,11 +148,9 @@ export function Scoreboard({
           </span>
           <Portrait content={content} fighter={mvpFighter} size="sm" />
           <div class="entity__stack">
-            <a class="entity__name" href={href(`fighter/${encodeURIComponent(mvp.id)}`)}>
-              {mvpFighter.name.full}
-            </a>
+            <FighterLink state={state} id={mvp.id} />
             <span class="entity__sub">
-              <ClassTag content={content} classId={mvpFighter.classId} /> · {mvp.row === 'front' ? t('row.front') : t('row.back')} · {clubName(state, result?.fighterStats[mvp.id]?.clubId ?? report.winnerClubId)}
+              <ClassTag content={content} classId={mvpClassId} /> · {mvp.row === 'front' ? t('row.front') : t('row.back')} · {clubName(state, result?.fighterStats[mvp.id]?.clubId ?? report.winnerClubId)}
             </span>
           </div>
           <div class="l-cluster l-cluster--lg u-sm report-mvp-stats">

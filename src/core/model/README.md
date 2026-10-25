@@ -19,7 +19,10 @@ Engine and state types shared by every module. Plain JSON data only.
 | `commands.ts` | the `Command` union (the only way decisions change state) |
 | `history.ts` | `SeasonRecord`, tier records, retirements |
 | `report.ts` | derived views: `MatchReport`, `WeekReport`, `SeasonEndReport`, `Blocker` |
-| `game-state.ts` | `GameState`, `GameOptions` (M1 defaults), `STATE_SCHEMA_VERSION` |
+| `game-state.ts` | `GameState`, `GameOptions` (M1 defaults), `STATE_SCHEMA_VERSION` (2) |
+| `alumni.ts` | `Alumnus` (slim record of a fighter who left), `alumnusOf`, `personOf`, `personName` (current fighter or alumnus) |
+| `indexes.ts` | derived indexes of transition drafts (club rosters, free-agent pool, results per club and season, fixtures per week) and the only writers of membership and of the fighters / results / fixtures maps: `setMembership`, `putFighter`, `removeFighter`, `putResult`, `removeResult`, `putFixture`, `removeFixture` (enforced by tests/architecture/indexed-writes.test.ts) |
+| `transition.ts` | `beginTransition`: the per-transition draft (mutable parts copied, write-once `results` / `history` / `alumni` shared and frozen) |
 | `save.ts` | `SaveEnvelope`, `SaveMeta`, `SaveError` codes |
 | `factories.ts` | `createEmptyGameState` |
 

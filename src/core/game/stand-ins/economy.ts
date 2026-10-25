@@ -5,7 +5,7 @@
  */
 import type { ContentDB } from '../../content';
 import type { OfferCheck, PostEntry } from '../../economy';
-import type { ClubId, FighterId, GameState, LedgerEntry, OfferResponse, SeasonRecord } from '../../model';
+import { setMembership, type ClubId, type FighterId, type GameState, type LedgerEntry, type OfferResponse, type SeasonRecord } from '../../model';
 import { clamp, engineError, err, ok } from '../../util';
 import type { GamePorts } from '../ports';
 
@@ -94,8 +94,7 @@ export function makeStandInEconomy(fighters: GamePorts['fighters']): Port {
   const sign = (draft: GameState, clubId: ClubId, fighterId: FighterId, wage: number, seasons: number): void => {
     const f = draft.fighters[fighterId]!;
     const season = draft.calendar.season;
-    f.clubId = clubId;
-    f.status = 'active';
+    setMembership(draft, f, clubId, 'active');
     f.freeAgency = null;
     f.contract = { clubId, wagePerWeek: wage, startSeason: season, endSeason: season + seasons - 1, signedAt: { season, weekIndex: draft.calendar.weekIndex }, dropClauseApplied: false };
   };
@@ -122,10 +121,9 @@ export function makeStandInEconomy(fighters: GamePorts['fighters']): Port {
     const left = Math.max(0, weeks(content) - draft.calendar.weekIndex + 1) + (f.contract.endSeason - draft.calendar.season) * weeks(content);
     const payout = relief ? 0 : Math.floor((f.contract.wagePerWeek * left * content.economy.contracts.releasePayoutBp) / BP / 10) * 10;
     if (payout > 0) post(draft, { clubId, amount: -payout, category: 'releasePayout', fighterId });
-    f.clubId = null;
+    setMembership(draft, f, null, 'free-agent');
     f.contract = null;
-    f.status = 'free-agent';
-    f.freeAgency = { unsignedSeasonEnds: 0, formerClubId: clubId, releasedByClubId: clubId, releasedSeason: draft.calendar.season };
+    f.freeAgency = { unsignedSeasonEnds: 0, formerClubId: clubId, releasedByClubId: clubId, releasedSeason: draft.calendar.season, enteredAt: { season: draft.calendar.season, weekIndex: draft.calendar.weekIndex } };
     draft.market.releasedThisSeason.push({ fighterId, clubId });
     return ok({ payout });
   };
@@ -271,10 +269,9 @@ export function makeStandInEconomy(fighters: GamePorts['fighters']): Port {
       for (const f of Object.values(draft.fighters)) {
         if (f.status !== 'active' || !f.contract || f.contract.endSeason > draft.calendar.season) continue;
         const former = f.clubId;
-        f.clubId = null;
+        setMembership(draft, f, null, 'free-agent');
         f.contract = null;
-        f.status = 'free-agent';
-        f.freeAgency = { unsignedSeasonEnds: 0, formerClubId: former, releasedByClubId: null, releasedSeason: null };
+        f.freeAgency = { unsignedSeasonEnds: 0, formerClubId: former, releasedByClubId: null, releasedSeason: null, enteredAt: { season: draft.calendar.season, weekIndex: draft.calendar.weekIndex } };
         out.push(f.id);
       }
       return out;
@@ -285,7 +282,7 @@ export function makeStandInEconomy(fighters: GamePorts['fighters']): Port {
         if (f.status !== 'free-agent' || !f.freeAgency) continue;
         f.freeAgency.unsignedSeasonEnds += 1;
         if (f.freeAgency.unsignedSeasonEnds >= UNSIGNED_SEASON_ENDS_BEFORE_LEAVING) {
-          f.status = 'retired';
+          setMembership(draft, f, null, 'retired');
           out.push(f.id);
         }
       }

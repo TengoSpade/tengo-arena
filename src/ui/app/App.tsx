@@ -10,8 +10,10 @@
 import { effect } from '@preact/signals';
 import type { ComponentType } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { ToastRegion, TooltipLayer, showToast } from '../components';
-import { DebugOverlay } from '../debug/DebugOverlay';
+// Direct module imports (not the components barrel) keep screen-only components out of the main bundle.
+import { ToastRegion, showToast } from '../components/Toast';
+import { TooltipLayer } from '../components/Tooltip';
+import type * as DebugOverlayModule from '../debug/DebugOverlay';
 import { StoreContext, type AppStore } from '../store';
 import { EngineContext } from '../store/engine';
 import { errorText } from '../store/messages';
@@ -42,6 +44,11 @@ function debugRequested(): boolean {
 export function App({ store }: AppProps) {
   const [debug, setDebug] = useState(debugRequested);
   const debugAllowed = import.meta.env.DEV || debugRequested();
+  // The debug overlay is a lazy chunk: loaded the first time it is opened.
+  const [DebugOverlay, setDebugOverlay] = useState<typeof DebugOverlayModule.DebugOverlay | null>(null);
+  useEffect(() => {
+    if (debug && debugAllowed && !DebugOverlay) void import('../debug/DebugOverlay').then((m) => setDebugOverlay(() => m.DebugOverlay));
+  }, [debug, debugAllowed, DebugOverlay]);
 
   useEffect(() => applySettingsToDocument(), []);
   useEffect(
@@ -63,7 +70,7 @@ export function App({ store }: AppProps) {
     <StoreContext.Provider value={store}>
       <EngineContext.Provider value={store.engine}>
         <AppRoutes store={store} onToggleDebug={debugAllowed ? () => setDebug((d) => !d) : undefined} />
-        {debug && debugAllowed && <DebugOverlay store={store} onClose={() => setDebug(false)} />}
+        {debug && debugAllowed && DebugOverlay && <DebugOverlay store={store} onClose={() => setDebug(false)} />}
       </EngineContext.Provider>
     </StoreContext.Provider>
   );

@@ -9,9 +9,9 @@ import type { FighterId, GameState, MatchReport, MatchResult } from '../../../co
 import { clubName } from '../league/lib/club';
 import { fmtInt, fmtSeconds1, fmtTicks } from '../league/lib/format';
 import { sortBy, SortTh, useSort } from '../league/lib/sort';
-import { href } from '../league/lib/store';
-import { ClassTag, Delta, Portrait } from '../league/lib/ui';
+import { ClassTag, Delta, FighterLink, Portrait } from '../league/lib/ui';
 import { abilityName, name, totals, type FighterInfo, type Perspective } from './analysis';
+import { weeksOutText } from '../../format/fighter';
 import { t } from './text';
 
 type Key = 'name' | 'downs' | 'downed' | 'damage' | 'taken' | 'healed' | 'control' | 'rules' | 'xp' | 'fell' | 'hp';
@@ -33,9 +33,7 @@ function FighterCell({
   return (
     <span class="entity">
       <Portrait content={content} fighter={f ?? null} size="xs" injured={injured} />
-      <a class="entity__name" href={href(`fighter/${encodeURIComponent(info.id)}`)}>
-        {f?.name.full ?? info.id}
-      </a>
+      <FighterLink state={state} id={info.id} />
       {report.mvpFighterId === info.id && <span class="tag tag--accent">{t('mvp')}</span>}
       {info.isCaptain && (
         <span class="captain-mark" data-tip="Captain">
@@ -43,7 +41,7 @@ function FighterCell({
         </span>
       )}
       {(injured || injury) && (
-        <span class="tag tag--bad" data-tip={injury ? `${injury.severity} · out ${injury.weeksOut} wk` : 'Injured'}>
+        <span class="tag tag--bad" data-tip={injury ? `${injury.severity} · out ${weeksOutText(injury)}` : 'Injured'}>
           <span class="icon" data-icon="injury" aria-hidden="true" />
           <span class="u-sr-only">Injured</span>
         </span>

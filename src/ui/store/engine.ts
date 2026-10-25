@@ -30,6 +30,8 @@ export interface GameEngine {
   fighterView: typeof game.fighterView;
   freeAgents: typeof game.freeAgents;
   suggestLineup: typeof game.suggestLineup;
+  /** Who a captaincy change would Snub or pass over, and the chemistry before and after (m1/fix-perf). */
+  captaincyPreview: typeof game.captaincyPreview;
   // views (other modules, read-only)
   lineupChemistry: typeof fighters.lineupChemistry;
   captaincy: typeof fighters.captaincy;
@@ -45,6 +47,8 @@ export interface GameEngine {
   ask: typeof economy.ask;
   checkOffer: typeof economy.checkOffer;
   marketWage: typeof economy.marketWage;
+  /** Polish pass: the payout a release would cost now (shown before the player confirms). */
+  releasePayout: typeof economy.releasePayout;
   presetsForClass: typeof tactics.presetsForClass;
   describeRule: typeof tactics.describeRule;
   // saves (core/save)
@@ -65,6 +69,7 @@ export const coreEngine: GameEngine = {
   fighterView: game.fighterView,
   freeAgents: game.freeAgents,
   suggestLineup: game.suggestLineup,
+  captaincyPreview: game.captaincyPreview,
   lineupChemistry: fighters.lineupChemistry,
   captaincy: fighters.captaincy,
   isFit: fighters.isFit,
@@ -78,6 +83,7 @@ export const coreEngine: GameEngine = {
   ask: economy.ask,
   checkOffer: economy.checkOffer,
   marketWage: economy.marketWage,
+  releasePayout: economy.releasePayout,
   presetsForClass: tactics.presetsForClass,
   describeRule: tactics.describeRule,
   saveMetaFor: save.saveMetaFor,
