@@ -2220,6 +2220,26 @@ a.card:hover {
   mask-image: var(--i-star-outline);
 }
 
+/* Pips: a small n-of-max scale (class complexity). Filled pips read without color too. */
+.pips {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+}
+
+.pips__pip {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--c-text-faint);
+}
+
+.pips__pip--on {
+  background: var(--c-text-muted);
+  border-color: var(--c-text-muted);
+}
+
 /* Recent results: W / L letters carry the meaning; color is secondary */
 .form {
   display: inline-flex;

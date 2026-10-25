@@ -58,7 +58,7 @@ export function FighterLink({ state, id, short = false }: { state: GameState; id
   const f = state.fighters[id];
   const name = f ? (short ? f.name.given : f.name.full) : String(id);
   return (
-    <a class="entity__name" href={href(`fighter/${encodeURIComponent(id)}`)}>
+    <a class="entity__name" href={href(`fighter/${encodeURIComponent(id)}`)} {...C.overflowTipAttrs(f?.name.full)}>
       {name}
     </a>
   );

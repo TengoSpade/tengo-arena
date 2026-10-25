@@ -43,6 +43,27 @@ describe('Finances screen', () => {
     expect(ledgerRows.length).toBe(state.ledger.entries.length);
   });
 
+  it('names the season-budget parts in words and hides zero tier-move parts', () => {
+    // The real core labels parts by id (core/economy seasonBudgetParts); the fake engine uses prose.
+    const world = makeSampleWorld(kit, 'mid');
+    render(
+      <StoreContext.Provider value={world.store}>
+        <EngineContext.Provider value={coreEngine}>
+          <FinancesScreen params={{}} />
+        </EngineContext.Provider>
+      </StoreContext.Provider>,
+    );
+    const budget = screen.getByTestId('finance-budget');
+    expect(budget.textContent).toContain('Central grant');
+    expect(budget.textContent).toContain('Sponsor retainer');
+    expect(budget.textContent).toContain('Projected gate');
+    expect(budget.textContent).not.toMatch(/centralGrant|sponsorRetainer|projectedGate/);
+    // A club that neither went up nor down has no parachute or promotion grant to show.
+    expect(budget.textContent).not.toContain('Parachute');
+    expect(budget.textContent).not.toContain('Promotion grant');
+    expect(within(budget).getByText('Central grant').getAttribute('data-tip')).toContain('installments');
+  });
+
   it('filters the ledger to income or costs', () => {
     renderAt();
     const ledger = screen.getByTestId('finance-ledger');

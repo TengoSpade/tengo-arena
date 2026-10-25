@@ -14,6 +14,7 @@ import { useShortcuts } from '../../app/shortcuts';
 import {
   CapMeter,
   Crest,
+  crestLetters,
   DataTable,
   Delta,
   Empty,
@@ -226,7 +227,7 @@ function FixtureHero({ ctx, fixture, engine }: { ctx: ClubContext; fixture: Fixt
     >
       <div class="fixture">
         <div class="fixture__side">
-          <Crest primary={club.colors.primary} secondary={club.colors.secondary} code={club.code} size="xl" />
+          <Crest primary={club.colors.primary} secondary={club.colors.secondary} code={crestLetters(club)} size="xl" />
           <div class="fixture__club">
             <span class="fixture__name">{club.name}</span>
             <span class="fixture__record" tabIndex={0} {...tipAttrs(ours.tip)}>
@@ -241,7 +242,7 @@ function FixtureHero({ ctx, fixture, engine }: { ctx: ClubContext; fixture: Fixt
           <span class="fixture__venue">{venue}</span>
         </div>
         <div class="fixture__side fixture__side--away">
-          <Crest primary={other.colors.primary} secondary={other.colors.secondary} code={other.code} size="xl" />
+          <Crest primary={other.colors.primary} secondary={other.colors.secondary} code={crestLetters(other)} size="xl" />
           <div class="fixture__club">
             <span class="fixture__name">{other.name}</span>
             <span class="fixture__record" tabIndex={0} {...tipAttrs(theirs.tip)}>
@@ -551,10 +552,10 @@ function ClubPanel({ ctx }: { ctx: ClubContext }) {
           <span class="stat-tile__sub">
             {lastWeekNet !== 0 ? (
               <>
-                <Delta value={lastWeekNet} /> {T.lastWeek}
+                <Delta value={lastWeekNet} format={(n) => formatMoney(n)} /> {T.lastWeek}
               </>
             ) : (
-              `${formatSigned(0)} ${T.lastWeek}`
+              `${formatMoney(0)} ${T.lastWeek}`
             )}
           </span>
         </div>

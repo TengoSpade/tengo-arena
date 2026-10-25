@@ -84,7 +84,7 @@ export const en = {
   'topbar.standing': 'Standing',
   'topbar.search': 'Search fighters, clubs, classes',
   'topbar.searchShort': 'Search',
-  'topbar.digest': 'Digest: {n} items need action',
+  'topbar.digest': 'Digest: {n} {n?item needs|items need} action',
   'topbar.digestNone': 'Digest: nothing needs action',
   'topbar.theme': 'Switch light or dark theme',
   'topbar.themeTip': 'Theme: dark or light',
@@ -92,7 +92,7 @@ export const en = {
   'topbar.shortcutsTip': 'Keyboard shortcuts (?)',
   'topbar.rosterTip': 'Roster {n} of {cap}, the {tier} cap. Hired blades do not count.',
   'topbar.balanceTip': 'Cash in hand. Changed only by ledger entries (wages, gates, grants, signings).',
-  'topbar.wagesTip': 'Wage bill: {n} contracts, paid at every week processing. Wage budget {budget} per week.',
+  'topbar.wagesTip': 'Wage bill: {n} {n?contract|contracts}, paid at every week processing. Wage budget {budget} per week.',
   'topbar.calendarTip': 'Season {season}, {week}. Phase: {phase}.',
   'topbar.standingTip': '{pos} of {size} in the {wing}. The top 4 of each wing reach the {tournament}.',
   'topbar.standingNone': 'No table yet: the wing draw happens at the season start.',
@@ -169,7 +169,7 @@ export const en = {
   'blocker.lineup.incomplete': 'Lineup needs 5 fit fighters',
   'blocker.lineup.unavailable': 'A lineup fighter is unavailable',
   'blocker.lineup.not-on-roster': 'A lineup fighter left the roster',
-  'blocker.roster.over-cap': 'Release {n} fighters',
+  'blocker.roster.over-cap': 'Release {n} {n?fighter|fighters}',
   'blocker.club.not-chosen': 'Pick a club',
   'blocker.phase.season-end': 'Season review',
   'blocker.captain.missing': 'Choose a captain',
@@ -206,7 +206,7 @@ export const en = {
   // ---- content error screen ------------------------------------------------------------------------------
   'contentError.title': 'Game content has errors',
   'contentError.text': 'The game cannot start until these content problems are fixed. Each line names the file, the path and the problem.',
-  'contentError.count': '{n} problems',
+  'contentError.count': '{n} {n?problem|problems}',
 
   // ---- crash screen -----------------------------------------------------------------------------------------
   'crash.title': 'Something broke on this screen',

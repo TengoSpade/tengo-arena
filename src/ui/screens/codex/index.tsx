@@ -14,7 +14,7 @@ import type { Fighter, GameState } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
 import { useShortcuts } from '../../app/shortcuts';
-import { Empty, FighterName, Icon, Meter, PageHeader, Panel, Rating, RoleBadge, RoleGlyph, RowMark, RuleLine, Tag, tipAttrs } from '../../components';
+import { Empty, FighterName, Icon, Meter, PageHeader, Panel, Pips, Rating, RoleBadge, RoleGlyph, RowMark, RuleLine, Tag, tipAttrs } from '../../components';
 import { presetLines, ruleParts, stanceName } from '../../format/rules';
 import { roleNames, rolesOf } from '../../format/fighter';
 import { useStore } from '../../store';
@@ -32,7 +32,8 @@ const T = {
   roles: 'Roles',
   roleToggle: 'Show {role} classes',
   hybrids: 'Hybrids only',
-  search: 'Search name, ability or role tag',
+  search: 'Name, ability or role',
+  searchLabel: 'Search name, ability or role tag',
   reset: 'Reset filters',
   empty: 'No class matches',
   complexity: 'Complexity {n} of 3',
@@ -130,7 +131,7 @@ export default function CodexScreen({ params }: ScreenProps) {
               class="input input--sm"
               type="search"
               placeholder={T.search}
-              aria-label={T.search}
+              aria-label={T.searchLabel}
               value={query.value}
               onInput={(e) => (query.value = (e.target as HTMLInputElement).value)}
             />
@@ -216,12 +217,15 @@ function ClassCard({ k, content, selected }: { k: ClassDef; content: ContentDB; 
         </span>
         <span class="codex-card__name">{k.name}</span>
       </span>
-      <span class="l-cluster l-cluster--xs">
+      <span class="codex-card__meta">
         <span class="u-xs u-muted">{names.join(' · ')}</span>
         <RowMark row={k.startingRow} tip={T.rowTip} />
-        <span class="tag tag--outline" {...tipAttrs(T.complexityTip)}>
-          {format(T.complexity, { n: k.complexity })}
-        </span>
+        <Pips
+          value={k.complexity}
+          max={3}
+          label={format(T.complexity, { n: k.complexity })}
+          tip={{ title: format(T.complexity, { n: k.complexity }), body: T.complexityTip }}
+        />
       </span>
       <span class="u-sm u-muted codex-card__desc">{k.description}</span>
     </button>

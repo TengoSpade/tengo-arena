@@ -97,6 +97,9 @@ function venueText(game: GameState, content: ContentDB, f: Fixture): string {
 function OurSeason({ game, content, clubId, fixtures, next }: { game: GameState; content: ContentDB; clubId: ClubId; fixtures: Fixture[]; next: Fixture | null }) {
   const positions = useWingPositions(game, content, game.clubs[clubId]!.tierId);
   const points = content.leagues.standings.pointsByResult as Record<string, number>;
+  const pointsTable = Object.entries(points)
+    .map(([score, pts]) => `${score.replace('-', '–')} ${pts}`)
+    .join(' · ');
   const columns: Column<Fixture>[] = [
     {
       id: 'week',
@@ -175,7 +178,12 @@ function OurSeason({ game, content, clubId, fixtures, next }: { game: GameState;
         if (!r || f.stage !== 'league') return <span class="u-faint">—</span>;
         const side = r.homeClubId === clubId ? 'home' : 'away';
         const key = `${r.score[side]}-${r.score[side === 'home' ? 'away' : 'home']}`;
-        return <span class="u-num">+{points[key] ?? 0}</span>;
+        const pts = points[key] ?? 0;
+        return (
+          <span class={pts > 0 ? 'u-num' : 'u-num u-faint'} data-tip={t('tip.points', { score: key.replace('-', '–'), pts, table: pointsTable })}>
+            {pts > 0 ? `+${pts}` : '0'}
+          </span>
+        );
       },
     },
     {

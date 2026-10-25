@@ -4,17 +4,13 @@
  * interface wording only. Theme names (clubs, tiers, classes, currency)
  * always come from content.
  */
+import { format } from '../../../text';
+
 export type TextTable = Readonly<Record<string, string>>;
 
 /** Returns t(key, params) for a table. Unknown params stay visible as {name}. */
 export function makeText<T extends TextTable>(table: T): (key: keyof T & string, params?: Record<string, string | number>) => string {
-  return (key, params) => {
-    let text: string = table[key] ?? key;
-    if (params) {
-      for (const [name, value] of Object.entries(params)) text = text.split(`{${name}}`).join(String(value));
-    }
-    return text;
-  };
+  return (key, params) => format(table[key] ?? key, params);
 }
 
 /** Copy shared by several WP7 screens (round names, empty states). */

@@ -11,12 +11,8 @@ import * as C from '../../../components';
 
 export type CrestSize = 'sm' | 'xs' | 'md' | 'lg' | 'xl';
 
-/** Two-letter crest code from the club name ("Thornwick Wardens" -> "TW"). */
-export function crestCode(club: Pick<Club, 'name' | 'code'>): string {
-  const words = club.name.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w));
-  if (words.length >= 2) return (words[0]![0]! + words[1]![0]!).toUpperCase();
-  return club.code.slice(0, 2).toUpperCase();
-}
+/** Two-letter crest code (shared rule in components/marks). */
+export const crestCode = C.crestLetters;
 
 export function Crest({ club, size }: { club: Pick<Club, 'name' | 'code' | 'colors'> | null | undefined; size?: CrestSize }) {
   const sz = size === 'xs' ? undefined : size;
@@ -59,7 +55,9 @@ export function ClubEntity({
   return (
     <span class="entity" data-tip={club && short ? club.name : undefined}>
       <Crest club={club} size={size} />
-      <span class="entity__name">{label}</span>
+      <span class="entity__name" {...(short ? {} : C.overflowTipAttrs(label))}>
+        {label}
+      </span>
       {children}
     </span>
   );

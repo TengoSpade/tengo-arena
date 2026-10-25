@@ -14,6 +14,7 @@ import { DataTable, Icon, PageHeader, Panel, showToast, type Column } from '../.
 import type { GameStore } from '../../store';
 import { useWp7Engine, type Wp7Engine } from '../league/lib/engine';
 import { fmtMoney } from '../league/lib/format';
+import { formatInt } from '../../format';
 import { rosterOf } from '../league/lib/season';
 import { useCareer, type Career } from '../league/lib/store';
 import { Callout, ClassTag, Empty, FighterLink, NoCareer, Portrait, RatingPill, Segmented, Stars, TraitDots, classRoles, roleNames } from '../league/lib/ui';
@@ -153,6 +154,14 @@ function Market({ career }: { career: Career }) {
         <div class="market-banner">
           <Callout kind="bad" title={t('embargo.title', { balance: fmtMoney(market.balance, content), min: fmtMoney(market.tierMinWage, content) })}>
             {t('embargo.text', { min: fmtMoney(market.tierMinWage, content) })}
+          </Callout>
+        </div>
+      )}
+
+      {!market.embargo && market.wageRoom <= 0 && (view === 'agents' || view === 'shortlist') && (
+        <div class="market-banner">
+          <Callout kind="warn" title={t('noRoom.title', { room: fmtMoney(market.wageRoom, content) })}>
+            {t('noRoom.text')}
           </Callout>
         </div>
       )}
@@ -514,9 +523,10 @@ function AgentsTable({
         return (
           <span class="market-ask">
             <span class="u-num">{fmtMoney(r.ask, content)}</span>
-            {excess > 0 && (
+            {/* With no room at all the banner above the table says it once, instead of a tag on every row. */}
+            {excess > 0 && market.wageRoom > 0 && (
               <span class="tag tag--warn" data-tip={t('disabled.roomRoom', { n: fmtMoney(excess, content) })}>
-                {t('tag.overRoom', { n: excess })}
+                {t('tag.overRoom', { n: formatInt(excess) })}
               </span>
             )}
           </span>

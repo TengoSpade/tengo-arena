@@ -18,7 +18,26 @@
 
 .lineup-card__xp {
   flex: 1 1 auto;
-  min-width: 2.5rem;
+  min-width: 2rem;
+}
+
+.lineup-card__risk {
+  flex: none;
+}
+
+/* The trend word gives way before the card overflows; the arrow and number always show. */
+.lineup-card__trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.lineup-card__trend-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lineup-card--empty {

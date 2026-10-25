@@ -7,6 +7,7 @@
 import { useState } from 'preact/hooks';
 import type { ContentDB } from '../../../core/content';
 import type { FighterId, GameState } from '../../../core/model';
+import { overflowTipAttrs } from '../../components';
 import { href } from '../league/lib/store';
 import { Portrait, Segmented } from '../league/lib/ui';
 import type { FighterInfo, Perspective } from './analysis';
@@ -25,7 +26,7 @@ function RecapCard({ state, content, info, focus }: { state: GameState; content:
       <header class="recap-card__head">
         <Portrait content={content} fighter={f ?? null} size="sm" />
         <div class="entity__stack">
-          <a class="entity__name" href={href(`fighter/${encodeURIComponent(info.id)}`)}>
+          <a class="entity__name" href={href(`fighter/${encodeURIComponent(info.id)}`)} {...overflowTipAttrs(f?.name.full)}>
             {f?.name.full ?? info.id}
           </a>
           <span class="entity__sub">

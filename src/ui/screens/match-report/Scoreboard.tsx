@@ -4,6 +4,7 @@ import type { Fixture, GameState, MatchReport, MatchResult } from '../../../core
 import { isRoundId, roundName } from '../league/lib/calendar';
 import { Crest, clubName, clubVenue } from '../league/lib/club';
 import { fmtInt, fmtMoney, fmtTicks } from '../league/lib/format';
+import { overflowTipAttrs } from '../../components';
 import { href } from '../league/lib/store';
 import { ClassTag, Portrait } from '../league/lib/ui';
 import { other, type FighterInfo, type Perspective } from './analysis';
@@ -146,7 +147,7 @@ export function Scoreboard({
           </span>
           <Portrait content={content} fighter={mvpFighter} size="sm" />
           <div class="entity__stack">
-            <a class="entity__name" href={href(`fighter/${encodeURIComponent(mvp.id)}`)}>
+            <a class="entity__name" href={href(`fighter/${encodeURIComponent(mvp.id)}`)} {...overflowTipAttrs(mvpFighter.name.full)}>
               {mvpFighter.name.full}
             </a>
             <span class="entity__sub">

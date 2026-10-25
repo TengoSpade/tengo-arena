@@ -40,6 +40,15 @@ describe('Fixtures screen', () => {
     expect(rows[10]!.textContent).toContain('Not played');
   });
 
+  it('shows league points as +n or a plain 0, with the points rule as a tip', () => {
+    renderAt('mid');
+    const table = screen.getByTestId('fixtures-season');
+    const cells = [...table.querySelectorAll('td')].filter((td) => td.querySelector('[data-tip^="Rounds "]'));
+    expect(cells.length).toBe(7);
+    for (const td of cells) expect(td.textContent).toMatch(/^(\+[123]|0)$/);
+    expect(cells[0]!.querySelector('[data-tip]')!.getAttribute('data-tip')).toContain('Points by rounds: 2–0 3');
+  });
+
   it('includes our Reckoning fixtures in the season list', () => {
     const world = renderAt('tournament');
     const me = world.state.playerClubId!;

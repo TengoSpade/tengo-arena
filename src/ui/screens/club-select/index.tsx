@@ -13,7 +13,7 @@ import type { Club, ClubId } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
 import { installShortcuts } from '../../app/shortcuts';
-import { ConfirmButton, Crest, Empty, Icon, PageHeader, Panel, Rating, Segmented, Tag, showToast, tipAttrs } from '../../components';
+import { ConfirmButton, Crest, Empty, Icon, PageHeader, Panel, Rating, Segmented, Tag, crestLetters, showToast, tipAttrs } from '../../components';
 import { formatMoney } from '../../format';
 import { useStore } from '../../store';
 import { safeView, useEngine } from '../../store/engine';
@@ -217,7 +217,7 @@ export default function ClubSelectScreen(_props: ScreenProps) {
                     onClick={() => setPicked(club.id)}
                   >
                     <span class="club-card__head">
-                      <Crest primary={club.colors.primary} secondary={club.colors.secondary} code={club.code} size="lg" />
+                      <Crest primary={club.colors.primary} secondary={club.colors.secondary} code={crestLetters(club)} size="lg" />
                       <span class="club-card__name">
                         <span class="club-card__title">{club.name}</span>
                         <span class="u-xs u-muted">
@@ -273,7 +273,7 @@ export default function ClubSelectScreen(_props: ScreenProps) {
         <div class="club-select__bar-inner">
           {pickedClub ? (
             <span class="entity">
-              <Crest primary={pickedClub.colors.primary} secondary={pickedClub.colors.secondary} code={pickedClub.code} size="md" />
+              <Crest primary={pickedClub.colors.primary} secondary={pickedClub.colors.secondary} code={crestLetters(pickedClub)} size="md" />
               <span class="entity__stack">
                 <span class="entity__name">{pickedClub.name}</span>
                 <span class="entity__sub">

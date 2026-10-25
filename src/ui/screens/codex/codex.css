@@ -37,6 +37,18 @@
   font-weight: var(--fw-bold);
 }
 
+/* Roles, starting row and complexity on one line; complexity sits at the right edge. */
+.codex-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.codex-card__meta > .pips {
+  margin-left: auto;
+}
+
 .codex-card__desc {
   display: -webkit-box;
   -webkit-line-clamp: 3;

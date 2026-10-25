@@ -2,10 +2,14 @@ import { cleanup, fireEvent, render, screen, act } from '@testing-library/preact
 import { useState } from 'preact/hooks';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fixtureContent } from '../../core/testkit';
+import { format } from '../text';
 import { configureFormat, formatMoney, formatPercentBp, formatSigned, potentialStars, ratingBand, attributeBand } from '../format';
 import {
   ClassTag,
   ConfirmButton,
+  Delta,
+  Pips,
+  overflowTipAttrs,
   Crest,
   DataTable,
   FighterName,
@@ -288,5 +292,34 @@ describe('domain components', () => {
     expect((container.querySelector('.crest') as HTMLElement).style.getPropertyValue('--crest-rim')).not.toBe('');
     expect(container.querySelectorAll('.page-header__meta .sep-dot')).toHaveLength(1);
     expect(container.querySelector('.panel__title')!.textContent).toBe('Club');
+  });
+});
+
+describe('polish helpers', () => {
+  it('fills plural slots by the count', () => {
+    expect(format('{n} {n?item|items} · {a} {a?needs|need} action', { n: 1, a: 3 })).toBe('1 item · 3 need action');
+    expect(format('{n} {n?item|items} · {a} {a?needs|need} action', { n: 4, a: 1 })).toBe('4 items · 1 needs action');
+    // A slot without its parameter stays visible, like any unfilled slot.
+    expect(format('{k?one|many}', { n: 1 })).toBe('{k?one|many}');
+  });
+
+  it('formats a delta magnitude with the given formatter', () => {
+    render(<Delta value={-7000} format={(n) => formatMoney(n)} />);
+    const el = document.querySelector('.delta')!;
+    expect(el.classList.contains('delta--down')).toBe(true);
+    expect(el.textContent).toBe('−7,000 ts');
+    cleanup();
+    render(<Delta value={1234} />);
+    expect(document.querySelector('.delta')!.textContent).toBe('+1,234');
+  });
+
+  it('draws pips with the count in the label', () => {
+    render(<Pips value={2} max={3} label="Complexity 2 of 3" />);
+    expect(screen.getByRole('img', { name: 'Complexity 2 of 3' }).querySelectorAll('.pips__pip--on')).toHaveLength(2);
+  });
+
+  it('marks overflow-only tips', () => {
+    expect(overflowTipAttrs('Fenrra Coppershank')).toEqual({ 'data-tip': 'Fenrra Coppershank', 'data-tip-overflow': '' });
+    expect(overflowTipAttrs(undefined)).toEqual({});
   });
 });

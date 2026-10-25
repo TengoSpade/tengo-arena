@@ -8,7 +8,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import type { ClubId, WeekReport } from '../../core/model';
-import { Crest, Icon, Modal, ToastRegion, TooltipLayer, showToast, tipAttrs, undoLast, type Tip } from '../components';
+import { Crest, Icon, Modal, ToastRegion, TooltipLayer, crestLetters, showToast, tipAttrs, undoLast, type Tip } from '../components';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
 import { slotName, useStore, type AppStore } from '../store';
@@ -261,7 +261,7 @@ function Topbar({
     <header class="topbar">
       {ctx ? (
         <a class="topbar__club" href="#/home" data-testid="topbar-club">
-          <Crest primary={ctx.club.colors.primary} secondary={ctx.club.colors.secondary} code={ctx.club.code} size="md" />
+          <Crest primary={ctx.club.colors.primary} secondary={ctx.club.colors.secondary} code={crestLetters(ctx.club)} size="md" />
           <span class="topbar__club-text">
             <span class="topbar__club-name">{ctx.club.name}</span>
             <span class="topbar__club-tier">

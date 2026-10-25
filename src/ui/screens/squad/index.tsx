@@ -459,9 +459,11 @@ function LineupBoard(props: BoardProps) {
             <li data-state={entries.length < 5 ? 'warn' : injuredInLineup.length ? 'bad' : undefined}>
               {hiredBlade && entries.length < 5
                 ? format(T.checkHiredBlade, { n: entries.length })
-                : entries.length === 5 && injuredInLineup.length === 0
-                  ? format(T.checkFilled, { n: 5 })
-                  : format(T.checkFilledPartial, { n: entries.length })}
+                : entries.length === 5 && injuredInLineup.length > 0
+                  ? format(T.checkFilledUnfit, { n: injuredInLineup.length })
+                  : entries.length === 5
+                    ? format(T.checkFilled, { n: 5 })
+                    : format(T.checkFilledPartial, { n: entries.length })}
             </li>
             <li data-state={club.captainId ? undefined : 'bad'}>
               {club.captainId
@@ -601,16 +603,17 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
       </div>
       <div class="lineup-card__foot lineup-card__meta">
         {risk && (
-          <span {...tipAttrs(risk.tip)} class={risk.atRisk ? 'u-warn' : undefined}>
-            <Icon name="injury" size="sm" /> {risk.word}
+          // Normal risk is the quiet default: icon only (the word stays for screen readers and the tooltip).
+          <span {...tipAttrs(risk.tip)} class={risk.atRisk ? 'lineup-card__risk u-warn' : 'lineup-card__risk'}>
+            <Icon name="injury" size="sm" /> <span class={risk.notable ? undefined : 'u-sr-only'}>{risk.word}</span>
           </span>
         )}
         <span class="lineup-card__xp" {...tipAttrs(format(T.xpTip, { xp: r.f.season.xp, target }))}>
           <Progress value={r.f.season.xp / Math.max(1, target)} />
         </span>
         {trend && (
-          <span {...tipAttrs(`Trend: ${trend.label}. Projected rating change at season end if this season's XP rate continues.`)}>
-            {trend.dir !== 0 && <Delta value={trend.dir} />} {trend.label}
+          <span class="lineup-card__trend" {...tipAttrs(format(T.trendTip, { label: trend.label }))}>
+            {trend.dir !== 0 && <Delta value={trend.dir} />} <span class="lineup-card__trend-label">{trend.label}</span>
           </span>
         )}
       </div>

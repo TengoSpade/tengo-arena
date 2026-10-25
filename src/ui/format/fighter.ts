@@ -139,7 +139,8 @@ export function statusLabel(statusId: string, content: ContentDB): { label: stri
   return { label: s?.label ?? statusId, text: s?.text ?? '' };
 }
 
-export function injuryRiskText(view: FighterView, content: ContentDB): { word: string; tip: string; atRisk: boolean } {
+/** Injury-risk copy. `notable` is false for the normal case, so callers can keep the quiet default to an icon. */
+export function injuryRiskText(view: FighterView, content: ContentDB): { word: string; tip: string; atRisk: boolean; notable: boolean } {
   const statuses = view.fighter.statuses.map((s) => s.id);
   const atRisk = statuses.includes('at_risk');
   const tender = statuses.includes('still_tender');
@@ -147,7 +148,8 @@ export function injuryRiskText(view: FighterView, content: ContentDB): { word: s
   return {
     word,
     atRisk,
-    tip: `Injury chance ${formatPercentBp(view.injuryChanceBp, 2)} per round started.${atRisk ? ` ${statusLabel('at_risk', content).text}` : ''}${tender ? ` ${statusLabel('still_tender', content).text}` : ''}`,
+    notable: atRisk || tender,
+    tip: `Injury risk: ${word}. Injury chance ${formatPercentBp(view.injuryChanceBp, 2)} per round started.${atRisk ? ` ${statusLabel('at_risk', content).text}` : ''}${tender ? ` ${statusLabel('still_tender', content).text}` : ''}`,
   };
 }
 

@@ -9,6 +9,7 @@ import type { FighterId, GameState, MatchReport, MatchResult } from '../../../co
 import { clubName } from '../league/lib/club';
 import { fmtInt, fmtSeconds1, fmtTicks } from '../league/lib/format';
 import { sortBy, SortTh, useSort } from '../league/lib/sort';
+import { overflowTipAttrs } from '../../components';
 import { href } from '../league/lib/store';
 import { ClassTag, Delta, Portrait } from '../league/lib/ui';
 import { abilityName, name, totals, type FighterInfo, type Perspective } from './analysis';
@@ -33,7 +34,7 @@ function FighterCell({
   return (
     <span class="entity">
       <Portrait content={content} fighter={f ?? null} size="xs" injured={injured} />
-      <a class="entity__name" href={href(`fighter/${encodeURIComponent(info.id)}`)}>
+      <a class="entity__name" href={href(`fighter/${encodeURIComponent(info.id)}`)} {...overflowTipAttrs(f?.name.full)}>
         {f?.name.full ?? info.id}
       </a>
       {report.mvpFighterId === info.id && <span class="tag tag--accent">{t('mvp')}</span>}

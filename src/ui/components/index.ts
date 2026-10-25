@@ -4,7 +4,7 @@
  * commit: additive changes only (WP7 builds on these).
  */
 export { Icon, type IconName, type IconProps } from './Icon';
-export { TooltipLayer, TipBody, tipAttrs, readTip, tooltipDelayMs, type Tip, type TipContent, type TipRow } from './Tooltip';
+export { TooltipLayer, TipBody, tipAttrs, overflowTipAttrs, readTip, tooltipDelayMs, type Tip, type TipContent, type TipRow } from './Tooltip';
 export {
   ToastRegion,
   showToast,
@@ -34,6 +34,7 @@ export { Tabs, TabPanel, type TabDef, type TabsProps } from './Tabs';
 export { RuleLine, type RuleLineParts } from './RuleLine';
 export {
   Crest,
+  crestLetters,
   Portrait,
   RoleGlyph,
   RoleBadge,
@@ -50,6 +51,7 @@ export {
   Progress,
   FormStrip,
   Delta,
+  Pips,
   Segmented,
   Chip,
   Kbd,

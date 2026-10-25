@@ -54,6 +54,20 @@ describe('Squad', () => {
     expect(screen.getByText(/5 of 5 places filled|of 5 places filled/)).toBeTruthy();
   });
 
+  it('says the five are not all fit when an injured fighter is in the lineup', () => {
+    const { store } = createTestStore();
+    const state = structuredClone(store.game.value!);
+    const c = club(state);
+    const hurt = state.fighters[c.lineup.fighters[0]!.fighterId]!;
+    hurt.injury = { severity: 'minor', weeksOut: 2, fixtureId: null, round: null, causeFighterId: null, damageBp: 0, since: { season: state.calendar.season, weekIndex: state.calendar.weekIndex } };
+    store.replaceWorld(state);
+    mount(<SquadScreen params={{}} />, store);
+    const check = document.querySelector('.lineup-check')!;
+    expect(check.textContent).toContain('All 5 places filled, but 1 fighter is unfit');
+    expect(check.textContent).not.toContain('5 of 5 places filled');
+    expect(check.textContent).toContain(`${hurt.name.full} is injured and cannot play`);
+  });
+
   it('moves a reserve into the lineup with F and undoes it with Ctrl Z', async () => {
     const { store } = createTestStore();
     const c = club(store.game.value!);

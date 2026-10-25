@@ -4,7 +4,7 @@ import { makeText } from '../league/lib/text';
 export const MARKET_TEXT = {
   'eyebrow': 'Free agents · signable any week',
   'title': 'Market',
-  'meta.count': '{n} free agents',
+  'meta.count': '{n} free {n?agent|agents}',
   'meta.roster': 'Roster {roster} / {cap} · {left} places left',
   'meta.rosterTip': 'Roster {roster} + pending offers {pending} of the {cap} cap. Pending offers hold a place until week processing.',
   'meta.room': 'Wage room {room} / week',
@@ -21,6 +21,8 @@ export const MARKET_TEXT = {
   'view.rookies': 'Rookies',
   'view.shortlist': 'Shortlist',
   'embargo.title': 'Spending embargo · balance {balance} · new contracts above {min} are refused',
+  'noRoom.title': 'No wage room · {room} / week',
+  'noRoom.text': 'Your wage bill and pending offers already fill the wage budget, so every ask is over the room and no offer can be made. Release a fighter or let a contract run out to free room.',
   'embargo.text': 'While the embargo lasts, free-agent offers are allowed only at the tier minimum ({min}, 1 season, no signing cost) and only while you have fewer than 5 fit fighters. It lifts at the first week processing that ends at 0 or above.',
   'filters.title': 'Filters',
   'filters.reset': 'Reset',
