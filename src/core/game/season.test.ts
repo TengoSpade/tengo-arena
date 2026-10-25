@@ -120,7 +120,12 @@ describe('a full season', () => {
     expect(next.history[0]!.season).toBe(1);
     expect(next.history[0]!.tiers).toHaveLength(content.leagues.tiers.length);
     const aged = Object.values(end.fighters).filter((f) => f.status === 'active');
-    for (const f of aged.slice(0, 20)) expect(next.fighters[f.id]!.age).toBe(f.age + 1);
+    for (const f of aged.slice(0, 20)) {
+      // A fighter who retired at this season end is an alumnus now.
+      const now = next.fighters[f.id];
+      if (now) expect(now.age).toBe(f.age + 1);
+      else expect(next.alumni[f.id]).toBeDefined();
+    }
     expect(Object.values(next.fixtures).some((x) => x.season === 2)).toBe(true);
     for (const c of Object.values(next.clubs)) expect(c.history.some((h) => h.season === 1)).toBe(true);
   });

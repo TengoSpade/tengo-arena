@@ -452,14 +452,31 @@ function startingBalance(club: Club, content: ContentDB): number {
  * 95% drop-trim). Wages keep their proportions to the nearest band edge,
  * floor to the wage multiple and stay within [tier minimum, maxWeeklyWage];
  * a shortfall after rounding is topped up one multiple at a time (fighter id
- * order). Only when the tier minimum keeps the bill above the band are the
- * lowest value-per-wage fighters released, down to the AI roster minimum.
+ * order). Only when the tier minimum keeps the bill above the band is the
+ * lowest value-per-wage fighter released (never below the AI roster minimum)
+ * and the rest rescaled again.
  */
 function fitWorldGenBill(draft: GameState, club: Club, content: ContentDB): void {
   const band = content.economy.budget.worldGenBillBandBp;
   const wb = club.finance.wageBudgetPerWeek;
   const lo = mulDiv(wb, band.minBp, BP);
   const hi = mulDiv(wb, band.maxBp, BP);
+  const keep = content.economy.ai.rosterMinimum;
+  for (;;) {
+    rescaleBill(draft, club, lo, hi, content);
+    const roster = rosterOf(draft, club.id);
+    if (wageBillOf(draft, club.id) <= hi || roster.length <= keep) return;
+    // The tier minimum keeps the bill above the band: release the lowest value per wage, then rescale again.
+    const worst = roster
+      .map((f) => ({ f, v: valuePerWage(f, club, content) }))
+      .sort((a, b) => a.v - b.v || compareFighterIds(b.f.id, a.f.id))[0]!.f;
+    makeFreeAgent(draft, worst);
+    worst.freeAgency = { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null, enteredAt: nowOf(draft) };
+  }
+}
+
+/** Scale every contract of the club toward the nearest band edge [lo, hi] (no-op inside the band). */
+function rescaleBill(draft: GameState, club: Club, lo: number, hi: number, content: ContentDB): void {
   const bill = wageBillOf(draft, club.id);
   if (bill === 0 || (bill >= lo && bill <= hi)) return;
   const target = bill > hi ? hi : lo;
@@ -474,16 +491,6 @@ function fitWorldGenBill(draft: GameState, club: Club, content: ContentDB): void
     if (c.wagePerWeek + step > max) continue;
     c.wagePerWeek += step;
     now += step;
-  }
-  const keep = content.economy.ai.rosterMinimum;
-  let roster = rosterOf(draft, club.id);
-  while (roster.length > keep && wageBillOf(draft, club.id) > hi) {
-    const worst = roster
-      .map((f) => ({ f, v: valuePerWage(f, club, content) }))
-      .sort((a, b) => a.v - b.v || compareFighterIds(b.f.id, a.f.id))[0]!.f;
-    makeFreeAgent(draft, worst);
-    worst.freeAgency = { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null, enteredAt: nowOf(draft) };
-    roster = rosterOf(draft, club.id);
   }
 }
 
