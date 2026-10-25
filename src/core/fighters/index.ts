@@ -2,7 +2,7 @@
  * core/fighters — fighter lifecycle (03-fighter-lifecycle: sys-races,
  * sys-fighters, sys-youth-intake, sys-development, aging and retirement,
  * sys-injury, sys-traits, sys-captaincy, sys-chemistry). Owner: WP2.
- * CONTRACT: signatures fixed; bodies are stubs.
+ * CONTRACT: signatures fixed (implemented); additive exports below the contract.
  *
  * Reads are pure functions of (fighter, content). Pipeline steps mutate a
  * DRAFT GameState handed in by core/game and derive their own RNG streams
@@ -16,6 +16,7 @@
  * - chemistry in M1 comes only from trait and captain lineup modifiers.
  */
 import type { CaptaincyGradeDef, ContentDB } from '../content';
+import { Rng, STREAM } from '../rng';
 import type {
   ClassId,
   ClubId,
@@ -30,7 +31,22 @@ import type {
   RetirementRecord,
   StatId,
 } from '../model';
-import { notImplemented } from '../util';
+import { captaincyAt, chemistryBreakdown, isFitFighter } from './captaincy';
+import { createFighterOn } from './generation';
+import { typicalRoundChanceBp } from './injury';
+import { applyMatch } from './match';
+import { generateNameWith, livingNames } from './names';
+import {
+  announceFinalSeasonsOn,
+  generateRookiesOn,
+  liveRetirementChance,
+  offseasonRecoveryOn,
+  seasonEndDevelopmentOn,
+  seasonEndRetirementsOn,
+  trendId,
+} from './season';
+import { effectiveStatsOf, fighterHumanAge100, potentialOf, ratingOf } from './stats';
+import { lockLineup, weekly } from './weekly';
 
 // ---- generation ---------------------------------------------------------------------------
 
@@ -52,19 +68,22 @@ export interface FighterSpec {
 
 /** Create a fighter on the draft (allocates its id, rolls everything, inserts into draft.fighters). Economy fills contractProfile. */
 export function createFighter(draft: GameState, spec: FighterSpec, content: ContentDB): FighterId {
-  return notImplemented('fighters.createFighter', draft, spec, content);
+  return createFighterOn(draft, spec, content);
 }
 
 /** A unique name for the race (names.json rules). */
 export function generateName(draft: GameState, raceId: RaceId, content: ContentDB): PersonName {
-  return notImplemented('fighters.generateName', draft, raceId, content);
+  // Standalone calls are keyed by a counter on the draft (createFighter keys names by fighter id).
+  const n = (draft.rng.counters['names'] ?? 0) + 1;
+  draft.rng.counters['names'] = n;
+  return generateNameWith(Rng.create(draft.rng.root, STREAM.names, 'standalone', n), raceId, content, livingNames(draft));
 }
 
 // ---- derived values (pure) --------------------------------------------------------------------
 
 /** humanAge = age × 80 / lifespan, in hundredths of a year (integer). */
 export function humanAge100(fighter: Fighter, content: ContentDB): number {
-  return notImplemented('fighters.humanAge100', fighter, content);
+  return fighterHumanAge100(fighter, content);
 }
 
 export interface StatContext {
@@ -78,17 +97,20 @@ export interface StatContext {
 
 /** Effective display stats 1-20 (caps × maturity − wear, race, traits, statuses, injury effects, context). The one function every caller uses. */
 export function effectiveStats(fighter: Fighter, content: ContentDB, context?: StatContext): Record<StatId, number> {
-  return notImplemented('fighters.effectiveStats', fighter, content, context);
+  const ctx: { matchType?: 'league' | 'tournament'; chemistry?: number } = {};
+  if (context?.matchType !== undefined) ctx.matchType = context.matchType;
+  if (context?.chemistry !== undefined) ctx.chemistry = context.chemistry;
+  return effectiveStatsOf(fighter, content, ctx);
 }
 
 /** Rating 1-100 = round(5 × Σ class ratingWeights × stat). */
 export function rating(fighter: Fighter, content: ContentDB): number {
-  return notImplemented('fighters.rating', fighter, content);
+  return ratingOf(fighter, content);
 }
 
 /** Potential 1-100 (displayed as stars). */
 export function potential(fighter: Fighter, content: ContentDB): number {
-  return notImplemented('fighters.potential', fighter, content);
+  return potentialOf(fighter, content);
 }
 
 export interface CaptaincyValue {
@@ -99,39 +121,42 @@ export interface CaptaincyValue {
 
 /** Captaincy of a fighter at a club (standing uses the club's top-five ratings). */
 export function captaincy(state: GameState, fighterId: FighterId, clubId: ClubId, content: ContentDB): CaptaincyValue {
-  return notImplemented('fighters.captaincy', state, fighterId, clubId, content);
+  const b = captaincyAt(state, fighterId, clubId, content);
+  return { cq: b.cq, grade: b.grade };
 }
 
 /** Lineup chemistry -5..5 from trait chemistry effects and the captain's grade. */
 export function lineupChemistry(state: GameState, clubId: ClubId, fighterIds: readonly FighterId[], captainId: FighterId | null, content: ContentDB): number {
-  return notImplemented('fighters.lineupChemistry', state, clubId, fighterIds, captainId, content);
+  return chemistryBreakdown(state, clubId, fighterIds, captainId, content).total;
 }
 
 /** Fit to be named in a lineup this week (not injured, not retired). */
 export function isFit(fighter: Fighter): boolean {
-  return notImplemented('fighters.isFit', fighter);
+  return isFitFighter(fighter);
 }
 
 /** Per-round injury chance in basis points (lineup screen odds). */
 export function injuryChanceBp(fighter: Fighter, content: ContentDB): number {
-  return notImplemented('fighters.injuryChanceBp', fighter, content);
+  return typicalRoundChanceBp(fighter, content);
 }
 
 /** Retirement chance this season in basis points (shown on the fighter profile). */
 export function retirementChanceBp(state: GameState, fighterId: FighterId, content: ContentDB): number {
-  return notImplemented('fighters.retirementChanceBp', state, fighterId, content);
+  const f = state.fighters[fighterId];
+  if (!f) throw new RangeError(`Unknown fighter ${fighterId}`);
+  return liveRetirementChance(state, f, content);
 }
 
 /** Development trend id (development.json trend.levels). */
 export function trend(fighter: Fighter, content: ContentDB): string {
-  return notImplemented('fighters.trend', fighter, content);
+  return trendId(fighter, content);
 }
 
 // ---- pipeline steps (mutate the draft) ---------------------------------------------------------
 
 /** Lineup lock for a club: captain strip/snubbed/passed-over rules, acting captain. */
 export function lineupLock(draft: GameState, clubId: ClubId, content: ContentDB): NewsId[] {
-  return notImplemented('fighters.lineupLock', draft, clubId, content);
+  return lockLineup(draft, clubId, content);
 }
 
 export interface MatchLifecycleOutcome {
@@ -142,35 +167,47 @@ export interface MatchLifecycleOutcome {
 
 /** After a match: XP (rounds started only), injury rolls (max 1 per match), career totals, statuses, event traits. */
 export function applyMatchLifecycle(draft: GameState, result: MatchResult, content: ContentDB): MatchLifecycleOutcome {
-  return notImplemented('fighters.applyMatchLifecycle', draft, result, content);
+  return applyMatch(draft, result, content);
 }
 
 /** Week processing step 3: injury and status countdown, emphasis weeks, captain streaks, weekly trait checks. */
 export function weeklyLifecycle(draft: GameState, content: ContentDB): NewsId[] {
-  return notImplemented('fighters.weeklyLifecycle', draft, content);
+  return weekly(draft, content);
 }
 
 /** Season end step 6: development and decline (pre-increment age), then +1 age; history rows. */
 export function seasonEndDevelopment(draft: GameState, content: ContentDB): NewsId[] {
-  return notImplemented('fighters.seasonEndDevelopment', draft, content);
+  return seasonEndDevelopmentOn(draft, content);
 }
 
 /** Season end step 7: retirements (final-season fighters, rolls, forced). Contracts end without payout. */
 export function seasonEndRetirements(draft: GameState, content: ContentDB): RetirementRecord[] {
-  return notImplemented('fighters.seasonEndRetirements', draft, content);
+  return seasonEndRetirementsOn(draft, content);
 }
 
 /** Season end step 9: off-season injury recovery. */
 export function offseasonRecovery(draft: GameState, content: ContentDB): void {
-  return notImplemented('fighters.offseasonRecovery', draft, content);
+  offseasonRecoveryOn(draft, content);
 }
 
 /** Season end step 13: rookie intake count and generation (economy assigns them to clubs for Trials Day). */
 export function generateRookies(draft: GameState, content: ContentDB): FighterId[] {
-  return notImplemented('fighters.generateRookies', draft, content);
+  return generateRookiesOn(draft, content);
 }
 
 /** P1: final-season announcements. */
 export function announceFinalSeasons(draft: GameState, content: ContentDB): NewsId[] {
-  return notImplemented('fighters.announceFinalSeasons', draft, content);
+  return announceFinalSeasonsOn(draft, content);
 }
+
+// ---- additive exports (not part of the phase-B contract) ----------------------------------------
+
+export { CAREER_ENDING_WEEKS, captaincyBreakdown, chemistryBreakdown, gradeFor, isCareerEnded, lineupCaptainOf as lineupCaptain } from './captaincy';
+export type { CaptaincyBreakdown, ChemistryBreakdown, LineupCaptain } from './captaincy';
+export { chemistryComposure, maturityBp, ratingFromStats } from './stats';
+export { careerEndingChancePerMatchBp, isAtRisk, pronenessIndexBp, pronenessLabel, roundInjuryChanceBp } from './injury';
+export { interimCaptainOf as interimCaptain } from './weekly';
+export { rookieCount, trendDelta } from './season';
+export { rolledPolarity, scarCount } from './traits';
+export { usageBpOf } from './development';
+export { PROVISIONAL_JOURNEYMAN_HUMAN_AGE } from './generation';
