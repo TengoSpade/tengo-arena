@@ -211,3 +211,4 @@ export { rookieCount, trendDelta } from './season';
 export { rolledPolarity, scarCount } from './traits';
 export { usageBpOf } from './development';
 export { PROVISIONAL_JOURNEYMAN_HUMAN_AGE } from './generation';
+export { lifecycleContentIssues } from './invariants';

@@ -19,6 +19,7 @@ import {
 } from './match';
 import { pushNews } from './news';
 import { fighterHumanAge100, ratingOf } from './stats';
+import { tables } from './tables';
 
 export const SNUBBED = 'snubbed';
 export const PASSED_OVER = 'passed_over';
@@ -97,7 +98,10 @@ function evaluateCaptainChange(draft: GameState, club: Club, previousId: Fighter
   const news: NewsId[] = [];
   const t = now(draft);
   const prev = draft.fighters[previousId];
-  const preseason = draft.calendar.phase === 'preseason';
+  // "Change made before MW1": at the season's first match lock every change since the
+  // previous lock happened in the off-season or preseason.
+  const firstMatchweek = tables(content).matchweekIndexes[0];
+  const preseason = draft.calendar.phase === 'preseason' || draft.calendar.weekIndex === firstMatchweek;
   // Snubbed: the previous captain, still at the club and fit, who held the role >= 4 matchweeks, unless exempt.
   if (prev && atClub(prev, club.id) && isFitFighter(prev) && club.captainSince) {
     const held = matchweeksBetween(club.captainSince, t, content);
