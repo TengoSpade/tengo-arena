@@ -196,6 +196,7 @@ export const REPORT_TEXT = {
   'missing.title': 'Details unavailable for this match',
   'missing.text': 'The event log cannot be rebuilt for this save (the game or content changed since the match). Score, rounds and the box score are kept.',
   'error.title': 'This report could not be built',
+  'why.gap': 'Their five averaged a rating of {them} against your {us}: a gap this size is hard to close with tactics alone.',
   'compacted.title': 'Only the score is kept for this match',
   'compacted.text': 'Matches between other clubs from earlier seasons are stored as results only, to keep saves small. Your own matches keep their full reports.',
   'error.notPlayed': 'This fixture has not been played yet.',

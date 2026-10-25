@@ -68,7 +68,7 @@ import {
 import { useStore } from '../../store';
 import { clubActions } from '../../store/actions';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
-import { fighterViewOf, usePlayerClub, type ClubContext } from '../../store/views';
+import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from '../../store/views';
 import { format, t } from '../../text';
 import { T } from './text';
 import './squad.css';
@@ -369,7 +369,7 @@ function LineupBoard(props: BoardProps) {
   const lineupRows = entries.map((e) => byId.get(e.fighterId)).filter((r): r is Row => !!r);
   const ratings = lineupRows.map((r) => r.view?.rating ?? null).filter((v): v is number => v !== null);
   const mean = ratings.length ? ratings.reduce((s, v) => s + v, 0) / ratings.length : null;
-  const opponentMean = props.opponent ? opponentLineupMean(state, content, engine, props.opponent) : null;
+  const opponentMean = props.opponent ? opponentLineupMean(state, props.opponent) : null;
   const wages = lineupRows.reduce((s, r) => s + (r.f.contract?.wagePerWeek ?? 0), 0);
   const chemistry = safeView<number | null>(
     () => engine.lineupChemistry(state, club.id, entries.map((e) => e.fighterId), club.captainId, content),
@@ -650,15 +650,10 @@ function engineFit(engine: GameEngine, f: Fighter): boolean {
   return safeView(() => engine.isFit(f), !(f.injury && f.injury.weeksOut > 0));
 }
 
-/** Mean rating of the opponent's last fielded lineup (from its last result), else its stored lineup. */
-function opponentLineupMean(state: GameState, content: ContentDB, engine: GameEngine, opponent: Club): number | null {
-  const last = Object.values(state.results)
-    .filter((r) => r.homeClubId === opponent.id || r.awayClubId === opponent.id)
-    .sort((a, b) => b.weekIndex - a.weekIndex)[0];
-  const side = last ? (last.homeClubId === opponent.id ? last.input.home : last.input.away) : null;
-  const ratings = side && side.fighters.length > 0 ? side.fighters.map((f) => f.rating) : opponent.lineup.fighters.map((e) => fighterViewOf(engine, state, content, e.fighterId)?.rating ?? null);
-  const vals = ratings.filter((v): v is number => v !== null);
-  return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+/** Mean rating of the opponent's last played lineup this season (D-R); null before their first match. */
+function opponentLineupMean(state: GameState, opponent: Club): number | null {
+  const played = lastPlayedLineup(state, opponent.id);
+  return played && played.length ? played.reduce((s, x) => s + x.rating, 0) / played.length : null;
 }
 
 /** The five, rows of the club's last match (from the stored sim input). */

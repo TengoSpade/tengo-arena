@@ -161,3 +161,6 @@ export function starsLabel(stars: number): string {
 export function playerText(text: string): string {
   return text.replace(/\s*\((?:from\s+)?M\d+\b[^)]*\)/gi, '').trim();
 }
+
+/** Lineup mean-rating gap from which the UI warns that a side is outclassed (Home advice, match report). */
+export const OUTCLASSED_GAP = 8;
