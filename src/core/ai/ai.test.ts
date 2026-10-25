@@ -209,6 +209,25 @@ describe('valueFighter and planWeek', () => {
     for (const r of releases) expect(extra.map((f) => f.id)).toContain((r as { fighterId: FighterId }).fighterId);
   });
 
+  it('depth: below the target a cheap reserve under replacement level is still offered; an expensive one is not', () => {
+    const state = world();
+    const club = state.clubs[NINTH_OAR]!;
+    const tierMin = content.tierProfile(content.tiers.require(club.tierId).level).tierMinWage;
+    const weak = new Map(Object.values(state.fighters).filter((f) => f.status === 'free-agent').map((f) => [f.id, 10] as const));
+    const offers = (ask: number): Command[] => createAi(fakePorts({ ratings: weak, ask: () => ask })).planWeek(state, NINTH_OAR, content).filter((c) => c.type === 'offer.make');
+    const cheap = offers(tierMin);
+    expect(cheap.length).toBeGreaterThan(0);
+    for (const c of cheap) expect((c as { wagePerWeek: number }).wagePerWeek).toBe(tierMin);
+    expect(offers(tierMin * 2 + 5)).toEqual([]);
+  });
+
+  it('depth: no voluntary release of a below-replacement reserve while the roster is under its target', () => {
+    const state = world();
+    const weak = new Map(rosterIds(state, NINTH_OAR).map((id) => [id, 10] as const));
+    const releases = createAi(fakePorts({ ratings: weak })).planWeek(state, NINTH_OAR, content).filter((c) => c.type === 'roster.release');
+    expect(releases).toEqual([]);
+  });
+
   it('every command names the acting club', () => {
     const state = world();
     const plan = createAi(fakePorts()).planSeasonEnd(state, NINTH_OAR, content);
