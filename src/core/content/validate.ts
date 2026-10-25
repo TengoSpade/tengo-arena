@@ -471,7 +471,9 @@ export function validateContentFiles(f: ContentFiles, profile: ValidationProfile
   checkCurveAscending(c, DF, 'maturityCurve.mental', development.maturityCurve.mental);
   checkCurveAscending(c, DF, 'decline.physicalPerHumanYear', development.decline.physicalPerHumanYear);
   checkCurveAscending(c, DF, 'decline.mentalPerHumanYear', development.decline.mentalPerHumanYear);
-  checkCurveAscending(c, DF, 'retirement.hazardPerHumanYear', development.retirement.hazardPerHumanYear);
+  checkCurveAscending(c, DF, 'retirement.hazardByRatingDrop', development.retirement.hazardByRatingDrop);
+  checkCurveAscending(c, DF, 'retirement.hazardPerHumanYearPastPeak', development.retirement.hazardPerHumanYearPastPeak);
+  if (development.retirement.forcedHumanAge <= development.retirement.minHumanAge) c.error(DF, 'retirement.forcedHumanAge', 'must be above minHumanAge');
   for (const race of Object.keys(development.soakTargets.injuriesPer40RoundsByRace)) {
     if (!raceIds.has(race)) c.error(DF, `soakTargets.injuriesPer40RoundsByRace.${race}`, `unknown race "${race}"`);
   }

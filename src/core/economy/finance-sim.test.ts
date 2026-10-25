@@ -78,6 +78,13 @@ function expectedFlows(c: ContentDB, level: number) {
 }
 
 const within = (actual: number, expected: number, tol = 0.05) => Math.abs(actual - expected) <= Math.abs(expected) * tol;
+/**
+ * Wages of the first season of a new career: the §8 flows assume the whole WB is spent, but D-P opens every
+ * club's bill inside budget.worldGenBillBandBp (room for the Trials Day rookie and a depth signing), so the
+ * season-1 wage flow may sit as low as the band's bottom edge (−5%) and no higher than the full flow (+5%).
+ */
+const withinOpening = (actual: number, expected: number) =>
+  actual >= expected * (content.economy.budget.worldGenBillBandBp.minBp / 10_000) * 0.95 && actual <= expected * 1.05;
 
 let result: SimResult;
 let state: GameState;
@@ -121,9 +128,12 @@ describe('1-season finance simulation (fixture world, 48 clubs)', () => {
     const e = expectedFlows(content, level);
     expect(sim.clubs).toBe(16);
     expect({ level, income: sim.income, ok: within(sim.income, e.income) }).toEqual({ level, income: sim.income, ok: true });
-    expect({ level, wages: sim.wages, ok: within(sim.wages, e.wages) }).toEqual({ level, wages: sim.wages, ok: true });
-    expect({ level, costs: sim.costs, ok: within(sim.costs, e.costs) }).toEqual({ level, costs: sim.costs, ok: true });
-    expect({ level, ratio: sim.wageToIncomeBp, ok: within(sim.wageToIncomeBp, 6_800) }).toEqual({ level, ratio: sim.wageToIncomeBp, ok: true });
+    expect({ level, wages: sim.wages, ok: withinOpening(sim.wages, e.wages) }).toEqual({ level, wages: sim.wages, ok: true });
+    // Costs carry the wages: the same opening-band allowance on their wage part.
+    const minShare = content.economy.budget.worldGenBillBandBp.minBp / 10_000;
+    const costsOk = sim.costs >= (e.costs - e.wages * (1 - minShare)) * 0.95 && sim.costs <= e.costs * 1.05;
+    expect({ level, costs: sim.costs, ok: costsOk }).toEqual({ level, costs: sim.costs, ok: true });
+    expect({ level, ratio: sim.wageToIncomeBp, ok: withinOpening(sim.wageToIncomeBp, 6_800) }).toEqual({ level, ratio: sim.wageToIncomeBp, ok: true });
     expect(within(sim.seasonBudget, e.sb)).toBe(true);
   });
 

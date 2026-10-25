@@ -154,6 +154,27 @@ export function emphasisFor(f: Fighter, content: ContentDB): TrainingEmphasis {
   return 'balanced';
 }
 
+const physicalShareCache = new WeakMap<ContentDB, Map<string, number>>();
+
+/** Share of a class's rating weight on physical stats, in bp (D-T veteran penalty). */
+function physicalShareBp(content: ContentDB, classId: string): number {
+  let byClass = physicalShareCache.get(content);
+  if (!byClass) physicalShareCache.set(content, (byClass = new Map()));
+  let share = byClass.get(classId);
+  if (share === undefined) {
+    const physical = new Set<string>(PHYSICAL_STAT_IDS);
+    let phys = 0;
+    let all = 0;
+    for (const [stat, w] of Object.entries(content.classes.require(classId).ratingWeights as Record<string, number>)) {
+      all += w;
+      if (physical.has(stat)) phys += w;
+    }
+    share = all > 0 ? Math.round((phys * BP) / all) : BP / 2;
+    byClass.set(classId, share);
+  }
+  return share;
+}
+
 /**
  * Per-call memo of derived fighter values (rating and friends are pure but
  * not free), so one plan evaluates each fighter once.
@@ -318,7 +339,10 @@ class Ctx {
     const potBonusBp = gap * stepLookup(this.content.economy.wage.potentialWeightBpByHumanAge, this.humanAge(f));
     const vet = ai.veteranPenaltyPerHumanYearOver;
     let v = r * BP + Math.trunc((potBonusBp * this.personality.potentialWeightBp) / BP);
-    v -= Math.max(0, this.humanAge(f) - vet.humanAge) * vet.points * this.personality.veteranPenaltyBp;
+    // D-T: the veteran penalty stands for expected decline, which is physical only (mental stats hold until
+    // human-age 60), so it scales with the class's physical rating weight: in full at a 50/50 class.
+    const years = Math.max(0, this.humanAge(f) - vet.humanAge);
+    v -= Math.trunc((years * vet.points * this.personality.veteranPenaltyBp * physicalShareBp(this.content, f.classId)) / (BP / 2));
     const others = roster.filter((o) => o.id !== f.id);
     if (this.needs(f, others)) v += ai.needBonus * BP;
     if (this.wouldStart(f, others)) v += ai.starterBonus * BP;

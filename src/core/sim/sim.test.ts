@@ -52,6 +52,8 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
     expect(a.rounds.map((r) => r.checksum)).not.toEqual(b.rounds.map((r) => r.checksum));
   });
 
+  // The round checksums pin the fight itself. The event hash also covers the fight header (content hash):
+  // re-pinned 2026-10 when the fixture content gained the D-P/D-T keys; checksums unchanged, no engine change.
   it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
     const out = simulateMatch(match(), content, { record: 'full' });
     expect(ENGINE_VERSION).toBe(1);
@@ -62,13 +64,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "ccb75889f44aa221c76690478b89b1b3",
+            "c4eab8f8ee27293c317b89e47e0bb80a",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "c4f9ac43c38003f8fb436231c8abc981",
+            "28d72b73b8d568ef461480d652f2ac00",
           ],
         ],
         "score": {

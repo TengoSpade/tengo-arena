@@ -252,7 +252,7 @@ describe('expiries, pool maintenance and pool floors', () => {
 });
 
 describe('new career finances', () => {
-  it('starting balance from prestige; contracts of 1/2/3 seasons; budgets; bills rescaled into 82-92% of WB (tuning CR-1)', () => {
+  it('starting balance from prestige; contracts of 1/2/3 seasons; budgets; bills rescaled into the world-gen band of WB (CR-1, D-P)', () => {
     const s = buildFixtureWorld({ freeAgents: 0 });
     const star = asId<ClubId>('varrow-lanternguard'); // Crown, prestige 84
     const small = asId<ClubId>('brightskerry-puffin-lancers'); // Muster, prestige 12
@@ -265,7 +265,6 @@ describe('new career finances', () => {
     expect(s.ledger.openingBalances[star]).toBe(57_000);
     expect(s.ledger.openingBalances[small]).toBe(7_360);
     const band = content.economy.budget.worldGenBillBandBp;
-    expect(band).toEqual({ minBp: 8200, maxBp: 9200 });
     const edge = (id: ClubId, bp: number) => Math.trunc((s.clubs[id]!.finance.wageBudgetPerWeek * bp) / 10_000);
     const signed = rosterOf(s, star);
     expect(wageBill(s, star)).toBeGreaterThanOrEqual(edge(star, band.minBp));

@@ -55,7 +55,7 @@ export function getBlockers(ports: GamePorts, state: GameState, content: Content
     const fit = roster.filter((f) => ports.fighters.isFit(f)).length;
     const need = Math.min(5, fit);
     if (valid < need) out.push({ code: 'lineup.incomplete', details: { have: valid, need } });
-    if (club.captainId === null && roster.length > 0) out.push({ code: 'captain.missing' });
+    // No captain blocker (D-S): a missing captain is named automatically at kickoff (week.ts autoCaptain).
   }
   return out;
 }

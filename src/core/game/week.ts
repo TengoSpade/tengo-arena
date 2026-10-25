@@ -10,12 +10,12 @@
  * The UI store autosaves after success. The input state is never mutated.
  */
 import type { ContentDB } from '../content';
-import { beginTransition, putResult, type ClubId, type FighterId, type Fixture, type GameState, type LineupEntry, type MatchResult, type WeekReport } from '../model';
+import { beginTransition, idNumber, putResult, type Club, type ClubId, type Fighter, type FighterId, type Fixture, type GameState, type LineupEntry, type MatchResult, type WeekReport } from '../model';
 import { NotImplementedError, engineError, err, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
 import { addMatchNews, buildMatchInput, eligibleEntries, toResult } from './match';
 import type { GamePorts } from './ports';
-import { clubsInOrder, defaultTactics, newsSince, rosterOf, tidyAll } from './shared';
+import { GAME_NEWS_KEYS, addNews, clubsInOrder, defaultTactics, newsSince, onRoster, rosterOf, tidyAll } from './shared';
 import { getBlockers } from './views';
 
 /** Commands an AI club issued that the rulebook refused (diagnostics; the soak counts them). */
@@ -47,6 +47,39 @@ export function runAiPhase(
   }
 }
 
+/**
+ * D-S, at kickoff: a club whose captain is missing (none named, or no longer on
+ * its roster) gets one automatically: the vice-captain if fit, else the fit
+ * starter with the highest CQ (ties: matchweeks at the club, rating, id), named
+ * interim captain with a captain.interim news item. Same rule for the player's
+ * and AI clubs, so a missing captain never blocks Play. A captain who is only
+ * unavailable this week keeps the job; the fight is then led by the vice, else
+ * the best-CQ starter (fighters.lineupCaptain). A lineup of hired blades only
+ * leaves the club without a captain; a blade leads as acting captain.
+ */
+export function autoCaptain(ports: GamePorts, draft: GameState, club: Club, content: ContentDB): FighterId | null {
+  if (club.captainId !== null && onRoster(draft, club.id, club.captainId) !== null) return null;
+  const fit = (id: FighterId | null): Fighter | null => {
+    const f = id === null ? null : onRoster(draft, club.id, id);
+    return f && ports.fighters.isFit(f) ? f : null;
+  };
+  let pick = fit(club.viceCaptainId);
+  const reason = pick ? 'vice' : 'starter';
+  if (!pick) {
+    const ranked = club.lineup.fighters
+      .map((e) => fit(e.fighterId))
+      .filter((f): f is Fighter => f !== null)
+      .map((f) => ({ f, cq: ports.fighters.captaincy(draft, f.id, club.id, content).cq, rating: ports.fighters.rating(f, content) }))
+      .sort((a, b) => b.cq - a.cq || b.f.career.matchweeksAtClub - a.f.career.matchweeksAtClub || b.rating - a.rating || idNumber(a.f.id) - idNumber(b.f.id) || (a.f.id < b.f.id ? -1 : 1));
+    pick = ranked[0]?.f ?? null;
+  }
+  club.captainId = pick?.id ?? null;
+  if (pick === null) return null;
+  if (club.viceCaptainId === pick.id) club.viceCaptainId = null;
+  addNews(draft, { key: GAME_NEWS_KEYS.captainInterim, clubId: club.id, refs: { fighterId: pick.id }, params: { reason }, importance: 'notable' });
+  return pick.id;
+}
+
 /** Lock the lineups of the clubs playing this week; hired blades fill short-handed sides (open-006). */
 function lockLineups(
   ports: GamePorts,
@@ -57,6 +90,7 @@ function lockLineups(
   const playing: ClubId[] = [];
   for (const fx of fixtures) for (const c of [fx.homeClubId, fx.awayClubId]) if (!playing.includes(c)) playing.push(c);
   const ordered = clubsInOrder(draft, content).filter((c) => playing.includes(c.id));
+  for (const club of ordered) autoCaptain(ports, draft, club, content);
   for (const club of ordered) ports.fighters.lineupLock(draft, club.id, content);
   const assigned = ports.economy.assignHiredBlades(draft, content);
 

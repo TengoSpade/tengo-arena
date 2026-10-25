@@ -148,10 +148,12 @@
   },
 
   "retirement": {
-    "_doc": "Chance computed live all season (shown on the fighter card) from the age held during the season; rolled once at season-end step 6. Per-season p = 1 - (1 - h)^k with h from the human-year table, then modifiers, clamp [0,1].",
+    "_doc": "D-T (orchestrator decision 2026-10, pending owner confirmation): retirement follows effectiveness, not a fixed age. Chance computed live all season (shown on the fighter card) from the age held during the season; rolled once at season-end step 7. 0 below minHumanAge; certain from forcedHumanAge (human-age, so every race is scaled by its lifespan). Otherwise per season p = 1 - (1 - hDrop) * (1 - hAge)^k: hDrop from hazardByRatingDrop on the drop of the current rating below the fighter's career-peak rating (rating points), hAge from hazardPerHumanYearPastPeak on floor(human-age) - physicalPeakHumanAge, k = 80 / race.lifespan. Then the modifiers, clamp [0,1]. Physical stats decline from human-age 31 and mental ones only from 60, so a fighter whose class rating rests on mental stats (healers, controllers, high-leadership captains) keeps his rating and plays on into his 40s and 50s while still good, and a physically weighted fighter loses rating fast and retires in his 30s.",
     "minHumanAge": 31,
-    "forcedHumanAge": 41,
-    "hazardPerHumanYear": [[0, 0], [31, 0.03], [32, 0.06], [33, 0.1], [34, 0.15], [35, 0.22], [36, 0.31], [37, 0.42], [38, 0.55], [39, 0.7], [40, 0.85], [41, 1.0]],
+    "forcedHumanAge": 58,
+    "physicalPeakHumanAge": 30,
+    "hazardByRatingDrop": [[0, 0], [5, 0.003], [8, 0.01], [10, 0.04], [12, 0.08], [14, 0.13], [16, 0.19], [19, 0.29], [22, 0.41], [26, 0.6], [30, 0.8]],
+    "hazardPerHumanYearPastPeak": [[0, 0], [1, 0.002], [10, 0.008], [15, 0.015], [18, 0.03], [21, 0.06], [23, 0.1], [25, 0.18], [26, 0.3], [27, 0.5]],
     "modifiers": {
       "usageHighAtLeast": 0.75,
       "usageHighMult": 0.8,
@@ -161,7 +163,7 @@
       "contractRemainingMult": 0.6,
       "perScarAdd": 0.03,
       "heavyWearAvgPhysicalPoints": 2.4,
-      "heavyWearAdd": 0.05
+      "heavyWearAdd": 0
     },
     "modifierOrder": "multiply (usage, contract, trait mults), then add (scars, heavy wear), then clamp",
     "finalSeasonAnnounceAtLeast": 0.6,
@@ -308,18 +310,19 @@
   "soakTargets": {
     "_doc": "Pass bands for the 20-season headless soak test (spec section 8). Measured from season 3 so world-generation warm-up is excluded.",
     "populationDriftMaxPct": 10,
-    "medianHumanAge": [26, 30],
-    "shareHumanAgeAtMost22": [0.15, 0.32],
-    "shareHumanAgeAtLeast31": [0.2, 0.4],
+    "medianHumanAge": [26, 32],
+    "shareHumanAgeAtMost22": [0.12, 0.32],
+    "shareHumanAgeAtLeast31": [0.2, 0.55],
+    "_ageBandNote": "D-T (2026-10): retirement follows effectiveness, so the mentally weighted classes (about 30% of fighters: healers, controllers) play on to human-age 45-55 while still good. The rostered share at human-age >= 31 rises from about 35-45% to about 45-53% and the median human-age from about 28-30 to 30-31; the bands were widened from [26, 30] and [0.2, 0.4] to keep catching a league that ages without limit. Same cause, same change: fewer retirements mean a smaller rookie intake in the first seasons (share <= 22 from 0.15 to 0.12); more fighters past human-age 36 meet the unchanged injury age multiplier (ashkin, who age fastest, from 0.95 to 1.05 per 40 rounds; career-ending injuries per league-season from 0.6 to 1.0); experienced high-leadership captains stay (AI captain mean CQ from 85 to 88); starters who play on keep growing toward their potential (starter peak over potential from 0.95 to 0.97).",
     "allClubTopFiveRatingDriftMaxPoints": 4,
     "leagueMeanRatingDriftMaxPoints": 3,
     "maxRatingInLeague": 95,
-    "injuriesPer40RoundsByRace": { "human": [0.75, 1.15], "elf": [1.1, 1.65], "dwarf": [0.5, 0.85], "orc": [0.55, 0.9], "ashkin": [0.6, 0.95] },
+    "injuriesPer40RoundsByRace": { "human": [0.75, 1.15], "elf": [1.1, 1.65], "dwarf": [0.5, 0.85], "orc": [0.55, 0.9], "ashkin": [0.6, 1.05] },
     "seriousShareOfInjuries": [0.04, 0.09],
-    "careerEndingPerLeagueSeason": [0.02, 0.6],
-    "starterPeakOverPotential": [0.85, 0.95],
+    "careerEndingPerLeagueSeason": [0.02, 1.0],
+    "starterPeakOverPotential": [0.85, 0.97],
     "rolledTraitPositiveShare": [0.78, 0.82],
-    "aiCaptainMeanCq": [65, 85],
+    "aiCaptainMeanCq": [65, 88],
     "aiCaptainsBelowGradeDMax": 0.05
   }
 }

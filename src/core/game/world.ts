@@ -9,6 +9,7 @@
  */
 import type { ContentDB } from '../content';
 import {
+  beginTransition,
   setMembership,
   asId,
   createEmptyGameState,
@@ -132,12 +133,24 @@ export function createWorld(ports: GamePorts, content: ContentDB, params: NewGam
   // AI season-start setup before P1 for every club (D-P; no club is the player's yet): the same
   // season-start plan as after a season end (captains, vice, training emphasis, opening offers), so
   // P1 opens with the AI's offers pending. Trials signings wait for the first P1 processing, where
-  // AI clubs sign theirs and the player's own trials rookie is the player's decision.
+  // AI clubs sign theirs and the player's own trials rookie is the player's decision. The plan is
+  // made on a scratch copy in which every club has already signed its trials rookie at his Trials
+  // Day ask, so the opening offers leave cap and wage room for him.
   ports.ai.beginPhase();
+  const scratch = beginTransition(draft);
+  for (const club of clubsInOrder(scratch, content)) {
+    const rookie = scratch.market.trialsRookies[club.id]?.[0];
+    if (rookie === undefined) continue;
+    const terms = content.economy.contracts.lengthsSeasons
+      .map((seasons) => ({ seasons, wage: ports.economy.ask(scratch, rookie, club.id, seasons, content) }))
+      .sort((a, b) => a.wage - b.wage || a.seasons - b.seasons)[0];
+    if (terms) applyToDraft(ports, scratch, { type: 'trials.sign', clubId: club.id, fighterId: rookie, wagePerWeek: terms.wage, seasons: terms.seasons }, content);
+  }
   for (const club of clubsInOrder(draft, content)) {
-    for (const cmd of ports.ai.planSeasonEnd(draft, club.id, content)) {
+    for (const cmd of ports.ai.planSeasonEnd(scratch, club.id, content)) {
       if (cmd.type === 'trials.sign') continue;
-      applyToDraft(ports, draft, cmd, content); // a refused AI command changes nothing (same rulebook as later seasons)
+      // A refused AI command changes nothing (the same rulebook as later seasons).
+      if (applyToDraft(ports, draft, cmd, content).ok) applyToDraft(ports, scratch, cmd, content);
     }
   }
   ports.fighters.announceFinalSeasons(draft, content);

@@ -157,7 +157,12 @@ export const DevelopmentFileSchema = z.object({
     _doc: z.string().optional(),
     minHumanAge: z.number(),
     forcedHumanAge: z.number(),
-    hazardPerHumanYear: z.array(z.tuple([z.number(), z.number()])),
+    /** D-T: human-age of the physical peak; the age hazard counts the years past it. */
+    physicalPeakHumanAge: z.number(),
+    /** D-T: [rating points below the career-peak rating, per-season hazard] step table. */
+    hazardByRatingDrop: z.array(z.tuple([z.number(), z.number()])),
+    /** D-T: [human-years past the physical peak, per-human-year hazard] step table (lifespan-scaled). */
+    hazardPerHumanYearPastPeak: z.array(z.tuple([z.number(), z.number()])),
     modifiers: z.object({
       usageHighAtLeast: z.number(),
       usageHighMult: z.number(),
@@ -378,6 +383,7 @@ export const DevelopmentFileSchema = z.object({
     medianHumanAge: z.tuple([z.number(), z.number()]),
     shareHumanAgeAtMost22: z.tuple([z.number(), z.number()]),
     shareHumanAgeAtLeast31: z.tuple([z.number(), z.number()]),
+    _ageBandNote: z.string().optional(),
     allClubTopFiveRatingDriftMaxPoints: z.number(),
     leagueMeanRatingDriftMaxPoints: z.number(),
     maxRatingInLeague: z.number(),

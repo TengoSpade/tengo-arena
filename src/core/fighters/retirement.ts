@@ -1,18 +1,22 @@
 /**
  * Retirement (sys-development "aging, decline and retirement"; development.json retirement).
+ * D-T (orchestrator decision, pending owner confirmation): driven by effectiveness, not a fixed age.
  *
- *   0 below human-age 31; 100% from 41, with a career-ending injury, or in a final season;
- *   otherwise p = 1 − (1 − h)^k from the precomputed per-race table (tables.ts), then
- *   × usage (≥ 0.75: 0.8; ≤ 0.30: 1.5) × contract (none next season: 1.5; running past
+ *   0 below human-age 31; 100% from the forced human-age (58), with a career-ending injury, or in
+ *   a final season; otherwise p = 1 − (1 − hDrop) × (1 − hAge):
+ *     hDrop = hazardByRatingDrop at (career-peak rating − current rating), per season;
+ *     hAge  = 1 − (1 − h)^k with h at the human-years past the physical peak (precomputed per race);
+ *   then × usage (≥ 0.75: 0.8; ≤ 0.30: 1.5) × contract (none next season: 1.5; running past
  *   this season: 0.6) × trait retirement mults, + 3 points per scar, + 5 points if
- *   average physical wear ≥ 2.4, clamped to 0-100%.
+ *   average physical wear ≥ 2.4, clamped to 0-100%. Mental stats do not decline before
+ *   human-age 60, so mentally weighted fighters keep their rating and play on.
  */
 import type { ContentDB } from '../content';
 import type { Fighter } from '../model';
 import { isCareerEnded } from './captaincy';
 import { effectSources, multFactorsBp } from './effects';
 import { BP, bp, truncN } from './fixed';
-import { humanAge100Of } from './stats';
+import { humanAge100Of, ratingOf } from './stats';
 import { tables } from './tables';
 import { scarCount } from './traits';
 
@@ -37,8 +41,12 @@ export function retirementChanceWith(fighter: Fighter, content: ContentDB, input
   const r = dev.retirement;
   if (ha100 < r.minHumanAge * 100) return 0;
   if (ha100 >= r.forcedHumanAge * 100) return BP;
-  const table = tables(content).hazardBp.get(race.id) ?? [];
-  let p = table[Math.floor(ha100 / 100)] ?? 0;
+  const t = tables(content);
+  const ageP = t.ageHazardBp.get(race.id)?.[Math.floor(ha100 / 100)] ?? 0;
+  const drop = Math.max(0, fighter.career.peakRating - ratingOf(fighter, content));
+  let dropP = 0;
+  for (const [d, h] of t.dropHazardBp) if (d <= drop) dropP = h;
+  let p = BP - ((BP - dropP) * (BP - ageP)) / BP;
   const m = r.modifiers;
   const factors: number[] = [];
   if (inputs.usageBp >= bp(m.usageHighAtLeast)) factors.push(bp(m.usageHighMult));
@@ -49,7 +57,6 @@ export function retirementChanceWith(fighter: Fighter, content: ContentDB, input
   for (const f of factors) p = (p * f) / BP;
   let v = truncN(p);
   v += scarCount(fighter, content) * bp(m.perScarAdd);
-  const t = tables(content);
   let wear = 0;
   for (const id of t.physicalIds) wear += fighter.wear100[id] ?? 0;
   if (t.physicalIds.length > 0 && wear >= t.physicalIds.length * m.heavyWearAvgPhysicalPoints * 100) v += bp(m.heavyWearAdd);

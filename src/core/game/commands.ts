@@ -42,6 +42,9 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
       const e = clubCheck(draft, cmd.clubId);
       if (e) return { ok: false, error: e };
       draft.playerClubId = cmd.clubId;
+      // The player makes the club's own market decisions (as after every season end, where the AI phase
+      // skips the player's club): the AI's opening offers made for it at world creation are withdrawn.
+      for (const o of draft.market.offers.filter((x) => x.clubId === cmd.clubId)) ports.economy.withdrawOffer(draft, o.clubId, o.fighterId);
       return ok(null);
     }
 

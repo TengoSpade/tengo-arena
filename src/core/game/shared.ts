@@ -123,6 +123,9 @@ export function isFirstWeek(state: GameState): boolean {
 export const GAME_NEWS_KEYS = {
   /** One per club per played fixture (clubId = that club). params: won (1/0), for, against, opponent (club name), opponentId, venue (home/away); x:<fighterId> = XP and i:<fighterId> = "<severity>:<weeksOut>" for that club's fighters. refs.fixtureId, refs.otherClubId. */
   matchResult: 'match.result',
-  /** Player club: the game named an interim captain after the captain left. refs.fighterId = the new captain. */
+  /**
+   * The game named an interim captain: after the player's captain left (tidy), or at kickoff for any club
+   * whose captain was missing (D-S; params.reason 'vice' | 'starter'). refs.fighterId = the new captain.
+   */
   captainInterim: 'captain.interim',
 } as const;
