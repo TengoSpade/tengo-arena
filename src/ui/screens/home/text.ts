@@ -32,7 +32,7 @@ export const T = {
   theirLineup: 'Their last lineup',
   noMatchesYet: 'No matches played yet',
   outclassedTitle: 'Outclassed: your five average {us}, {club} last fielded {them}',
-  outclassedTitleBest: 'Outclassed: your five average {us}, {club}’s best five {them}',
+  outclassedTitleBest: 'Outclassed: your five average {us}, {clubs} best five {them}',
   outclassedText: 'A rating gap this size is hard to close with tactics. Stronger signings are in the Market.',
   roomTitle: 'You have {room} wage room and {n} open {n?place|places}',
   roomText: 'Free agents who would start for you are in the Market.',

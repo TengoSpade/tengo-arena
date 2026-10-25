@@ -89,3 +89,11 @@
     --cell-fill-min: 9rem;
   }
 }
+
+/* In the narrow rail the label's hint takes its own line instead of squeezing beside the label. */
+@media (max-width: 1399px) {
+  .market-filters .filter-group__label {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+}

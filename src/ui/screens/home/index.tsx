@@ -577,7 +577,13 @@ export function homeAdvice(ctx: ClubContext): DigestItem[] {
       out.push({
         id: 'advice-outclassed',
         kind: 'development',
-        title: format(played ? T.outclassedTitle : T.outclassedTitleBest, { us: ours.toFixed(0), club: them.shortName, them: theirs.toFixed(0) }),
+        title: format(played ? T.outclassedTitle : T.outclassedTitleBest, {
+          us: ours.toFixed(0),
+          club: them.shortName,
+          // English possessive: "Netcasters’", "Kindler’s".
+          clubs: /s$/i.test(them.shortName) ? `${them.shortName}’` : `${them.shortName}’s`,
+          them: theirs.toFixed(0),
+        }),
         text: T.outclassedText,
         needsAction: false,
         unread: true,
