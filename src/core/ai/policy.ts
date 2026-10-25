@@ -146,6 +146,8 @@ class Ctx {
   private potentials = new Map<string, number>();
   private ages = new Map<string, number>();
   private cqs = new Map<string, number>();
+  private familyCache = new Map<string, RoleFamily[]>();
+  private leagueNext: boolean | null = null;
   readonly club: Club;
   readonly personality: AiPersonalityDef;
   readonly cap: number;
@@ -204,7 +206,9 @@ class Ctx {
   }
 
   families(f: Fighter): RoleFamily[] {
-    return roleFamilies(this.content.classes.require(f.classId));
+    let v = this.familyCache.get(f.classId);
+    if (v === undefined) this.familyCache.set(f.classId, (v = roleFamilies(this.content.classes.require(f.classId))));
+    return v;
   }
 
   /** Active roster fighters in id order. */
@@ -318,6 +322,11 @@ class Ctx {
   // ---- calendar ------------------------------------------------------------------------------------------
   /** The club's next unplayed fixture is a league match (at-risk resting applies), else the Reckoning / none. */
   nextIsLeagueMatch(): boolean {
+    if (this.leagueNext === null) this.leagueNext = this.computeNextIsLeagueMatch();
+    return this.leagueNext;
+  }
+
+  private computeNextIsLeagueMatch(): boolean {
     const w = this.state.calendar.weekIndex;
     let best: { weekIndex: number; stage: string } | null = null;
     for (const x of Object.values(this.state.fixtures)) {
