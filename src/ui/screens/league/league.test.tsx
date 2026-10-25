@@ -47,9 +47,9 @@ describe('League screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tier table' }));
     const table = screen.getByTestId('standings-tier');
     expect(within(table).getAllByRole('row')).toHaveLength(17);
-    fireEvent.keyDown(window, { key: 'w' });
+    fireEvent.keyDown(document.body, { key: 'w' });
     expect(screen.getAllByTestId('standings-wing')).toHaveLength(2);
-    fireEvent.keyDown(window, { key: 't' });
+    fireEvent.keyDown(document.body, { key: 't' });
     const tierTable = screen.getByTestId('standings-tier');
     const ptsHeader = within(tierTable).getByRole('button', { name: 'Pts' });
     fireEvent.click(ptsHeader);

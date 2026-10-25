@@ -5,8 +5,9 @@
  * chosen week, ← → to change week) and the calendar (P1-P4, MW1-MW16,
  * TW1-TW3 with markers). Read-only.
  */
-import { useEffect, useState } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { useShortcuts } from '../../app/shortcuts';
 import type { ContentDB } from '../../../core/content';
 import type { ClubId, Fixture, GameState, TierId } from '../../../core/model';
 import { DataTable, Icon, PageHeader, Panel, TabPanel, type Column } from '../../components';
@@ -27,11 +28,6 @@ export default function FixturesScreen(_props: ScreenProps) {
   const career = useCareer();
   if (!career) return <NoCareer testId="screen-fixtures" />;
   return <Fixtures career={career} />;
-}
-
-function isTyping(e: KeyboardEvent): boolean {
-  const el = e.target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
 
 function Fixtures({ career }: { career: Career }) {
@@ -226,16 +222,11 @@ function ByWeek({ game, content, clubId }: { game: GameState; content: ContentDB
   const prev = i > 0 ? weeks[i - 1]! : null;
   const nextW = i >= 0 && i < weeks.length - 1 ? weeks[i + 1]! : null;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
-      if ((e.target as HTMLElement | null)?.closest?.('[role="tablist"]')) return;
-      if (e.key === 'ArrowLeft' && prev !== null) setWeek(prev);
-      else if (e.key === 'ArrowRight' && nextW !== null) setWeek(nextW);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [prev, nextW]);
+  // 04 ui-fixtures: ← → change week.
+  useShortcuts({
+    ArrowLeft: () => (prev !== null ? setWeek(prev) : false),
+    ArrowRight: () => (nextW !== null ? setWeek(nextW) : false),
+  });
 
   const list = current === null ? [] : tierFixturesOfWeek(game, tierId, season, current);
   const tiers = [...content.tiers.list].sort((a, b) => a.level - b.level);

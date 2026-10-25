@@ -5,8 +5,9 @@
  * retirements and contracts, next season. Begin next season returns to Home.
  * Before the step has run (phase season-end) it offers the binding commit.
  */
-import { useEffect, useState } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { useShortcuts } from '../../app/shortcuts';
 import type { ContentDB } from '../../../core/content';
 import type { ClubId, Fighter, FighterSeasonRow, GameState, SeasonEndReport, SeasonRecord, TierId, TierSeasonRecord } from '../../../core/model';
 import { ConfirmButton, DataTable, PageHeader, Panel, type Column } from '../../components';
@@ -29,11 +30,6 @@ export default function SeasonReviewScreen(_props: ScreenProps) {
   const career = useCareer();
   if (!career) return <NoCareer testId="screen-season-review" />;
   return <Review career={career} />;
-}
-
-function isTyping(e: KeyboardEvent): boolean {
-  const el = e.target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
 
 /** The finished season: the store's last report, else the newest archived season. */
@@ -103,17 +99,12 @@ function ReviewSteps({ career, record, report }: { career: Career; record: Seaso
   const i = STEPS.indexOf(step);
   const begin = () => go('home');
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
-      if ((e.target as HTMLElement | null)?.closest?.('[role="tablist"]')) return;
-      if (e.key === 'ArrowRight' && i < STEPS.length - 1) setStep(STEPS[i + 1]!);
-      else if (e.key === 'ArrowLeft' && i > 0) setStep(STEPS[i - 1]!);
-      else if (e.key === 'Enter' && i === STEPS.length - 1 && !(e.target as HTMLElement | null)?.closest?.('a,button')) begin();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [i]);
+  // 04 ui-season-end: ← → steps, Enter begins the next season on the last step.
+  useShortcuts({
+    ArrowRight: () => (i < STEPS.length - 1 ? setStep(STEPS[i + 1]!) : false),
+    ArrowLeft: () => (i > 0 ? setStep(STEPS[i - 1]!) : false),
+    Enter: () => (i === STEPS.length - 1 ? begin() : false),
+  });
 
   const tierRec = tierRecordOf(record, club.id);
   return (

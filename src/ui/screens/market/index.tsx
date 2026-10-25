@@ -5,8 +5,9 @@
  * pending offers with Withdraw; renewals; trials-day rookies (P1 only) and
  * the shortlist. Every change goes through store.dispatch (commands).
  */
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useMemo, useRef, useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { useShortcuts } from '../../app/shortcuts';
 import type { ContentDB } from '../../../core/content';
 import type { Fighter, FighterId, GameState, Offer } from '../../../core/model';
 import { DataTable, Icon, PageHeader, Panel, showToast, type Column } from '../../components';
@@ -29,11 +30,6 @@ export default function MarketScreen(_props: ScreenProps) {
   const career = useCareer();
   if (!career) return <NoCareer testId="screen-market" />;
   return <Market career={career} />;
-}
-
-function isTyping(e: KeyboardEvent): boolean {
-  const el = e.target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
 
 interface Filters {
@@ -100,22 +96,13 @@ function Market({ career }: { career: Career }) {
   const renewals = rosterOf(game, club.id).filter((f) => f.contract && f.contract.endSeason === season);
   const isP1 = game.calendar.weekIndex === 1 && game.calendar.phase === 'preseason';
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey || offer || compareOpen) return;
-      if (e.key === '/') {
-        e.preventDefault();
-        searchRef.current?.focus();
-      } else if ((e.key === 'o' || e.key === 'O') && selected && view === 'agents') {
-        e.preventDefault();
-        setOffer({ fighterId: selected as FighterId, kind: 'free-agent' });
-      } else if ((e.key === 'c' || e.key === 'C') && selected && view === 'agents') {
-        e.preventDefault();
-        toggleCompare(selected as FighterId);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+  // 04 ui-market: / search, O offer on the selected row, C compare it.
+  useShortcuts({
+    '/': () => {
+      searchRef.current?.focus();
+    },
+    o: () => (selected && view === 'agents' ? setOffer({ fighterId: selected as FighterId, kind: 'free-agent' }) : false),
+    c: () => (selected && view === 'agents' ? toggleCompare(selected as FighterId) : false),
   });
 
   const toggleCompare = (id: FighterId) =>

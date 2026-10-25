@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { useShortcuts } from '../../app/shortcuts';
 import { STATE_SCHEMA_VERSION, type SaveError, type SaveMeta } from '../../../core/model';
 import { ConfirmButton, DataTable, Icon, Modal, PageHeader, Panel, showToast, type Column } from '../../components';
 import { formatDateTime, formatPlaytime } from '../../format';
@@ -104,17 +105,7 @@ function Saves({ store }: { store: GameStore }) {
   };
 
   // Ctrl S on this screen saves too (the frame also maps it globally).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S') && game && target && !busy) {
-        e.preventDefault();
-        e.stopPropagation();
-        void doSave(target);
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  });
+  useShortcuts({ 'ctrl+s': () => (game && target && !busy ? void doSave(target) : false) });
 
   const saveBlocked = !game ? t('noCareer') : busy ? t('busy') : null;
   const columns = (auto: boolean): Column<SaveMeta>[] => [

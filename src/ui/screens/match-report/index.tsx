@@ -7,6 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { useShortcuts } from '../../app/shortcuts';
 import type { FighterId, FixtureId, MatchReport } from '../../../core/model';
 import { weekTitle } from '../league/lib/calendar';
 import { clubShort } from '../league/lib/club';
@@ -27,11 +28,6 @@ export default function MatchReportScreen({ params }: ScreenProps) {
   if (!career) return <NoCareer testId="screen-match-report" />;
   const fixtureId = (params.fixtureId ?? '') as FixtureId;
   return <Report career={career} fixtureId={fixtureId} />;
-}
-
-function isTyping(e: KeyboardEvent): boolean {
-  const el = e.target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
 
 function Report({ career, fixtureId }: { career: Career; fixtureId: FixtureId }) {
@@ -71,27 +67,13 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
   }, [fixtureId]);
 
   // 04 ui-report shortcuts: 1-5 round tabs (0 whole match), ← → previous / next report.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (/^[0-9]$/.test(e.key)) {
-        const n = Number(e.key);
-        if (n === 0 || n <= report.rounds.length) {
-          e.preventDefault();
-          e.stopPropagation();
-          setRound(n === 0 ? null : n);
-        }
-      } else if (e.key === 'ArrowLeft' && adj.prev && !(e.target as HTMLElement | null)?.closest?.('[role="tablist"]')) {
-        e.stopPropagation();
-        go(`match/${encodeURIComponent(adj.prev)}`);
-      } else if (e.key === 'ArrowRight' && adj.next && !(e.target as HTMLElement | null)?.closest?.('[role="tablist"]')) {
-        e.stopPropagation();
-        go(`match/${encodeURIComponent(adj.next)}`);
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [report.rounds.length, adj.prev, adj.next]);
+  const roundKeys: Record<string, () => void | false> = { '0': () => setRound(null) };
+  for (let n = 1; n <= 9; n++) roundKeys[String(n)] = () => (n <= report.rounds.length ? setRound(n) : false);
+  useShortcuts({
+    ...roundKeys,
+    ArrowLeft: () => (adj.prev ? go(`match/${encodeURIComponent(adj.prev)}`) : false),
+    ArrowRight: () => (adj.next ? go(`match/${encodeURIComponent(adj.next)}`) : false),
+  });
 
   const opponent = persp.involved ? clubShort(game, persp.themClubId) : '';
   const tierId = fixture?.tierId ?? null;

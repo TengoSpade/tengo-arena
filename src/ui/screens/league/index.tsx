@@ -4,8 +4,9 @@
  * bracket: projection from MW13, live during the Reckoning, last season's
  * result on request. Reads core/league standings; never computes points.
  */
-import { useEffect, useState } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { useShortcuts } from '../../app/shortcuts';
 import type { ContentDB } from '../../../core/content';
 import type { ClubId, GameState, StandingRow, TierId, WingId } from '../../../core/model';
 import { BracketView, projectedBracket, storedBracket, type BracketModel } from './Bracket';
@@ -46,11 +47,6 @@ function computeTables(engine: Wp7Engine, game: GameState, content: ContentDB, s
   }));
 }
 
-function isTyping(e: KeyboardEvent): boolean {
-  const el = e.target as HTMLElement | null;
-  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
-}
-
 function League({ career }: { career: Career }) {
   const { game, content, club } = career;
   const season = game.calendar.season;
@@ -58,15 +54,8 @@ function League({ career }: { career: Career }) {
   const [view, setView] = useState<'wings' | 'tier'>('wings');
   const [bracketView, setBracketView] = useState<'current' | 'last'>('current');
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === 'w' || e.key === 'W') setView('wings');
-      else if (e.key === 't' || e.key === 'T') setView('tier');
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  // 04 ui-league: W / T switch the Wings and Tier tables.
+  useShortcuts({ w: () => setView('wings'), t: () => setView('tier') });
 
   const tier = content.tiers.get(tierId);
   const tiers = [...content.tiers.list].sort((a, b) => a.level - b.level);

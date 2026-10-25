@@ -57,7 +57,7 @@ describe('Fixtures screen', () => {
     expect(subtitle()).toContain('Matchweek 7');
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }));
     expect(subtitle()).toContain('Matchweek 6');
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
     expect(subtitle()).toContain('Matchweek 7');
     expect(within(screen.getByTestId('fixtures-week')).getAllByRole('row').filter((r) => r.classList.contains('is-us'))).toHaveLength(1);
   });

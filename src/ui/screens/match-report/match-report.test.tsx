@@ -118,9 +118,9 @@ describe('Match report screen', () => {
     expect(screen.getByTestId('panel-box').textContent).toContain('Round 2 · downs, falls and HP left');
     const momentsPanel = screen.getByTestId('panel-moments');
     expect(momentsPanel.querySelectorAll('.timeline__round')).toHaveLength(1);
-    fireEvent.keyDown(window, { key: '0' });
+    fireEvent.keyDown(document.body, { key: '0' });
     expect(screen.getByTestId('panel-box').textContent).toContain('Whole match');
-    fireEvent.keyDown(window, { key: '1' });
+    fireEvent.keyDown(document.body, { key: '1' });
     expect(screen.getByRole('tab', { name: /Round 1/ }).getAttribute('aria-selected')).toBe('true');
   });
 
@@ -183,7 +183,7 @@ describe('Match report screen', () => {
     const id = lastPlayed(world.state);
     cleanup();
     renderReport(id);
-    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    fireEvent.keyDown(document.body, { key: 'ArrowLeft' });
     expect(window.location.hash).toMatch(/^#\/match\/lg%3A2%3A/);
     expect(decodeURIComponent(window.location.hash)).not.toContain(id);
   });
