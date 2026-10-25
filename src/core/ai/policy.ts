@@ -75,6 +75,29 @@ export const PROVISIONAL_SEEDBED_ROOKIE_MIN_GAP = 15;
 export const PROVISIONAL_RANK_BY_SURPLUS: readonly string[] = ['star_chasing'];
 /** 03 sys-captaincy (D-I): an AI captain injured with >= 4 weeks left may be replaced (exempt change). */
 export const PROVISIONAL_CAPTAIN_INJURY_WEEKS = 4;
+/**
+ * Depth (tuning pass, 03 sys-ai-manager procedure 3): the roster size every AI club keeps wage room for
+ * (cap − DEPTH_FLOOR_BELOW_CAP), so its core signings never spend the reserves' wages. Owner target:
+ * AI rosters within 2 of the cap.
+ */
+export const PROVISIONAL_DEPTH_FLOOR_BELOW_CAP = 2;
+/**
+ * Depth signings: once the core pass is done, free places up to the roster target are filled with
+ * legal reserves whose ask is at most this multiple of the tier minimum wage (bp), best aiValue first,
+ * with no surplus requirement (a reserve below replacement level still beats a hired blade).
+ */
+export const PROVISIONAL_DEPTH_MAX_ASK_BP_OF_TIER_MIN = 20000;
+/** Depth ranking: points of depth score per point of (potential − rating), capped like the wage term, so reserve places go to prospects first. */
+export const PROVISIONAL_DEPTH_POTENTIAL_WEIGHT_BP = 5000;
+/** Trials rookies are signed on this length by every AI club: cheap, no signing cost, a long-term bet (03 sys-transfers Trials Day). */
+export const PROVISIONAL_TRIALS_ROOKIE_SEASONS = 3;
+/**
+ * Star overbid by need (tuning pass, competitive balance): the star overbid scales with how many rating points
+ * the star adds over the club's current 5th-best fighter, reaching the full personality value at this gain.
+ * A club already fielding stars bids less for one more, so top free agents spread to the clubs they improve most.
+ * Roster-based, not results-based, so tanking cannot raise it.
+ */
+export const PROVISIONAL_STAR_OVERBID_FULL_GAIN = 20;
 
 /** 03 §5.2 training rule 1: this trait sends the fighter to Mind. */
 const WANDERING_MIND_TRAIT = 'wandering_mind';
@@ -253,6 +276,21 @@ class Ctx {
 
   rosterTarget(): number {
     return Math.min(this.cap, Math.max(this.content.economy.ai.rosterMinimum, this.cap - this.personality.rosterSlack));
+  }
+
+  /** Roster size whose reserve wages the core pass must leave room for (never above the target). */
+  depthFloor(): number {
+    return Math.min(this.rosterTarget(), Math.max(this.content.economy.ai.rosterMinimum, this.cap - PROVISIONAL_DEPTH_FLOOR_BELOW_CAP));
+  }
+
+  /** Highest ask the AI pays for a depth signing (a legal reserve). */
+  depthMaxAsk(): number {
+    return Math.trunc((this.tierMinWage() * PROVISIONAL_DEPTH_MAX_ASK_BP_OF_TIER_MIN) / BP);
+  }
+
+  /** Wage room kept for the reserves still missing below the depth floor once `after` places are filled. */
+  depthReserve(after: number): number {
+    return Math.max(0, this.depthFloor() - after) * this.tierMinWage();
   }
 
   replacementRating(): number {
@@ -508,6 +546,9 @@ function releases(ctx: Ctx, roster: readonly Fighter[]): FighterId[] {
   const ranked = [...roster].sort((a, b) => ctx.value(a, roster) - ctx.value(b, roster) || byIdNumber(b, a));
   const over = roster.length - ctx.cap;
   if (over > 0) return ranked.slice(0, over).map((f) => f.id); // cap relief, lowest aiValue first
+  // Voluntary releases only free a place the club needs: a full roster (03 sys-ai-manager procedure 2).
+  // Below the target a reserve under replacement level is depth, not dead weight.
+  if (roster.length < ctx.rosterTarget()) return [];
   const memory = ctx.state.ai[ctx.clubId];
   let allowance = ctx.personality.maxVoluntaryReleasesPerSeason - (memory?.voluntaryReleasesThisSeason ?? 0);
   const out: FighterId[] = [];
@@ -600,17 +641,53 @@ function freeAgentOffers(ctx: Ctx, roster: readonly Fighter[], extraRostered: nu
     const kb = starChasing ? b.surplus : Math.trunc((b.surplus * 1e6) / b.ask);
     return kb - ka || byIdNumber(a.f, b.f);
   });
+  let filled = rosterCount + pending;
+  const offered = new Set<string>();
+  // The rating a star must beat to start: the club's current 5th-best fighter (0 with fewer than 5).
+  const fifthBest = [...roster].map((f) => ctx.rating(f)).sort((a, b) => b - a)[4] ?? 0;
+  const starOverbid = (f: Fighter): number => {
+    const gain = Math.min(Math.max(0, ctx.rating(f) - fifthBest), PROVISIONAL_STAR_OVERBID_FULL_GAIN);
+    return Math.max(ctx.personality.overbidBp, Math.trunc((ctx.personality.starOverbidBp * gain) / PROVISIONAL_STAR_OVERBID_FULL_GAIN));
+  };
   for (const c of cands) {
     if (slots <= 0) break;
-    const overbid = embargo ? 0 : stars.has(c.f.id) ? ctx.personality.starOverbidBp : ctx.personality.overbidBp;
+    const overbid = embargo ? 0 : stars.has(c.f.id) ? starOverbid(c.f) : ctx.personality.overbidBp;
     const wage = embargo ? c.ask : floor5((c.ask * (BP + overbid)) / BP);
-    if (bill + wage > ceiling) continue;
+    // Keep wage room for the reserves still missing below the depth floor (embargo terms are fixed anyway).
+    if (bill + wage + (embargo ? 0 : ctx.depthReserve(filled + 1)) > ceiling) continue;
     const check = econ.checkOffer(state, { clubId, fighterId: c.f.id, wagePerWeek: wage, seasons: c.seasons, kind: 'free-agent' }, content);
     if (!check.ok || cash - check.value.signingCost < reserve) continue;
     bill += wage;
     cash -= check.value.signingCost;
     slots--;
+    filled++;
+    offered.add(c.f.id);
     cmds.push({ type: 'offer.make', clubId, fighterId: c.f.id, wagePerWeek: wage, seasons: c.seasons, acceptCounter: false });
+  }
+  if (embargo || slots <= 0) return cmds;
+
+  // Depth: fill the remaining places up to the target with legal reserves (ask <= the depth cap), best
+  // aiValue first, no surplus requirement. Same commitment checks as any other offer.
+  const maxAsk = ctx.depthMaxAsk();
+  const depth: { f: Fighter; seasons: number; ask: number; value: number }[] = [];
+  for (const f of pool) {
+    if (offered.has(f.id) || !ctx.ageRuleAllows(f, roster)) continue;
+    const seasons = ctx.lengthFor(f);
+    const ask = econ.ask(state, f.id, clubId, seasons, content);
+    if (ask <= 0 || ask > maxAsk) continue;
+    const gap = Math.min(Math.max(0, ctx.potential(f) - ctx.rating(f)), content.economy.wage.potentialGapCap);
+    depth.push({ f, seasons, ask, value: ctx.value(f, roster) + Math.trunc((gap * PROVISIONAL_DEPTH_POTENTIAL_WEIGHT_BP) / BP) });
+  }
+  depth.sort((a, b) => b.value - a.value || a.ask - b.ask || byIdNumber(a.f, b.f));
+  for (const d of depth) {
+    if (slots <= 0) break;
+    if (bill + d.ask > ceiling) continue;
+    const check = econ.checkOffer(state, { clubId, fighterId: d.f.id, wagePerWeek: d.ask, seasons: d.seasons, kind: 'free-agent' }, content);
+    if (!check.ok || cash - check.value.signingCost < reserve) continue;
+    bill += d.ask;
+    cash -= check.value.signingCost;
+    slots--;
+    cmds.push({ type: 'offer.make', clubId, fighterId: d.f.id, wagePerWeek: d.ask, seasons: d.seasons, acceptCounter: false });
   }
   return cmds;
 }
@@ -623,23 +700,28 @@ function trialsSignings(ctx: Ctx, roster: readonly Fighter[]): { cmds: Command[]
   const scored = rookies
     .map((f) => ({ f, surplus: ctx.surplus(f, roster), gap: ctx.potential(f) - ctx.rating(f) }))
     .sort((a, b) => b.surplus - a.surplus || b.gap - a.gap || byIdNumber(a.f, b.f));
-  let room = ctx.cap - roster.length - state.market.offers.filter((o) => o.clubId === clubId).length;
+  const pendingCount = state.market.offers.filter((o) => o.clubId === clubId).length;
+  let room = ctx.cap - roster.length - pendingCount;
+  // Places below the roster target a trials rookie may take as depth (a legal reserve at a depth ask).
+  let depthRoom = ctx.rosterTarget() - roster.length - pendingCount;
   let bill = ctx.ports.economy.wageBill(state, clubId) + ctx.ports.economy.pendingWages(state, clubId);
   const ceiling = ctx.wageCeiling(roster.length);
   const cmds: Command[] = [];
   let wages = 0;
   for (const { f, surplus, gap } of scored) {
     if (room <= 0) break;
-    const wanted = surplus > 0 || (ctx.personality.youthMinutes && gap >= PROVISIONAL_SEEDBED_ROOKIE_MIN_GAP);
-    if (!wanted) continue;
-    const seasons = ctx.lengthFor(f);
+    const seasons = PROVISIONAL_TRIALS_ROOKIE_SEASONS;
     const wage = ctx.ports.economy.ask(state, f.id, clubId, seasons, content);
+    const wanted = surplus > 0 || (ctx.personality.youthMinutes && gap >= PROVISIONAL_SEEDBED_ROOKIE_MIN_GAP);
+    const asDepth = !wanted && depthRoom > 0 && wage <= ctx.depthMaxAsk();
+    if (!wanted && !asDepth) continue;
     if (bill + wage > ceiling) continue;
     const check = ctx.ports.economy.checkOffer(state, { clubId, fighterId: f.id, wagePerWeek: wage, seasons, kind: 'trials' }, content);
     if (!check.ok) continue;
     bill += wage;
     wages += wage;
     room--;
+    depthRoom--;
     cmds.push({ type: 'trials.sign', clubId, fighterId: f.id, wagePerWeek: wage, seasons });
   }
   return { cmds, signed: cmds.length, wages };
