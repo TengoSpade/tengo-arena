@@ -1,0 +1,31 @@
+/* Squad layout glue only (designer classes do the styling). */
+.squad-chips {
+  margin-left: var(--sp-4);
+}
+
+.squad-filter {
+  width: 10rem;
+}
+
+.lineup__row.is-drop-target {
+  border-color: var(--c-accent-line);
+}
+
+.lineup-card__meta {
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+
+.lineup-card__xp {
+  flex: 1 1 auto;
+  min-width: 2.5rem;
+}
+
+.lineup-card--empty {
+  min-height: 7.5rem;
+  gap: var(--sp-1);
+}
+
+.squad-training .select--inline {
+  min-width: 6.4rem;
+}

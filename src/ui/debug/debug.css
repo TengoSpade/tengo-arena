@@ -1,0 +1,24 @@
+/* Debug overlay placement only (developer tool; tokens for every colour). */
+.debug-overlay {
+  position: fixed;
+  left: var(--sp-3);
+  bottom: var(--sp-3);
+  z-index: var(--z-overlay);
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 6rem);
+  overflow: auto;
+  box-shadow: var(--shadow-3);
+}
+
+.debug-overlay__wrap {
+  white-space: normal;
+  text-align: right;
+}
+
+.debug-overlay__log {
+  margin: 0;
+  padding-left: var(--sp-4);
+  max-height: 9rem;
+  overflow: auto;
+  color: var(--c-text-muted);
+}

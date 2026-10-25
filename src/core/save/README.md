@@ -1,15 +1,23 @@
 # core/save
 
-**Owner:** WP5 (game loop). **Status:** contract stubs in `index.ts` (phase B; `checksumState` implemented). The public API in `index.ts` is a fixed contract (typed stubs); implement the bodies, add exports only additively, and request signature changes from the architect.
+**Owner:** WP5 (game loop). **Status:** implemented. API: `checksumState`, `saveMetaFor`, `createSave`, `serializeSave`, `parseSave`, `validateState`, `MIGRATIONS` (contract) plus `parseSaveWith` (explicit migration list, for tests) and `GameStateSchema`.
 
-## Responsibility
-- Build a `SaveEnvelope` (format, schemaVersion, engineVersion, content ref, meta, checksum, state).
-- Parse and validate untrusted JSON: format tag, version, checksum, structural validation (zod), referential integrity (every `clubId`, `fighterId`, `fixtureId` reference resolves; lineup fighters belong to the club; ledger invariant).
-- Migrations: an ordered list of pure functions `vN -> vN+1`; saves newer than the build are rejected with a clear error.
-- Content mismatch policy: a save made with a different content hash still loads if all referenced content ids exist; otherwise a clear error.
+## parseSave order and error codes
+1. `JSON.parse` → `save.json`
+2. `format` tag, malformed envelope → `save.format`
+3. `schemaVersion` newer than the build → `save.too-new` (details: saveVersion, buildVersion)
+4. checksum of the state as written (`hashString(stableStringify(state))`) → `save.checksum`
+5. stepwise migrations vN → vN+1 (missing or throwing step) → `save.migration`
+6. structure: strict zod schema of the whole `GameState` → `save.structure`
+7. content: another theme, or any referenced content id missing → `save.content-missing`; a different content hash with every id present loads with a warning
+8. references and the ledger invariant (balance = opening + Σ entries) → `save.references`
 
-## Rules
-- Pure: no storage access. `src/platform` (IndexedDB / file system / file export-import) calls this module.
-- Never "repair" silently: return issues; the UI decides (load anyway is not offered for errors).
+`save.storage` belongs to `src/platform`. A failed parse never returns a state.
 
-Depends on: `util`, `rng`, `model`, `content`. Tests: round trip, checksum mismatch, each migration, future version rejected, broken reference detected, truncated JSON.
+## validateState
+Structure (strict: an unknown key is an error, so a module writing an undeclared field is caught by the soak), content ids (classes, races, traits, presets, tiers, regions, districts, AI personalities, paces, stats, weeks, venues), and references: map keys equal ids, clubs/fighters/fixtures/competitions resolve, lineup fighters on the roster (hired blades allowed), captain ≠ vice, contract club = fighter club, status consistency, fixture `played` ⇔ result, offers only to free agents, ledger sequence and the balance invariant, id counters ahead of every allocated id, calendar consistent with `leagues.json`. Issues are capped at 200 per group.
+
+## Decisions
+- Envelopes are written with `JSON.stringify` (key order is irrelevant: the checksum uses `stableStringify`).
+- After a migration the envelope carries the checksum of the migrated state and `migratedFrom`.
+- The schema mirrors `core/model`; a model change bumps `STATE_SCHEMA_VERSION`, adds a migration and updates `schema.ts` together (architect).

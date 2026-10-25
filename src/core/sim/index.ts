@@ -1,7 +1,8 @@
 /**
  * core/sim — fixed-tick fight engine (03-combat sys-fight-sim, sys-match,
  * sys-abilities, sys-movement, sys-fight-traits, sys-fight-captain,
- * sys-match-report). Owner: WP1 (combat). CONTRACT: signatures fixed; bodies are stubs.
+ * sys-match-report). Owner: WP1 (combat). CONTRACT: the original signatures
+ * are fixed; additions are marked "additive".
  *
  * Pure: (inputs, content) -> outputs. Never reads GameState. Integer state
  * only: positions in mm, HP in points, damage in centipoints, focus in
@@ -21,14 +22,18 @@ import type {
   SideInput,
 } from '../model';
 import type { Seed } from '../rng';
-import { notImplemented } from '../util';
+import { SIM_ENGINE_VERSION } from './fight';
+import { runFight, runMatch } from './match';
+import { staticValues } from './profile';
+import { BP, ST, simTables } from './tables';
+import { InvariantError } from '../util';
 
 /**
  * Version of the fight rules implementation. Bump on ANY change that can
  * alter an outcome or event stream for the same inputs. Stored in results,
  * fight headers and saves; replays require an exact match.
  */
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = SIM_ENGINE_VERSION;
 
 export interface SimOptions {
   /** Default 'none'. The outcome is identical at every level. */
@@ -84,15 +89,47 @@ export interface CombatProfile {
  * M1: lineups and tactics fixed for the whole match (open-010).
  */
 export function simulateMatch(input: MatchInput, content: ContentDB, options?: SimOptions): MatchOutput {
-  return notImplemented('sim.simulateMatch', input, content, options);
+  return runMatch(input, content, options?.record ?? 'none');
 }
 
 /** Play one round. */
 export function simulateFight(input: FightInput, content: ContentDB, options?: SimOptions): FightOutput {
-  return notImplemented('sim.simulateFight', input, content, options);
+  const run = runFight(content, input.seed, input.round, input, options?.record ?? 'none');
+  return { result: run.result, fighterStats: run.fighterStats, log: run.log };
 }
 
-/** Derived combat values (no randomness) for one fighter input. */
+/** Derived combat values (no randomness) for one fighter input: attributes, class, race combatMods and unconditional passive mods. */
 export function combatProfile(fighter: FightFighterInput, content: ContentDB): CombatProfile {
-  return notImplemented('sim.combatProfile', fighter, content);
+  const tb = simTables(content);
+  const cls = tb.classes.get(fighter.classId);
+  if (!cls) throw new InvariantError(`sim: unknown class "${fighter.classId}"`);
+  const s = staticValues(fighter, cls, tb);
+  const d = tb.derived;
+  const m = s.staticMods;
+  const atk = Math.min(s.atkSpeedMax, Math.max(4000, s.atkSpeed0 + m[ST.attackSpeed]!));
+  const [lo, hi] = d.speedClamp;
+  const speedMult = Math.min(hi, Math.max(lo, BP + m[ST.moveSpeed]!));
+  const cmp = Math.min(d.cmpMax, Math.max(d.cmpMin, s.attrs[8]! + m[ST.composure]!));
+  let us = d.reactBaseUs + d.reactPerAwrUs * (s.attrs[10]! - 10) + d.reactPerCmpUs * (cmp - 10);
+  us = Math.trunc((us * (BP + m[ST.reactionDelay]!)) / BP);
+  us = Math.min(d.reactMaxUs, Math.max(d.reactMinUs, us));
+  return {
+    maxHp: s.maxHp,
+    armor: s.armor0 + m[ST.armor]!,
+    ward: s.ward0 + m[ST.ward]!,
+    power: Math.max(1, Math.trunc((s.power0 * (BP + m[ST.power]!)) / BP)),
+    support: Math.max(0, Math.trunc((s.support0 * (BP + m[ST.support]!)) / BP)),
+    attackIntervalTicks: Math.trunc((s.intervalTicks * BP) / atk),
+    moveSpeedMmPerTick: Math.trunc((s.speedE4 * speedMult) / (BP * BP)),
+    critBp: Math.min(d.critMaxBp, Math.max(0, s.crit0 + m[ST.crit]!)),
+    evadeBp: Math.min(d.evadeMaxBp, Math.max(0, s.evade0 + m[ST.evade]!)),
+    tenacityBp: Math.min(d.tenMaxBp, Math.max(d.tenMinBp, d.tenPerCmpBp * (cmp - 10) + s.tenacity0 + m[ST.tenacity]!)),
+    resolveBp: Math.min(d.resMaxBp, Math.max(d.resMinBp, s.resolve0 + m[ST.resolve]!)),
+    reactionTicks: Math.trunc((us * tb.tps) / 1_000_000),
+    focusRegenMilliPerTick: Math.trunc((s.focusRegen0 * (BP + m[ST.focusRegen]!)) / BP),
+  };
 }
+
+/** Additive: fight-input builders (harness, tests, dev tools). */
+export { fighterInput, sideInput } from './build';
+export type { FighterSpec } from './build';

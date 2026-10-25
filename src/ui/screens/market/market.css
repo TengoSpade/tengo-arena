@@ -1,0 +1,71 @@
+/* Market layout glue (screen-scoped). */
+.market-banner {
+  margin-bottom: var(--sp-4);
+}
+
+.market-split {
+  --split-side: 16.5rem;
+}
+
+.market-results {
+  min-width: 0;
+}
+
+.market-filters {
+  position: sticky;
+  top: var(--sp-4);
+}
+
+.market-age {
+  width: 4rem;
+}
+
+.market-ask {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.market-asks {
+  white-space: nowrap;
+}
+
+.market-actions {
+  --row-gap: var(--sp-1);
+  justify-content: flex-end;
+}
+
+.market-pin {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+.market-pin[aria-pressed="true"] {
+  color: var(--c-accent-text);
+}
+
+.market-check {
+  accent-color: var(--c-accent);
+}
+
+.offer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.offer-grid {
+  --grid-gap: var(--sp-6);
+}
+
+.offer-wage {
+  width: 7rem;
+  text-align: right;
+}
+
+@media (max-width: 1399px) {
+  .market-split {
+    --split-side: 14.5rem;
+  }
+}
