@@ -50,7 +50,7 @@ export const FINANCE_TEXT = {
   'col.amount': 'Amount',
   'col.balance': 'Balance',
   'ends': 'S{n}',
-  'endsFinal': 'S{n} · final season',
+  'endsFinal': 'S{n} · final',
   'chart.weekly': 'Money by week',
   'chart.weeklySub': 'Income above the line, costs below · hover a week',
   'chart.balance': 'Balance through the season',

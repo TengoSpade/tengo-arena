@@ -173,7 +173,7 @@ function FinanceBody({
       </Panel>
 
       <div class="l-grid">
-        <Panel title={t('budget.title')} icon="coins" subtitle={t('budget.subtitle')} class="span-4" testId="finance-budget">
+        <Panel title={t('budget.title')} icon="coins" subtitle={t('budget.subtitle')} class="span-6 span-4@wide" testId="finance-budget">
           <dl class="kv">
             {view.seasonBudgetParts.map((p) => (
               <div key={p.label}>
@@ -204,7 +204,7 @@ function FinanceBody({
           </dl>
         </Panel>
 
-        <Panel title={t('cat.title')} icon="finances" subtitle={t('cat.subtitle')} class="span-4" testId="finance-categories">
+        <Panel title={t('cat.title')} icon="finances" subtitle={t('cat.subtitle')} class="span-6 span-4@wide" testId="finance-categories">
           {byCat.length === 0 ? (
             <p class="u-sm u-muted">{t('cat.none')}</p>
           ) : (
@@ -323,7 +323,7 @@ function WageTable({ game, content, career, wageBudget }: { game: GameState; con
     },
   ];
   return (
-    <Panel title={t('wages.title')} icon="contract" subtitle={t('wages.subtitle', { n: fighters.length })} class="span-4" body="flush" testId="finance-wages">
+    <Panel title={t('wages.title')} icon="contract" subtitle={t('wages.subtitle', { n: fighters.length })} class="span-12 span-4@wide" body="flush" testId="finance-wages">
       <DataTable
         label={t('wages.title')}
         columns={columns}
