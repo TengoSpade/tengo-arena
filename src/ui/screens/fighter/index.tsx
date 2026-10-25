@@ -251,7 +251,7 @@ function ProfileHeader(props: {
               </span>
             )}
             {since !== undefined && f.clubId && (
-              <span>
+              <span {...tipAttrs(format(T.sinceTip, { season: since }))}>
                 {T.sinceClub} <strong>S{since}</strong>
               </span>
             )}
@@ -400,6 +400,7 @@ function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef
         <Panel
           title={T.development}
           subtitle={view ? format(T.developmentSub, { p: view.potential, trend: trend?.label ?? '—' }) : undefined}
+          subtitleTip={view ? potentialTip(view.potential) : undefined}
           bodyClass="l-stack l-stack--sm"
           actions={
             own && actions ? (
@@ -414,7 +415,7 @@ function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef
             ) : undefined
           }
         >
-          <div class="l-row u-sm">
+          <div class="l-row u-sm" {...tipAttrs(format(T.seasonXpTip, { per: xpCfg.perRoundStarted, win: xpCfg.winBonus, down: xpCfg.downCreditEach, max: xpCfg.downCreditMax, target: xpCfg.seasonTarget }))}>
             <span class="u-muted" {...tipAttrs(format(T.seasonXpTip, { per: xpCfg.perRoundStarted, win: xpCfg.winBonus, down: xpCfg.downCreditEach, max: xpCfg.downCreditMax, target: xpCfg.seasonTarget }))}>
               {T.seasonXp}
             </span>
@@ -430,6 +431,7 @@ function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef
         <Panel
           title={T.traits}
           subtitle={format(T.traitsSub, { pos: traits.filter((x) => x.polarity !== 'neg').length, neg: traits.filter((x) => x.polarity === 'neg').length })}
+          subtitleTip={T.traitsTip}
           body="tight"
           testId="traits"
         >
@@ -514,7 +516,9 @@ function RatingHistory({ f, view, state }: { f: Fighter; view: FighterView | nul
     return (
       <div class="stat-tile">
         <span class="stat-tile__label">{T.ratingBySeason}</span>
-        <span class="u-sm u-muted">{view ? `S${state.calendar.season} ${view.rating}` : '—'} · {T.noHistory}</span>
+        <span class="u-sm u-muted" {...tipAttrs(T.ratingHistoryTip)}>
+          {view ? `S${state.calendar.season} ${view.rating}` : '—'} · {T.noHistory}
+        </span>
       </div>
     );
   }
@@ -526,7 +530,7 @@ function RatingHistory({ f, view, state }: { f: Fighter; view: FighterView | nul
     <div class="l-row">
       <div class="stat-tile">
         <span class="stat-tile__label">{T.ratingBySeason}</span>
-        <span class="u-num u-sm">{points.map((p, i) => (i === points.length - 1 ? `S${p.season} ${p.rating}` : `S${p.season} ${p.rating} · `)).join('')}</span>
+        <span class="u-num u-sm" {...tipAttrs(T.ratingHistoryTip)}>{points.map((p, i) => (i === points.length - 1 ? `S${p.season} ${p.rating}` : `S${p.season} ${p.rating} · `)).join('')}</span>
       </div>
       <svg class="sparkline l-push fighter-spark" viewBox="0 0 100 30" aria-label={points.map((p) => p.rating).join(', ')}>
         {potY !== null && <line class="fighter-spark__potential" x1="2" x2="98" y1={potY} y2={potY} />}
@@ -633,7 +637,7 @@ function AgeCurve({ f, race, content, humanAge }: { f: Fighter; race: RaceDef; c
           </svg>
           {T.legendMental}
         </span>
-        <span class="legend__item">
+        <span class="legend__item" {...tipAttrs(format(T.legendYouTip, { age: f.age, human: humanAge }))}>
           <span class="legend__swatch" style={{ '--swatch': 'var(--c-accent)' }} />
           {format(T.legendYou, { name: f.name.given, age: f.age })}
         </span>
@@ -689,9 +693,9 @@ function CareerTable({ f, view, state, content }: { f: Fighter; view: FighterVie
       header: T.colSeason,
       sortValue: (r) => r.season,
       cell: (r) => (
-        <>
+        <span {...tipAttrs(`Season ${r.season}`)}>
           S{r.season} {r.now && <Tag kind="accent">{T.now}</Tag>}
-        </>
+        </span>
       ),
     },
     {

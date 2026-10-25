@@ -37,12 +37,21 @@ import { ENGINE_VERSION } from '../../core/sim';
 import { deepFreeze, engineError, err, NotImplementedError, ok, type EngineError, type Result } from '../../core/util';
 import { AUTOSAVE_SLOTS, MANUAL_SLOT_COUNT } from '../../platform/save-store';
 import { configureFormat } from '../format';
+import { t } from '../text';
 import type { GameStore, StorePlatform } from './contract';
 import { coreEngine, type GameEngine } from './engine';
 
 /** Manual slot ids "manual-1" .. "manual-10" (TUNABLE (tech): 10). */
 export const MANUAL_SLOT_IDS: readonly string[] = Array.from({ length: MANUAL_SLOT_COUNT }, (_, i) => `manual-${i + 1}`);
 export { AUTOSAVE_SLOTS };
+
+/** Player-facing slot name: "slot 3", "autosave 2". */
+export function slotName(slotId: string): string {
+  const n = slotId.slice(slotId.lastIndexOf('-') + 1);
+  if (slotId.startsWith('auto-')) return t('save.slotAuto', { n });
+  if (slotId.startsWith('manual-')) return t('save.slotManual', { n });
+  return slotId;
+}
 
 export function isAutosaveSlot(slotId: string): boolean {
   return (AUTOSAVE_SLOTS as readonly string[]).includes(slotId);

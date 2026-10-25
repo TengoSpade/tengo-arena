@@ -397,7 +397,9 @@ function LineupBoard(props: BoardProps) {
     >
       <div class="lineup__row-label">
         <span>{label}</span>
-        <span class="u-faint">{list.length}</span>
+        <span class="u-faint" {...tipAttrs(format(T.rowCountTip, { n: list.length, row: label.toLowerCase() }))}>
+          {list.length}
+        </span>
       </div>
       <div class="lineup__slots">
         {list.map((e) => {
@@ -572,7 +574,7 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
           )}
           {captain === 'vice' && <ViceCaptainTag />}
         </span>
-        <span class="lineup-card__class">
+        <span class="lineup-card__class" {...tipAttrs(format(T.ageTip, { race, age: r.f.age, human: r.view?.humanAge ?? '—' }))}>
           {r.klass.name} · {race} {r.f.age}
         </span>
       </div>
@@ -661,7 +663,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       />
     ),
   };
-  const slot: Column<Row> = { id: 'slot', header: '#', headerLabel: 'Lineup order', class: 'cell-tight u-faint', sortValue: (r) => (r.slot < 0 ? 99 : r.slot), cell: (r) => (r.slot >= 0 ? r.slot + 1 : '') };
+  const slot: Column<Row> = { id: 'slot', header: '#', headerLabel: 'Lineup order', class: 'cell-tight u-faint', sortValue: (r) => (r.slot < 0 ? 99 : r.slot), cell: (r) => (r.slot >= 0 ? <span {...tipAttrs(format(T.slotTip, { n: r.slot + 1 }))}>{r.slot + 1}</span> : '') };
   const klass: Column<Row> = {
     id: 'class',
     header: T.colClass,

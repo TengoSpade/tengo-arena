@@ -1,7 +1,9 @@
 # ui/debug
 
-**Owner:** UI foundation agent (M1 wave 1). **Status:** not started.
+**Owner:** WP6. **Status:** implemented. Dev tooling; may import `core/testkit` (05 §3.1). Loaded only behind `import.meta.env.DEV` (dynamic import) or from tests, never in a production bundle — except `DebugOverlay.tsx`, which imports no fixtures and also opens in release builds with `?debug=1`.
 
-- **Debug overlay** (toggle with the backtick key, or open with `?debug=1`): season/week/phase, root seed, content id + hash, engine and schema versions, last `advanceWeek` time (ms), state size (KB), last 20 commands, last error. Dev builds only, plus release builds when launched with `?debug=1`.
-- **State dump**: downloads `<club>-s<season>w<week>.state-dump.json` = save envelope + command log + build info + user agent. A dump plus the build version is enough to reproduce a bug headless.
-- **Match repro**: copy `{ fixtureId, matchSeed, engineVersion, contentHash }` for a match report.
+- `DebugOverlay.tsx` (backtick or `?debug=1`): season / week / phase, root seed, content id and hash, engine / schema / game versions, last advance in ms, state size, last error, the last 20 commands; State dump; dev: load the dev world, open the gallery.
+- `dev-engine.ts`: `createDevEngine()` wraps the real core and falls back to PROVISIONAL stand-ins only where a core function still throws `NotImplementedError` (world, commands for lineup / captaincy / tactics / training / shortlist / news, a week advance with synthetic results, views, saves). Real implementations take over automatically as WP1-WP5 merge. Nothing here is a game rule.
+- `dev-world.ts`: `buildDevWorld(content, { playerClubId, weekIndex })` — a plausible career on any content (wings, double round robin, synthetic results before the given week, an injury, expiring contracts, digest news, names from `names.json`). Browser: `?dev-world=11&club=<clubId|none>`.
+- `test-store.tsx`: `createTestStore({ world, weekIndex, playerClubId, engine })` (real store, memory saves, manual clock, captured downloads, fixture content, dev engine) and `<TestProviders store>` for screen tests (WP7 may use them).
+- `Gallery.tsx`: the component sheet at `#/dev/components`.
