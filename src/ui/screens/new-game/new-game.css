@@ -1,0 +1,39 @@
+/* Title screen layout (flow-state-001): one centred panel on the page background. */
+.title-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-8) var(--page-gutter);
+  background: var(--c-bg);
+}
+
+.title-screen__panel {
+  width: min(30rem, 100%);
+  padding: var(--sp-8);
+  gap: var(--sp-6);
+}
+
+.title-screen__head {
+  text-align: center;
+}
+
+.title-screen__title {
+  font-size: var(--fs-3xl);
+  line-height: var(--lh-tight);
+  margin-bottom: var(--sp-1);
+}
+
+.title-screen__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+.title-screen__latest {
+  text-align: center;
+  margin-top: calc(var(--sp-1) * -1);
+}
+
+.title-screen__advanced {
+  align-self: center;
+}

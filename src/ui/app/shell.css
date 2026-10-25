@@ -1,7 +1,1 @@
-/* Phase A shell layout only. Real layout comes from src/ui/styles (UI designer). */
-.shell-grid {
-  display: grid;
-  gap: var(--grid-gap, 1rem);
-  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
-  align-items: start;
-}
+/* App-frame glue only. Every visual style comes from src/ui/styles (UI designer). */

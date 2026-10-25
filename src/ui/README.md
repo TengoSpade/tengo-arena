@@ -13,6 +13,8 @@ HTML/CSS screens over the pure core. The UI **reads** `GameState` and **dispatch
 | `text/` | WP6 (screens keep their own text.ts) | UI copy table (`t(key)`); theme names come from content |
 | `debug/` | WP6 (may load core/testkit fixtures in dev builds) | debug overlay (backtick key or `?debug=1`) and state dump |
 
+Status (WP6): frame, store, platform, components, format, text, debug and the screens home, new-game, club-select, squad, fighter and codex are implemented; see each folder's README.
+
 Rules:
 - Import core through module indexes only (`../../core/game`, never `../../core/game/pipeline`). Enforced by tests/architecture.
 - Use the designer's classes from `styles/components.css`; screen-local CSS only for layout glue, in the screen folder.
