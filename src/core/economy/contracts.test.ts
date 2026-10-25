@@ -185,7 +185,6 @@ describe('embargo ladder (le-018)', () => {
       const away = home === C ? rival : C;
       addPlayedFixture(s, content, { weekIndex: week, home, away, winner: week === 14 ? rival : i < 5 ? C : rival });
     }
-    setOpeningBalance(s, C, 300 + s.ledger.entries.filter((e) => e.clubId === C).reduce((a, e) => a + e.amount, 0));
     setOpeningBalance(s, C, 300);
     weeklyIncome(s, content);
     weeklyCosts(s, content);
