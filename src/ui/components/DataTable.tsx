@@ -59,7 +59,8 @@ export interface DataTableProps<R> {
   onSelect?: (key: string, row: R) => void;
   onOpen?: (row: R) => void;
   rowClass?: (row: R) => string | undefined;
-  rowAttrs?: (row: R) => Record<string, string>;
+  /** Extra row props (data-zone, draggable, drag handlers). */
+  rowAttrs?: (row: R) => Record<string, unknown>;
   empty?: ComponentChildren;
   /** CSS max-height of the scroll area (sticky header inside). */
   maxHeight?: string;

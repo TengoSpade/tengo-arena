@@ -1,103 +1,114 @@
-import { CONTENT_FILE_NAMES } from '../../core/content';
-import { STATE_SCHEMA_VERSION } from '../../core/model';
-import { Rng } from '../../core/rng';
-import { ENGINE_VERSION } from '../../core/sim';
-import type { ThemeFiles } from '../../platform/content-loader';
+/**
+ * App root: providers (store, engine), settings on <html>, error toasts,
+ * the content-error gate and the route decision:
+ *  - no career: title (#/new-game), plus Save / Load, Settings and the codex;
+ *  - career without a club: club select;
+ *  - otherwise the hub frame with the routed screen.
+ * Dev builds add the component gallery (#/dev/components); the debug
+ * overlay opens with backtick (dev) or ?debug=1.
+ */
+import { effect } from '@preact/signals';
+import type { ComponentType } from 'preact';
+import { useEffect, useState } from 'preact/hooks';
+import { showToast } from '../components';
+import { DebugOverlay } from '../debug/DebugOverlay';
+import { StoreContext, type AppStore } from '../store';
+import { EngineContext } from '../store/engine';
+import { errorText } from '../store/messages';
+import { applySettingsToDocument } from '../store/settings';
 import { t } from '../text';
+import { Frame } from './Frame';
+import { navigate, useRoute } from './router';
+import { ROUTES, type RouteId } from './routes';
+import { ContentErrorScreen, ScreenHost } from './ScreenHost';
 
 export interface AppProps {
-  content: ThemeFiles;
+  store: AppStore;
 }
 
-/** Same seed twice must give the same numbers; shown so testers can spot a broken build at a glance. */
-function rngSelfCheck(): boolean {
-  const a = Rng.create('shell-self-check', 'ui');
-  const b = Rng.create('shell-self-check', 'ui');
-  for (let i = 0; i < 8; i++) if (a.nextU32() !== b.nextU32()) return false;
-  return true;
+/** Routes reachable before a career exists. */
+const PRE_CAREER: readonly RouteId[] = ['new-game', 'saves', 'settings', 'codex'];
+/** Full-page routes without the hub frame (flow-state-001 / 002). */
+const BARE: readonly RouteId[] = ['new-game', 'club-select'];
+
+function debugRequested(): boolean {
+  try {
+    return new URLSearchParams(location.search).get('debug') === '1';
+  } catch {
+    return false;
+  }
 }
 
-/**
- * Phase A app shell: proves the toolchain, the designer's CSS and the core
- * imports work in the browser. Replaced by the real app frame (topbar,
- * sidenav, router) in M1.
- */
-export function App({ content }: AppProps) {
-  const rngOk = rngSelfCheck();
+export function App({ store }: AppProps) {
+  const [debug, setDebug] = useState(debugRequested);
+  const debugAllowed = import.meta.env.DEV || debugRequested();
+
+  useEffect(() => applySettingsToDocument(), []);
+  useEffect(
+    () =>
+      effect(() => {
+        const e = store.lastError.value;
+        if (!e) return;
+        showToast({ title: errorText(e), kind: 'bad', sub: e.code });
+        store.clearError();
+      }),
+    [store],
+  );
+
+  const issues = store.contentIssues.value;
+  if (issues.length > 0) return <ContentErrorScreen issues={issues} />;
+  if (!store.content.value) return <main class="page" aria-busy="true" />;
+
   return (
-    <main class="page" data-testid="app-shell">
-      <header class="page-header">
-        <div class="page-header__text">
-          <div class="page-header__eyebrow">{t('shell.eyebrow')}</div>
-          <h1 class="page-header__title">{t('app.title')}</h1>
-          <div class="page-header__meta">{t('shell.subtitle')}</div>
-        </div>
-      </header>
-
-      <div class="shell-grid">
-        <section class="panel" aria-labelledby="shell-content-title">
-          <div class="panel__header">
-            <h2 class="panel__title" id="shell-content-title">
-              {t('shell.content.title')} ({content.found.length}/{CONTENT_FILE_NAMES.length})
-            </h2>
-          </div>
-          <div class="panel__body">
-            <dl class="kv" data-testid="content-files">
-              {CONTENT_FILE_NAMES.map((name) => {
-                const found = content.found.includes(name);
-                return (
-                  <div key={name}>
-                    <dt>{name}.json</dt>
-                    <dd>
-                      <span class={found ? 'tag tag--good' : 'tag tag--warn'}>
-                        {found ? t('shell.content.found') : t('shell.content.missing')}
-                      </span>
-                    </dd>
-                  </div>
-                );
-              })}
-              {content.extra.length > 0 && (
-                <div>
-                  <dt>{t('shell.content.extra')}</dt>
-                  <dd>{content.extra.join(', ')}</dd>
-                </div>
-              )}
-            </dl>
-          </div>
-        </section>
-
-        <section class="panel" aria-labelledby="shell-build-title">
-          <div class="panel__header">
-            <h2 class="panel__title" id="shell-build-title">
-              {t('shell.build.title')}
-            </h2>
-          </div>
-          <div class="panel__body">
-            <dl class="kv">
-              <div>
-                <dt>{t('shell.build.theme')}</dt>
-                <dd>{content.themeId}</dd>
-              </div>
-              <div>
-                <dt>{t('shell.build.engine')}</dt>
-                <dd>{ENGINE_VERSION}</dd>
-              </div>
-              <div>
-                <dt>{t('shell.build.schema')}</dt>
-                <dd>{STATE_SCHEMA_VERSION}</dd>
-              </div>
-              <div>
-                <dt>{t('shell.build.rng')}</dt>
-                <dd>
-                  <span class={rngOk ? 'tag tag--good' : 'tag tag--bad'} data-testid="rng-check">
-                    {rngOk ? t('shell.build.rng.ok') : t('shell.build.rng.fail')}
-                  </span>
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </section>
-      </div>
-    </main>
+    <StoreContext.Provider value={store}>
+      <EngineContext.Provider value={store.engine}>
+        <AppRoutes store={store} onToggleDebug={debugAllowed ? () => setDebug((d) => !d) : undefined} />
+        {debug && debugAllowed && <DebugOverlay store={store} onClose={() => setDebug(false)} />}
+      </EngineContext.Provider>
+    </StoreContext.Provider>
   );
 }
+
+function AppRoutes({ store, onToggleDebug }: { store: AppStore; onToggleDebug?: () => void }) {
+  const { route, params, hash } = useRoute();
+  const game = store.game.value;
+  const hasCareer = !!game;
+  const hasClub = !!game?.playerClubId;
+
+  // Redirects (kept out of render to avoid loops).
+  let target: string | null = null;
+  if (import.meta.env.DEV && hash.startsWith('#/dev/components')) target = null;
+  else if (!route) target = hasClub ? '#/home' : '#/new-game';
+  else if (!hasCareer && !PRE_CAREER.includes(route.id)) target = '#/new-game';
+  else if (hasCareer && !hasClub && route.id !== 'club-select' && route.id !== 'new-game' && !PRE_CAREER.includes(route.id)) target = '#/club-select';
+  else if (hasClub && route.id === 'club-select') target = '#/home';
+  useEffect(() => {
+    if (target) navigate(target);
+  }, [target]);
+
+  if (import.meta.env.DEV && hash.startsWith('#/dev/components')) {
+    return (
+      <Frame onToggleDebug={onToggleDebug}>
+        <LazyGallery />
+      </Frame>
+    );
+  }
+  if (!route || target) return <main class="page" aria-busy="true" />;
+  if (BARE.includes(route.id)) return <ScreenHost route={route} params={params} />;
+  return (
+    <Frame onToggleDebug={onToggleDebug}>
+      <ScreenHost route={route} params={params} />
+    </Frame>
+  );
+}
+
+function LazyGallery() {
+  const [Gallery, setGallery] = useState<ComponentType | null>(null);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    void import('../debug/Gallery').then((m) => setGallery(() => m.default));
+  }, []);
+  return Gallery ? <Gallery /> : <main class="page" aria-busy="true">{t('common.loading')}</main>;
+}
+
+export { ROUTES };

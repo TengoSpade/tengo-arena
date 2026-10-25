@@ -55,9 +55,15 @@ export const ROUTES: readonly RouteDef[] = [
   { id: 'settings', path: 'settings', owner: 'WP7', nav: true, load: () => import('../screens/settings') },
 ];
 
-/** Match "#/fighter/f-12" against the table. */
+/**
+ * Match "#/fighter/f-12" against the table. A query ("#/codex?class=oathguard")
+ * adds its keys to params (path params win).
+ */
 export function matchRoute(hash: string): { route: RouteDef; params: Record<string, string> } | null {
-  const path = hash.replace(/^#\/?/, '');
+  const raw = hash.replace(/^#\/?/, '');
+  const q = raw.indexOf('?');
+  const path = q >= 0 ? raw.slice(0, q) : raw;
+  const query = q >= 0 ? new URLSearchParams(raw.slice(q + 1)) : null;
   const parts = path.split('/').filter(Boolean);
   for (const route of ROUTES) {
     const pattern = route.path.split('/');
@@ -69,7 +75,22 @@ export function matchRoute(hash: string): { route: RouteDef; params: Record<stri
       if (seg.startsWith(':')) params[seg.slice(1)] = decodeURIComponent(part);
       else if (seg !== part) ok = false;
     });
-    if (ok) return { route, params };
+    if (ok) {
+      if (query) for (const [k, v] of query) if (!(k in params)) params[k] = v;
+      return { route, params };
+    }
   }
   return null;
+}
+
+/** Hash for a route id with params, e.g. hrefFor('fighter', { id: 'f-12' }) -> "#/fighter/f-12". */
+export function hrefFor(id: RouteId, params: Readonly<Record<string, string>> = {}, query?: Readonly<Record<string, string>>): string {
+  const route = ROUTES.find((r) => r.id === id);
+  if (!route) return '#/home';
+  const path = route.path
+    .split('/')
+    .map((seg) => (seg.startsWith(':') ? encodeURIComponent(params[seg.slice(1)] ?? '') : seg))
+    .join('/');
+  const qs = query && Object.keys(query).length > 0 ? `?${new URLSearchParams(query as Record<string, string>).toString()}` : '';
+  return `#/${path}${qs}`;
 }
