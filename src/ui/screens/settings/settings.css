@@ -1,0 +1,94 @@
+/* Settings layout glue (screen-scoped). */
+.settings-presets {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.settings-presets > legend {
+  margin-bottom: var(--sp-2);
+}
+
+.settings-preset {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--c-surface-0);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+
+.settings-preset:hover {
+  border-color: var(--c-border-strong);
+}
+
+.settings-preset.is-on {
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+}
+
+.settings-preset input {
+  margin-top: 0.2rem;
+  accent-color: var(--c-accent);
+}
+
+.settings-preset__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.settings-preset__name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: var(--fw-semibold);
+}
+
+.settings-preset__text {
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+
+.settings-stops {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2) var(--sp-4);
+  padding-left: var(--sp-4);
+}
+
+.settings-switch {
+  align-items: flex-start;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--c-divider);
+}
+
+.settings-range-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+
+.settings-audio .settings-range-label {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  align-items: center;
+  font-size: var(--fs-sm);
+  color: var(--c-text-faint);
+}
+
+.settings-palette-sample {
+  margin-top: var(--sp-2);
+}
+
+.settings-grid .field > .segmented {
+  align-self: flex-start;
+}

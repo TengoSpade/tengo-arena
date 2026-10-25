@@ -1,0 +1,97 @@
+/* Season review layout glue (screen-scoped). */
+.review-body {
+  margin-top: var(--sp-4);
+}
+
+.review-nav {
+  margin-top: var(--sp-5);
+}
+
+.review-pending {
+  max-width: 44rem;
+}
+
+/* Our movement in large type (04 ui-season-end). */
+.review-move__body {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6);
+}
+
+.review-move__icon {
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  background: var(--c-surface-3);
+  color: var(--c-text-muted);
+}
+
+.review-move--promoted .review-move__icon {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-text);
+}
+
+.review-move--relegated .review-move__icon {
+  background: var(--c-bad-soft);
+  color: var(--c-bad);
+}
+
+.review-move__title {
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+}
+
+.review-wings {
+  --grid-gap: var(--sp-3);
+}
+
+.review-moves {
+  margin-top: var(--sp-3);
+}
+
+.review-names {
+  white-space: normal;
+  text-align: right;
+}
+
+.review-stage {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+}
+
+.kv > div.review-hit {
+  color: var(--c-text);
+  font-weight: var(--fw-semibold);
+}
+
+.kv > div.review-hit dt {
+  color: var(--c-accent-text);
+}
+
+.kv > div.review-total {
+  border-top: 1px solid var(--c-border);
+  border-bottom: 0;
+}
+
+.kv > div.review-total dt {
+  color: var(--c-text);
+  font-weight: var(--fw-semibold);
+}
+
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.review-attrs {
+  display: inline-flex;
+  gap: var(--sp-2);
+}

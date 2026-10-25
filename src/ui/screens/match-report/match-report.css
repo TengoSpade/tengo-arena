@@ -1,0 +1,189 @@
+/* Match report layout glue (screen-scoped). Components come from styles/components.css. */
+.report-top {
+  margin-bottom: var(--sp-3);
+}
+
+.report-pips {
+  padding-bottom: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.report-mvp-stats {
+  margin-left: var(--sp-5);
+}
+
+/* Losses are explained, not punished: a neutral result line (04 §1). */
+.scoreboard__result.report-result--lost {
+  color: var(--c-text-muted);
+}
+
+.report-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.report-tabs > .tabs {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.report-tabs__hint {
+  padding-bottom: var(--sp-2);
+  white-space: nowrap;
+}
+
+.report-grid {
+  margin-top: var(--sp-4);
+}
+
+.report-why {
+  margin: var(--sp-3) var(--sp-4) 0;
+}
+
+.report-empty-line {
+  padding: var(--sp-3) var(--sp-4);
+}
+
+/* A moment, row, card or down picked from the timeline. */
+.trace__item.is-focus,
+.timeline__item.is-focus,
+.report-down.is-focus {
+  background: var(--c-accent-soft);
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+.recap-card.is-focus {
+  border-color: var(--c-accent-line);
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+.data-table tbody tr.is-focus {
+  cursor: pointer;
+}
+
+.data-table tbody tr {
+  cursor: default;
+}
+
+/* Rule recaps */
+.recap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr));
+  gap: var(--sp-3);
+}
+
+.recap-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.recap-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.recap-card__meta {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.recap-rules > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.recap-rule__text {
+  min-width: 0;
+}
+
+.recap-rule__warn {
+  margin-left: var(--sp-2);
+}
+
+.recap-rule.is-never .rule__v {
+  color: var(--c-text-muted);
+}
+
+.recap-rule__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.recap-rule__bar > .meter {
+  flex: 1;
+}
+
+.recap-rule__bar > .rule-list__fires {
+  margin-left: 0;
+  min-width: 2.2rem;
+  text-align: right;
+}
+
+/* Downs (death summaries) */
+.report-downs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-down {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: var(--sp-2) var(--sp-2);
+  margin: 0 calc(var(--sp-2) * -1);
+  border-bottom: 1px dashed var(--c-divider);
+  border-radius: var(--r-sm);
+}
+
+.report-down:last-child {
+  border-bottom: 0;
+}
+
+.report-down__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem var(--sp-2);
+}
+
+.report-down__name {
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+.report-down.is-them .report-down__name {
+  color: var(--c-text-muted);
+}
+
+.report-down__meter {
+  margin-top: 0.15rem;
+}
+
+.report-xp-title {
+  margin: var(--sp-2) 0 0;
+}
+
+.report-legend {
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+}
+
+/* A long match keeps the side column in view: the timeline scrolls inside its panel. */
+.report-moments {
+  max-height: 46rem;
+  overflow-y: auto;
+}
