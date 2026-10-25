@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ContentDB } from '../content';
 import type { ClubId, GameState } from '../model';
 import { buildFixtureWorld, fixtureContent } from '../testkit';
+import { stableStringify } from '../util';
 import { simulateFinanceSeason, type SimResult, type TierFlows } from './finance-sim';
 import { initialFinances, ledgerInvariantViolations, reserveContribution, seasonBudgetOf, wageBudgetOf } from './index';
 import { addFighter, resetFighterDoubles, setFighterValues, setWeek } from './testing';
@@ -137,4 +138,30 @@ describe('1-season finance simulation (fixture world, 48 clubs)', () => {
     const negative = Object.values(state.clubs).filter((c) => c.finance.balance < 0);
     expect(negative).toEqual([]);
   });
+});
+
+describe('three seasons headless (le-027 economy part, le-030)', () => {
+  function threeSeasons() {
+    const s = buildWorld();
+    const flows: TierFlows[][] = [];
+    for (let season = 1; season <= 3; season++) {
+      if (season > 1) setWeek(s, content, 1, season);
+      const r = simulateFinanceSeason(s, content, (label) => {
+        const v = ledgerInvariantViolations(s);
+        if (v.length > 0) throw new Error(`season ${season}, ${label}: ${v[0]}`);
+      });
+      flows.push(r.flows);
+    }
+    return { s, flows };
+  }
+
+  it('keeps the invariant across season boundaries, never pays a patron bonus, and is identical when run twice', () => {
+    const a = threeSeasons();
+    expect(a.s.ledger.entries.some((e) => e.category === 'patronBonus')).toBe(false);
+    for (const season of a.flows) for (const f of season) expect(f.wageToIncomeBp).toBeGreaterThan(5_000);
+    const relegatedOnce = Object.values(a.s.clubs).filter((c) => c.finance.parachuteSeasonsLeft > 0);
+    expect(relegatedOnce.length).toBeGreaterThan(0);
+    const b = threeSeasons();
+    expect(stableStringify(b.s)).toBe(stableStringify(a.s));
+  }, 30_000);
 });

@@ -214,6 +214,20 @@ describe('embargo ladder (le-018)', () => {
     expect(ledgerInvariantViolations(s)).toEqual([]);
   });
 
+  it('under embargo a free-agent offer needs fewer than 5 fit roster fighters and costs no signing fee', () => {
+    const s = world(10);
+    // A fighter whose ask is the tier minimum (rating 20: curve 35, clamped to 60).
+    const fa = addFighter(s, content, { values: { rating: 20, potential: 20 } });
+    s.clubs[C]!.finance.status = 'embargo';
+    expect(code(makeOffer(s, { clubId: C, fighterId: fa.id, wagePerWeek: 60, seasons: 1, acceptCounter: false }, content))).toBe('embargo.roster');
+    clearRoster(s, C);
+    setOpeningBalance(s, C, -500);
+    expect(code(makeOffer(s, { clubId: C, fighterId: fa.id, wagePerWeek: 60, seasons: 1, acceptCounter: false }, content))).toBe('ok');
+    resolveFreeAgentOffers(s, content);
+    expect(fa.clubId).toBe(C);
+    expect(s.ledger.entries.filter((e) => e.category === 'signingCost')).toEqual([]);
+  });
+
   it('under embargo: renewals only at the tier minimum, no trials signings; non-conforming pending offers are void', () => {
     const s = world(19);
     s.playerClubId = A;
