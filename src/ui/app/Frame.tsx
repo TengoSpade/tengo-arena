@@ -301,10 +301,11 @@ function Topbar({
   return (
     <header class="topbar">
       {ctx ? (
-        <a class="topbar__club" href="#/home" data-testid="topbar-club">
+        <a class="topbar__club" href="#/home" data-testid="topbar-club" aria-label={ctx.club.name} {...tipAttrs(ctx.club.name.length > TOPBAR_NAME_MAX ? ctx.club.name : null)}>
           <Crest primary={ctx.club.colors.primary} secondary={ctx.club.colors.secondary} code={crestLetters(ctx.club)} size="md" />
           <span class="topbar__club-text">
-            <span class="topbar__club-name">{ctx.club.name}</span>
+            {/* A long name would be cut in the nav-width block: the short name fits whole. */}
+            <span class="topbar__club-name">{ctx.club.name.length > TOPBAR_NAME_MAX ? ctx.club.shortName : ctx.club.name}</span>
             <span class="topbar__club-tier">
               {ctx.tier.name} · {t('topbar.tier', { n: ctx.tier.level })}
             </span>
@@ -444,6 +445,9 @@ function TopbarStats({ ctx }: { ctx: ClubContext }) {
 // ---- Commit dialogs of Continue (Kick off season, Advance to season end, expiring contracts) -------
 
 type ConfirmVariant = 'kick-off' | 'season-end' | 'expiring';
+
+/** Longest club name the top bar shows whole at the nav width (display face, md). */
+const TOPBAR_NAME_MAX = 17;
 
 /** Player fighters whose contract ends with this season, not renewed and not retiring. */
 function expiringUnrenewed(ctx: ClubContext | null) {

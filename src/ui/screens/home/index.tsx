@@ -376,7 +376,7 @@ function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
       hero
       title={state.calendar.phase === 'preseason' ? T.preseasonTitle : T.weekChecklistTitle}
       icon="calendar-check"
-      subtitle={format(T.preseasonSub, { week: weekName(content, week.index, tier) })}
+      subtitle={state.calendar.phase === 'season-end' ? T.seasonEndSub : format(T.preseasonSub, { week: weekName(content, week.index, tier) })}
       testId="preseason-checklist"
     >
       <ul class="checklist" role="list">

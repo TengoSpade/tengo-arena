@@ -527,16 +527,20 @@ function AgentsTable({
       cell: (r) => <ClassTag content={content} classId={r.fighter.classId} />,
     },
     {
-      id: 'raceAge',
-      header: t('col.raceAge'),
-      class: 'col-mid',
-      sortValue: (r) => r.view?.humanAge ?? r.fighter.age,
+      id: 'race',
+      header: t('col.race'),
+      sortValue: (r) => content.races.get(r.fighter.raceId)?.name ?? r.fighter.raceId,
       firstDir: 'asc',
-      cell: (r) => (
-        <span data-tip={r.view ? `Human-age ${r.view.humanAge}` : undefined}>
-          {content.races.get(r.fighter.raceId)?.name ?? r.fighter.raceId} · {r.fighter.age}
-        </span>
-      ),
+      cell: (r) => content.races.get(r.fighter.raceId)?.name ?? r.fighter.raceId,
+    },
+    {
+      id: 'age',
+      header: t('col.age'),
+      align: 'num',
+      sortValue: (r) => r.fighter.age,
+      firstDir: 'asc',
+      cellAttrs: (r): Record<string, string> => (r.view ? { 'data-tip': t('tip.humanAge', { age: r.fighter.age, human: r.view.humanAge }) } : {}),
+      cell: (r) => r.fighter.age,
     },
     { id: 'rating', header: t('col.rating'), align: 'num', sortValue: (r) => r.rating, cell: (r) => <RatingPill value={r.rating} /> },
     { id: 'potential', header: t('col.potential'), sortValue: (r) => r.potential, cell: (r) => <Stars potential={r.potential} /> },
@@ -591,8 +595,10 @@ function AgentsTable({
       cell: (r) => (r.check?.ok ? <span class="u-num">{fmtMoney(r.check.value.signingCost, content)}</span> : <span class="u-faint">—</span>),
     },
     {
+      // Rival offers are usually 0: below 1400 px the count moves to the Offer button's tooltip.
       id: 'rivals',
       header: t('col.rivals'),
+      class: 'col-mid',
       align: 'num',
       sortValue: (r) => r.rivals,
       cellAttrs: () => ({ 'data-tip': t('tip.rivals') }),
@@ -641,7 +647,7 @@ function AgentsTable({
               class="btn btn--sm"
               type="button"
               aria-disabled={blocked ? 'true' : undefined}
-              data-tip={blocked ?? undefined}
+              data-tip={blocked ?? t('tip.offerRivals', { n: r.rivals })}
               data-testid="offer-button"
               onClick={(e) => {
                 e.stopPropagation();

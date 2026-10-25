@@ -153,3 +153,11 @@ export function potentialStars(potential: number): number {
 export function starsLabel(stars: number): string {
   return `${stars} ${stars === 1 ? 'star' : 'stars'}`;
 }
+
+/**
+ * Content prose for the player: drops build-plan notes such as "(From M3: +1 rule slot.)" that some
+ * content strings carry for designers.
+ */
+export function playerText(text: string): string {
+  return text.replace(/\s*\((?:from\s+)?M\d+\b[^)]*\)/gi, '').trim();
+}

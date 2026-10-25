@@ -690,7 +690,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
         race={r.f.raceId}
         injured={!!(r.f.injury && r.f.injury.weeksOut > 0)}
         captain={club.captainId === r.f.id ? 'captain' : club.viceCaptainId === r.f.id ? 'vice' : null}
-        rookie={r.f.debutSeason === season && r.f.career.matches === 0}
+        rookie={r.f.debutSeason === season}
       />
     ),
   };
@@ -787,9 +787,11 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       );
     },
   };
+  // Below 1400 px the traits give way to the names (they stay on the profile and Attributes view).
   const traits: Column<Row> = {
     id: 'traits',
     header: T.colTraits,
+    class: 'col-mid',
     cell: (r) => <TraitDots traits={fighterTraits(r.f, content).map((ti) => ({ id: ti.id, polarity: ti.polarity, tip: ti.tip }))} />,
   };
   const apps: Column<Row> = { id: 'apps', header: T.colApps, align: 'num', class: 'col-wide', sortValue: (r) => r.f.season.matchesStarted, cell: (r) => <span {...tipAttrs(format(T.apps, { n: r.f.season.matchesStarted }))}>{r.f.season.matchesStarted}</span> };

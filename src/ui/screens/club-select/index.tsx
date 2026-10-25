@@ -33,6 +33,7 @@ const T = {
   seedHint: 'The same seed gives the same world. Regenerating replaces this unstarted world.',
   regenerate: 'Regenerate',
   recommended: 'Recommended for a first career',
+  recommendedTip: 'The strongest five in the easiest tier, with wage room to sign more.',
   budget: 'Season budget',
   budgetTip: 'Season budget fixed at the season setup (central grant, sponsor, projected gates).',
   wageBudget: 'Wage budget',
@@ -88,6 +89,19 @@ export default function ClubSelectScreen(_props: ScreenProps) {
     const finance = state && content ? safeView(() => engine.financeView(state, club.id, content), null) : null;
     return { roster, mean, finance };
   };
+
+  // One suggested club for a first career, in the lowest tier: the strongest five, then the most wage room.
+  const suggestedId = useMemo(() => {
+    if (!content || tierLevel !== Math.max(...content.tiers.list.map((x) => x.level))) return null;
+    let best: { id: ClubId; score: number } | null = null;
+    for (const club of clubs) {
+      const i = info(club);
+      const room = i.finance ? i.finance.wageBudgetPerWeek - i.finance.wageBill - i.finance.pendingWages : 0;
+      const score = (i.mean ?? 0) * 100_000 + room;
+      if (!best || score > best.score) best = { id: club.id, score };
+    }
+    return best?.id ?? null;
+  }, [clubs, content, tierLevel]);
 
   const start = () => {
     if (!picked) return;
@@ -260,7 +274,11 @@ export default function ClubSelectScreen(_props: ScreenProps) {
                           {personality.label}
                         </Tag>
                       )}
-                      {tier.level === lowest && <Tag kind="accent">{T.recommended}</Tag>}
+                      {club.id === suggestedId && (
+                        <Tag kind="accent" tip={T.recommendedTip}>
+                          {T.recommended}
+                        </Tag>
+                      )}
                     </span>
                   </button>
                 );

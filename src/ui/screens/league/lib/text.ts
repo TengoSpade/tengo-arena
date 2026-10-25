@@ -20,6 +20,7 @@ export const COMMON = {
   'round.semifinal': 'Semifinal',
   'round.final': 'Final',
   'week.seasonEnd': 'Season end',
+  'week.seasonStart': 'Season start',
   'noCareer.title': 'No career loaded',
   'noCareer.text': 'Start a new career or load a save to see this screen.',
   'noCareer.new': 'New career',

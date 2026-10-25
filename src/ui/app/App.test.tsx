@@ -33,7 +33,9 @@ describe('App', () => {
     render(<App store={store} />);
     const club = store.game.value!.clubs[store.game.value!.playerClubId!]!;
     await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy());
-    expect(screen.getByTestId('topbar-club').textContent).toContain(club.name);
+    // Long names show the short name whole; the full name stays in the label.
+    expect(screen.getByTestId('topbar-club').textContent).toContain(club.name.length > 17 ? club.shortName : club.name);
+    expect(screen.getByTestId('topbar-club').getAttribute('aria-label')).toBe(club.name);
     expect(screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('.sidenav__item').length).toBeGreaterThanOrEqual(9);
     const cont = screen.getAllByTestId('continue');
     expect(cont).toHaveLength(1);

@@ -235,7 +235,7 @@ export const en = {
   'debug.devWorldTip': 'Dev builds only: a hand-built world on the 6-class fixture content, for screens while core modules are stubs.',
 
   'shell.eyebrow': 'Development build',
-  'shell.subtitle': 'Project scaffold. Management screens arrive in M1.',
+  'shell.subtitle': 'Fantasy arena league manager',
   'shell.content.title': 'Content files',
   'shell.content.found': 'found',
   'shell.content.missing': 'missing',
