@@ -10,7 +10,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { ContentDB } from '../../../core/content';
 import type { ClubId, Command, Fighter, GameState, OfferResponse } from '../../../core/model';
 import type { EngineError } from '../../../core/util';
-import { Meter, Modal, showToast } from '../../components';
+import { Meter, Modal, showToast, tipAttrs } from '../../components';
 import type { GameStore } from '../../store';
 import type { Wp7Engine } from '../league/lib/engine';
 import { fmtMoney, fmtPctBp } from '../league/lib/format';
@@ -27,19 +27,44 @@ export interface OfferTarget {
   seasons?: number;
 }
 
-function errText(error: EngineError, m: ClubMarket, content: ContentDB): string {
+/** Copy for an offer-check error (exported for tests). */
+export function offerErrorText(error: EngineError, m: ClubMarket, content: ContentDB): string {
   const d = (error.details ?? {}) as Record<string, unknown>;
   switch (error.code) {
     case 'roster.full':
       return m.pendingOffers > 0
         ? t('disabled.fullPending', { roster: m.roster, pending: m.pendingOffers, cap: m.cap })
         : t('err.roster.full', { roster: m.roster, cap: m.cap });
+    // Core codes (core/economy/offers.ts) first; the dotted pairs after them are the provisional engine's.
+    case 'budget.wage':
     case 'wage.budget':
-      return t('err.wage.budget', { excess: fmtMoney(Number(d['excess'] ?? 0), content) });
+      return t('err.wage.budget', { excess: fmtMoney(Number(d['over'] ?? d['excess'] ?? 0), content) });
+    case 'budget.cash':
     case 'cash.balance':
       return t('err.cash.balance', { cost: fmtMoney(Number(d['signingCost'] ?? 0), content) });
+    case 'embargo.wage':
+    case 'embargo.length':
+    case 'embargo.roster':
     case 'finance.embargo':
       return t('err.finance.embargo', { min: fmtMoney(m.tierMinWage, content) });
+    case 'embargo.trials':
+      return t('err.embargo.trials');
+    case 'offer.below-minimum':
+      return t('err.below-minimum', { min: fmtMoney(Number(d['tierMinWage'] ?? m.tierMinWage), content) });
+    case 'offer.max-pending':
+      return t('err.max-pending', { max: Number(d['max'] ?? 0) });
+    case 'offer.will-not-deal':
+      return t('err.will-not-deal');
+    case 'renewal.will-not-renew':
+      return t('err.will-not-renew');
+    case 'renewal.not-final-season':
+      return t('err.not-final-season', { end: Number(d['endSeason'] ?? 0) });
+    case 'renewal.retiring':
+      return t('err.retiring');
+    case 'offer.released-by-club':
+      return t('err.released-by-club');
+    case 'trials.closed':
+      return t('err.trials-closed');
     default:
       return t('err.generic', { message: error.message });
   }
@@ -104,7 +129,7 @@ export function OfferDialog({
   const { label: greed } = greedLabel(content, fighter.contractProfile.greedBp);
   const check = tryView(() => engine.checkOffer(game, { clubId, fighterId: fighter.id, wagePerWeek: wage, seasons, kind }, content));
   const legal = check.ok && check.value.ok ? check.value.value : null;
-  const illegal = check.ok && !check.value.ok ? errText(check.value.error, market, content) : !check.ok ? check.error : null;
+  const illegal = check.ok && !check.value.ok ? offerErrorText(check.value.error, market, content) : !check.ok ? check.error : null;
   const own = game.market.offers.find((o) => o.fighterId === fighter.id && o.clubId === clubId);
   const replaced = kind === 'renewal' ? (fighter.contract?.wagePerWeek ?? 0) : own ? own.wagePerWeek : 0;
   const billAfter = market.wageBill + market.pendingWages - replaced + wage;
@@ -131,7 +156,7 @@ export function OfferDialog({
     const r = store.dispatch(command);
     setSending(false);
     if (!r.ok) {
-      setSendError(errText(r.error, market, content));
+      setSendError(offerErrorText(r.error, market, content));
       return;
     }
     const response = r.value.response;
@@ -245,6 +270,8 @@ export function OfferDialog({
           </div>
         </div>
         <div class="span-6 l-stack" data-testid="offer-terms">
+          {/* A broken rule comes first: it is what stops the offer, whatever he would say. */}
+          {(illegal || sendError) && <Callout kind="bad" title={sendError ?? illegal ?? ''} />}
           {answer && answer.kind === 'countered' ? (
             <Callout kind="warn" title={t('offer.countered', { wage: fmtMoney(answer.counterWage, content) })}>
               {t('offer.counteredText', { wage: fmtMoney(answer.counterWage, content) })}
@@ -254,7 +281,7 @@ export function OfferDialog({
               {answer.reason}
             </Callout>
           ) : terms.verdict === 'acceptable' ? (
-            <Callout kind="good" title={t('offer.terms.acceptable')}>
+            <Callout kind={illegal ? 'info' : 'good'} title={t('offer.terms.acceptable')}>
               {kind === 'free-agent' ? t('offer.terms.acceptableText', { rivals }) : t('offer.terms.acceptableRenew')}
             </Callout>
           ) : terms.verdict === 'counter' ? (
@@ -266,17 +293,17 @@ export function OfferDialog({
               {t('offer.terms.refusedText', { greed, flex: fmtPctBp(terms.flexBp), patience })}
             </Callout>
           )}
-          {(illegal || sendError) && (
-            <Callout kind="bad" title={sendError ?? illegal ?? ''} />
-          )}
           <dl class="kv">
             <div>
               <dt>{kind === 'free-agent' ? t('offer.signing') : t('offer.signingNow')}</dt>
-              <dd>{legal ? fmtMoney(legal.signingCost, content) : '—'}</dd>
+              {/* Trials signings never cost a fee (offer.noteTrials); otherwise the cost needs a legal offer. */}
+              <dd {...tipAttrs(legal || kind === 'trials' ? null : t('offer.costUnknown'))}>
+                {kind === 'trials' ? t('offer.noCost') : legal ? fmtMoney(legal.signingCost, content) : '—'}
+              </dd>
             </div>
             <div>
               <dt>{t('offer.balanceAfter')}</dt>
-              <dd>{legal ? fmtMoney(market.balance - legal.signingCost, content) : '—'}</dd>
+              <dd>{kind === 'trials' ? fmtMoney(market.balance, content) : legal ? fmtMoney(market.balance - legal.signingCost, content) : '—'}</dd>
             </div>
             <div>
               <dt>{t('offer.rosterAfter')}</dt>

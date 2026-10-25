@@ -8,7 +8,8 @@ import { createFakeStore, type FakeStoreOptions } from '../league/testing/fake-s
 import { Providers } from '../league/testing/providers';
 import { makeSampleWorld } from '../league/testing/worlds';
 import type { SampleStage } from '../league/testing/sample-season';
-import { termsCheck, willingLevel } from './model';
+import { termsCheck, willingLevel, type ClubMarket } from './model';
+import { offerErrorText } from './OfferDialog';
 import MarketScreen from './index';
 
 afterEach(cleanup);
@@ -173,5 +174,18 @@ describe('terms check', () => {
     expect(willingLevel(2, 3)).toBe(2);
     expect(willingLevel(1, 3)).toBe(1);
     expect(willingLevel(0, 3)).toBe(0);
+  });
+});
+
+describe('offer error copy', () => {
+  const content = fixtureContent();
+  const m = { tierMinWage: 120, pendingOffers: 0, roster: 9, cap: 12 } as ClubMarket;
+  it('reads the real core codes, not the raw message', () => {
+    expect(offerErrorText({ code: 'budget.wage', message: 'Over wage budget by 110 per week', details: { over: 110 } }, m, content)).toMatch(/^Over the wage budget by 110 ts per week\. Release a fighter/);
+    expect(offerErrorText({ code: 'budget.cash', message: 'x', details: { signingCost: 900, available: 100 } }, m, content)).toBe('Signing cost 900 ts is more than the balance can cover.');
+    expect(offerErrorText({ code: 'offer.max-pending', message: 'x', details: { max: 3 } }, m, content)).toBe('At most 3 pending offers at a time. Withdraw one first.');
+    expect(offerErrorText({ code: 'renewal.not-final-season', message: 'x', details: { endSeason: 3 } }, m, content)).toContain('season 3');
+    // Unknown codes fall back to the core message.
+    expect(offerErrorText({ code: 'something.new', message: 'Raw core text' }, m, content)).toBe('Raw core text');
   });
 });
