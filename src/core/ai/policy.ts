@@ -138,16 +138,19 @@ interface FighterMemo {
   ratings: Map<string, number>;
   potentials: Map<string, number>;
   ages: Map<string, number>;
+  /** Stage of each club's next unplayed fixture (fixtures do not change during an AI phase). */
+  nextStage: Map<string, string> | null;
 }
 
 function freshMemo(): FighterMemo {
-  return { ratings: new Map(), potentials: new Map(), ages: new Map() };
+  return { ratings: new Map(), potentials: new Map(), ages: new Map(), nextStage: null };
 }
 
 class Ctx {
   private ratings: Map<string, number>;
   private potentials: Map<string, number>;
   private ages: Map<string, number>;
+  private memo: FighterMemo;
   private cqs = new Map<string, number>();
   private familyCache = new Map<string, RoleFamily[]>();
   private leagueNext: boolean | null = null;
@@ -167,6 +170,7 @@ class Ctx {
     this.ratings = memo.ratings;
     this.potentials = memo.potentials;
     this.ages = memo.ages;
+    this.memo = memo;
     const club = state.clubs[clubId];
     if (!club) throw new RangeError(`ai: unknown club "${clubId}"`);
     this.club = club;
@@ -326,13 +330,19 @@ class Ctx {
 
   private computeNextIsLeagueMatch(): boolean {
     const w = this.state.calendar.weekIndex;
-    let best: { weekIndex: number; stage: string } | null = null;
-    for (const x of Object.values(this.state.fixtures)) {
-      if (x.status !== 'scheduled' || x.weekIndex < w) continue;
-      if (x.homeClubId !== this.clubId && x.awayClubId !== this.clubId) continue;
-      if (!best || x.weekIndex < best.weekIndex) best = x;
+    if (this.memo.nextStage === null) {
+      const best = new Map<string, { weekIndex: number; stage: string }>();
+      for (const x of Object.values(this.state.fixtures)) {
+        if (x.status !== 'scheduled' || x.weekIndex < w || x.season !== this.state.calendar.season) continue;
+        for (const c of [x.homeClubId, x.awayClubId]) {
+          const cur = best.get(c);
+          if (!cur || x.weekIndex < cur.weekIndex) best.set(c, x);
+        }
+      }
+      this.memo.nextStage = new Map([...best].map(([c, x]) => [c, x.stage]));
     }
-    if (best) return best.stage === 'league';
+    const stage = this.memo.nextStage.get(this.clubId);
+    if (stage !== undefined) return stage === 'league';
     const next = Math.min(w + 1, this.weekCount);
     return next >= 1 && this.content.weekByIndex(next).phase === 'regular';
   }
