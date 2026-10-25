@@ -48,7 +48,7 @@ const T = {
   focus: '{n} focus',
   range: '{m} m',
   emphasis: 'Rating weights',
-  emphasisTip: 'How much each attribute counts toward this class’s rating (classes.json ratingWeights).',
+  emphasisTip: 'How much each attribute counts toward this class’s rating.',
   presets: 'Presets',
   stance: '{name} stance',
   yours: 'Your fighters of this class',

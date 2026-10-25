@@ -9,6 +9,8 @@ import type { ClubId, FighterId, GameState } from '../../core/model';
 import { installShortcuts } from '../app/shortcuts';
 import { readTip, resetToasts, toasts, undoLast } from '../components';
 import { TestProviders, createTestStore } from '../debug/test-store';
+import { formatMoney } from '../format';
+import { coreEngine } from '../store/engine';
 import ClubSelectScreen from './club-select';
 import CodexScreen from './codex';
 import FighterScreen from './fighter';
@@ -207,6 +209,12 @@ describe('Fighter profile', () => {
     const dialog = screen.getByTestId('release-dialog');
     expect(dialog.textContent).toContain('Roster after');
     expect(dialog.textContent).toContain('A release cannot be undone.');
+    // The payout is stated in money before the player confirms, with the balance it leaves.
+    const state = store.game.value!;
+    const payout = coreEngine.releasePayout(state, club(state).id, id, store.content.value!);
+    expect(dialog.textContent).toContain(`Release payout${formatMoney(payout)}`);
+    expect(dialog.textContent).toContain(`Balance after${formatMoney(club(state).finance.balance - payout)}`);
+    expect(dialog.textContent).not.toContain('.json');
   });
 
   it('shows a not-found state for an unknown id', () => {

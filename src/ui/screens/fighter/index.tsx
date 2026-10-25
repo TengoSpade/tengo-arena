@@ -212,6 +212,9 @@ function ProfileHeader(props: {
   const since = f.contract?.signedAt.season;
   const rosterAfter = ctx ? ctx.roster.length - 1 : 0;
   const billAfter = ctx?.wageBill !== null && ctx?.wageBill !== undefined ? ctx.wageBill - (f.contract?.wagePerWeek ?? 0) : null;
+  const engine = useEngine();
+  const payout = own && ctx ? safeView(() => engine.releasePayout(state, ctx.club.id, f.id, content), null) : null;
+  const balance = ctx?.finance?.balance ?? null;
 
   return (
     <section class="panel panel--hero" aria-labelledby="fighter-name" data-testid="profile-head">
@@ -317,11 +320,13 @@ function ProfileHeader(props: {
                 icon="user-minus"
                 testId="release"
                 title={format(T.releaseTitle, { name: f.name.full })}
-                description={T.releaseText}
+                description={format(T.releaseText, { name: f.name.given })}
                 warning={T.releaseWarning}
                 confirmLabel={format(T.releaseConfirm, { name: f.name.given })}
                 confirmVariant="danger"
                 consequences={[
+                  { label: T.releasePayout, value: payout !== null ? formatMoney(payout) : '—', tip: T.releasePayoutTip },
+                  ...(payout !== null && balance !== null ? [{ label: T.releaseBalance, value: formatMoney(balance - payout) }] : []),
                   { label: T.releaseWage, value: f.contract ? formatMoney(f.contract.wagePerWeek, { perWeek: true }) : '—' },
                   { label: T.releaseLeft, value: f.contract ? format(T.contractEndsValue, { season: f.contract.endSeason, n: contract.seasonsLeft }) : '—' },
                   { label: T.releaseRoster, value: `${rosterAfter} / ${ctx.rosterCap}` },
@@ -953,7 +958,7 @@ function ContractTab({ f, view, state }: { f: Fighter; view: FighterView | null;
             {ends.final ? T.renewalOpen : format(T.renewalLater, { season: c.endSeason })}
           </KV>
           {view && (
-            <KV label={T.marketWage} tip="What clubs would pay for this fighter now (economy.json wage curve).">
+            <KV label={T.marketWage} tip="What clubs would pay for this fighter now, from rating, potential, age, traits and role demand.">
               {formatMoney(view.marketWage, { perWeek: true })}
             </KV>
           )}

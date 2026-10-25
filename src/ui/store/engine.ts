@@ -45,6 +45,8 @@ export interface GameEngine {
   ask: typeof economy.ask;
   checkOffer: typeof economy.checkOffer;
   marketWage: typeof economy.marketWage;
+  /** Polish pass: the payout a release would cost now (shown before the player confirms). */
+  releasePayout: typeof economy.releasePayout;
   presetsForClass: typeof tactics.presetsForClass;
   describeRule: typeof tactics.describeRule;
   // saves (core/save)
@@ -78,6 +80,7 @@ export const coreEngine: GameEngine = {
   ask: economy.ask,
   checkOffer: economy.checkOffer,
   marketWage: economy.marketWage,
+  releasePayout: economy.releasePayout,
   presetsForClass: tactics.presetsForClass,
   describeRule: tactics.describeRule,
   saveMetaFor: save.saveMetaFor,

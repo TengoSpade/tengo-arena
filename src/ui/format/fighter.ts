@@ -78,7 +78,7 @@ export function ratingTip(view: FighterView, klass: ClassDef, content: ContentDB
       ...top.map(([id, w], i) => ({ label: `${statName(id)} ${view.stats[id as StatId] ?? '—'}`, value: `${Math.round(w * 100)}%${i === 0 ? ' weight' : ''}` })),
       ...(rest > 0 ? [{ label: `${weights.length - 4} others`, value: `${Math.round(rest * 100)}%` }] : []),
     ],
-    meta: 'Weights from classes.json',
+    meta: 'Each class weights the attributes it fights with',
   };
 }
 

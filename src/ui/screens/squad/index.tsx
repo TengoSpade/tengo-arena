@@ -822,7 +822,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       header: T.colMarket,
       align: 'num',
       sortValue: (r) => r.view?.marketWage ?? 0,
-      cell: (r) => (r.view ? <span {...tipAttrs('Market wage: what clubs would pay for this fighter now (economy.json wage curve).')}>{formatInt(r.view.marketWage)}</span> : '—'),
+      cell: (r) => (r.view ? <span {...tipAttrs('Market wage: what clubs would pay for this fighter now, from rating, potential, age, traits and role demand.')}>{formatInt(r.view.marketWage)}</span> : '—'),
     };
     const left: Column<Row> = {
       id: 'left',
