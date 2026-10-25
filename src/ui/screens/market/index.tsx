@@ -443,6 +443,15 @@ function AgentsTable({
       showToast({ kind: 'accent', title: r.shortlisted ? t('toast.unshortlisted', { name }) : t('toast.shortlisted', { name }), undo: () => store.dispatch(cmd) });
     }
   };
+  // With no room at all the banner above the table says it once, instead of a tag on every row.
+  const overRoomTag = (r: MarketRow) => {
+    const excess = r.ask - (market.wageRoom + (r.pending?.wagePerWeek ?? 0));
+    return excess > 0 && market.wageRoom > 0 ? (
+      <span class="tag tag--warn" data-tip={t('disabled.roomRoom', { n: fmtMoney(excess, content) })}>
+        {t('tag.overRoom', { n: formatInt(excess) })}
+      </span>
+    ) : null;
+  };
   const columns: Column<MarketRow>[] = [
     {
       id: 'compare',
@@ -479,7 +488,7 @@ function AgentsTable({
       header: <span data-tip={t('tip.starter')}>{t('col.starter')}</span>,
       headerLabel: t('tag.starter'),
       align: 'center',
-      class: 'col-mid',
+      class: 'col-wide',
       sortValue: (r) => (r.wouldStart ? 1 : 0),
       cell: (r) =>
         r.wouldStart ? (
@@ -511,50 +520,51 @@ function AgentsTable({
     },
     { id: 'rating', header: t('col.rating'), align: 'num', sortValue: (r) => r.rating, cell: (r) => <RatingPill value={r.rating} /> },
     { id: 'potential', header: t('col.potential'), sortValue: (r) => r.potential, cell: (r) => <Stars potential={r.potential} /> },
-    { id: 'traits', header: t('col.traits'), class: 'col-mid', cell: (r) => <TraitDots content={content} traitIds={r.fighter.traits.map((x) => x.id)} /> },
+    // Traits need the room of a wide screen; below it they are one hover away in Compare and the profile.
+    { id: 'traits', header: t('col.traits'), class: 'col-wide', cell: (r) => <TraitDots content={content} traitIds={r.fighter.traits.map((x) => x.id)} /> },
     {
+      // Below 1800 px: the ask for his preferred length. At 1800 px and up the next column shows all three.
       id: 'ask',
       header: t('col.ask'),
+      class: 'col-narrow',
       align: 'num',
       sortValue: (r) => r.ask,
       cellAttrs: (r) => ({ 'data-tip': t('tip.ask', { n: r.preferred }) }),
-      cell: (r) => {
-        const excess = r.ask - (market.wageRoom + (r.pending?.wagePerWeek ?? 0));
-        return (
-          <span class="market-ask">
-            <span class="u-num">{fmtMoney(r.ask, content)}</span>
-            {/* With no room at all the banner above the table says it once, instead of a tag on every row. */}
-            {excess > 0 && market.wageRoom > 0 && (
-              <span class="tag tag--warn" data-tip={t('disabled.roomRoom', { n: fmtMoney(excess, content) })}>
-                {t('tag.overRoom', { n: formatInt(excess) })}
-              </span>
-            )}
-          </span>
-        );
-      },
+      cell: (r) => (
+        <span class="market-ask">
+          <span class="u-num">{fmtMoney(r.ask, content)}</span>
+          {overRoomTag(r)}
+        </span>
+      ),
     },
     {
       id: 'asks',
-      header: t('col.asks'),
+      header: <span data-tip={t('tip.asksHead')}>{t('col.asks')}</span>,
+      headerLabel: t('col.asks'),
       class: 'col-wide',
       align: 'num',
+      sortValue: (r) => r.ask,
       cellAttrs: (r) => ({ 'data-tip': t('tip.asks', { list: r.asks.map((a) => `${a.seasons} s: ${fmtMoney(a.ask, content)}`).join(' · ') }) }),
       cell: (r) => (
-        <span class="u-num market-asks">
-          {r.asks.map((a, i) => (
-            <span key={a.seasons} class={a.seasons === r.preferred ? 'u-strong' : 'u-muted'}>
-              {i > 0 ? ' · ' : ''}
-              {a.seasons === r.preferred ? '▸' : ''}
-              {a.ask}
-            </span>
-          ))}
+        <span class="market-ask">
+          <span class="u-num market-asks">
+            {r.asks.map((a, i) => (
+              <span key={a.seasons} class={a.seasons === r.preferred ? 'u-strong' : 'u-muted'}>
+                {i > 0 ? ' · ' : ''}
+                {a.seasons === r.preferred ? '▸' : ''}
+                {formatInt(a.ask)}
+              </span>
+            ))}
+          </span>
+          {overRoomTag(r)}
         </span>
       ),
     },
     {
       id: 'signing',
-      header: t('col.signing'),
-      class: 'col-mid',
+      header: <span data-tip={t('tip.signing')}>{t('col.signing')}</span>,
+      headerLabel: t('tip.signingLabel'),
+      class: 'col-wide',
       align: 'num',
       sortValue: (r) => (r.check?.ok ? r.check.value.signingCost : Number.MAX_SAFE_INTEGER),
       cellAttrs: (r) => ({ 'data-tip': r.check && !r.check.ok ? t('tip.signingNa', { reason: r.check.error.message }) : t('tip.signing') }),
@@ -581,7 +591,7 @@ function AgentsTable({
                 <i key={i} class={i < level ? 'is-on' : undefined} />
               ))}
             </span>
-            <span class="col-mid">{t(`willing.${level as 0 | 1 | 2 | 3}`)}</span>
+            <span class="col-wide">{t(`willing.${level as 0 | 1 | 2 | 3}`)}</span>
           </span>
         );
       },
@@ -589,7 +599,7 @@ function AgentsTable({
     {
       id: 'action',
       header: <span class="u-sr-only">{t('col.action')}</span>,
-      class: 'cell-tight',
+      class: 'cell-tight cell-sticky',
       cell: (r) => {
         const blocked = offerBlock(r, market, content);
         return (

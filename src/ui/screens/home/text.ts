@@ -33,6 +33,7 @@ export const T = {
   theirStyle: 'Their style',
   ready: 'Ready',
   notReady: 'Not ready',
+  outInjured: '{name} out ({injury}, {n} wk)',
   front: 'Front',
   back: 'Back',
   noHealer: 'No healer',

@@ -302,7 +302,9 @@ function LineupTile({ ctx, club, label, ours }: { ctx: ClubContext; club: Club; 
       {ours ? (
         <span class="stat-tile__sub">
           {blockers.length === 0 ? <span class="u-good">{T.ready}</span> : <span class="u-warn">{T.notReady}</span>}
-          {injuredReserve ? ` · ${injuredReserve.name.full}: ${injuryLabel(injuredReserve.injury!, content)}` : ''}
+          {injuredReserve
+            ? ` · ${format(T.outInjured, { name: injuredReserve.name.full, injury: injuryLabel(injuredReserve.injury!, content).toLowerCase(), n: injuredReserve.injury!.weeksOut })}`
+            : ''}
         </span>
       ) : (
         <span class="stat-tile__sub" {...tipAttrs(T.theirLineupTip)}>
@@ -615,18 +617,25 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
             {list.map((f) => (
               <tr key={f.id}>
                 <td class="cell-fill">
-                  <FighterName name={f.name.full} href={`#/fighter/${f.id}`} role={role(f)} race={f.raceId} injured={!!f.injury} />
-                </td>
-                <td>
-                  {f.injury ? (
-                    <Tag kind="bad" icon="injury" tip={injuryTip(f.injury, content)}>
-                      {injuryLabel(f.injury, content)}
-                    </Tag>
-                  ) : (
-                    <Tag kind="warn" icon="contract" tip={T.expiresTip}>
-                      {format(T.expires, { season: f.contract?.endSeason ?? state.calendar.season })}
-                    </Tag>
-                  )}
+                  {/* The status sits under the name so the side column never truncates both. */}
+                  <FighterName
+                    name={f.name.full}
+                    href={`#/fighter/${f.id}`}
+                    role={role(f)}
+                    race={f.raceId}
+                    injured={!!f.injury}
+                    sub={
+                      f.injury ? (
+                        <span class="u-bad" {...tipAttrs(injuryTip(f.injury, content))}>
+                          <Icon name="injury" size="sm" /> {injuryLabel(f.injury, content)}
+                        </span>
+                      ) : (
+                        <span class="u-warn" {...tipAttrs(T.expiresTip)}>
+                          <Icon name="contract" size="sm" /> {format(T.expires, { season: f.contract?.endSeason ?? state.calendar.season })}
+                        </span>
+                      )
+                    }
+                  />
                 </td>
                 <td class={`cell-num${f.injury ? '' : ' u-muted'}`}>
                   {f.injury ? (

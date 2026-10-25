@@ -4222,10 +4222,37 @@ dialog.modal::backdrop {
   }
 }
 
-/* A cell that takes the remaining width and lets its entity truncate. */
+/* Row actions that stay in view while a wide table scrolls sideways. The cell is
+   opaque, so row hover and selection are layered over the panel colour. */
+.data-table .cell-sticky {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--c-surface-1);
+  box-shadow: inset 1px 0 0 var(--c-divider);
+}
+
+.data-table thead .cell-sticky {
+  z-index: calc(var(--z-sticky) + 1);
+  background: var(--c-surface-2);
+}
+
+.data-table tbody tr:hover .cell-sticky {
+  background: var(--c-surface-2);
+}
+
+.data-table tbody tr[aria-selected="true"] .cell-sticky,
+.data-table tbody tr.is-us .cell-sticky {
+  background: linear-gradient(var(--c-accent-soft), var(--c-accent-soft)), var(--c-surface-1);
+}
+
+/* A cell that takes the remaining width and lets its entity truncate. The floor
+   keeps a name readable when a wide screen adds columns (it never collapses to
+   an initial); below it the table scrolls sideways inside .table-wrap. */
 .data-table .cell-fill {
   width: 100%;
   max-width: 0;
+  min-width: var(--cell-fill-min, 9rem);
 }
 
 .data-table .cell-fill .entity {

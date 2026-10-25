@@ -49,6 +49,19 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const commitKey = cal ? `${store.game.value!.rng.root}:${cal.season}:${cal.weekIndex}:${cal.phase}` : '';
   useEffect(() => clearUndos(), [commitKey]);
 
+  // Changes since the last save (signings, releases, lineup) are kept only by the next autosave or a
+  // manual save: ask before the tab closes on them.
+  const dirty = store.dirty?.value ?? false;
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
   const model = continueModel({
     state: store.game.value,
     content: store.content.value,
