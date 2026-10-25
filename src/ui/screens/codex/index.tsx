@@ -201,7 +201,7 @@ function ClassCard({ k, content, selected }: { k: ClassDef; content: ContentDB; 
   return (
     <button
       type="button"
-      class="card codex-card"
+      class="card card--choice codex-card"
       data-role={k.archetypes[0]}
       aria-pressed={selected ? 'true' : 'false'}
       data-testid={`class-card-${k.id}`}

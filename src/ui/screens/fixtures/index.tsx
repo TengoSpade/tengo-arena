@@ -362,11 +362,11 @@ function CalendarStrip({ game, content, clubId, fixtures }: { game: GameState; c
   const last = weeks[weeks.length - 1];
   return (
     <Panel title={t('cal.title')} icon="fixtures" subtitle={t('cal.subtitle', { n: weeks.length, last: last?.id ?? '' })}>
-      <div class="fixtures-cal" data-testid="fixtures-calendar">
+      <div class="cal-strip" data-testid="fixtures-calendar">
         {groups.map((g) => (
-          <div class="fixtures-cal__group" key={g.id}>
+          <div key={g.id}>
             <div class="panel-section__title">{g.label}</div>
-            <ol class="fixtures-cal__weeks" role="list" style={{ '--cols': Math.min(8, g.weeks.length) }}>
+            <ol class="cal-strip__weeks" role="list" style={{ '--cols': Math.min(8, g.weeks.length) }}>
               {g.weeks.map((w) => {
                 const f = fixtures.find((x) => x.weekIndex === w.index);
                 const r = f ? game.results[f.id] : undefined;
@@ -376,14 +376,21 @@ function CalendarStrip({ game, content, clubId, fixtures }: { game: GameState; c
                 if (w.commit === 'kick_off') markers.push({ icon: 'calendar-check', tip: t('cal.kickoff') });
                 if (grant) markers.push({ icon: 'coins', tip: t('cal.grant', { share: fmtPctBp(grant.shareBp) }) });
                 if (w.index === last?.index) markers.push({ icon: 'contract', tip: t('cal.expiry') });
-                const cls = ['fixtures-cal__week', w.index === now ? 'is-now' : '', w.index < now ? 'is-past' : '', f && r ? (r.winnerClubId === clubId ? 'is-won' : 'is-lost') : ''].filter(Boolean).join(' ');
+                const result = f && r ? (r.winnerClubId === clubId ? 'won' : 'lost') : undefined;
                 const def = weekDefAt(content, w.index);
                 return (
-                  <li key={w.id} class={cls} data-tip={weekLong(content, w.index, tierId)} data-testid={`cal-${w.id}`}>
-                    <div class="fixtures-cal__head">
-                      <span class="fixtures-cal__id">{w.id}</span>
+                  <li
+                    key={w.id}
+                    class={w.index < now ? 'cal-week is-past' : 'cal-week'}
+                    aria-current={w.index === now ? 'date' : undefined}
+                    data-result={result}
+                    data-tip={weekLong(content, w.index, tierId)}
+                    data-testid={`cal-${w.id}`}
+                  >
+                    <div class="cal-week__head">
+                      <span class="cal-week__id">{w.id}</span>
                       {w.index === now && <span class="tag tag--accent">{t('cal.now')}</span>}
-                      <span class="fixtures-cal__marks">
+                      <span class="cal-week__marks">
                         {markers.map((m) => (
                           <span key={m.icon} data-tip={m.tip} aria-label={m.tip} role="img">
                             <Icon name={m.icon} size="sm" />
@@ -392,14 +399,14 @@ function CalendarStrip({ game, content, clubId, fixtures }: { game: GameState; c
                         {def?.fixtureKind === 'cross_wing' && <span class="tag tag--outline">{t('cross')}</span>}
                       </span>
                     </div>
-                    <div class="fixtures-cal__label">{def?.label ?? (def?.matchweek ? '' : weekLong(content, w.index, tierId))}</div>
+                    <div class="cal-week__label">{def?.label ?? (def?.matchweek ? '' : weekLong(content, w.index, tierId))}</div>
                     {f ? (
-                      <a class="fixtures-cal__match" href={r ? href(`match/${encodeURIComponent(f.id)}`) : undefined}>
+                      <a class="cal-week__match" href={r ? href(`match/${encodeURIComponent(f.id)}`) : undefined}>
                         {r && <FormStrip form={[r.winnerClubId === clubId ? 'W' : 'L']} />}
                         <span class="u-truncate">{f.homeClubId === clubId ? t('cal.vs', { club: clubShort(game, f.awayClubId) }) : t('cal.at', { club: clubShort(game, f.homeClubId) })}</span>
                       </a>
                     ) : (
-                      <span class="fixtures-cal__match u-faint">{w.phase === 'preseason' ? '' : t('cal.noFixture')}</span>
+                      <span class="cal-week__match u-faint">{w.phase === 'preseason' ? '' : t('cal.noFixture')}</span>
                     )}
                   </li>
                 );
@@ -408,7 +415,7 @@ function CalendarStrip({ game, content, clubId, fixtures }: { game: GameState; c
           </div>
         ))}
       </div>
-      <div class="legend fixtures-cal__legend">
+      <div class="legend cal-strip__legend">
         <span class="legend__item">
           <Icon name="user-plus" size="sm" />
           {t('cal.legendTrials')}

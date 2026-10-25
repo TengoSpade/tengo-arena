@@ -178,17 +178,17 @@ function StandingsStep({ game, content, record, tierRec, clubId }: { game: GameS
   const isChampion = tierRec.reckoningChampionId === clubId;
   return (
     <div class="l-stack">
-      <section class={`panel panel--hero review-move review-move--${move.kind}`} data-testid="review-move">
-        <div class="review-move__body">
-          <span class="review-move__icon" aria-hidden="true">
+      <section class="panel panel--hero" data-testid="review-move">
+        <div class="outcome" data-kind={move.kind === 'promoted' ? 'up' : move.kind === 'relegated' ? 'down' : 'level'}>
+          <span class="outcome__icon" aria-hidden="true">
             <span class="icon icon--lg" data-icon={move.kind === 'promoted' ? 'arrow-up' : move.kind === 'relegated' ? 'arrow-down' : 'shield'} />
           </span>
           <div>
-            <div class="review-move__title u-display">
+            <div class="outcome__title u-display">
               {move.kind === 'promoted' ? t('move.promoted', { tier: move.tierName }) : move.kind === 'relegated' ? t('move.relegated', { tier: move.tierName }) : t('move.stayed', { tier: move.tierName })}
             </div>
             {wingRow && tierRow && (
-              <div class="u-sm u-muted">
+              <div class="outcome__text">
                 {t('move.finish', { wingPos: ordinal(wingRow.position), wing: wing ? wingName(wing.wingId) : '', tierPos: ordinal(tierRow.position), points: tierRow.points })}
                 {isChampion && ` · ${t('move.champion', { tier: tier?.tournamentName ?? '' })}`}
               </div>

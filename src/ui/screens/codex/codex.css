@@ -3,22 +3,11 @@
   --autogrid-min: 15rem;
 }
 
-.codex-card {
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  border-top: 3px solid var(--role-c, var(--c-border-strong));
-}
-
-.codex-card:hover {
-  border-color: var(--c-accent-line);
-  border-top-color: var(--role-c);
-}
-
+/* Choice cards (components.css) with the role stripe on top in every state. */
+.codex-card,
+.codex-card:hover,
 .codex-card[aria-pressed="true"] {
-  border-color: var(--c-accent);
-  border-top-color: var(--role-c);
-  box-shadow: inset 0 0 0 1px var(--c-accent);
+  border-top: 3px solid var(--role-c, var(--c-border-strong));
 }
 
 .codex-card__head {

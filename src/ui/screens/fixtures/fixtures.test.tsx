@@ -75,9 +75,9 @@ describe('Fixtures screen', () => {
     const { content } = renderAt('mid');
     fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }));
     const cal = screen.getByTestId('fixtures-calendar');
-    expect(cal.querySelectorAll('.fixtures-cal__week')).toHaveLength(content.weeks.list.length);
-    expect(cal.querySelectorAll('.fixtures-cal__week.is-now')).toHaveLength(1);
+    expect(cal.querySelectorAll('.cal-week')).toHaveLength(content.weeks.list.length);
+    expect(cal.querySelectorAll('.cal-week[aria-current="date"]')).toHaveLength(1);
     expect(within(screen.getByTestId('cal-P1')).getByRole('img', { name: /Trials Day/ })).toBeTruthy();
-    expect(cal.querySelectorAll('.fixtures-cal__week.is-won, .fixtures-cal__week.is-lost')).toHaveLength(7);
+    expect(cal.querySelectorAll('.cal-week[data-result]')).toHaveLength(7);
   });
 });

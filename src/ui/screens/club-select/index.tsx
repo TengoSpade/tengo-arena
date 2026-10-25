@@ -211,7 +211,7 @@ export default function ClubSelectScreen(_props: ScreenProps) {
                   <button
                     key={club.id}
                     type="button"
-                    class="card club-card"
+                    class="card card--choice club-card"
                     aria-pressed={picked === club.id ? 'true' : 'false'}
                     data-testid={`club-card-${club.id}`}
                     onClick={() => setPicked(club.id)}
