@@ -1,14 +1,14 @@
 # Arena League — art direction and presentation
 
-> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.2 · 2026-10-25. Merged from the UI/UX designer's phase-2 draft (`_drafts/04-presentation.md`) and reconciled with documents 01, 02 and 03 v0.2 by the lead designer. Not approved for implementation and not independently reviewed.
-> Follow the labels, scope, glossary, and authority rules in [document 01](01-game-vision-and-design-principles.md). REQUIRED appears only where an owner ID is cited (O12 match reports, O13 good UI design, T1 PixiJS from M2, T3 HTML/CSS UI, T5 theme data). **DELEGATED** marks D-J to D-M: the UI designer's OC-3 to OC-6, adopted under the owner's goal instruction and pending confirmation (01 §8.2). Everything else the UI designer decided is PROPOSED, with PROPOSED · TUNABLE values in `src/ui/styles/tokens.css`. The owner questions are in 01 §8.5 (Q4, Q23–Q27).
+> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.3 · 2026-10-25. Merged from the UI/UX designer's phase-2 draft (`_drafts/04-presentation.md`), reconciled with documents 01, 02 and 03 by the lead designer, and synced in v0.3 to the M1 build (main @ f4b39d9) and to D-N to D-T. Reviewed by the requirements reviewer and the independent reviewer (01 §8.6); not approved by the owner. M1 was built at risk on these working assumptions.
+> Follow the labels, scope, glossary, and authority rules in [document 01](01-game-vision-and-design-principles.md). REQUIRED appears only where an owner ID is cited (O12 match reports, O13 good UI design, T1 PixiJS from M2, T3 HTML/CSS UI, T5 theme data). **DELEGATED** marks D-J to D-M (the UI designer's OC-3 to OC-6) and the orchestrator decisions D-O, D-R and D-S where this document presents them, all adopted under the owner's goal instruction and pending confirmation (01 §8.2). **PERMITTED-CHOICE** (01) marks behaviour the implementation chose within stated bounds. Everything else the UI designer decided is PROPOSED, with PROPOSED · TUNABLE values in `src/ui/styles/tokens.css`. The owner questions are in 01 §8.5 (Q4, Q23–Q27, Q29, Q32, Q33).
 > This document owns how the game looks, sounds, and communicates. It must faithfully present the rules in [document 03](03-gameplay-systems-and-content.md) and the journey in [document 02](02-player-experience-and-game-flow.md). Vocabulary follows 01 §7; the content key `archetypes` holds the five role ids.
 
 | Field | Value |
 | --- | --- |
-| Game / version / updated | Arena League / v0.2 / 2026-10-25 |
-| Status / design owner | Draft, merged and reconciled / the project owner |
-| Milestone covered | **M1 "Season MVP"** (O14): management screens and match reports (O12). The M2 arena-viewer direction is given at brief level and marked FUTURE |
+| Game / version / updated | Arena League / v0.3 / 2026-10-25 |
+| Status / design owner | Draft v0.3, synced to the M1 build and reviewed (01 §8.6), not approved / the project owner |
+| Milestone covered | **M1 "Season MVP"** (O14): management screens and match reports (O12). The M2 arena-viewer direction is given at brief level and tagged M2; M4 and M5 screens are placeholders (§6.3) |
 | Visual references | **Approved EXAMPLE visual references and primary visual anchor** (§2 ref-001): the static mockups in [`mockups/`](mockups/index.html) (index, home, squad, fighter, match-report, league, market, components) and the design system in [`src/ui/styles/`](../../src/ui/styles/) (`tokens.css`, `base.css`, `components.css`). Sample names and numbers in the mockups are EXAMPLE data. Where a mockup's wording differs from this document, this document governs (§6.3, reconciliation notes) |
 
 ## 1. Presentation promise
@@ -41,7 +41,7 @@
 | ref-005: Teamfight Tactics round recap (research A2.1, A4.2) | exploratory | A per-fighter recap after each round | Art, layout | Match report |
 | ref-006: Eslabong death summary and orders under HP bars (research A1.1) | exploratory, mechanics only | A death summary per down; an order or rule label above each fighter (M2) | Anything visual or textual; never open its files | Match report; M2 rule badges |
 | ref-007: Crusader Kings III trait icons with rich tooltips (research Part D) | exploratory | Compact trait badges whose tooltip shows effect, category, opposite and source | Icon art, frames, text | Traits everywhere |
-| ref-008: Gladiabots replay-to-editor (research A3.1, C1.4) | exploratory, FUTURE M2–M3 | Jump from a report moment to the rule that caused it | — | Report, M3 editor |
+| ref-008: Gladiabots replay-to-editor (research A3.1, C1.4) | exploratory, M2–M3 | Jump from a report moment to the rule that caused it | — | Report, M3 editor |
 | ref-009: Okabe & Ito, "Color Universal Design" palette (2008) | exploratory, permitted | Colour-blind-safe hue set for the five roles | — | Role colours |
 | ref-010: WCAG 2.2 AA (1.4.3, 1.4.11, 1.4.4, 2.1.1, 2.4.7) | exploratory | Contrast, non-text contrast, resize, keyboard, visible focus | Full conformance claims | Accessibility |
 
@@ -81,9 +81,9 @@ Hybrids show both glyphs side by side (e.g. Vowknight = shield + cross). Hues de
 
 ## 4. Viewpoint and camera
 
-**Status:** M1 has no arena view (O12, REQUIRED); this section sets M2 direction (FUTURE M2, T1) so M1 assets and colours do not need redoing.
+**Status:** M1 has no arena view (O12, REQUIRED); this section sets M2 direction (M2 scope, T1) so M1 assets and colours do not need redoing.
 
-- **Perspective and framing (FUTURE M2):** top-down orthographic 2D over the whole arena (P-03). The working arena of 32 m × 18 m (03 §1) is exactly 16:9, so the whole field fits a 1920 × 1080 window at about 52 px per metre with room for the HUD. Home starts at the west end, away at the east; each side's **front row** and **back row** are faint lines parallel to the centre line, labelled only at kickoff.
+- **Perspective and framing (M2):** top-down orthographic 2D over the whole arena (P-03). The working arena of 32 m × 18 m (03 §1) is exactly 16:9, so the whole field fits a 1920 × 1080 window at about 52 px per metre with room for the HUD. Home starts at the west end, away at the east; each side's **front row** and **back row** are faint lines parallel to the centre line, labelled only at kickoff.
 - **Player control:** fixed framing by default (no camera work needed to follow a 5v5 fight). Zoom 1×/1.5×/2× with a follow-selected-fighter option is OPEN for M2.
 - **Required visible information (M2):** per fighter: HP bar with shield segment, focus bar, role glyph, side ring, captain crown, status icons, cast telegraph, and the **live rule badge** ("R3", P-22). Per side: fighters standing, calls left (P-01). Global: round clock, overtime state (from 45 s), speed and pause.
 - **Motion behaviour:** no camera shake by default; a 220 ms ease on zoom changes; speed changes (1×/2×/4×, T1) never move the camera.
@@ -110,20 +110,20 @@ Hybrids show both glyphs side by side (e.g. Vowknight = shield + cross). Hues de
 **asset-002 · Club crest (M1).**
 - Heater shield with a rim, a diagonal two-colour field from `clubs.json` `colors.primary/secondary`, and a 2-letter code in the display face. Sizes 1.25 / 1.6 / 2.2 / 3.4 / 4.6 rem; letters hidden below 1.6 rem.
 - *Acceptance:* the 16 clubs of one tier are distinguishable in the standings at 1.6 rem. Clubs whose two colours are both very light or both very dark get the darker rim automatically (rule for implementers: compute luminance, swap the rim token).
-- FUTURE: heraldic charges (a lantern, an oar…) per club for release.
+- M7 (release polish): heraldic charges (a lantern, an oar…) per club.
 
 **asset-003 · Role glyphs (M1, permanent).** The five filled silhouettes of §3 at 12–36 px. They are used unchanged in M2 inside arena tokens.
 
 **asset-004 · Trait badge icon (M1 placeholder).** A polarity glyph (up triangle, down triangle, gem, question mark for unrevealed in M4) in a round (positive), square (negative) or double-ringed (storied/rare) frame. Release (FUTURE): one icon per trait id in `traits.json` (`icon_trait_*`), drawn in the same 24 px stroke style.
 
-**asset-005 · Class icon (FUTURE M2).** 42 icons keyed by `classes.json` `iconId`. Frame = the role glyph shape (hybrids: a split frame), interior = one emblem of the class's tool (gong, net, scalpel…). Monochrome with the role hue as the frame fill. 24, 32 and 48 px. *Acceptance:* the 6 classes of one role are distinguishable at 24 px by interior emblem alone.
+**asset-005 · Class icon (M2).** 42 icons keyed by `classes.json` `iconId`. Frame = the role glyph shape (hybrids: a split frame), interior = one emblem of the class's tool (gong, net, scalpel…). Monochrome with the role hue as the frame fill. 24, 32 and 48 px. *Acceptance:* the 6 classes of one role are distinguishable at 24 px by interior emblem alone.
 
-**asset-006 · Arena fighter token (FUTURE M2).**
+**asset-006 · Arena fighter token (M2).**
 - Circle sized to the fighter radius (0.5 m, 03 §1), side ring (brass for the player's side, steel blue `--c-side-them` for the opponent; in AI-vs-AI replays, home and away use club primaries with a luminance check), role glyph inside, facing wedge, HP and focus bars above.
 - States: idle, moving, casting (telegraph arc), stunned (grey ring), downed (flattened, 40% opacity, then removed at round end).
 - *Acceptance:* observers can name both sides' tank and healer in at least 90% of prompts (vis-003).
 
-### Environment direction (FUTURE M2)
+### Environment direction (M2)
 
 A flat sand-and-stone floor at a mid value (so both side colours and every role hue reach 3:1), a centre line, faint row markers at kickoff, and walls that read as the boundary. No obstacles, hazards or decoration that could be mistaken for gameplay (open-019). Crowd and banners stay outside the walls.
 
@@ -138,7 +138,7 @@ Every management screen shares one shell (mockup: any page).
 - **Top bar (3.5 rem):** club crest, name and tier (click → Home); season and matchweek; balance; wage bill (≥ 1480 px); roster count (≥ 1480 px); standing; search (Ctrl K); digest bell with count; theme; shortcut sheet; and the **Continue** button at the far right, always in the same place.
 - **Side navigation (13.5 rem, collapsible to 3.75 rem):** Home 1 · Squad 2 · Fixtures 3 · League 4 · Market 5 · Finances 6 · Class codex 7; footer: Save / Load, Settings. Badges show counts only for things that need action.
 - **Page:** page header (eyebrow, display-face title, one-line meta, page actions), then a 12-column grid of panels. Content stops growing at 118 rem and centres on ultrawide screens.
-- **Continue** (one primary action, research C1.9) changes label with the state of the week: `Continue · Lineup at <club>` (opens the lineup) → `Play match · locks lineup` → (report) `Continue · To matchweek N`. Preseason: `Continue · Week P2`; end of P4: `Kick off season`; out of the Reckoning: `Advance to season end`. When something blocks progress (02 §3), the button turns neutral with a warning outline and reads `Decide first · <item>`; pressing it jumps to the item. Space triggers it from anywhere except text fields. The **pacing preset** (DELEGATED, D-L; ui-settings) decides where Continue stops at the lineup and the report. A preset never changes a result: the match always uses the lineup, captain, rows and presets the player would lock, and the same seeds (P-05).
+- **Continue** (one primary action, research C1.9) changes label with the state of the week: `Continue · Lineup at <club>` (opens the lineup) → `Play match · locks lineup` (which runs and autosaves the whole week before the report opens, D-O) → (report) `Continue · To matchweek N` (opens the next hub; nothing further is processed). Preseason: `Continue · Week P2`; end of P4: `Kick off season`; out of the Reckoning: `Advance to season end`. When something blocks progress (02 §3), the button turns neutral with a warning outline and reads `Decide first · <item>`; pressing it jumps to the item. Space triggers it from anywhere except text fields. The **pacing preset** (DELEGATED, D-L; ui-settings) decides where Continue stops at the lineup and the report. A preset never changes a result: the match always uses the lineup, captain, rows and presets the player would lock, and the same seeds (P-05).
 
 ### 6.2 Interaction rules
 
@@ -218,25 +218,25 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 
 - **Purpose:** answer "what needs me this week?" and start the week in one press. **Flow:** flow-state-003 hub.
 - **Layout (8/12 main, 4/12 side):**
-  1. *Next fixture* (hero panel): both crests and names (player's club always on the left, venue says Home/Away), records, last-five form strips, venue and week; a strip with **our lineup** by row (role glyphs, readiness and the auto-substitution note), **their last lineup**, **their style** tags (visible in M1, open-026) and the main threat; a footer with the next three fixtures.
+  1. *Next fixture* (hero panel): both crests and names (player's club always on the left, venue says Home/Away), records, last-five form strips, venue and week; a strip with **our lineup** by row (role glyphs, readiness and the auto-substitution note), **their last lineup** (D-R: the five they last fielded, labelled as such and never a forecast of their next lineup), **their style** tags (visible in M1, open-026) and the main threat; a footer with the next three fixtures.
   2. *Digest* ("This week"): the ≤ 6 items with filter tabs (All, Needs action, Results, Squad, Market); each item has an icon by kind, a title, one line of detail and its action button.
   3. Side: *Club* (balance and its change, this week's projection, Watch or embargo status, wage bill plus pending offers against the wage budget, roster plus pending offers against the cap), *Availability* (injuries with weeks out, contracts ending this season), *wing table* (8 rows, top-4 Reckoning cut, 8th relegation line, our row and the next opponent highlighted).
 - **Data:** fixture, both clubs' standings rows and last five, lineups, presets, style tags, digest items, ledger summary, wage budget, roster cap, injuries, contracts, wing table.
 - **Actions:** Continue; Lineup (L); Opponent (O); each digest action; mark done (with Undo); Save (Ctrl S).
-- **States:** *since you were away* (02 §7): after a load, the digest's first item summarises the last 3 results, standing, pending decisions and budget. *Bye or no fixture* (preseason): the hero shows the preseason checklist (budget, roster vs cap, trials day, contracts) instead. *Embargo* (03 sys-finance, D-C): a red banner under the top bar on every hub screen, "Spending embargo · balance −2,300 ts · new contracts above 110 ts are refused". *Empty digest:* "Nothing needs you this week" with Continue emphasised.
+- **States:** *since you were away* (02 §7): after a load, the digest's first item summarises the last 3 results, standing, pending decisions and budget. *Bye or no fixture* (preseason): the hero shows the preseason checklist (budget, roster vs cap, trials day, contracts) instead. *Embargo* (03 sys-finance, D-C): a red banner under the top bar on every hub screen, "Spending embargo · balance −2,300 ts · new contracts above 150 ts are refused" (Banner minimum, EXAMPLE). *Empty digest:* "Nothing needs you this week" with Continue emphasised.
 - **Shortcuts:** Space Continue, L lineup, O opponent, 1–7 screens, Ctrl S save.
 
 #### ui-squad · Squad: lineup and roster ([squad.html](mockups/squad.html))
 
 - **Purpose:** pick five fighters, their rows, captain and presets, and manage the roster. This screen is also the **lineup screen** of 02 step 6 (flow-state-004) when opened by Continue.
 - **Layout:**
-  1. *Lineup board* (full width): **Back row** and **Front row** zones (front faces the enemy side, as in the M2 arena), sized by how many fighters each holds; one card per starter with portrait, name, captain crown or VC tag, class and race/age, a **preset select** and the rating; a validation strip underneath (✓ 5 of 5 fit, ✓ captain and vice-captain, ✓ presets, ⚠ injuries) with the lineup's mean rating against the opponent's last lineup, the lineup's wages, and the **chemistry readout** ("Chemistry +3 · +1 composure each", one line per source on hover; 03 sys-chemistry, D-D). Each card also shows the fighter's **injury risk** (a word and the per-match odds; an At-risk badge with the career-ending chance, 03 sys-injury) and his **season XP bar and trend** (03 sys-development), so benching a prospect visibly costs development (D-A).
+  1. *Lineup board* (full width): **Back row** and **Front row** zones (front faces the enemy side, as in the M2 arena), sized by how many fighters each holds; one card per starter with portrait, name, captain crown or VC tag, class and race/age, a **preset select** and the rating; a validation strip underneath (✓ 5 of 5 fit, ✓ captain and vice-captain, ✓ presets, ⚠ injuries) with the lineup's mean rating against the opponent's last lineup, the lineup's wages, and the **chemistry readout** ("Chemistry +3 · +1 composure each", one line per source on hover; 03 sys-chemistry, D-D). Each card also shows the fighter's **injury risk**: a word, and on hover an **estimate** of the chance per round started, always with ≈ and the note "estimated from typical rounds (not exact)" (as built, PROPOSED: the 03 sys-injury formula for a typical round, downed 55% and damage taken 60% of max HP, times the fighter's proneness); At risk and Still tender add their status text. The per-match career-ending estimate core computes is not shown in M1 (05 §12) and his **season XP bar and trend** (03 sys-development), so benching a prospect visibly costs development (D-A).
   2. *Roster table:* the **roster cap meter** (one cell per place, 11 / 12), filter chips (All, Lineup, Reserves, Injured, Contract ends), name filter, Sign. Columns at 1440: fighter (portrait, name, C/VC, rookie tag), class (role glyphs), race · age, rating, potential (stars, number on hover), lineup state (Front / Back / Reserve / injured weeks), preset, training emphasis (Balanced, Body, Mind; D-A), trend, traits (polarity dots with tooltips), wage, contract (ends, seasons left, warning tag in the final season). Wide-screen extras: apps, downs, rating sparkline S1–S3.
   3. *View switch* (page header): Overview, Attributes (12 attribute columns), Contracts, Season stats.
-- **Actions:** drag between rows and the roster; keyboard F / B / R (front, back, reserve), C captain, V vice-captain, P cycle preset, E cycle training emphasis, Enter profile; "Last lineup" restores the previous five; Play match (Continue).
+- **Actions:** drag between rows and the roster; keyboard F / B / R (front, back, reserve), C captain, V vice-captain, P cycle preset, E cycle training emphasis, Enter profile; "Last lineup" restores the previous five; **Auto-pick** applies the AI's lineup rule (03 sys-ai-manager step 8); Play match (Continue). **Pre-fill** (PERMITTED-CHOICE, as built): a new career's first lineup is the AI rule's pick; each later week starts from the last locked lineup without departed fighters and hired blades, and an unfit starter gets a one-click Bring in from the reserves.
 - **Selection and focus:** the selected fighter is outlined in brass on the board and highlighted in the table.
 - **Captain changes:** C or V previews the consequence before it applies ("Rook Saltmere will be Snubbed: −2 chemistry for 6 weeks") and applies at once with Undo. Costs are evaluated only at the next lineup lock, so changing back before it is free (03 sys-captaincy).
-- **Validation (inline, never a dialog):** fewer than 5 fit fighters → strip reads "4 of 5 · a hired blade will fill the last place" (open-006); no captain → "Choose a captain" and Play match blocked; roster over cap after relegation → Continue becomes `Decide first · Release N fighters` (flow-005).
+- **Validation (inline, never a dialog):** fewer than 5 fit fighters → strip reads "4 of 5 · a hired blade will fill the last place" (open-006); no captain → the strip says one will be named at kickoff (the vice-captain if fit, else the best-CQ fit starter) and Play match stays enabled; the digest then reports the interim captain and why (`captain.interim`, D-S); roster over cap after relegation → Continue becomes `Decide first · Release N fighters` (flow-005).
 - **Empty / error:** a roster of 0 cannot happen; a roster below 5 shows the hired-blade card (dashed, labelled) in the empty slot.
 - **Shortcuts:** above, plus ↑ ↓ rows, Space Play match.
 
@@ -278,19 +278,24 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 
 #### ui-match · Simulating (transient, M1)
 
-- **Purpose:** flow-state-005. The headless match resolves in well under a second. Show a 600 ms (TUNABLE; 0 with reduced motion) panel "Simulating · Round 1 · Round 2 · Round 3" filling in as rounds resolve, then open the report. Input is ignored except Esc, which does nothing but is not an error. FUTURE M2: this becomes Watch or Simulate (open-020).
+- **Purpose:** flow-state-005. In M1, Play match runs the whole week processing (every fixture of the week, the player's included) and writes the autosave before the report opens (D-O); the week takes about 0.2 s (median on the development machine, 05 §8). Show a 600 ms (TUNABLE; 0 with reduced motion) panel "Simulating · Round 1 · Round 2 · Round 3" filling in as rounds resolve, then open the report. Input is ignored except Esc, which does nothing but is not an error. M2: this becomes Watch or Simulate (open-020).
 
 #### ui-report · Match report ([match-report.html](mockups/match-report.html))
 
 - **Purpose:** make the result explain itself (C1.2, pillar 2, P-22); vis-001 asks playtesters to name a concrete cause from this screen.
 - **Layout:**
-  1. *Scoreboard* (home club on the left): crests, names, a large score, result line (Won/Lost, points, gate if home), **round pips** (winner, duration, end reason: standing count, overtime or time-cap tiebreak step), and the **MVP strip** (portrait, headline numbers, "How MVP is chosen" tooltip). MVP (PROPOSED · TUNABLE; presentation only, with no mechanical effect): the fighter on the winning side with the highest contribution over the match, = damage dealt + healing done + shielding done + 250 × downs inflicted; ties go to fewer downs suffered, then the lower slot.
+  1. *Scoreboard* (home club on the left): crests, names, a large score, result line (Won/Lost, points, gate if home), **round pips** (winner, duration, end reason: standing count, overtime or time-cap tiebreak step), and the **MVP strip** (portrait, headline numbers, "How MVP is chosen" tooltip). MVP (PROPOSED · TUNABLE; presentation only, with no mechanical effect; **as built**, 03 sys-match-report): the fighter on the match winner's side with the highest score over the match, = damage dealt (to HP and to shields) + healing done + shielding done + 150 × downs inflicted + 50 × assists; ties go to the earlier lineup slot. The tooltip states this formula.
   2. *Round tabs:* Whole match, Round 1–3 (or 1–5 in finals) filter every panel below.
-  3. *What decided it* (top of the main column): a one-sentence summary callout, then 3–5 **rule traces**: fighter, preset, verdict (helped / hurt / never fired / blocked), the rule as a sentence, fire counts per round, and one line of effect. Traces are chosen from the event stream: largest swing in downs, damage or healing first, then "never fired" rules of starters, then rules skipped for a reason (cooldown, out of reach, controlled). Traces and counters come from 03 sys-match-report.
+  3. *What decided it* (top of the main column): a one-sentence summary callout, then up to 5 **rule traces**: fighter, preset, verdict, the rule as a sentence, fire counts, and one line of effect. Traces and counters come from 03 sys-match-report. **Selection heuristic as built (PROPOSED · TUNABLE; WP7, `match-report/analysis.ts`)**, a presentation rule that chooses what to show and never changes or forecasts a result (P-13), with *contribution* = damage dealt + healing + shielding + 250 × downs inflicted (a ranking aid only, not the MVP score), in this order and without repeating a fighter's rule:
+     1. **Helped:** our two highest contributors, each with his most-fired rule (the stance only if no rule fired), with downs, damage and healing.
+     2. **Hurt us:** the opponent's highest contributor and his most-fired rule.
+     3. **Hurt:** our fighter who was downed first in the most rounds (at least two), with the rule he spent most ticks committed to and who downed him.
+     4. **Idle:** never-fired rules of our starters, in lineup order (the P-22 warning), until there are 5 traces.
+     A round decided at the time cap adds a line naming the tiebreak step. Not built in M1: traces for rules skipped for a reason (cooldown, out of reach, controlled) and a "blocked" verdict.
   4. *Box score:* both sides (ours first, theirs dimmed), columns downs, downed, damage, taken, healed, control seconds, rules fired, XP; sortable; every number has a breakdown tooltip (per round, per ability).
-  5. *Key moments* (side): a timeline grouped by round; markers by side colour and by event shape (diamond = down, ring = rule or save, square = injury, bar = round end or overtime); each item names the actor, the rule or ability and the cause. Clicking an item highlights the related trace and box-score row; FUTURE M2 jumps the replay to that tick.
+  5. *Key moments* (side): a timeline grouped by round; markers by side colour and by event shape (diamond = down, ring = rule or save, square = injury, bar = round end or overtime); each item names the actor, the rule or ability and the cause. Clicking an item highlights the related trace and box-score row; from M2 it jumps the replay to that tick.
   6. *Injuries and XP:* injury callouts with cause and weeks out; XP gains and attribute changes.
-- **Actions:** Continue (to the next week); open any fighter; copy the event log; Replay (FUTURE M2, shown disabled with a tooltip).
+- **Actions:** Continue (to the next week's hub; the week was already processed and autosaved at Play match, D-O); open any fighter; copy the event log; Replay (M2, shown disabled with a tooltip).
 - **Empty / error:** a report missing its event log (an old save) shows score and rounds and "Details unavailable for this match"; a hired blade in the lineup is labelled in every table.
 - **Shortcuts:** 1–5 round tabs, ← → previous/next report, Space Continue.
 
@@ -298,10 +303,10 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 
 - **Purpose:** find, compare and sign free agents within the cap and the wage budget (R6, O10, P-09).
 - **Layout:** filter rail (search; role toggles where hybrids match either role, open-024; class; race including Ashkin; age range; minimum rating; switches "Fits wage headroom", "No negative traits", "Only new this week"); results table (compare checkbox, fighter, class, race · age, rating, potential, traits, ask per week, the **ask for my club** at 1, 2 and 3 seasons (preferred length marked), signing cost, **rival offers** (a count, never amounts), a starter flag ("would start for you"), **willingness** (3 pips = patience left with this club this season; 0 = "will not deal with you this season", 03 sys-contracts), Offer); a sticky **compare tray** (2–3 fighters against a chosen roster fighter) opening a comparison dialog with the best value per row marked ▲. Page header: free agents count, roster places left (cap − roster − pending offers), wage room (tooltip: wage budget − wage bill − pending wages). A **Pending** tab lists sent offers with their answer week and Withdraw.
-- **Offer dialog (commit):** wage stepper (5 ts steps; Shift 25), length (1–3 seasons, `economy.json`), the fighter's ask, a **terms check** callout (at or above his ask: acceptable, and he takes the best acceptable offer at week processing, with +500 for clubs where he would start; within the counter window: he will counter; below it: refused, patience −1; the rival-offer count; never a probability forecast, P-13), signing cost (charged on acceptance), balance after, roster after, wage bill after with a meter against the budget. Footer note: offers are answered at **week processing** and can be withdrawn until then (03 sys-transfers, D-C). Send offer → toast "Offer sent · he answers when you Continue"; the answer arrives as a digest item.
+- **Offer dialog (commit):** wage stepper (5 ts steps; Shift 25), length (1–3 seasons, `economy.json`), the fighter's ask, a **terms check** callout (at or above his ask: acceptable, and he takes the best acceptable offer at week processing, with +1,000 for clubs where he would start; within the counter window: he will counter; below it: refused, patience −1; the rival-offer count; never a probability forecast, P-13), signing cost (charged on acceptance), balance after, roster after, wage bill after with a meter against the budget. Footer note: offers are answered at **week processing** and can be withdrawn until then (03 sys-transfers, D-C). Send offer → toast "Offer sent · he answers when you Continue"; the answer arrives as a digest item.
 - **Renew** uses the same dialog from the profile or the digest (renewals answer at once, 03 sys-contracts). **Release** uses the commit dialog on the profile (payout, balance, wage bill, roster and captain after).
-- **Errors (inline, with reasons):** roster full → "Roster full (12/12). Release a fighter first.", or with pending offers "Roster full with pending offers (9 + 1 of 10)" (02 flow-004); over the wage room → the Offer button is disabled and the ask shows a warning tag with the excess; embargo → "Spending embargo: only tier-minimum offers (110 ts, 1 season) while you have fewer than 5 fit fighters" (03 sys-finance).
-- **Empty:** no match → "No free agents match · Reset filters"; Rookies tab outside P1 → "Trials-day rookies are available in week P1 only; unsigned rookies join the free agents". In P1 the tab lists the club's exclusive share; Sign is binding at once with no signing cost (commit dialog).
+- **Errors (inline, with reasons):** roster full → "Roster full (12/12). Release a fighter first.", or with pending offers "Roster full with pending offers (9 + 1 of 10)" (02 flow-004); over the wage room → the Offer button is disabled and the ask shows a warning tag with the excess; embargo → "Spending embargo: only tier-minimum offers (150 ts, 1 season) while you have fewer than 5 fit fighters" (Banner, EXAMPLE) (03 sys-finance).
+- **Empty:** no match → "No free agents match · Reset filters"; Rookies tab outside P1 → "Trials-day rookies are available in week P1 only; unsigned rookies join the free agents". In P1 the tab lists the club's exclusive share (season 1: exactly one rookie, D-P) at its Trials Day ask, capped at 1.25 × the tier minimum; Sign is binding at once with no signing cost (commit dialog).
 - **Shortcuts:** 5 opens; / search; C compare; O offer on the selected row; Enter sends in the dialog.
 
 #### ui-finances · Finances (not mocked)
@@ -327,7 +332,7 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 #### ui-save · Save / Load (not mocked)
 
 - **Purpose:** R7 (REQUIRED) with the open-016 working assumption: manual slots plus rotating autosaves.
-- **Layout:** two tables, *Manual saves* (name, club, season and week, saved at, play time) and *Autosaves* (after every week processing and after the season-end step, rotating, newest first; 03 sys-save); actions Save (Ctrl S, to the selected or a new slot), Save as, Load (commit dialog if there is unsaved progress), Delete (commit dialog, removes only that file).
+- **Layout:** two tables, *Manual saves* (name, club, season and week, saved at, play time) and *Autosaves* (after every week processing, which in a match week happens at Play match before the report opens (D-O), and after the season-end step; three rotating slots, newest first; 03 sys-save); actions Save (Ctrl S, to the selected or a new slot), Save as, Load (commit dialog if there is unsaved progress), Delete (commit dialog, removes only that file).
 - **Errors:** damaged or incompatible save → a clear message with the save's version and "This save cannot be loaded; nothing was changed" (02 §3); a failed write never replaces the previous file (05 §5).
 
 #### ui-settings · Settings (not mocked)
@@ -337,6 +342,18 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 - **Accessibility:** reduce motion (also follows the OS), status colours (Green/red, Blue/orange), flash limit (M2), larger focus ring.
 - **Audio:** master, music, effects, interface; mute when the window is unfocused.
 - **Controls:** every shortcut remappable, with conflict warnings and "Reset to defaults".
+
+#### ui-knowledge · Fuzzy-stat display (M4 placeholder, not designed)
+
+- **Status:** placeholder (C7). The screen design is M4 scope and not yet written; these constraints already bind it.
+- **Constraints:** every fighter has a free, low-accuracy **baseline report** with wide ranges (O4, REQUIRED), and scouting narrows it (R3). Values appear as **ranges with a certainty** and a **source label** (scout and week) instead of exact numbers (P-12); information decays slowly and contact refreshes it (P-19). Opponents' values are shown at the viewer's knowledge, and reports never forecast outcomes (P-13). Traits reveal in `traits.json` revealOrder, negatives last (`.trait--hidden` until revealed). The same `.stat-bar` gains a range form (`__range`, already in the component sheet). Careers started before M4 never gain fog, so their saves keep exact values (owner question Q10).
+- **Surfaces affected:** ui-fighter, ui-market, ui-squad (opponent strip), ui-home (their last lineup), ui-report (opponent box score).
+
+#### ui-academy · Academy (M5 placeholder, not designed)
+
+- **Status:** placeholder (C7). The screen design is M5 scope and not yet written; these constraints already bind it.
+- **Constraints:** a separate pool with capacity equal to the tier's roster cap (O2); enrollment chosen at the start of the season and committed at Kick off, except fighters signed or traded for mid-season, who may be enrolled that week (O3); a call-up is a binding commit whose dialog states that the fighter cannot return this season and gains no XP unless he plays (O3, D-M). Program types, cost and the R5 outcomes (growth of stats and potential, new abilities and traits, curing flaws) are shown as ranges before enrollment, with no hidden success roll (open-004). How a taught ability fits the fixed 4-ability kit is owner question Q20.
+- **Surfaces affected:** a new hub screen, ui-squad (academy column), ui-fighter (program tab), ui-season-end (graduation step), ui-finances (fees).
 
 ### 6.4 Input behaviour
 
@@ -375,8 +392,8 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 | Embargo | Spending is limited | Red banner on every hub screen | none | none | high |
 | Attribute change | Growth or decline | ▲ / ▼ delta with sign | none | none | medium |
 | Promotion / relegation | Tier changes | Season-end banner, large display type | 360 ms fade | fanfare / low horn | high |
-| M2: rule fires (FUTURE) | Which rule acted | Rule badge "R3" pulses over the fighter | 220 ms | none | high |
-| M2: overtime (FUTURE) | Damage ramps | Clock turns amber; thin edge vignette | 360 ms | horn | high |
+| M2: rule fires | Which rule acted | Rule badge "R3" pulses over the fighter | 220 ms | none | high |
+| M2: overtime | Damage ramps | Clock turns amber; thin edge vignette | 360 ms | horn | high |
 
 - **Anticipation, action, recovery:** M1 has no in-fight animation. M2 telegraphs casts and channels of 0.3 s or longer with an arc and a cast bar (03 sys-fight-ai).
 - **Simulation relationship:** presentation never affects results (T4). Report animations run after the result is committed.
@@ -387,11 +404,11 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 
 ## 8. Audio direction
 
-**Status:** PROPOSED, light for M1; FUTURE for most of it.
+**Status:** PROPOSED, light for M1; most of it is M2 scope.
 
 - **Music:** M1 optional: one calm menu loop (low strings, frame drum, plucked lute), ducked by 6 dB on the report. FUTURE: a short arena theme for the Reckoning.
-- **Environmental sound:** FUTURE M2: crowd bed outside the walls, rising in overtime.
-- **Action sounds:** FUTURE M2: material-based hits (steel, wood, flesh-free thud), cast wind-ups per role family, a distinct downed sound.
+- **Environmental sound:** M2: crowd bed outside the walls, rising in overtime.
+- **Action sounds:** M2: material-based hits (steel, wood, flesh-free thud), cast wind-ups per role family, a distinct downed sound.
 - **Interface sounds (M1):** click, confirm, error, notify, win sting, loss sting. Short (< 300 ms), dry, at −18 LUFS integrated so they never dominate.
 - **Voice:** none (no barks or commentary; P-17).
 - **Mix priorities:** interface errors and results over music.
@@ -447,14 +464,14 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 
 ## 11. Open decisions and completion check
 
-Owner items: OC-1 and OC-7 to OC-10 are PROPOSED and asked in 01 §8.5 Q26; OC-2 in Q27; OC-3, OC-5 and OC-6 are DELEGATED as D-J, D-L and D-M (Q23–Q25); OC-4 is DELEGATED as D-K and confirmed with the money model in Q4. Related package items: open-026 (exact values in M1, assumed here), D-C (league structure and money), open-006 (hired blades in the lineup), the D-C failure ladder (embargo banner), open-011 (vice-captain), open-016 (save screen), open-020 (M2 Watch or Simulate), open-024 under D-G (hybrids match either role in filters).
+Owner items: OC-1 and OC-7 to OC-10 are PROPOSED and asked in 01 §8.5 Q26; OC-2 in Q27; OC-3, OC-5 and OC-6 are DELEGATED as D-J, D-L and D-M (Q23–Q25); OC-4 is DELEGATED as D-K and confirmed with the money model in Q4. The v0.3 screen changes follow D-O (report after the autosave, Q29), D-R (their last lineup, Q32) and D-S (no captain blocker, Q33); the MVP and "What decided it" rules are documented as built (PROPOSED). Related package items: open-026 (exact values in M1, assumed here), D-C (league structure and money), open-006 (hired blades in the lineup), the D-C failure ladder (embargo banner), open-011 (vice-captain), open-016 (save screen), open-020 (M2 Watch or Simulate), open-024 under D-G (hybrids match either role in filters).
 
 - [x] References state exactly which qualities to reproduce.
 - [x] Style can be evaluated through concrete shapes, colours, type, layout and motion (tokens and mockups).
-- [x] Interface presents actual rules (cap, wage budget, points, zones, presets, rule traces) from 03 v0.2.
+- [x] Interface presents actual rules (cap, wage budget, points, zones, presets, rule traces) from 03 v0.3.
 - [x] Essential information remains readable in the busiest screens (report, squad) at 1280–2560 px.
 - [x] Prototype placeholders and required finished qualities are explicit (§10).
-- [ ] A new artist can produce class icons and arena tokens without inventing direction (briefs exist; reference art is FUTURE M2).
+- [ ] A new artist can produce class icons and arena tokens without inventing direction (briefs exist; reference art is M2 scope).
 
 ## Notes for implementers
 

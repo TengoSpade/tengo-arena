@@ -1,17 +1,17 @@
 # Arena League — gameplay systems and content
 
-> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.2 · 2026-10-25. §1–2 were written by the lead designer (phase 1). §3–10 merge the three phase-2 drafts (`_drafts/03-combat.md`, `_drafts/03-fighter-lifecycle.md`, `_drafts/03-league-economy.md`) and resolve their conflicts using decisions D-A to D-I, which were made under delegation (document 01 §8.2). Not approved for implementation and not independently reviewed. Document 01 §8.5 lists what still needs the owner.
+> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.3 · 2026-10-25. §1–2 were written by the lead designer (phase 1). §3–10 merge the three phase-2 drafts (`_drafts/03-combat.md`, `_drafts/03-fighter-lifecycle.md`, `_drafts/03-league-economy.md`) and resolve their conflicts using decisions D-A to D-I, which were made under delegation (document 01 §8.2). **v0.3 is the M1 doc sync:** values now match `content/default` on main @ f4b39d9 after combat balance pass 1 (1597f1d), the tuning pass (m1/fix-tuning) and the core fix round (m1/fix-core), and decisions D-N to D-T are folded in. M1 was built at risk on these working assumptions under the owner's goal (01 §8.5). Two reviews have run (01 §8.6); the owner has not yet approved the package.
 > Follow the labels, scope, glossary, and authority rules in [document 01](01-game-vision-and-design-principles.md).
 > This document owns mechanical truth. [Document 02](02-player-experience-and-game-flow.md) owns when systems appear in the player journey. [Document 05](05-technical-design-principles-and-build-plan.md) owns how their state and implementation are organized.
 
 | Field | Value |
 | --- | --- |
-| Game / version / updated | Arena League / v0.2 / 2026-10-25 |
-| Status / design owner | Draft: all sections written for M1; merged from the phase-2 drafts / the project owner |
-| Milestone covered | M1 "Season MVP" (O14) in full. Later systems are tagged with their milestone in §2 and summarized in §3.5 |
-| Content source of truth | `content/default/`: `combat.json`, `classes.json`, `abilities.json`, `tactics-presets.json`, `races.json`, `traits.json`, `names.json`, `development.json`, `leagues.json`, `clubs.json`, `economy.json`. Where this text quotes a number, it is the working value at merge time. **The data file holds the working value**; a disagreement between text and data is a defect to report, not a choice |
+| Game / version / updated | Arena League / v0.3 / 2026-10-25 |
+| Status / design owner | Draft: all sections written for M1 and synced to the M1 build (main @ f4b39d9, 741 tests, 10-season soak 11/11) / the project owner |
+| Milestone covered | M1 "Season MVP" (O14; scope D-N) in full. Later systems are tagged with their milestone in §2 and summarized in §3.5 |
+| Content source of truth | `content/default/`: `combat.json`, `classes.json`, `abilities.json`, `tactics-presets.json`, `races.json`, `traits.json`, `names.json`, `development.json`, `leagues.json`, `clubs.json`, `economy.json`. Where this text quotes a number, it is the working value on main @ f4b39d9 (v0.3 sync). **The data file holds the working value**; a disagreement between text and data is a defect to report, not a choice |
 
-**Labels in this document.** REQUIRED cites an owner ID (R, T, O). **DELEGATED** cites a D-ID: a decision the orchestrator made under the owner's goal instruction. It is the binding working design, but it still awaits owner confirmation (01 §8.2). PROPOSED marks rules from the phase-2 drafts that no decision has yet covered. Every number is PROPOSED · TUNABLE unless a REQUIRED or DELEGATED rule fixes it. EXAMPLE, OPEN and FUTURE are as defined in 01. Untagged prose follows its section's status line.
+**Labels in this document.** REQUIRED cites an owner ID (R, T, O). **DELEGATED** cites a D-ID: a decision the orchestrator made under the owner's goal instruction. It is the binding working design, but it still awaits owner confirmation (01 §8.2). PROPOSED marks rules from the phase-2 drafts that no decision has yet covered. Every number is PROPOSED · TUNABLE unless a REQUIRED or DELEGATED rule fixes it. EXAMPLE, OPEN, FUTURE and PERMITTED-CHOICE are as defined in 01. **FUTURE is used only for ideas no milestone schedules**; planned work carries its milestone tag (M2–M7, D-N). Untagged prose follows its section's status line.
 
 ## 1. Mechanical foundations
 
@@ -19,7 +19,7 @@
 
 | Topic | Decision | Player-visible consequence |
 | --- | --- | --- |
-| Player control | Indirect only. The manager chooses the lineup of 5 (O1), the captain and vice-captain (O6), each fighter's starting row (P-03) and tactics: one per-class preset per fighter in M1 (O14), editable rule lists from M3 (R2). From M2, up to 2 calls per round per side (P-01). The lineup, captain, rows and presets are fixed for a whole match in M1 (open-010). No direct control of a fighter at any milestone (01 §5 non-goal) | Every fighter action traces to a rule, the stance fallback, a status that overrides rules (taunt, stun, sleep, silence, displacement), or a call |
+| Player control | Indirect only. The manager chooses the lineup of 5 (O1), the captain and vice-captain (O6), each fighter's starting row (P-03) and tactics: one per-class preset per fighter in M1 (D-N), editable rule lists from M3 (R2). From M2, up to 2 calls per round per side (P-01). The lineup, captain, rows and presets are fixed for a whole match in M1 (open-010). No direct control of a fighter at any milestone (01 §5 non-goal) | Every fighter action traces to a rule, the stance fallback, a status that overrides rules (taunt, stun, sleep, silence, displacement), or a call |
 | Time model | **Two clocks.** *Fight time* is continuous real time simulated in fixed ticks of **50 ms (20 ticks per second)** (PROPOSED · TUNABLE, P-02, P-05; fixed per build). Kickoff is tick 0. **Overtime** begins at 45 s (tick 900) and the **hard time cap** is 75 s (tick 1,500) (DELEGATED, D-G; P-02 targets a typical fight of 20–45 s). Content times are multiples of 0.05 s, so they convert exactly to ticks. *Calendar time* moves in discrete weeks. A season is one in-game year (O3) of **23 played weeks**: P1–P4, MW1–MW16, TW1–TW3, then a season-end step that is not a week (DELEGATED, D-C; sys-calendar). Management time advances only on Continue (02 §3). Fight time never advances the calendar. From M2, viewer speed (1x/2x/4x) and pause change presentation only (T1, T4) | Decisions are made on paused management screens without time pressure. In M1 a whole match resolves at once (O12) |
 | Space model | Continuous 2D top-down arena (P-03). An open rectangle **32 m × 18 m** (PROPOSED · TUNABLE, width 24–40 m, height 14–22 m) with walls and no obstacles, hazards, summons or neutral units (open-019, adopted under D-G). The origin is the north-west corner, x points east and y south. The home side starts west and the away side east, each with a **front row** and a **back row** (sys-arena). Fighters are circles of radius **0.5 m**. **Gap** = centre distance − both radii, never below 0. Every range, band and "within" test uses the gap and is inclusive (gap ≤ range). **Range bands:** melee ≤ 1.5 m, close ≤ 4 m, mid ≤ 7 m, long ≤ 10 m | "Range 6 m" means 6 m of empty ground between two fighters. Rows, spacing, kiting, bunching and flanking exist even in headless fights |
 | Measurement units | *Distance:* content is in metres (`…M` keys); events and displays use integer centimetres; **sim positions and per-tick movement are integer millimetres** (DELEGATED, D-E). *Time:* integer ticks internally, displayed in seconds to one decimal. *Points:* HP, damage, healing, shields, focus, armor, ward and composure are integer points. Damage and healing are computed in centipoints and truncated once; focus is held in millipoints. **Stats:** 12 integer attributes on an **absolute 1–20 scale** (10 = average professional) shared by the whole world (P-12; DELEGATED D-G, cmb-q1). Five are **physical** (`str` Strength, `agi` Agility, `pac` Pace, `tgh` Toughness, `pre` Precision), which decline after the race-scaled physical peak. Seven are **mental** (`arc` Arcana, `spi` Spirit, `wil` Willpower, `cmp` Composure, `ldr` Leadership, `awr` Awareness, `dis` Discipline), which do not decline until about human-age 60 (O11, D-B). Lifecycle stores base stats in centipoints (100–2,000) so that growth is gradual. **Rating**, **potential** and **captaincy (CQ)** are integers 1–100. Potential is displayed as stars = potential ÷ 20 in half-star steps. *Rule thresholds:* whole percent, set in 10% steps in the editor (P-07). *Probabilities and ratios:* integer basis points (0–10,000), with content decimals converted at load (round half away from zero). *Money:* gold is an integer, displayed in the default theme as **tessels (ts)** (D-C). Wages are per week. *Contract length:* whole seasons, ending at a season end. *Age:* whole years, +1 for every fighter at season end. **Human-age** = floor(age × 800 ÷ lifespan) ÷ 10, kept in tenths. Table lookups use floor(human-age), and the per-season rate scale is k = 80 ÷ lifespan (sys-races). *Injury and assignment durations:* weeks | A stat of 12 means the same in every tier, region and race. Displayed values always equal what the rules use |
@@ -37,7 +37,7 @@ Specify the units before using numerical ranges or speeds. A value such as "rang
 
 **Status:** this inventory is the structure the §3 specs follow. A system's existence is REQUIRED where it implements an R, T or O ID, DELEGATED where a D-ID covers it, and PROPOSED otherwise. sys-ids are stable: lowercase with the `sys-` prefix, never reused, and any rename is recorded in the 01 change record. **Spec owner** splits the work: *combat* covers everything inside a fight (arena, movement, stats in combat, classes and abilities, targeting, the rule engine and presets, playbook and calls, fighter behavior, in-fight effects of traits and captains, and match reports); *management* covers everything else. **Spec source** names the draft that was merged into §3.
 
-| System ID | Purpose in the player experience | Depends on | First milestone | Spec owner | Spec source | Later growth / FUTURE |
+| System ID | Purpose in the player experience | Depends on | First milestone | Spec owner | Spec source | Later growth (milestone tag; FUTURE = unscheduled) |
 | --- | --- | --- | --- | --- | --- | --- |
 | sys-fight-sim | Runs one real-time 5v5 fight on fixed ticks from kickoff to result, including overtime and the time cap, and emits the event log (R1, O1, T4) | sys-arena, sys-movement, sys-combat-stats, sys-abilities, sys-targeting, sys-tactics, sys-fight-ai | M1 (headless, O12) | combat | 03-combat | M2: the viewer renders its event stream; calls via sys-calls |
 | sys-arena | Arena bounds, sides, front and back rows, spawn points (P-03) | none | M1 | combat | 03-combat | FUTURE arena variants and hazards (open-019) |
@@ -45,7 +45,7 @@ Specify the units before using numerical ranges or speeds. A value such as "rang
 | sys-combat-stats | The 12 attributes and their in-fight values (HP, armor, ward, speed, Power, Support, crit, evade, tenacity, resolve, focus, reaction delay); the class rating | sys-fighters, sys-races, sys-abilities | M1 | combat | 03-combat | — |
 | sys-abilities | The ability schema, effect vocabulary, statuses, diminishing returns, damage and healing pipelines, and the 42 classes (O8) with 168 abilities | sys-combat-stats, sys-targeting | M1 | combat | 03-combat | M5: learned abilities (R5) |
 | sys-targeting | Deterministic selectors, Only and Prefer, role references (open-024), published tie-breaks with stickiness | sys-arena | M1 | combat | 03-combat | M3: playbook focus policy |
-| sys-tactics | The rule engine (ordered IF/THEN lists, stance fallback, reaction delay, traces) and the **105 per-class presets selectable per fighter** (O14, R2, P-06) | sys-targeting, sys-abilities | M1 (presets only) | combat | 03-combat | M3: editable lists, rule groups, "jump to" (P-07) |
+| sys-tactics | The rule engine (ordered IF/THEN lists, stance fallback, reaction delay, traces) and the **105 per-class presets selectable per fighter** (R2, P-06; M1 scope D-N) | sys-targeting, sys-abilities | M1 (presets only, D-N) | combat | 03-combat | M3: editable lists, rule groups, "jump to" (P-07) |
 | sys-fight-ai | Execution beneath the rules: approach, kite, hold, protect, regroup, stances, anti-stuck (research C2.1) | sys-tactics, sys-movement | M1 | combat | 03-combat | — |
 | sys-fight-traits | In-fight effects of traits (O5) through the trait-effect adapter | sys-traits, sys-combat-stats | M1 | combat | 03-combat | Grows with the trait catalog |
 | sys-fight-captain | The captain in the fight (O6): aura, rally, captain down, handover, captain's target | sys-captaincy, sys-tactics | M1 | combat | 03-combat | M2: calls go through the captain |
@@ -68,14 +68,14 @@ Specify the units before using numerical ranges or speeds. A value such as "rang
 | sys-tournament | **The Reckoning:** the season-ending 3-round knockout of 8 clubs per tier (O9, D-C) | sys-league, sys-match | M1 | management | 03-league-economy | — |
 | sys-roster | Roster cap by tier (O2), cap relief after relegation, lineup lock, eligibility, hired blades (open-006) | sys-fighters, sys-league, sys-captaincy | M1 | management | 03-league-economy | M5: the academy pool |
 | sys-contracts | Market wage and asks, lengths, signing costs, negotiation (one offer, one counter), renewals, releases, expiry, drop clause (O10) | sys-fighters, sys-finance | M1 | management | 03-league-economy | M6: clauses (release fee, sell-on) |
-| sys-transfers | The free-agent market, open every week (P-09): pool, offers resolved at week processing, trials day, journeyman top-up | sys-contracts, sys-finance, sys-youth-intake | M1 (free agents only, O14) | management | 03-league-economy | M4: knowledge-limited views. M6: club-to-club transfers, windows, deadline day, trust |
+| sys-transfers | The free-agent market, open every week (P-09): pool, offers resolved at week processing, trials day, journeyman top-up | sys-contracts, sys-finance, sys-youth-intake | M1 (free agents only, D-N) | management | 03-league-economy | M4: knowledge-limited views. M6: club-to-club transfers, windows, deadline day, trust |
 | sys-finance | Season budget and weekly wage budget (O10); ledger; grants, sponsors, gate, prizes; operating cost; Watch, embargo and Registry advance (open-007); soft landings | sys-league, sys-contracts | M1 | management | 03-league-economy | M6: cup prizes, transfer fees |
 | sys-ai-manager | AI clubs under the same rulebook (P-04): five personalities; lineups, presets, captains, renewals, releases, offers, trials rookies, training emphasis | most management systems; sys-tactics presets | M1 | management | 03-league-economy (+ lifecycle policies) | M3: rule lists. M4: abstracted scouting. M5: academy. M6: transfers |
 | sys-save | Player-facing save rules: slots, autosave points, what is restored, no reroll (R7, P-05, open-016). The persistence contract is in 05 §5 | all state owners | M1 | management | lead designer (persistence: 05) | M2: mid-fight resume. M7: hardcore ironman |
 | sys-knowledge | Per-club views of fighters and opponents. M1–M3: a pass-through returning true values (open-026). From M4: baseline report (O4), ranges, reveal steps, certainty (P-12), decay and contact refresh (P-19), source labels, opponent reveal (P-13) | sys-fighters, sys-scouting | M1 (pass-through), M4 (fog) | management | lead designer (fog spec not yet written) | — |
 | sys-staff | Staff market and contracts: scouts first, other roles per open-022 | sys-finance, sys-contracts | M4 | management | not yet written | — |
 | sys-scouting | Scout assignments, the scouts' time budget, report accuracy from skill and region, digests (R3) | sys-staff, sys-knowledge, sys-calendar | M4 | management | not yet written | — |
-| sys-academy | Programs by type, enrollment and call-up timing (O3, open-003), capacity (O2), fees, progress, graduation, risks (open-004) | sys-development, sys-roster, sys-finance, sys-calendar | M5 | management | not yet written | — |
+| sys-academy | Programs by type, enrollment and call-up timing (O3, open-003), capacity (O2), fees, progress, graduation, risks (open-004). **M5 scope includes the R5 outcomes:** program types; growth of stats and potential; teaching new abilities and new traits (and curing flaws) | sys-development, sys-roster, sys-finance, sys-calendar, sys-traits, sys-abilities | M5 | management | not yet written | — |
 | sys-cups | The regional cup, in which the underdog plays at home, and the cross-region cup (P-08) | sys-league, sys-match, sys-calendar | M6 | management | not yet written (hooks in sys-calendar, sys-finance) | — |
 | sys-patron | Patron temperament, directives, patience, dismissal and job offers, legacy score (P-10, open-007). **No patron goal in M1** (D-C) | sys-league, sys-finance | M6 | management | not yet written (economy draft's M1-light goal rejected) | FUTURE: scenario challenges |
 | sys-difficulty | Difficulty sliders and capped catch-up (P-14); the hardcore toggle (P-11) | sys-ai-manager, sys-finance, sys-knowledge | M7 | management | not yet written | — |
@@ -91,7 +91,7 @@ Systems deliberately absent from M1: loans (open-009, FUTURE); facilities; moral
 4. **XP and slots.** Combat reports participation only, and sys-development computes XP. From M3, management supplies each fighter's rule-slot count and unlocked vocabulary ids, and combat defines the vocabulary and enforces the slots.
 5. **Presets.** Combat defines the presets per class (`tactics-presets.json`), and management (sys-roster, sys-ai-manager) only selects among them.
 6. **Knowledge in displays.** Every management screen and every AI valuation reads fighters through `sys-knowledge.view`. Combat displays read what the viewing club knows and never read hidden true values of an opponent (from M4).
-7. **Ratings.** Rating is one number per fighter for its class: round(5 × Σ ratingWeightsᵢ × statᵢ). Combat's attribute formula and lifecycle's centipoint formula are the same function. Ratings are comparable across classes by construction (weights sum to 1.00).
+7. **Ratings** (DELEGATED, D-Q). Rating is one integer per fighter for its class, from one function, `combatRating`: clamp(round(5 × Σ ratingWeightsᵢ × statᵢ), 1, 100) on the integer effective stats (1–20) that a fight receives, with the weights converted to basis points and rounded half away from zero. Fighter ratings and potentials, market wages, AI valuations, every screen and the balance harness's OVR all call it, so the displayed rating is the rating used. The lifecycle draft's centipoint form is retired. Ratings are comparable across classes by construction (weights sum to 1.00).
 
 **sys-id notes:** every id listed in phase 1 is kept unchanged. One id was added in this merge: **sys-chemistry** (D-D). The economy draft's working name "sys-market" is sys-transfers, and the lifecycle draft's "sys-aging" is part of sys-development. Nothing has been renamed.
 
@@ -145,7 +145,7 @@ Spellcraft, healing and nerve are learned, so they follow the mental curve (O11)
 | Reaction delay (s) | (0.30 − 0.01·d(AWR) − 0.005·d(CMP_eff) + pressure) × (1 + Σ reactionDelay mods), clamped to 0.15–0.6, then + seeded jitter of 0–2 ticks. pressure = 0.15 × (20 − CMP_eff) ÷ 19 while own HP < 35% | 3–12 ticks before jitter |
 | In-fight composure CMP_eff | CMP + Σ composure mods (captain aura, rally, Shaken, trait in-fight mods, enemy composure auras) | 1–20 |
 | HP regeneration | (hpRegenPct × maxHp + hpRegenFlat) per second, applied once per second as healing | — |
-| Rating (1–100) | round(5 × Σᵢ ratingWeightsᵢ × statᵢ), with `classes.json` ratingWeights summing to exactly 1.00 (leadership weight 0) | 1–100 |
+| Rating (1–100) | `combatRating` (D-Q): round(5 × Σᵢ ratingWeightsᵢ × statᵢ) on the integer effective stats, weights in basis points, rounded half away from zero; `classes.json` ratingWeights sum to exactly 1.00 (leadership weight 0). The same function gives potential (sys-fighters) | 1–100 |
 
 **Modifier sums.** All modifiers to one stat are added, then the stat's clamp applies. Sources: passive stat mods (static or conditional), auras (only the strongest of the same aura ability counts), statuses (stacking rules in sys-abilities), traits (summed per stat and capped at ±0.15 for fractions and ±8 composure points, `combat.json` derived.traitModCaps) and the captain. Conditional modifiers that name a target ("against enemies below 40% HP") are evaluated per hit.
 
@@ -157,9 +157,9 @@ Spellcraft, healing and nerve are learned, so they follow the mental curve (O11)
 
 **Edge cases:** attributes outside 1–20 are clamped at the fight boundary. Negative armor or ward from shredding stops at 0. Attack speed has a floor of 0.4.
 
-**Worked example (EXAMPLE).** An Oathguard with STR 12, AGI 9, PAC 11, TGH 14, PRE 9, ARC 6, SPI 5, WIL 10, CMP 13, LDR 11, AWR 8, DIS 10, human, no traits: max HP = trunc(1500 × 1.18) = **1770**; armor 60 + 8 = **68**; ward **45**; move 3.2 × 1.02 = 3.264 m/s = **163 mm per tick**; attack interval 1.3 ÷ 0.975 = **1.333 s**; Power = trunc(60 × 1.056) = **63**; crit **4%**; evade **0%**; tenacity **6%**; focus regeneration **2.5/s**; reaction delay 0.305 s = **6 ticks** (+0–2 jitter), 7 ticks below 35% HP; rating = round(5 × 11.97) = **60**.
+**Worked example (EXAMPLE).** An Oathguard with STR 12, AGI 9, PAC 11, TGH 14, PRE 9, ARC 6, SPI 5, WIL 10, CMP 13, LDR 11, AWR 8, DIS 10, human, no traits (balance pass 1 values: base HP 1,250, Power 72): max HP = trunc(1250 × 1.18) = **1475**; armor 60 + 8 = **68**; ward **45**; move 3.2 × 1.02 = 3.264 m/s = **163 mm per tick**; attack interval 1.3 ÷ 0.975 = **1.333 s**; Power = trunc(72 × 1.056) = **76**; crit **4%**; evade **0%**; tenacity **6%**; focus regeneration **2.5/s**; reaction delay 0.305 s = **6 ticks** (+0–2 jitter), 7 ticks below 35% HP; rating = round(5 × 11.97) = **60**.
 
-**Acceptance cases:** cs-001 to cs-003 (§9.1).
+**Acceptance cases:** cs-001 to cs-003, cmb-014 (§9.1).
 
 #### sys-arena: arena, sides and spawn points
 
@@ -234,7 +234,7 @@ Spellcraft, healing and nerve are learned, so they follow the mental curve (O11)
 
 **Status:** class count and kit structure REQUIRED (O8); the vocabulary and rules DELEGATED (D-G: two damage types cmb-q7, crowd-control rules cmb-q5, the unusual mechanics cmb-q10, class names cmb-q6). Every number is PROPOSED · TUNABLE in `abilities.json`, `classes.json` and `combat.json`.
 
-**Kit structure.** Every class has exactly one basic attack (`basic`), two actives (`a1`, `a2`, each with a cooldown and a focus cost) and one passive: 168 abilities in total. Learned abilities (M5) are FUTURE and would add slots.
+**Kit structure.** Every class has exactly one basic attack (`basic`), two actives (`a1`, `a2`, each with a cooldown and a focus cost) and one passive: 168 abilities in total. Learned abilities are M5 scope (R5, sys-academy); whether an academy-taught ability replaces a kit slot or adds one is owner question Q20.
 
 **Ability schema** (`abilities.json` → abilities[]; every field present on every ability): `id` (`<classId>_<slug>`), `classId`, `slot`, `kind`, `name`, `description` (player-facing, with its numbers), `iconId`, `tags`, `cooldownS`, `startCooldownS`, `focusCost` (charged at release), `castTimeS` (null for basic), `channel` (duration, tick interval, mobile, move-speed multiplier), `rangeM` (max gap at start, +0.4 m leeway at release), `target` (`enemy`, `ally`, `ally_or_self`, `self`), `approach` (true: move into range; false: the rule skips with `out_of_range`), `order` (`target_first` or `self_first`), `delivery` (`instant`, `projectile`, `dash`, `leap`; projectiles home and cannot miss, but evade applies), `area` (circle, cone 60/90/120/180°, or line; centre target or self; affects enemies, allies, allies including self, or both; a unit is inside if its centre is within the shape expanded by its radius; cone tests use `combat.json` coneHalfAngleCos), `effects`, `allyEffects`, `selfEffects`, and `passive` (static and conditional stat mods, an optional aura, triggers).
 
@@ -294,11 +294,11 @@ Spellcraft, healing and nerve are learned, so they follow the mental curve (O11)
 
 **Validation** (at load): every referenced status, stat, predicate, trigger, amount stat and effect type exists; hard-control durations ≤ 2.5 s; magnitudes ≤ the status cap; times are whole ticks; distances whole centimetres; actives have cooldown > 0 and focus > 0; self-target abilities never approach; `both` areas have ally effects; cone angles are in the table.
 
-**Worked example (EXAMPLE): Behead.** A Headsman with STR 14 and PRE 10 has Power trunc(115 × 1.144) = 131. Behead on an Oathguard at 25% HP with armor 68, no crit, variance +1.00%: 262.00 → × 2 (target below 30%) = 524.00 → × 1.01 = 529.24 → × 100/168 = 315.02 → **315 damage**. If it downs the Oathguard, Behead's cooldown resets.
+**Worked example (EXAMPLE): Behead** (balance pass 1: Headsman base Power 140). A Headsman with STR 14 and PRE 10 has Power trunc(140 × 1.144) = 160. Behead on the worked-example Oathguard at trunc(1475 ÷ 4) = 368 HP (24.9%) with armor 68, no crit, variance +1.00%: 320.00 → × 2 (target below 30%) = 640.00 → × 1.01 = 646.40 → × 100/168 = 384.76 → **384 damage**. If it downs the Oathguard, Behead's cooldown resets.
 
 **The 42 classes (content).** `classes.json` classes[] is the catalog: id, name, flavor and description; `archetypes` (one, or two for hybrids, of `tank`, `melee`, `ranged`, `controller`, `healer`, displayed as Tank, Melee DPS, Ranged DPS, Controller, Healer); `hybridPair`; `roleTags`; `affinityGroup` (generation only); `complexity`; `preferredBand` and `startingRow`; `damageProfile`; `base` values at all attributes 10; `powerAttrs` and `supportAttrs`; `ratingWeights`; `statEmphasis`; `abilities`; `presetIds` and `defaultPresetId`. Kits and numbers are in `abilities.json`, which document 04 reads for class cards.
 
-Archetype baselines at all attributes 10 (averages after the draft's fight-length pass): Tanks HP 1,492, armor 56, ward 42, Power 58.5, interval 1.28 s, move 3.22 m/s. Melee DPS HP 1,050, armor 28, Power 80.8, 1.03 s, 3.58 m/s. Ranged DPS HP 800, armor 15, Power 78, 1.19 s, 3.4 m/s. Controllers HP 853, ward 33, Power 56, 1.2 s. Healers HP 872, Power 39, Support 95.8. Hybrids HP 1,145, Power 59.6, Support 35.4.
+Archetype baselines at all attributes 10 (averages of `classes.json` base values after balance pass 1, §8.2): Tanks HP 1,244, armor 56, ward 42, Power 70.0, interval 1.28 s, move 3.22 m/s. Melee DPS HP 1,085, armor 28, Power 104.3, 1.03 s, 3.58 m/s. Ranged DPS HP 810, armor 15, Power 94.5, 1.19 s, 3.4 m/s. Controllers HP 853, ward 33, Power 98.0, 1.2 s. Healers HP 880, Power 53.8, Support 110.2. Hybrids HP 1,134, Power 80.2, Support 36.2.
 
 Identities (each pure archetype has six distinct jobs; each hybrid uses one ability from each side of its pair):
 - **Tanks:** Oathguard (interceptor), Gongbearer (taunter), Scarhide (regenerating bruiser), Briarback (thorns), Bladeturner (evasive duelist), Phalanx Sergeant (shield wall).
@@ -330,7 +330,7 @@ Identities (each pure archetype has six distinct jobs; each hybrid uses one abil
 
 #### sys-tactics: rule engine, presets and traces
 
-**Status:** rule format and engine DELEGATED (D-G, cmb-q9; R2, P-06, P-07); per-class presets selectable per fighter REQUIRED (O14). Editing is FUTURE (M3, sys-tactics-editor).
+**Status:** rule format and engine DELEGATED (D-G, cmb-q9; R2, P-06, P-07); per-class presets selectable per fighter as the whole M1 tactics scope are DELEGATED (D-N; the owner's R2 editing need is unchanged). Editing is M3 scope (sys-tactics-editor).
 
 **Rule format.** A rule list is an ordered list of up to 8 rules (M1 presets use 2–4) plus one stance:
 
@@ -359,7 +359,7 @@ Every condition may carry NOT. Thresholds use 10% steps. The JSON shape is `{ id
 
 Rules never skip, reorder or misfire because of stats or traits (P-06). Only visible statuses (taunt, stun, sleep, silence, displacement) override them, and each is named in the trace.
 
-**Presets** (O14). `tactics-presets.json` presets[] holds 105 presets (42 balanced, 33 aggressive, 30 protective; 297 rules). The shape is `{ id: <classId>_<style>, classId, style, name, summary, stance, rules[] }`. Every class has a `balanced` preset, which is its default, and 2–3 in total, with class-flavoured display names (e.g. "Bodyguard") and a plain-language `summary` for the lineup screen. EXAMPLE, Oathguard Balanced: R1 IF enemy_casting band=melee THEN Shield Bash ON casting_enemy ONLY in_range; R2 IF ally_targeted count=2 THEN Interpose ON most_targeted_ally; R3 IF ally_hp_below 50% THEN Interpose ON lowest_hp_ally; R4 IF always THEN Shield Bash ON nearest_enemy ONLY in_range; stance Aggressive.
+**Presets** (D-N). `tactics-presets.json` presets[] holds 105 presets (42 balanced, 33 aggressive, 30 protective; 295 rules after balance pass 1, which removed one rule from each War Drummer preset). The shape is `{ id: <classId>_<style>, classId, style, name, summary, stance, rules[] }`. Every class has a `balanced` preset, which is its default, and 2–3 in total, with class-flavoured display names (e.g. "Bodyguard") and a plain-language `summary` for the lineup screen. EXAMPLE, Oathguard Balanced: R1 IF enemy_casting band=melee THEN Shield Bash ON casting_enemy ONLY in_range; R2 IF ally_targeted count=2 THEN Interpose ON most_targeted_ally; R3 IF ally_hp_below 50% THEN Interpose ON lowest_hp_ally; R4 IF always THEN Shield Bash ON nearest_enemy ONLY in_range; stance Aggressive.
 
 **Preset selection in M1.** The player picks one preset per fighter on the lineup screen; the class default is pre-selected. AI managers select per fighter by the club's `tacticsStyle` (`clubs.json`), mapped to a preset style: aggressive → `aggressive`, steady → `balanced`, cautious → `protective`. The first preset of the class with that style (in `presetIds` order) is used, else the class default. This resolves the drafts' "stance tag versus style key" conflict without data changes (sys-ai-manager).
 
@@ -408,7 +408,7 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 2. **Rally:** the first time in a round that an ally other than the acting captain is downed while the acting captain stands, all standing allies become Rallied: composure + `rallyComposure` (A +3, B +2, C +1, D and E none) for 5 s, and allyDown-conditioned negative trait mods are suppressed. One use per round. An unused rally carries over to a successor captain. Rallying Voice multiplies the rally composure (truncated) and duration by 1.5.
 3. **Captain down:** the aura ends, and every ally is Shaken (composure −1 for 4 s). Steel Spine is immune.
 4. **Handover:** when Shaken ends, the acting captain becomes the vice-captain if fielded and standing, otherwise the standing ally with the highest CQ (ties: lower slot), at CQ − 10 for the rest of the round, with the grade recomputed.
-5. **Captain's target:** the `captain_target` selector follows the acting captain's committed target. This is the presets' focus-fire hook. FUTURE M2: calls go through the captain.
+5. **Captain's target:** the `captain_target` selector follows the acting captain's committed target. This is the presets' focus-fire hook. M2: calls go through the captain.
 6. **Cap:** captain-sourced modifiers change no combat quantity by more than 10%. +2 composure is +4% tenacity and about −0.01 s reaction delay.
 
 **Player information:** the captain marker is always shown. Reports show rallies, captain-down moments and handovers.
@@ -422,13 +422,13 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 **Procedure:**
 1. For round n = 1, 2, …: round seed = derive(match seed, "round", n). Reset HP, focus, cooldowns, statuses, shields, zones, positions and captaincy, then simulate (sys-fight-sim).
 2. Stop when a side has won a majority of `bestOf`: 2 of 3, or 3 of 5 in the Reckoning final. A round is never drawn.
-3. M1: lineup, captain, rows and presets are fixed for the whole match (open-010). FUTURE M3: tactics may change between rounds as new inputs.
+3. M1: lineup, captain, rows and presets are fixed for the whole match (open-010). M3: tactics may change between rounds as new inputs.
 
 **Output:** boundary contract 2.
 
 #### sys-match-report: event stream and explanations
 
-**Status:** PROPOSED (O12, P-22). M1 records at summary level; FUTURE M2 records at full level for the viewer.
+**Status:** PROPOSED (O12, P-22). M1 records at summary level; M2 records at full level for the viewer.
 
 **Envelope:** `SimEvent { seq, tick, type, unit?, target?, data? }` plus a round header (format, engine version, content hash, round seed, tick ms 50, frame every 2 ticks, arena in cm, units with side, fighter id, club id, class id, slot and captain flag).
 
@@ -438,7 +438,7 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 
 **Death summary** (per down): the credited fighter, the ability, the last three hits taken with their sources, active debuffs, and whether a heal or shield arrived in the last 2 s.
 
-**M1 match report content** (presentation in 04): score and per-round winner, duration and end reason (with the tiebreak step); a key-event timeline (downs with cause, interrupts, Deathward saves, rallies, overtime); per-fighter recap cards with rule-fire bars labelled by the preset's rules; "never fired" warnings; MVP data (damage, healing, downs); injuries and XP (from sys-injury and sys-development).
+**M1 match report content** (presentation in 04): score and per-round winner, duration and end reason (with the tiebreak step); a key-event timeline (downs with cause, interrupts, Deathward saves, rallies, overtime); per-fighter recap cards with rule-fire bars labelled by the preset's rules; "never fired" warnings; MVP data (damage, healing, downs); injuries and XP (from sys-injury and sys-development). **MVP as built** (PROPOSED · TUNABLE; presentation only): the fighter on the match winner's side with the highest score = damage dealt (to HP and to shields) + healing + shielding + 150 × downs inflicted + 50 × assists, summed over the match. The weights are `PROVISIONAL_MVP_DOWN_POINTS` and `PROVISIONAL_MVP_ASSIST_POINTS` in core/sim until `combat.json` gets a key (content request). The report's "What decided it" selection is a presentation heuristic specified in 04 ui-report.
 
 **Determinism** (T4, vis-009): the event hash is identical for identical inputs at a given level, and the round checksum is identical at every level.
 
@@ -446,7 +446,7 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 
 ### 3.2 Fighter lifecycle systems
 
-**Status for §3.2:** the shapes required by O3, O5, O6 and O11 are REQUIRED. The unused-fighter rule and training emphasis are DELEGATED (D-A), as are mental-decline scaling and the kept races (D-B), M1 chemistry (D-D), magnitude caps (D-F), rookie counts (D-H) and AI captain timing (D-I). Every other rule is PROPOSED, and every number is PROPOSED · TUNABLE in `races.json`, `traits.json`, `names.json` and `development.json`. The soak figures quoted come from a simplified model of 24 clubs, not from the real sim. They must be re-run at 48 clubs (§8.3).
+**Status for §3.2:** the shapes required by O5, O6 and O11 are REQUIRED, and O3's no-XP rule for unused academy call-ups. Extending that rule to every unused roster fighter, and training emphasis, are DELEGATED (D-A), as are mental-decline scaling and the kept races (D-B, a departure from O11's literal wording), M1 chemistry (D-D), magnitude caps (D-F), rookie counts (D-H), AI captain timing (D-I), the season-1 Trials Day class (D-P), the one rating formula (D-Q), the automatic interim captain (D-S) and effectiveness-driven retirement (D-T). Every other rule is PROPOSED, and every number is PROPOSED · TUNABLE in `races.json`, `traits.json`, `names.json` and `development.json`. Observed figures now come from the real sim at 48 clubs (§8.3); figures still marked "soak model" are the lifecycle draft's 24-club estimates.
 
 #### sys-races: races and lifespan scaling
 
@@ -454,20 +454,22 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 
 **One clock for every age rule** (O11). Human-age = age × 80 ÷ lifespan (in tenths; 03 §1). A human peaks physically at 28; an elf (lifespan 120) at 42. Every per-season rate (development clocks, wear, retirement conversion) is multiplied by k = 80 ÷ lifespan, so each phase of a career lasts lifespan ÷ 80 times as many seasons as a human's.
 
-| Race | Lifespan | k | Debut age | Physical peak (plateau) | Physical decline from | Mental decline from (D-B) | Injury chance × | Recovery × | Typical career seasons (p10 / median / p90) |
+| Race | Lifespan | k | Debut age | Physical peak (plateau) | Physical decline from | Mental decline from (D-B) | Injury chance × | Recovery × | Retirement forced at (human-age 58, D-T) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Human | 80 | 1.000 | 17–21 | 28 (28–30) | 31 | 60 | 1.00 | 1.00 | 15 / 18 / 22 |
-| Elf | 120 | 0.667 | 28–33 | 42 (42–46) | 47 | 90 | 1.25 | 1.20 | 20 / 25 / 30 |
-| Dwarf | 72 | 1.111 | 16–19 | 25 (26–27) | 28 | 54 | 0.80 | 0.90 | 13 / 17 / 20 |
-| Orc | 64 | 1.250 | 16–18 | 22 (23–24) | 25 | 48 | 0.85 | 0.85 | 11 / 13 / 16 |
-| Ashkin (original race) | 52 | 1.538 | 16–17 | 18 (19–20) | 21 | 39 | 0.85 | 0.80 | 6 / 9 / 11 |
+| Human | 80 | 1.000 | 17–21 | 28 (28–30) | 31 | 60 | 1.00 | 1.00 | 58 |
+| Elf | 120 | 0.667 | 28–33 | 42 (42–46) | 47 | 90 | 1.25 | 1.20 | 87 |
+| Dwarf | 72 | 1.111 | 16–19 | 25 (26–27) | 28 | 54 | 0.80 | 0.90 | 52.2 |
+| Orc | 64 | 1.250 | 16–18 | 22 (23–24) | 25 | 48 | 0.85 | 0.85 | 46.4 |
+| Ashkin (original race) | 52 | 1.538 | 16–17 | 18 (19–20) | 21 | 39 | 0.85 | 0.80 | 37.7 |
+
+The last column is the real age at human-age 58 (58 × lifespan ÷ 80). Career length now depends on the class as well as the race (D-T): in the 48-club measurement (2 seeds × 20 seasons, §8.3) the median retirement human-age was 40.0 for every race except dwarves (41.1) and elves (39.0), which is real age 40 for a human, 60 for an elf, 36 for a dwarf, 32 for an orc and 26 for an Ashkin.
 
 **Identities (PROPOSED; values in `races.json`):** tendencies are cap offsets in stat points, at most ±4 per stat by rule (D-F), and at most ±1.6 in the data.
 - **Human:** no tendencies. *Adaptable:* training emphasis works 1.5× as strongly.
 - **Elf:** agile, precise, aware; frail (tgh −1.6, str −1.2); mental growth ×1.1. The slowest climb and the longest prime, the most injuries and the slowest healing. Long elf careers are kept (D-B).
 - **Dwarf:** shorter-lived than humans (the literal reading of O11, PROPOSED C-2); tough and composed, slow (pac −1.6); physical decline ×0.85; the lowest injury rate.
-- **Orc:** strong and tough (str +1.6), less disciplined; physical growth ×1.05, mental ×0.9; useful almost at once, done by 30.
-- **Ashkin:** original race (kept, D-B): fast, weak captains; they debut at the age floor of 16, which already equals human-age 24.6, so they arrive near their peak, last about 8 seasons, and decline the most steeply.
+- **Orc:** strong and tough (str +1.6), less disciplined; physical growth ×1.05, mental ×0.9; useful almost at once, and in a physically weighted class usually done by about 31 (human-age 39, D-T).
+- **Ashkin:** original race (kept, D-B): fast, weak captains; they debut at the age floor of 16, which already equals human-age 24.6, so they arrive near their peak and decline the most steeply; at the D-T median (human-age 40, real age 26) an Ashkin career lasts about 10 seasons.
 
 **Invariants** (validator; O11): a race longer-lived than humans must not have a lower injury-chance multiplier than humans, and a shorter-lived race must not have a higher one; among shorter-lived races the order is free. Every debut age is ≥ 16 (PROPOSED C-13). Every race lists all 12 stat ids. A tendency above ±4 is rejected.
 
@@ -491,7 +493,7 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 9. **Veteran history** (older than a sampled debut age): proSeasons = age − debut; careerRounds = round(proSeasons × 40 × U); each pro season rolls a 1.6% scar chance; acquired-trait thresholds are checked once.
 10. **Traits** (sys-traits roll), then **name**.
 
-**Effective stats** (the single function used by fight setup, rating and captaincy): developed100ᵢ = cap100ᵢ × M_g(D_g + bloomᵢ) (interpolated maturity curve, truncated); base100ᵢ = max(100, developed100ᵢ − wear100ᵢ); eff100ᵢ = base100ᵢ + 100 × (trait stat adds + status stat mods + chemistry composure on cmp + contextStat if the match qualifies); the displayed and fight value is clamp(floor(eff100ᵢ ÷ 100), 1, 20). **Rating** = clamp(round(Σ wᵢ × eff100ᵢ ÷ Σ wᵢ ÷ 20), 1, 100) with the class's ratingWeights. **Potential** (displayed) is the same formula with every stat at its cap, no wear, and only permanent modifiers (physique traits and scars), so a scar lowers potential (the "injury" event change allowed by P-12).
+**Effective stats** (the single function used by fight setup, rating and captaincy): developed100ᵢ = cap100ᵢ × M_g(D_g + bloomᵢ) (interpolated maturity curve, truncated); base100ᵢ = max(100, developed100ᵢ − wear100ᵢ); eff100ᵢ = base100ᵢ + 100 × (trait stat adds + status stat mods + chemistry composure on cmp + contextStat if the match qualifies); the displayed and fight value is clamp(floor(eff100ᵢ ÷ 100), 1, 20). **Rating** = `combatRating` (D-Q, boundary contract 7) of the displayed integer stats clamp(floor(eff100ᵢ ÷ 100), 1, 20), so the rating shown is the rating combat and the market use; the lifecycle draft's centipoint form is retired (flooring puts potential about 2.5 below the draft's P on average). **Potential** (displayed) is the same function with every stat at its cap, no wear, and only permanent modifiers (physique traits and scars), so a scar lowers potential (the "injury" event change allowed by P-12).
 
 **Maturity curves** (fraction of cap by development clock D in human-years; `development.json` maturityCurve):
 
@@ -514,30 +516,31 @@ Physical also has points at 17 = .55, 19 = .65, 21 = .745, 23 = .83, 25 = .905 a
 
 **Worked example (EXAMPLE):** an Oathguard (statEmphasis tgh 2.0, str 1.27, arc 0.5) with P = 70: offsets before recentring are tgh +2.0, str +0.54, arc −1.0; the rating-weighted mean is about +0.6, so after recentring they are tgh +1.4, str −0.06, arc −1.6. The tgh cap is 14.0 + 1.4 = 15.4 points; a dwarf adds +1.6, giving 1,700 centipoints. At D_physical = 22, tgh = 1,700 × 0.79 = 1,343, which shows as **13**.
 
-**Acceptance cases:** gen-001 to gen-005 (§9.2).
+**Acceptance cases:** gen-001 to gen-005, intake-001, intake-002 (§9.2).
 
 #### sys-youth-intake: rookies each season
 
-**Status:** counts DELEGATED (D-H, agreed between the lifecycle and economy drafts); trials day per P-18.
+**Status:** counts DELEGATED (D-H, agreed between the lifecycle and economy drafts; base tuned to 0.75 per club in m1/fix-tuning); the season-1 class DELEGATED (D-P); trials day per P-18.
 
 **Procedure** (season-end step 13, next-season setup):
-1. rookies = clamp(round(clubs × 0.6) + retirementsThisSeason, round(clubs × 0.5), round(clubs × 1.6)). retirementsThisSeason counts retirements and career-ending injuries, and **not** unsigned free agents who left the league, which would feed back into itself. With 48 clubs this is 29 + retirements, between 24 and 77. About 40 retirements a season give about 70 rookies.
+1. rookies = clamp(round(clubs × 0.75) + retirementsThisSeason, round(clubs × 0.5), round(clubs × 1.6)) (`development.json` generation.intake basePerClub 0.75). retirementsThisSeason counts retirements and career-ending injuries, and **not** unsigned free agents who left the league, which would feed back into itself. With 48 clubs this is 36 + retirements, between 24 and 77. In the 20-season soak (seed `soak-1`) 1–23 retirements a season gave 37–59 rookies.
+   **Season 1 (D-P):** a new career has no preceding season end, so world creation generates a Trials Day class of **exactly one rookie per club** (48) with the normal rookie generator; the intake formula applies from season 2.
 2. For each rookie: race by `intakeWeight` (human 36, orc 20, dwarf 17, Ashkin 14, elf 13), age uniform in the race's debut range, quality shift 0, then sys-fighters generation.
 3. Trials day (sys-transfers): each club receives floor(rookies ÷ 48), and the remainder goes one each to clubs drawn by lot. Rookie count and quality never depend on standings, so there is no tanking incentive.
 
-**Why these values keep the pool healthy (D-H):** intake replaces every retirement and adds about 0.6 fighters per club per season. Unsigned fighters leave after 2 consecutive unsigned season ends (sys-development). The free-agent pool therefore settles at a size set by expiries and leavers, inside the economy's targets (100–300 at P1; ≥ 60 in season with ≥ 5 per role). Journeymen fill any in-season shortfall. World generation adds **2.5 free agents per club** (120 at 48 clubs; D-C) so the first P1 market has choices in every tier. If the 48-club soak shows the P1 pool outside 100–300, tune `basePerClub` first (0.3–1.0), then AI roster slack (§8.4).
+**Why these values keep the pool healthy (D-H):** intake replaces every retirement and adds about 0.75 fighters per club per season. Unsigned fighters leave after 2 consecutive unsigned season ends (sys-development). The free-agent pool therefore settles at a size set by expiries and leavers, inside the economy's targets (100–300 at P1; ≥ 60 in season with ≥ 5 per role). Journeymen fill any in-season shortfall. World generation adds **2.5 free agents per club** (120 at 48 clubs; D-C) so the first P1 market has choices in every tier. The 48-club soak measured a P1 pool of 103–217 over 20 seasons and an in-season minimum of 62 (§8.4); if it leaves 100–300, tune `basePerClub` first (0.3–1.0), then AI roster slack.
 
 **Population mix (soak target):** humans 34–40%, elves 16–21% (above their intake share, because elves stay longer), dwarves 13–20%, orcs 18–21%, Ashkin 6–12%.
 
 #### sys-development: XP, growth toward potential, training emphasis, trend
 
-**Status:** "XP comes from playing rounds and drives growth toward potential" and "an unused fighter gains no XP" are REQUIRED (O3, P-12 shape). **A roster fighter who plays no rounds gets 0 XP and 0 development** (DELEGATED, D-A: the lifecycle draft's 20% development floor is rejected). Training emphasis as a standing setting that only redistributes growth is DELEGATED (D-A). The model and numbers are PROPOSED · TUNABLE (`development.json` xp, developmentClock, training, trend).
+**Status:** "XP comes from playing rounds and drives growth toward potential" is REQUIRED (P-12 shape), and so is O3's rule that a called-up academy fighter not used in matches gains no XP. **A roster fighter who plays no rounds gets 0 XP and 0 development** (DELEGATED, D-A): this *extends* the owner's academy call-up rule to every unused roster fighter, which O3 does not state, and rejects the lifecycle draft's 20% development floor. Training emphasis as a standing setting that only redistributes growth is DELEGATED (D-A). The model and numbers are PROPOSED · TUNABLE (`development.json` xp, developmentClock, training, trend).
 
 **Purpose:** playing time is the development lever, so lineup choices are development choices. Pace and traits make every prospect a bet, and growth is visible every season.
 
 **XP per round started** (committed with the match result): 10 for starting the round; +3 if the fighter's side won the round; +1 per down credited, at most +2; +1 if not downed. ×1.25 in Reckoning matches, then trait XP multipliers, floored once at the end. Maximum 16 per round (20 in the Reckoning). A fighter who did not start the round gets **0**: reserves, injured fighters, free agents, and from M5 called-up academy fighters who are not fielded.
 
-**Usage** (D-A): usage = min(1, seasonXp ÷ 360). 360 XP is about 70% of a full-time starter's league XP (16 matches × about 2.5 rounds × about 12.8 XP), so starting about 70% of rounds develops at full speed. Because of the cap, splitting rounds between two prospects develops them better in total than starting one in every round, and the player chooses between winning now and developing. A fighter with 0 XP does not develop at all, but still ages and wears (O3, D-A).
+**Usage** (D-A): usage = min(1, seasonXp ÷ 360). 360 XP is about 70% of a full-time starter's league XP (16 matches × about 2.5 rounds × about 12.8 XP), so starting about 70% of rounds develops at full speed. Because of the cap, splitting rounds between two prospects develops them better in total than starting one in every round, and the player chooses between winning now and developing. A fighter with 0 XP does not develop at all, but still ages and wears (D-A, extending O3).
 
 **Training emphasis** (D-A; `development.json` training). A standing per-fighter setting, **Balanced, Body or Mind**, changeable any week outside a match. It is not a weekly chore. It shapes **which** stats the earned growth goes to, never **how much**: with fBody and fMind the shares of the season's 23 weeks spent under each emphasis, and a = the product of emphasis-strength multipliers (human Adaptable 1.5, Regimented 1.5, Set in Their Ways 0; clamped to 0–2):
 - physical multiplier = 1 + a × 0.20 × (fBody − fMind)
@@ -560,22 +563,24 @@ The two multipliers always sum to 2, so emphasis moves development between the p
 
 **Edge cases:** a fighter who changes clubs mid-season keeps his season XP, and mentoring is pro-rated per club. Injured weeks earn no XP. An emphasis set while injured still counts toward fBody and fMind. A cap lowered by a scar is fine; developed values follow the new cap.
 
-**FUTURE hooks:** rule slots (M3, P-07) = clamp(4 + floor(careerRounds ÷ 100), 4, 8) + trait slots, maximum 12. Academy (M5): program XP is added to seasonXp; on call-up academy XP stops and accrued XP is kept (open-003). Fog (M4): pace hidden until one season at the club; the trend stays visible.
+**Later-milestone hooks:** rule slots (M3, P-07) = clamp(4 + floor(careerRounds ÷ 100), 4, 8) + trait slots, maximum 12. Academy (M5): program XP is added to seasonXp; on call-up academy XP stops and accrued XP is kept (open-003). Fog (M4): pace hidden until one season at the club; the trend stays visible.
 
 **Worked example (EXAMPLE): four careers.** Oathguard template, P 70, steady pace, starting every round, headline caps STR 16 and CMP 14:
 
-| Fighter | Age (human-age) | STR shown | CMP shown | Rating / potential | Retirement chance |
-| --- | --- | --- | --- | --- | --- |
-| Human | 18 (18.0) debut | 9 | 7 | 43 / 72 | 0% |
-| Human | 28 (28.0) | 16 | 11 | 69 / 72 | 0% |
-| Human | 34 (34.0) | 14 (wear 1.2) | 13 | 67 / 72 | 12.0% |
-| Human | 40 (40.0) | 9 (wear 6.2) | 14 | 50 / 72 | 73.0% |
-| Elf | 30 (20.0) | 11 | 9 | 48 / 70 | 0% |
-| Elf | 42 (28.0) | 16 | 12 | 68 / 70 | 0% |
-| Orc | 20 (25.0) | 14 | 10 | 65 / 74 | 0% |
-| Orc | 26 (32.5) | 15 (wear 0.38) | 12 | 71 / 74 | 6.0% |
-| Ashkin | 16 (24.6) debut | 14 | 10 | 62 / 73 | 0% |
-| Ashkin | 24 (36.9) | 13 (wear 2.46) | 13 | 63 / 73 | 39.8% |
+| Fighter | Age (human-age) | STR shown | CMP shown |
+| --- | --- | --- | --- |
+| Human | 18 (18.0) debut | 9 | 7 |
+| Human | 28 (28.0) | 16 | 11 |
+| Human | 34 (34.0) | 14 (wear 1.2) | 13 |
+| Human | 40 (40.0) | 9 (wear 6.2) | 14 |
+| Elf | 30 (20.0) | 11 | 9 |
+| Elf | 42 (28.0) | 16 | 12 |
+| Orc | 20 (25.0) | 14 | 10 |
+| Orc | 26 (32.5) | 15 (wear 0.38) | 12 |
+| Ashkin | 16 (24.6) debut | 14 | 10 |
+| Ashkin | 24 (36.9) | 13 (wear 2.46) | 13 |
+
+v0.3 drops the draft's rating/potential and retirement columns: the ratings came from the retired centipoint formula and need the full stat set (D-Q), and retirement no longer depends on age alone (D-T; see the worked example in "aging, decline and retirement").
 
 The human at 34 has D 34, so developed STR is 16.00; wear 0.3 + 0.4 + 0.5 = 1.2 gives 14.80, shown as 14. A human who debuts at 18 (D = 18) and **never plays** (usage 0, D-A) still has D = 18 at age 28: STR = 16 × 0.60 = 9.6, shown as 9 ("potential reached" about 60%). A slow-paced human who plays every round reaches D 25.5 at 28 (STR 14.76) and hits his cap only around 31, just as decline starts.
 
@@ -583,26 +588,29 @@ The human at 34 has D 34, so developed STR is 16.00; wear 0.3 + 0.4 + 0.5 = 1.2 
 
 #### sys-development: aging, decline and retirement
 
-**Status:** the human peak of 28 scaled by lifespan, and mental decline from about 60, are REQUIRED (O11). Scaling the mental-decline age by lifespan is DELEGATED (D-B: human 60, elf 90, dwarf 54, orc 48, Ashkin 39; `development.json` decline.mentalDeclineScalesWithLifespan = true). Retirement on by default is PROPOSED (P-10).
+**Status:** the human peak of 28 scaled by lifespan is REQUIRED (O11), and so is the owner's "Mental skills don't decline until ~60" (O11 states no race scaling for mental decline). **Scaling the mental-decline age by lifespan is a departure from that literal wording**, DELEGATED under D-B and pending owner confirmation (human 60, elf 90, dwarf 54, orc 48, Ashkin 39; `development.json` decline.mentalDeclineScalesWithLifespan = true). Retirement driven by effectiveness and forced at human-age 58 is DELEGATED (D-T). Retirement on by default is PROPOSED (P-10).
 
 **Decline (wear)** in stat points per human-year, looked up at floor(human-age during the season) − any trait declineShift, then × k × race.declineMult[g] × trait decline multipliers: physical 0 up to 30, then 0.3 (31), 0.4 (32), 0.5 (33), 0.6 (34), 0.7 (35), 0.8 (36), 0.9 (37), 1.0 from 38. Mental: 0 before human-age 60, 0.1 per human-year at 60–64, 0.2 at 65–69, 0.3 from 70. With scaling, human-age is used for every race, so mental decline never touches a playing career. Cumulative human physical wear: 1.2 points by 34, 4.5 by 37, 6.2 by 40.
 
 **Retirement** (stream `retirement`):
-1. **Chance** (computed live all season and shown on the card): 0 below human-age 31; 100% at human-age ≥ 41, with a career-ending injury, or in a final season; otherwise p = 1 − (1 − h)^k with h by floor(human-age): 31 3%, 32 6%, 33 10%, 34 15%, 35 22%, 36 31%, 37 42%, 38 55%, 39 70%, 40 85%. The conversion is a precomputed basis-point table per (race, human-age).
-2. **Modifiers**, in this order. Multiply: usage ≥ 0.75 → ×0.8; usage ≤ 0.30 → ×1.5; no contract for next season → ×1.5; a contract running past this season → ×0.6; trait multipliers (Glory-Hungry 0.8, Weathers Well 0.85, Keeps the Edge 0.9, Idle Hands 1.2). Then add 3 points per scar, and 5 points if average physical wear is ≥ 2.4. Then clamp to 0–100%.
+1. **Chance** (D-T; computed live all season and shown on the card): 0 below human-age 31; 100% from human-age **58**, with a career-ending injury, or in a final season; otherwise **p = 1 − (1 − hDrop) × (1 − hAge)**.
+   - hDrop (per season) is a step table on the drop from the fighter's career-peak rating to his current rating (`development.json` retirement.hazardByRatingDrop): drop ≥ 5 → 0.3%, ≥ 8 → 1%, ≥ 10 → 4%, ≥ 12 → 8%, ≥ 14 → 13%, ≥ 16 → 19%, ≥ 19 → 29%, ≥ 22 → 41%, ≥ 26 → 60%, ≥ 30 → 80%. Physical decline lowers the rating of a physically weighted class, so it shows up here.
+   - hAge = 1 − (1 − h)^k, with h a step table on the human-years past the physical peak of 30 (`hazardPerHumanYearPastPeak`): 1–9 years 0.2%, 10–14 0.8%, 15–17 1.5%, 18–20 3%, 21–22 6%, 23–24 10%, 25 18%, 26 30%, 27 50%. The conversion is a precomputed basis-point table per (race, human-age).
+   Because mental stats hold until human-age 60, mentally weighted fighters keep their rating and play into their 40s and 50s, and physically weighted fighters usually retire in their late 30s.
+2. **Modifiers**, in this order. Multiply: usage ≥ 0.75 → ×0.8; usage ≤ 0.30 → ×1.5; no contract for next season → ×1.5; a contract running past this season → ×0.6; trait multipliers (Glory-Hungry 0.8, Weathers Well 0.85, Keeps the Edge 0.9, Idle Hands 1.2). Then add 3 points per scar (the heavy-wear add is 0 under D-T, because the rating drop already carries physical decline). Then clamp to 0–100%.
 3. **Final season:** at P1, a fighter whose chance (computed with usage 1.0 and the current contract) is ≥ 60% announces a final season. He gets status `final_season` (+1 composure, "farewell tour") and retires at season end for certain.
-4. **Roll** at season-end step 7. A retiring fighter's contract ends with no payout. He leaves a career record and, FUTURE, may become staff (P-10).
+4. **Roll** at season-end step 7. A retiring fighter's contract ends with no payout. He leaves a career record (an `alumni` entry, 05 §5) and, FUTURE (unscheduled), may become staff (P-10).
 5. **Leaving the league:** a free agent unsigned at 2 consecutive season ends leaves. This is pool maintenance, and it is not counted as a retirement for intake.
 
-**Distributions** (soak model, starters under contract; retirement age p10 / median / p90): human 33 / 36 / 39; elf 50 / 55 / 59; dwarf 30 / 33 / 36; orc 27 / 29 / 32; Ashkin 22 / 24 / 26.
+**Distributions** (real sim, 48 clubs, 2 seeds × 20 seasons, measured in m1/fix-core): median retirement human-age **40.0** (36.2 under the draft's age-only rule). By class weighting: mentally weighted 44.0, mixed 41.2, physically weighted 38.8. By race: human 40.0, elf 39.0, dwarf 41.1, orc 40.0, Ashkin 40.0.
 
 **Player information:** the age bar shows rising, prime and declining zones for the race; a retirement-chance badge from human-age 31; the final-season status; the P1 digest lists final-season announcements.
 
-**Edge cases:** retirement never happens mid-season; a career-ending injury removes the fighter from play at once, and he retires at season end. Pending offers to a retiring fighter are void. A free agent's chance uses "no contract next season". Human-age 40.9 is still below 41.
+**Edge cases:** retirement never happens mid-season; a career-ending injury removes the fighter from play at once, and he retires at season end. Pending offers to a retiring fighter are void. A free agent's chance uses "no contract next season". Human-age 57.9 is still below 58.
 
-**Worked example (EXAMPLE):** a dwarf aged 32 (human-age 35.5), usage 0.6, an expiring contract not renewed, 1 scar: h = 0.22, k = 1.111, so p = 1 − 0.78^1.111 = 24.1%; × 1.5 (no contract) = 36.2%; + 3 (scar) = **39.2%**.
+**Worked example (EXAMPLE):** a dwarf Bladeturner aged 32 (human-age 35.5) whose rating fell from a career peak of 66 to 54 (drop 12 → hDrop 8%), usage 0.6, an expiring contract not renewed, 1 scar. He is 5 human-years past the peak, so h = 0.2% and hAge = 1 − 0.998^1.111 = 0.22% (22 bp). p = 1 − 0.92 × 0.9978 = 8.20%; × 1.5 (no contract) = 12.30%; + 3 (scar) = **15.3%**. A human healer at human-age 47 who is 2 below his peak (hDrop 0; 17 years past the peak, h = 1.5%), with usage 0.5 and a contract running past this season, has p = 1.5% × 0.6 = **0.9%**, so he plays on.
 
-**Acceptance cases:** age-001 to age-003, ret-001 to ret-005 (§9.2).
+**Acceptance cases:** age-001 to age-003, ret-001 to ret-007 (§9.2).
 
 #### sys-injury: the injury ladder
 
@@ -621,7 +629,7 @@ The human at 34 has D 34, so developed STR is 16.00; wear 0.3 + 0.4 + 0.5 = 1.2 
 
 **Expected rates** (soak model, injuries per 40 rounds): human 0.95–1.04, elf 1.26–1.46, dwarf 0.64–0.77, orc 0.71–0.79, Ashkin 0.77–0.94. Serious injuries are about 6% of all injuries. A 24-club league sees about 3–5 scars and 0.1–0.35 career-ending injuries a season.
 
-**Player information:** *before* the match, on the lineup screen per fighter: "Injury risk: Average, about 2.1% per round, about 5% per match", the proneness label, and if At risk: "A serious injury could end this career: 0.07% this match", with the reason. *After*, in the match report: each injury with its round, cause ("downed by X after taking 118% of max HP"), severity, weeks out, return week and pre-match odds, and for scars the new trait and the potential change. *Also:* the digest, a roster medical column with countdowns, and the season review tally.
+**Player information:** *before* the match, on the lineup screen per fighter: the risk word and an **estimate** of the chance per round started, shown with ≈ and labelled as an estimate ("≈1.95% injury chance per round started, estimated from typical rounds (not exact)"). As built (PROPOSED · TUNABLE), the estimate is the per-round formula of step 1 for a *typical round* (downed 55%, damage taken 60% of max HP: `PROVISIONAL_TYPICAL_ROUND` in core/fighters), times the fighter's proneness factors, capped at 15%; the example is a human with tgh 10, human-age under 30 and no traits. The real chance depends on the round, so the estimate is never presented as exact. If At risk, the At-risk status text says a serious injury could end the career; core also estimates the per-match career-ending chance from 2.5 typical rounds per match, which M1 does not yet display (05 §12). *After*, in the match report: each injury with its round, cause ("downed by X after taking 118% of max HP"), severity, weeks out, return week and pre-match odds, and for scars the new trait and the potential change. *Also:* the digest, a roster medical column with countdowns, and the season review tally.
 
 **Edge cases:** a fighter downed in round 1 plays rounds 2 and 3. If two rounds roll injuries, only the first counts. An injury in the last tournament week carries into the off-season. A knock on a bye week is used up by that week's processing (M1 has no byes, but future cup weeks may). With no fit fighters, hired blades fill the lineup (sys-roster).
 
@@ -631,7 +639,7 @@ The human at 34 has D 34, so developed STR is 16.00; wear 0.3 + 0.4 + 0.5 = 1.2 
 
 #### sys-traits: Crusader-Kings-style traits
 
-**Status:** "randomized traits, about 80% positive and 20% negative, Crusader Kings style" is REQUIRED (O5). The taxonomy, catalog, roll and numbers are PROPOSED (open-012, C-6), informed by research Part D. The ±3 cap on stat adds is DELEGATED (D-F). Reveal tiers (M4) and academy teaching and curing (M5) are FUTURE.
+**Status:** "randomized traits, about 80% positive and 20% negative, Crusader Kings style" is REQUIRED (O5). The taxonomy, catalog, roll and numbers are PROPOSED (open-012, C-6), informed by research Part D. The ±3 cap on stat adds is DELEGATED (D-F). Reveal tiers are M4 scope, and academy teaching and curing of traits are M5 scope (R5, sys-academy).
 
 **Purpose:** fighters read as people at a glance, with one icon, one line and one number per trait. Traits shift numbers, development and relationships, and they **never** take control: no trait skips, reorders or overrides a rule (P-06).
 
@@ -657,7 +665,7 @@ Kinds (research D3): **boon** (pure positive), **edge** (net positive with a dra
 Monte Carlo over 100,000 fighters: mean 2.90 traits; realized positive share **79.9%** (each race 79.8–80.1%); 58% of fighters carry one negative, 42% none, none two.
 
 **Effect ownership** (every type in `traits.json` effectTypes names its owner; boundary contract 3):
-- *Management-applied* (before or outside the fight): `stat` (whole points, at most ±3 per stat per trait, D-F; included in setup stats), `contextStat` (tournament), devClock, declineMult, declineShift, xp, trainingEmphasis, injuryChance, recovery, scarChance, retirement, captaincy, mentor, the chemistry terms, ruleSlots (FUTURE), and economy hooks (fanAppeal, wageDemandMult, loyalty).
+- *Management-applied* (before or outside the fight): `stat` (whole points, at most ±3 per stat per trait, D-F; included in setup stats), `contextStat` (tournament), devClock, declineMult, declineShift, xp, trainingEmphasis, injuryChance, recovery, scarChance, retirement, captaincy, mentor, the chemistry terms, ruleSlots (M3), and economy hooks (fanAppeal, wageDemandMult, loyalty).
 - *Sim-applied* (sys-fight-traits): `combat`, `enemyComposureAura`, `shakenImmune`, `captainRally`. Eighteen traits carry them.
 
 **Gain and loss** (every rule is visible on the card, with progress or odds):
@@ -688,7 +696,7 @@ Physique traits never change. Limits: at most 4 rolled traits and 8 traits in to
 
 #### sys-captaincy: club captain, captaincy rating and consequences
 
-**Status:** "each club has a captain; stats, traits and skills make a fighter a good or bad captain" is REQUIRED (O6). The model is PROPOSED (open-011; C-11 captain-change costs and C-12 poor captains hurt). AI timing is DELEGATED (D-I). In-fight effects are in sys-fight-captain (DELEGATED, D-G).
+**Status:** "each club has a captain; stats, traits and skills make a fighter a good or bad captain" is REQUIRED (O6). The model is PROPOSED (open-011; C-11 captain-change costs and C-12 poor captains hurt). AI timing is DELEGATED (D-I). The automatic interim captain is DELEGATED (D-S). In-fight effects are in sys-fight-captain (DELEGATED, D-G).
 
 **Purpose:** choosing a captain is a real roster decision with visible upside (reliability in fights, development of the young, chemistry), and changing it or passing over a senior fighter has a price. Captaincy improves reliability, not damage.
 
@@ -700,26 +708,29 @@ Physique traits never change. Limits: at most 4 rolled traits and 8 traits in to
 
 | Grade | CQ | Aura (sim) | Rally (sim) | Mentoring (human-age ≤ 23) | Chemistry |
 | --- | --- | --- | --- | --- | --- |
-| A Inspiring | ≥ 85 | +2 composure | +3 composure, 5 s | ×1.08 | +2 |
-| B Steady | 70–84 | +1 | +2 | ×1.05 | +1 |
+| A Inspiring | ≥ 90 | +2 composure | +3 composure, 5 s | ×1.08 | +2 |
+| B Steady | 70–89 | +1 | +2 | ×1.05 | +1 |
 | C Adequate | 55–69 | 0 | +1 | ×1.02 | 0 |
 | D Shaky | 40–54 | 0 | none | ×1.00 | 0 |
 | E Divisive | < 40 | −1 | none | ×0.97 | −1 |
 
-**Player action:** appoint a club captain and optionally a vice-captain at any time outside a match. It is free and reversible until the next lineup lock.
+The grade-A threshold was raised from 85 to 90 in m1/fix-tuning, because 48% of AI captains reached grade A at 85 (target 10–35%).
+
+**Player action:** appoint a club captain and optionally a vice-captain at any time outside a match. It is free and reversible until the next lineup lock. Naming a captain is never required to play (D-S).
 
 **Resolution procedure:**
+0. **Automatic interim captain** (D-S, at each lineup lock, every club, player and AI alike): a club whose club captain is missing (none named, or no longer on the roster) gets the vice-captain if he is fit, else the fit starter in the club's current lineup with the highest CQ (ties: more matchweeks at the club, then fighter id), as club captain; a vice-captain who moves up leaves the vice role empty. The club's digest gets a `captain.interim` item naming him and the reason (vice or starter). There is no "choose a captain" blocker. A captain who is on the roster but unavailable keeps the role.
 1. **Lineup captain at lock:** the club captain if fielded; else the vice-captain if fielded; else the highest-CQ fielded fighter (ties: seniority, rating, fighter id). The fight setup receives that fighter's CQ, minus 10 unless he is the club captain.
 2. **Change evaluation at lock**, only if the club captain differs from the one at the previous lock:
    - **Snubbed** (6 matchweeks; −2 chemistry when fielded) goes to the previous captain if he is still at the club, fit, held the role ≥ 4 matchweeks, and no exemption applies. Exemptions: he is injured with ≥ 4 weeks left, in his final season, the change is made before MW1, or he is made vice-captain at the same lock.
    - **Passed Over** (6 matchweeks, or until made vice-captain; −1 chemistry) goes to each fit club-mate with human-age ≥ 30 and CQ ≥ the new captain's CQ + 15 who is not vice-captain.
-3. **Captain Departed:** a club captain who held the role ≥ 19 matchweeks and leaves mid-season (release, from M6 sale, or career-ending injury) gives the club `captain_departed` (4 matchweeks, −1 chemistry). The game names an interim captain by the AI rule and flags it in the digest.
+3. **Captain Departed:** a club captain who held the role ≥ 19 matchweeks and leaves mid-season (release, from M6 sale, or career-ending injury) gives the club `captain_departed` (4 matchweeks, −1 chemistry). The interim captain is named by rule 0 (D-S) and flagged in the digest.
 4. **Losing the Room:** a fit club captain not fielded in 4 or more consecutive matches gets −10 CQ until fielded again.
 5. Mentoring is applied in sys-development at season end, pro-rated by weeks in the role. Wore the Armband comes at 32 matchweeks as club captain.
 
 Changing captain A → B → A between two locks costs nothing, because only locks are compared.
 
-**AI captain timing** (D-I, agreed between the drafts): an AI club names its club captain at the season-end AI phase for the coming season (in effect at P1) as the highest CQ among its five projected starters (ties: seniority, rating, fighter id), and replaces an incumbent at that point only if a challenger exceeds him by ≥ 5 CQ (hysteresis, `economy.json` ai.captainHysteresis). Mid-season it changes captain only when the role falls vacant, or when the captain is injured with ≥ 4 weeks remaining (an exempt change). An AI club therefore never triggers Snubbed. Its vice-captain is the second-highest CQ among the projected starters, updated at each lineup lock.
+**AI captain timing** (D-I, agreed between the drafts): an AI club names its club captain at the season-end AI phase for the coming season (in effect at P1) as the highest CQ among its five projected starters (ties: seniority, rating, fighter id), and replaces an incumbent at that point only if a challenger exceeds him by ≥ 5 CQ (hysteresis, `economy.json` ai.captainHysteresis). Mid-season it changes captain only when the role falls vacant, or when the captain is injured with ≥ 4 weeks remaining (an exempt change). An AI club therefore never triggers Snubbed. Its vice-captain is the second-highest CQ among the projected starters, updated at each lineup lock. In season 1 the AI's season-start setup (captains, vice-captains, training emphasis, opening offers) runs for every club at world creation, before P1 (D-P).
 
 **Player information:** a captain panel ranks the roster by CQ with grades and a component breakdown, predicts the consequences of a change ("Rook Saltmere will be Snubbed: −2 chemistry for 6 weeks"), and states the in-fight effect at this grade. The lineup screen shows who leads if the captain falls.
 
@@ -727,7 +738,7 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 
 **Worked example (EXAMPLE):** a veteran with leadership 13, composure 13 (Quiet Steel included), 350 career rounds, 60 matchweeks at the club, rating 68 against a top-5 mean of 66, with Quiet Steel and Wore the Armband: 29.25 + 16.25 + 7 + 6.32 + 5.6 = 64.42 → 64, + 6 + 6 = **76, grade B**. A 22-year-old orc with Hot Blood (leadership 8, composure 6, 120 rounds, 19 weeks) scores 35 − 8 = **27, grade E**.
 
-**Acceptance cases:** cap-001 to cap-010 (§9.2).
+**Acceptance cases:** cap-001 to cap-011 (§9.2).
 
 #### sys-chemistry: lineup chemistry (new id)
 
@@ -771,7 +782,7 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 3. Tier 1 promotes no one and tier 3 relegates no one. A promotion playoff stays disabled (FUTURE).
 4. Flags are set for sys-finance (parachute, promotion grant, ascension) and sys-contracts (drop clause).
 
-**Prestige** (0–100; season-end step 4; `economy.json` prestige): delta = tableTerm + tournamentTerm + movementTerm − advancePenalty, where tableTerm = (17 − 2 × tierRank) × 3 ÷ 8 toward zero (rank 1 → +5, rank 16 → −5); the Reckoning gives +1 (QF exit), +2 (SF exit), +3 (finalist), +5 (champion); promotion +8; relegation −8; each Registry advance −5. new = clamp(old + delta − (old + delta − newTierBase) × 15%, 0, 100), toward zero. Prestige feeds the sponsor retainer, gate, asks and free-agent tie-breaks.
+**Prestige** (0–100; season-end step 4; `economy.json` prestige): delta = tableTerm + tournamentTerm + movementTerm − advancePenalty, where tableTerm = (17 − 2 × tierRank) × 3 ÷ 8 toward zero (rank 1 → +5, rank 16 → −5); the Reckoning gives +1 (QF exit), +2 (SF exit), +3 (finalist), +5 (champion); promotion +8; relegation −8; each Registry advance −5. new = clamp(old + delta − (old + delta − newTierBase) × 25%, 0, 100), the reversion term truncated toward zero (`reversionBp` 2,500 since m1/fix-tuning, up from 15%). Prestige feeds the sponsor retainer, gate, asks and free-agent tie-breaks.
 
 **Table prize** (paid at season end): floor10(tablePrizeTop × (17 − rank) ÷ 16), with tops 25,000 / 10,000 / 4,000.
 
@@ -787,14 +798,14 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 
 | Index | Week | What happens |
 | --- | --- | --- |
-| 1 | **P1 Trials Day** | Season and wage budgets shown; first central-grant installment credited at setup. Trials rookies exclusive to their club. Final-season announcements. The free-agent market opens with the AI's opening offers already pending |
+| 1 | **P1 Trials Day** | Season and wage budgets shown; first central-grant installment credited at setup. Trials rookies exclusive to their club (season 1: one per club, D-P). Final-season announcements. The free-agent market opens with the AI's opening offers already pending (season 1 too: the AI's season-start setup runs at world creation, D-P) |
 | 2–3 | P2, P3 | Market rounds, renewals; over-cap clubs release fighters (cap relief) |
 | 4 | **P4 Kick-off week** | The Kick off commit at the end of P4 (02 §3) |
 | 5–20 | MW1–MW16 | One fixture per club every week; MW5 and MW12 are cross-wing. Second central-grant installment at the MW8 processing. AI renewals begin at MW4 |
 | 21–23 | TW1 quarterfinal, TW2 semifinal, TW3 final | The Reckoning. Clubs with no fixture still pay wages and costs, and may "Advance to season end" |
 
-**Week processing** (one Continue; atomic for all clubs; in this order):
-1. Simulate every remaining fixture of the week. The player's match is already played (02 §3).
+**Week processing** (started by Play match in a week with an own fixture, otherwise by Continue; atomic for all clubs; in this order). **Season 1, P1 only (D-P):** before step 1, AI clubs sign their trials rookies (the only part of the AI's season-start setup not run at world creation).
+1. **Lock and play** (D-O): automatic interim captains where a captain is missing (sys-captaincy rule 0, D-S); lineup lock for every club; hired blades; then every fixture of the week is simulated, the player's included. M1 has no separate "play my match first" step: the player's Play match starts this processing.
 2. Record results: standings, the bracket, and with each match its XP and injury rolls (sys-development, sys-injury), plus the Green Nerves check.
 3. **Lifecycle weekly step:** injury and status countdowns, week-processing trait checks (Wore the Armband), captain streaks.
 4. **Income:** home gate, sponsor retainer installment, win bonuses, scheduled grant installment.
@@ -804,7 +815,7 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 8. **Free-agent decisions** (sys-transfers).
 9. **AI action phase**, clubs in tier then id order: renewals, releases, new offers, counter replies, training emphasis, and the lineup, captain choice and vice-captain for next week's fixture (sys-ai-manager).
 10. Free-agent pool top-up to its floors (sys-transfers).
-11. Advance the calendar, build the digest, autosave (open-016).
+11. Advance the calendar, build the digest, and commit: the whole week, the player's result included, is committed atomically and autosaved **before the match report opens** (D-O). The report reads the committed result, so there is no reroll by reloading (P-05, open-016).
 
 **Season-end processing** (a step, not a week: no wages, and it does not count toward debt weeks; AI clubs go through the same steps):
 1. Reckoning complete; placings fixed; titles recorded (Reckoning champion, Shield).
@@ -849,8 +860,8 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 **Status:** caps and the academy as a separate pool are REQUIRED (O2), interpreted per open-002. Hired blades follow open-006. Cap relief is DELEGATED (D-C, soft landings).
 
 - **Cap:** that of the tier the club plays in this season, from next-season setup. It is hard: an offer, trials signing or (from M5) call-up is refused if roster + pending offers + 1 > cap. The only legal over-cap state is the one relegation creates. Such a club may not add fighters, must be at or under the cap by the Kick off commit (the player) or the P4 AI phase (AI), and may release up to roster − cap fighters during P1–P4 with **no payout** (cap relief).
-- **Lineup lock:** 5 distinct roster fighters who are fit and were on the roster at the start of the week, plus a captain (sys-captaincy), a row and a preset each (O1, O6, O14, open-010). A fighter signed at week processing w can play from week w + 1; a trials rookie signed during P1 can play from MW1.
-- **Hired blades** (open-006): if fewer than 5 fit fighters exist at lock, the Charter Registry assigns generated fighters (sys-fighters, other generated kinds) at the tier band minimum. They are paid the tier minimum wage for that week, sit outside the cap, are labelled in the lineup and report, and leave after the match. The digest warns a week ahead when next week's fit count is 5 or fewer.
+- **Lineup lock:** 5 distinct roster fighters who are fit and were on the roster at the start of the week, a row and a preset each (O1, O6, D-N, open-010); the lineup captain follows sys-captaincy, and a missing club captain is filled automatically at lock (D-S), so a lineup is never blocked for want of a captain. A fighter signed at week processing w can play from week w + 1; a trials rookie signed during P1 can play from MW1.
+- **Hired blades** (open-006): if fewer than 5 fit fighters exist at lock, the Charter Registry assigns generated fighters (sys-fighters, other generated kinds) at the tier band minimum. They are paid the tier minimum wage (260 / 150 / 60) for that week, sit outside the cap, are labelled in the lineup and report, and leave after the match. The digest warns a week ahead when next week's fit count is 5 or fewer.
 - **Minimum roster:** none as a rule, because hired blades guarantee a lineup. AI clubs aim for at least 8.
 
 **Acceptance cases:** le-009, le-014, le-024 (§9.3).
@@ -866,9 +877,9 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 | Source | Rule | Values |
 | --- | --- | --- |
 | Central grant | By tier; 50% at setup (P1) and 50% at the MW8 processing; reduced by any Registry deduction | 82,000 / 34,000 / 14,000 |
-| Sponsor retainer | base × (10,000 + clamp(120 × (prestige − tierBase), −2,500, +3,500)) ÷ 10,000, in 23 equal weekly parts | 46,000 / 18,800 / 7,200 |
+| Sponsor retainer | base × (10,000 + clamp(60 × (prestige − tierBase), −1,500, +1,500)) ÷ 10,000, in 23 equal weekly parts | 46,000 / 18,800 / 7,200 |
 | Sponsor bonuses | Per match win (league and Reckoning); once for qualifying for the Reckoning | win 1,200 / 500 / 200; qualify 6,000 / 2,500 / 1,000 |
-| Gate (home fixtures) | gateBase × (10,000 + prestigeAdj + formAdj + fanAppealAdj) × stageBp ÷ 10⁸. prestigeAdj = 100 bp per prestige point over the tier base (−2,500 to +3,000); formAdj = −1,000 + 2,000 × wins ÷ matches this season before this fixture (0 before the first match); fanAppealAdj = +200 bp per fan-appeal trait point in the home lineup (max +1,000) | 9,250 / 3,700 / 1,400 per home match |
+| Gate (home fixtures) | gateBase × (10,000 + prestigeAdj + formAdj + fanAppealAdj) × stageBp ÷ 10⁸. prestigeAdj = 50 bp per prestige point over the tier base (−1,500 to +1,500); formAdj = −1,000 + 2,000 × wins ÷ matches this season before this fixture (0 before the first match); fanAppealAdj = +200 bp per fan-appeal trait point in the home lineup (max +1,000) | 9,250 / 3,700 / 1,400 per home match |
 | Table prize | floor10(top × (17 − rank) ÷ 16) | top 25,000 / 10,000 / 4,000 |
 | Reckoning prize | By round reached | champion 38,000 / 15,000 / 6,000 (finalist ½, SF ¼, QF ⅛) |
 | Promotion grant | Once, at setup of the first season in the new tier | 20,500 into Crown, 8,500 into Banner |
@@ -878,7 +889,7 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 
 **Season budget and wage budget** (fixed at next-season setup for the whole season; non-rolling):
 - **Season budget** SB = grant due this season (after deduction) + parachute + promotion grant + sponsor retainer + 8 × projected regular-season gate (formAdj 0, fanAppealAdj 0). It is shown on club cards and at P1.
-- **Wage budget per week** WB = floor((SB × (wageRatioBp + ascensionBp) + reserveContribution × 10,000) ÷ (10,000 × 23)). wageRatio is 8,000 / 7,800 / 7,600 bp; ascensionBp is +800 in the first season after promotion. reserveContribution = min(SB × 25%, max(0, balanceAtSetup − SB × 15%) × 50%), so savings, prize money included, buy more wage room next season, within a cap.
+- **Wage budget per week** WB = floor((SB × (wageRatioBp + ascensionBp) + reserveContribution × 10,000) ÷ (10,000 × 23)). wageRatio is 8,000 / 7,800 / 7,600 bp; ascensionBp is +800 in the first season after promotion. reserveContribution = min(SB × 10%, max(0, balanceAtSetup − SB × 15%) × 50%), so savings, prize money included, buy more wage room next season, within a cap (`reserveCapBp` 1,000 since m1/fix-tuning, down from 25%). balanceAtSetup is the balance before the setup's grant installment is credited (D-P).
 - **Commitment rule (hard).** A free-agent offer, trials signing or renewal is legal only if wageBill + pendingWages + newWage − replacedWage ≤ WB, or the change does not raise the bill, **and** balance − pendingSigningCosts ≥ signing cost. Both checks run at submission and again at resolution, where a failing offer is void. Releases are always allowed, and their payout may push the balance below 0.
 
 **Status ladder** (open-007; DELEGATED, D-C; clubs never fold; AI identical):
@@ -891,9 +902,9 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 
 **Player information** (O13, research C2.2 "costs shown where you spend"): the finance screen shows the balance; SB and its parts; WB as a bar (bill + pending ÷ WB); the projected end-of-season balance; the ledger by category and week; the status with its reason ("−497 ts after MW10 wages"); the Registry debt and next season's deduction. Every offer dialog shows the wage-budget room after signing and the signing cost.
 
-**Worked example (EXAMPLE; Banner club, prestige 50, balance 30,000 at setup):** retainer = 18,800 × 10,600 ÷ 10,000 = 19,928; gate = 3,700 × 10,500 ÷ 10,000 = 3,885 per home match, × 8 = 31,080; SB = 34,000 + 19,928 + 31,080 = **85,008**. Reserve floor 12,751; contribution = min(21,252, (30,000 − 12,751) × 50%) = 8,624. WB = floor((85,008 × 7,800 + 8,624 × 10,000) ÷ 230,000) = **3,257 ts per week**.
+**Worked example (EXAMPLE; Banner club, prestige 50 against the tier base 45, balance 30,000 at setup):** retainer = 18,800 × 10,300 ÷ 10,000 = 19,364; gate = 3,700 × 10,250 ÷ 10,000 = 3,792 per home match, × 8 = 30,336; SB = 34,000 + 19,364 + 30,336 = **83,700**. Reserve floor 12,555; contribution = min(8,370, (30,000 − 12,555) × 50% = 8,722) = 8,370. WB = floor((83,700 × 7,800 + 8,370 × 10,000) ÷ 230,000) = **3,202 ts per week**. The first grant installment (17,000) is then credited as its own ledger entry, so the balance reads 47,000 at P1. At par prestige and the default starting balance the WB is 7,454 / 2,960 / 1,138 (SB 202,000 / 82,400 / 32,400).
 
-**Acceptance cases:** le-015 to le-021, le-028 (§9.3).
+**Acceptance cases:** le-015 to le-021, le-028, le-030 (§9.3).
 
 #### sys-contracts: wages, lengths, renewals, releases, expiry
 
@@ -905,21 +916,23 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 
 **Market wage** (independent of club):
 - EQ = clamp(rating + min(potential − rating, 25) × potW(human-age) ÷ 10,000, 1, 100), with potW 4,000 bp up to human-age 23, 3,000 at 24, 2,000 at 25, 1,000 at 26–27, 0 from 28.
-- curve(EQ) = linear interpolation of anchors 200 × 2^((EQ − 50) ÷ 12): 50 → 200, 60 → 355, 70 → 635, 80 → 1,130, 90 → 2,015.
+- curve(EQ) = linear interpolation of anchors 160 × 2^((EQ − 50) ÷ 12) (0.8× the draft's curve since m1/fix-tuning, so rosters near the cap fit the wage budget): 50 → 160, 60 → 285, 70 → 510, 80 → 905, 90 → 1,610.
 - marketWage = floor5(curve(EQ) × (10,000 + ageAdj + traitAdj + roleDemandAdj + fanAppealAdj) ÷ 10,000).
 - ageAdj is a step table by human-age (32: −600, 33: −1,200, … 39+: −5,000), a market discount for coming decline. traitAdj is +150 per positive trait and −150 per negative (with overrides by id), clamped to ±1,500. fanAppealAdj is +300 per fan-appeal point. roleDemandAdj is per role, all 0 at start.
 
 **Ask** (one fighter, one club, one length): ask = clamp(floor5(marketWage × (10,000 + clamp(tierGap + prestige + length + greed + wageDemand + situation, −4,000, +6,000)) ÷ 10,000), club tier minimum wage, 4,000).
 - calibre is tier 1 if rating ≥ 62, tier 2 if rating ≥ 47, else tier 3. tierGap = +1,500 per tier the club sits below the fighter's calibre, and −500 per tier above it.
-- prestige = −30 bp per prestige point above the club's tier base (±600).
+- prestige = −20 bp per prestige point above the club's tier base (±400).
 - length = +500 per season of difference from the preferred length: 1 if human-age ≤ 24 and potential − rating ≥ 8; 3 if human-age ≥ 32; else 2.
 - greed = the fighter's greedBp, rolled −1,000 to +1,500 in steps of 100 (labels: Modest ≤ −400, Fair ≤ +700, Grasping above).
 - wageDemand = (wageDemandMult − 1) × 10,000 from traits.
 - situation applies to renewals only: +1,000 if he started < 25% of the club's matches this season; −500 if ≥ 60%; −300 after 3+ seasons at the club; −200 per loyalty trait point.
 
-The base is club-independent, so promotion **does not** inflate an existing squad's wage demands (research C2.7). Tier minimum wages are 200 / 110 / 60.
+The base is club-independent, so promotion **does not** inflate an existing squad's wage demands (research C2.7). Tier minimum wages are 260 / 150 / 60 (raised from 200 / 110 in m1/fix-tuning to keep the median wage stable).
 
 **Signing cost** (one-time, paid from the balance at signing): floor10(wage × remaining paid weeks × 10%). Trials rookies pay 0, and renewals 10% of the new guaranteed wages.
+
+**Rookie scale** (D-P): on Trials Day a rookie's ask from his own club is capped at max(tier minimum, floor5(tier minimum × 1.25)), that is 325 / 185 / 75 (`market.trialsDay.maxAskBpOfTierMinWage` 12,500). On the open market he asks normally.
 
 **Renewals:** allowed in any week of a contract's final season, by the holding club only, answered at once. The new terms start at season-end setup; meanwhile the old wage continues.
 
@@ -935,25 +948,25 @@ The base is club-independent, so promotion **does not** inflate an existing squa
 
 **Drop clause and tier minimum** (setup): every contract of a relegated club becomes max(new tier minimum, floor5(wage × 80%)). A contract below its club's tier minimum is raised to it (e.g. after promotion).
 
-**Worked example (EXAMPLE): Brannoc**, a human aged 23, rating 58, potential 64, Fair greed +400, with one positive and one negative trait. EQ = 58 + floor(6 × 0.4) = 60, so his market wage is **355**. His ask from a Banner club at prestige 50 for 2 seasons is 355 × (10,000 + 0 − 150 + 0 + 400) ÷ 10,000 = 363.9 → **360 ts per week**. A Muster club (prestige 20) is asked **420**, and a Crown club at prestige 70 is asked **350**. Signed at the P1 processing: 45 paid weeks, so the signing cost is **1,620**. An offer of 340 (ratio 9,444) draws a counter of **350**; 320 (ratio 8,888) is refused. Released while MW6 is the current week, with a contract to the end of next season: 37 weeks, so the payout is **6,660**.
+**Worked example (EXAMPLE): Brannoc**, a human aged 23, rating 58, potential 64, Fair greed +400, with one positive and one negative trait. EQ = 58 + floor(6 × 0.4) = 60, so his market wage is curve(60) = **285**. His ask from a Banner club at prestige 50 for 2 seasons is 285 × (10,000 + 0 − 100 + 0 + 400) ÷ 10,000 = 293.5 → floor5 → **290 ts per week**. A Muster club (prestige 20) is asked 285 × 11,900 ÷ 10,000 → **335** (tier gap +1,500), and a Crown club at prestige 70 is asked 285 × 9,900 ÷ 10,000 → **280** (tier gap −500; at or above the Crown minimum 260). Signed at the P1 processing: 45 paid weeks, so the signing cost is floor10(290 × 45 × 10%) = **1,300**. An offer of 270 (ratio 9,310) draws a counter of floor5((270 + 290) ÷ 2) = **280**; 255 (ratio 8,793) is refused. Released while MW6 is the current week, with a contract to the end of next season: 37 weeks, so the payout is floor10(290 × 37 × 50%) = **5,360**.
 
 **Acceptance cases:** le-010 to le-012, le-016, le-017, le-020 (§9.3).
 
 #### sys-transfers: the free-agent market
 
-**Status:** free agents only in M1 (O14), signable in any week (P-09). Resolution at week processing with reserved cap and wage room, and visible rival-offer counts, are DELEGATED (D-C). Pool targets and rookie counts are DELEGATED (D-C, D-H).
+**Status:** free agents only in M1 (D-N), signable in any week (P-09). Resolution at week processing with reserved cap and wage room, and visible rival-offer counts, are DELEGATED (D-C). Pool targets and rookie counts are DELEGATED (D-C, D-H).
 
 **Pool sources:** contracts expired at season end; released fighters; unsigned trials rookies (P1); world-generation free agents (**2.5 per club**, 120 at 48 clubs, D-C); journeymen generated to keep the pool at its floors. **Exits:** signing; retirement; leaving after 2 consecutive unsigned season ends.
 
 **Pool floors** (`economy.json` market.pool): at least **60** free agents in season with at least **5 per role** family. After step 10 of week processing, a pool below either floor is topped up with journeymen. The P1 pool is expected to be 100–300; this is a soak target, not a top-up rule.
 
-**Trials Day** (P-18): each club receives floor(rookies ÷ 48) of the season's rookies, and the remainder goes one each to clubs drawn by lot (stream `rookies`). They are exclusive to that club during P1, answer at once, and sign with **no signing cost**. AI clubs decide in the season-end AI phase; the player decides during P1. Unsigned trials rookies enter the pool at the P1 processing (step 7), before the AI acts.
+**Trials Day** (P-18): each club receives floor(rookies ÷ 48) of the season's rookies, and the remainder goes one each to clubs drawn by lot (stream `rookies`). They are exclusive to that club during P1, answer at once, ask at most the rookie scale (sys-contracts, D-P), and sign with **no signing cost**. AI clubs decide in the season-end AI phase (season 1: at the first P1 processing, D-P), and every AI trials signing is a 3-season deal; the player decides during P1. Unsigned trials rookies enter the pool at the P1 processing (step 7), before the AI acts. **Season 1** (D-P): exactly one rookie per club; the AI's opening offers were planned as if each club had already signed its rookie at his Trials Day ask, so they leave cap and wage room for him, and choosing a club withdraws the AI offers made for it, so the player makes that club's market decisions.
 
 **Offers:** a club has at most one pending offer per fighter `{wage, length, destination: roster (M1) or academy (M5)}`, and at most 6 pending offers in total. Pending offers count against the cap and the wage budget, and their signing costs against the balance, from the moment they are made, and can be withdrawn until processing. AI clubs make their offers in the AI action phase, so they are visible to the player all week as **"rival offers: n"** (counts, not amounts). The AI never sees the player's offers (P-04: never counter-build against the player).
 
 **Decision procedure** (week processing step 8; free agents by market wage descending, then id):
 1. For each offer, the required price is the fighter's ask for that club and length, or that club's valid counter price. Offers from clubs he has stopped dealing with are refused.
-2. score = offer × 10,000 ÷ required, + 500 if he would rank in that club's top 5 by rating (the starter bonus). Offers with offer ≥ required are acceptable.
+2. score = offer × 10,000 ÷ required, + 1,000 if he would rank in that club's top 5 by rating (the starter bonus, `market.starterBonusBp` 1,000 since m1/fix-tuning, up from 500). Offers with offer ≥ required are acceptable.
 3. Take the highest score among acceptable offers (ties: higher prestige, then higher tier, then lot). Re-check the cap, wage budget, cash and embargo. If the winner now fails, void it and take the next.
 4. Sign: create the contract, charge the signing cost, remove him from the pool, and notify every bidder ("signed with X").
 5. With no acceptable offer, the best offer with ratio ≥ 10,000 − flex receives a counter, valid through the next processing, and every other offer is refused (patience −1 for that club).
@@ -964,9 +977,9 @@ The base is club-independent, so promotion **does not** inflate an existing squa
 
 **Edge cases:** pending offers to a fighter who retires are void. An offer from a club relegated meanwhile is re-checked at resolution (cap, embargo). Equal score, prestige and tier → lot (stream `market`, season, week, fighter id).
 
-**Worked example (le-013):** Brannoc's ask is 360 at club A (Banner, prestige 50, where he would start) and 360 at club B (Crown, prestige 60, where he would not). A offers 360: score 10,000 + 500 = **10,500**. B offers 375: score **10,416**. A signs him. Had Muster club C (ask 420) offered 430, its score of 10,238 + 500 = 10,738 would win: a smaller club can outbid a bigger one by paying the premium and offering a starting place.
+**Worked example (le-013):** Brannoc's ask is 290 at club A (Banner, prestige 50, where he would start) and 285 at club B (Crown, prestige 60: tier gap −500, prestige +200, where he would not). A offers 290: score 10,000 + 1,000 = **11,000**. B offers 310: score 310 × 10,000 ÷ 285 = **10,877**. A signs him. Had Muster club C (ask 335) offered 345 with a starting place, its score of 10,298 + 1,000 = **11,298** would win: a smaller club can outbid a bigger one by paying the premium and offering a starting place, and a club that cannot offer a start must pay more than 10% over its ask to beat one that can.
 
-**Acceptance cases:** le-013, le-022, le-023 (§9.3).
+**Acceptance cases:** le-013, le-022, le-023, intake-002 (§9.2–9.3).
 
 #### sys-ai-manager: AI clubs under the same rulebook
 
@@ -984,17 +997,17 @@ The base is club-independent, so promotion **does not** inflate an existing squa
 
 Any personality spends 100% of WB once its balance exceeds 1.0 × SB, so no AI hoards without limit.
 
-**Value used by every decision** (integer): potentialBonus = min(potential − rating, 25) × potW(human-age) ÷ 10,000, the same upside term as EQ in the market wage (defined at merge; the draft named it without a formula). aiValue = rating + potentialBonus × personality.potentialWeight − max(0, human-age − 31) × 2 × personality.veteranPenalty + 8 if his role family is below the club's role targets (Tank 2, Healer 2, DPS 3, Controller 1; hybrids count for both) + 5 if he would start. surplus = aiValue − replacement rating (60 / 46 / 32).
+**Value used by every decision** (integer): potentialBonus = min(potential − rating, 25) × potW(human-age) ÷ 10,000, the same upside term as EQ in the market wage (defined at merge; the draft named it without a formula). aiValue = rating + potentialBonus × personality.potentialWeight − max(0, human-age − 31) × 3 × personality.veteranPenalty × physicalScale + 8 if his role family is below the club's role targets (Tank 2, Healer 2, DPS 3, Controller 1; hybrids count for both) + 10 if he would start (m1/fix-tuning: veteran points 2 → 3, starter bonus 5 → 10). physicalScale = the class's physical share of its rating weights ÷ 0.5 (D-T: the penalty stands for expected decline, which is physical only, so it applies in full to a 50/50 class, about half for healers and controllers and about 1.5× for melee and ranged DPS). surplus = aiValue − replacement rating (60 / 46 / 32).
 
 **Procedures** (AI action phase, in order):
 1. **Renewals** (from the MW4 processing): for expiring fighters in descending aiValue, keep him if he ranks within the roster target, the personality's age rule allows it, and his ask fits WB × wageUse. Offer ask × (1 − haggle), accept a counter, and after a refusal offer the full ask next week. Otherwise let the contract expire.
 2. **Releases:** cap relief when over the cap (P1–P4, lowest aiValue first). Voluntary releases only in P1–P4, at most 2 per season, and only for a fighter with surplus < 0, payout ≤ 10% of SB, and balance after the payout ≥ the reserve floor.
-3. **Free-agent offers** while roster + pending < roster target (cap − slack, at least 8): rank candidates by surplus × 10⁶ ÷ ask (Glory-hunters: by surplus), skipping any with surplus ≤ 0. Offer floor5(ask × (1 + overbid)) at the personality's length, within bill + pending + offer ≤ WB × wageUse and balance − pending costs − cost ≥ reserve floor. Up to 3 new offers per week (Ledger-keepers: 2). Below 8 rostered fighters, the AI may use the full WB and a zero reserve.
+3. **Free-agent offers** while roster + pending < roster target (cap − slack, at least 8): rank candidates by surplus × 10⁶ ÷ ask (Glory-hunters: by surplus), skipping any with surplus ≤ 0. Offer floor5(ask × (1 + overbid)) at the personality's length, within bill + pending + offer ≤ WB × wageUse and balance − pending costs − cost ≥ reserve floor. Up to 3 new offers per week (Ledger-keepers: 2). Below 8 rostered fighters, the AI may use the full WB and a zero reserve. The star overbid is scaled by the star's rating gain over the club's 5th-best fighter (full at a gain of 20). This core pass keeps wage room, at the tier minimum, for the reserves still missing below the **depth floor** (cap − 2, at least 8, at most the target). **Depth signings** (m1/fix-tuning) then fill the remaining places up to the roster target with free agents whose ask is at most 2 × the tier minimum, ranked by aiValue + ½ × (potential − rating), with no surplus requirement and the same commitment checks; none while embargoed. Voluntary releases (step 2) happen only when the roster is at its target.
 4. **Counters received:** accept if within wage room.
-5. **Trials rookies** (season-end AI phase): sign those with surplus > 0 within cap and wage room; Seedbed signs any rookie with potential − rating ≥ 15 if there is room.
+5. **Trials rookies** (season-end AI phase; season 1 at the first P1 processing, D-P): sign those with surplus > 0 within cap and wage room; Seedbed signs any rookie with potential − rating ≥ 15 if there is room; a rookie whose ask fits the depth cap may also be signed as depth into a place below the target. Every AI trials signing is for 3 seasons.
 6. **Captain and vice-captain** (D-I): see sys-captaincy, "AI captain timing".
 7. **Training emphasis** (lifecycle policy, adapted to D-A): the first matching rule of §5.2 (Wandering Mind → Mind; D_physical ≥ 28 → Mind; mental-heavy class → Mind; physical-heavy class → Body; otherwise Balanced).
-8. **Lineup for next week:** the best fit Tank-family fighter, the best Healer-family fighter, then the 3 highest-rated remaining (ties by CQ, then id). Seedbed swaps in a prospect (human-age ≤ 23, potential − rating ≥ 10, rating ≥ the 5th starter's − 4) for the lowest non-Tank, non-Healer starter. **At-risk resting** (lifecycle policy): in a league match, rest an At-risk starter if a fit reserve of the same role family is within 3 rating; never in the Reckoning. Rows come from each class's default row. **Presets** by the club's tacticsStyle mapped to a preset style (sys-tactics). The match captain follows sys-captaincy. The lineup is published to the opponent for the coming week (open-026).
+8. **Lineup for next week:** the best fit Tank-family fighter, the best Healer-family fighter, then the 3 highest-rated remaining (ties by CQ, then id). Seedbed swaps in a prospect (human-age ≤ 23, potential − rating ≥ 10, rating ≥ the 5th starter's − 4) for the lowest non-Tank, non-Healer starter. **At-risk resting** (lifecycle policy): in a league match, rest an At-risk starter if a fit reserve of the same role family is within 3 rating; never in the Reckoning. Rows come from each class's default row. **Presets** by the club's tacticsStyle mapped to a preset style (sys-tactics). The match captain follows sys-captaincy. The player's lineup pre-fill ("Auto-pick") uses this same rule (PERMITTED-CHOICE, 04 ui-squad). **What the opponent sees** (D-R): in M1 each club sees its next opponent's *last* locked lineup, never the lineup it will lock for the coming match (open-026).
 
 **Never:** it never reads the player's pending offers or lineup, never tanks (its lineup is always the best by the rule above, except the published rest rule), never breaks the commitment rule, and never signs while embargoed except as the embargo allows.
 
@@ -1013,7 +1026,8 @@ Any personality spends 100% of WB once its balance exceeds 1.0 × SB, so no AI h
 #### sys-save (player-facing rules)
 
 **Status:** save/load REQUIRED (R7). The rules below are the open-016 working assumption; the persistence contract is in 05 §5.
-- Manual saves to several slots from any management screen; rotating autosaves after every week processing and after the season-end step.
+- Manual saves to several slots from any management screen; rotating autosaves (three slots) after every week processing and after the season-end step.
+- **Commit before the report** (DELEGATED, D-O): Play match runs the week processing, which commits the player's result with every other result, and the autosave is written before the match report opens. The report shows the committed result; quitting or reloading at the report cannot change it (no rerolls).
 - A save contains the complete career: world, every club and fighter, contracts, finances, pending offers and negotiations, standings and history. Loading restores exactly that state.
 - Committed results are never re-simulated on load. Because seeds derive from the career seed and fixture identity (03 §1), replaying a match from an earlier save with identical inputs reproduces the same result (flow-003).
 - M2: quitting mid-fight resumes the fight at the same tick. M7: hardcore uses a single ironman slot.
@@ -1027,7 +1041,7 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 | sys-calls | M2 | Free unlimited pause to inspect; auto-pause triggers; at most 2 calls per round per side, which AI managers also spend; calls are timed inputs to the deterministic sim and are logged for replays (P-01). The calls go through the captain (sys-fight-captain). Skipping watching gives the player's side the AI call policy (open-020) |
 | sys-tactics-editor, sys-playbook | M3 | Rule format and vocabulary of sys-tactics; slots 4 → 8 with experience (sys-development) and up to 12 through traits; starter vocabulary from day one; lint for unreachable rules, missing cooldowns, friendly-fire risk and near-opposite conditions; local library and export codes (P-07, P-21, P-22); presets as editable starting points; edits between rounds; sandbox with its own seed (P-13) |
 | sys-staff, sys-scouting, sys-knowledge (fog) | M4 | Scouts with read-skill and read-talent, a region of expertise (Saltmarch, Emberreach, Thornwald), limited time and a wage (R3). The free baseline report (O4). Ranges, reveal steps, certainty and source labels (P-12). Slow decay refreshed by contact (P-19). Opponent reveal without forecasts (P-13). Trait reveal order (`traits.json` revealOrder; negatives last). Own fighters per open-008. Every read goes through sys-knowledge.view |
-| sys-academy | M5 | O2 capacity (10/12/14, a separate pool), O3 timing (enrollment committed at Kick off; irreversible call-up; no XP if unused; mid-season signings enrolled in the week they join), open-003 and open-004. Program XP is added to season XP. Embargoed clubs cannot enroll. The transfer `academy` destination hook |
+| sys-academy | M5 | O2 capacity (10/12/14, a separate pool), O3 timing (enrollment committed at Kick off; irreversible call-up; no XP if unused; mid-season signings enrolled in the week they join), open-003 and open-004. **R5 outcomes in M5 scope:** program types; growth of stats and of potential; teaching new abilities and new traits, and curing flaws (sys-traits). How an academy-taught ability fits the fixed 4-ability kit (sys-abilities) is owner question Q20. Program XP is added to season XP. Embargoed clubs cannot enroll. The transfer `academy` destination hook |
 | sys-cups, sys-patron, club-to-club transfers | M6 | Regions as P-08; the regional cup in which the underdog plays at home; cup weeks inserted into the calendar; fixtures carry competition and bestOf; finance has a cup-prize category. Windows and deadline day; trust from 50 (P-09); AI valuation by need and scarcity. The patron's temperament, directives, patience, dismissal and job offers (open-007). **No patron goal in M1** (D-C) |
 | sys-difficulty, sys-season-modifiers | M7 | Sliders change management levers only and never fight rules (P-14). Hardcore permadeath (P-11). One opt-out modifier per season (P-16) |
 
@@ -1049,15 +1063,16 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 | Anchored against knockback | Pavisier planted | Displacement skipped | No movement; the `displace` track does not advance | — |
 | Overtime and healing | t ≥ 45 s | Healing × max(0, 1 − 0.03k) | Stalemates resolve | Shields scale the same way |
 | Trait and captain composure in fight | Aura, rally, Shaken, trait mods | Summed per stat, then clamped 1–20 (trait-sourced capped ±8) | CMP_eff drives tenacity and reaction delay | Never changes rule evaluation (P-06) |
-| Match result → XP and injuries | Each round started | Result → XP per round → injury roll per round (at most one per match) → applied at match end | Season XP, injury, Still tender | Committed with the match (P-05) |
+| Match result → XP and injuries | Each round started | Result → XP per round → injury roll per round (at most one per match) → applied at match end | Season XP, injury, Still tender | Committed and autosaved with the week before the report opens (P-05, D-O) |
 | No rounds started → development | A roster fighter never fielded | XP 0 → usage 0 → ΔD 0 at season end; wear and aging still apply | No growth (D-A) | Applies to roster fighters and from M5 to unused call-ups (O3) |
 | Training emphasis → growth split | Standing setting | Season shares fBody, fMind → physical and mental multipliers that sum to 2 | Growth moves between clocks | Never more total growth, no wear effect (D-A) |
 | Injury → development | Weeks out | No rounds, so no XP | Lower usage | — |
 | Scar → potential, captaincy, retirement | Scar gained | Trait added → potential recomputed → +3 points retirement per scar → At risk at 2 scars | Potential down, risk up | Scars are permanent |
 | Captain grade → young development | Human-age ≤ 23 | Season end, pro-rated by weeks in the role | ×0.97 to ×1.08 (total mentor cap ×1.15) | — |
 | Captain change → chemistry | At lineup lock | Snubbed or Passed Over → chemistry term | −2 or −1 for 6 matchweeks | Exemptions; AI never triggers it (D-I) |
+| Missing captain → lineup lock | No club captain, or he left the roster | Interim captain (vice if fit, else best-CQ fit starter) before the lock | `captain.interim` digest item; the lock proceeds | Never blocks Continue (D-S) |
 | Chemistry → fight | At lineup lock | Chemistry ÷ 2 into setup composure | ±2 composure at most | Walks Alone immune (D-D) |
-| Age → retirement → intake | Season end | Development → retirement chance → age +1 → roll → intake = base + retirements | Steady population | Leavers not counted (D-H) |
+| Age → rating → retirement → intake | Season end | Development and wear → rating drop from peak and human-years past 30 → retirement chance (D-T) → age +1 → roll → intake = base + retirements | Steady population; mentally weighted veterans play on | Leavers not counted (D-H); forced at human-age 58 |
 | Relegation → contracts → roster | 8th in a wing | Season-end 3 → setup: drop clause, then tier minimum, then cap | Wages −20%, parachute, cap −2, cap relief equal to the overage | Kick off blocked while over the cap (02 flow-005) |
 | Promotion → finance → market | Reckoning champion or Shield | Season-end 3 → setup: promotion grant, ascension, WB | Bigger WB; the calibre premium falls in the new tier | Existing wages unchanged (no spike) |
 | Release → finance status | Payout > balance | Payout at once → status at the next processing | Possible embargo | A release is never blocked by money |
@@ -1066,7 +1081,7 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 | Free-agent decision → AI | Fighter signs elsewhere | Step 8 before step 9 | AI re-plans with the new pool | AI offers are never instant |
 | Injury → lineup → hired blade | Fewer than 5 fit at lock | Countdown (step 3) → AI lineup (step 9) or the player's lock | A hired blade fills the slot at the tier minimum | Not on the roster; counts for no cap |
 | Retirement and expiry | An expiring fighter retires | Step 7 before step 8 | Retires, no payout, no free-agent entry | No contract next season raises retirement odds ×1.5 |
-| Prize money → next WB | Season-end prizes | Step 2 → setup reserve contribution | Up to +25% of SB in wage room | Capped (anti-snowball) |
+| Prize money → next WB | Season-end prizes | Step 2 → setup reserve contribution | Up to +10% of SB in wage room | Capped (anti-snowball) |
 
 ## 5. Autonomous behavior
 
@@ -1088,13 +1103,13 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 - **Available information:** the same views as the player through sys-knowledge.view (exact in M1, open-026; from M4 with noise from the club's scouting quality, P-04). No access to the player's pending offers, round seeds or future results.
 - **Legal capabilities:** identical to the player's: offers, renewals, releases, trials signings, lineup, captain, vice-captain, presets and training emphasis. From M2, calls on the same budget. No exceptions.
 - **Decision priorities:** sys-ai-manager procedures 1–8, in order.
-- **Timing:** once per week processing (step 9) and once in the season-end AI phase (step 14).
-- **Captain timing** (D-I): set for the new season in the season-end AI phase with a 5-CQ hysteresis; mid-season only on vacancy or a captain injury of ≥ 4 weeks; never a change that causes Snubbed.
+- **Timing:** once per week processing (step 9) and once in the season-end AI phase (step 14). Season 1 has no season end before it, so the season-start phase runs at world creation, before P1, and the trials signings at the first P1 processing (D-P).
+- **Captain timing** (D-I): set for the new season in the season-end AI phase with a 5-CQ hysteresis; mid-season only on vacancy or a captain injury of ≥ 4 weeks; never a change that causes Snubbed. A missing captain is filled automatically at lock by the same rule as the player's club (D-S).
 - **Training emphasis** (D-A), first matching rule: Wandering Mind → Mind; D_physical ≥ 28 → Mind; a class whose rating weights on mental stats exceed 50% → Mind; a class whose rating weights on physical stats exceed 50% → Body; otherwise Balanced.
 - **Prospects:** Seedbed's youth-minutes swap gives AI prospects rounds; the usage rule (D-A) means prospects that never play stall, for AI and player alike.
 - **Difficulty:** none in M1. M7 sliders may change decision quality, never the rulebook.
 - **No useful action:** keep the roster; hired blades cover a short lineup; renew at the tier minimum while embargoed.
-- **Telegraphing and counterplay:** the personality tag and tactics style are visible (M1); rival-offer counts are visible on free agents; AI lineups are published a week ahead. A player can, for example, outbid a Ledger-keeper, which never pays above ask, or let a Glory-hunter overpay for a star and sign the value fighters it ignores.
+- **Telegraphing and counterplay:** the personality tag and tactics style are visible (M1); rival-offer counts are visible on free agents; the next opponent's last locked lineup is visible (D-R; its next lineup is not). A player can, for example, outbid a Ledger-keeper, which never pays above ask, or let a Glory-hunter overpay for a star and sign the value fighters it ignores.
 
 ## 6. Content model
 
@@ -1123,7 +1138,7 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 - **League and economy:** club counts per tier = clubCount = 2 × wing size = 16; caps follow O2 (lowest 10, +2 per tier up) with academy = cap; wing and cross-wing matchweeks cover MW1–16 exactly; the calendar length equals `economy.json` season.wageWeeksPerSeason (23); grant installments sum to 10,000 bp; every economy number is an integer; curve anchors are monotonic; unique club ids, codes, names and primary colors; club start prestige within ±15 of its tier base; color rules (primary/secondary contrast ≥ 3.0; pair and kit distances ≥ 25; if home and away primaries are within ΔE 20, the away side displays its secondary).
 - **Presentation keys** (document 04): `class_<id>`, `abl_<abilityId>`, `st_<statusId>`, `arch_<archetype>`, `attr_<id>`, `icon_trait_<id>`, `status_*`, `inj_*`, `trend_*`. Every class has a flavor line and a two-line description; every ability a one-sentence description with its numbers; every preset a summary; every trait an effect line.
 
-**Prototype content set (M1):** all of the above. It is ready when the loader validates it with zero errors, the combat harness (§8.2) and the 48-club headless soak (§8.3, §8.4) run it, and the §9 scenarios pass. None of this has run yet.
+**Prototype content set (M1):** all of the above. It is ready when the loader validates it with zero errors, the combat harness (§8.2) and the 48-club headless soak (§8.3, §8.4) run it, and the §9 scenarios pass. **Status on main @ f4b39d9:** the loader validates `content/default` with zero errors; balance pass 1 ran on the harness; the 10-season soak passes 11/11 checks; 741 tests pass, including the §9 scenarios as re-derived in v0.3. Known gaps are listed in 05 §12.
 
 ## 7. Levels, encounters, or challenge structure
 
@@ -1131,13 +1146,16 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 
 - **Fights:** one authored arena (open-019). Opponents are other clubs' lineups under the same rules. Setup is 5 v 5, rows per sys-arena, both sides at full HP and focus. Objective: eliminate the other side, or lead the tiebreak chain at the cap; win 2 of 3 rounds (3 of 5 in the Reckoning final). Walls are the only environment interaction. Validity: spawns inside the arena and non-overlapping; every round ends by tick 1,500.
 - **The league ladder:** the authored structure is the tier and wing tables of sys-league, the Reckoning (top 4 per wing) and promotion and relegation (champion and Shield up; 8th in each wing down). Escalation: each tier up roughly doubles or triples budgets and opposition ratings (bands 30–50, 45–65, 60–80), and the bands overlap, so a promoted club can survive with good tactics. Objectives: win the wing and tier tables, the Reckoning and promotion; avoid 8th place; stay solvent. There is no patron goal in M1 (D-C).
-- **New-career setup:** each club gets its start tier and prestige; starting balance = tier base × (1 + 1% × (prestige − tier base)), within ±30%; rosters filled to 90% of cap; contracts of 1, 2 and 3 seasons in equal shares at each fighter's ask for his club; then the lowest value-per-wage fighters are dropped into the pool until the club's bill is ≤ 95% of its WB, keeping at least 8. World generation adds 2.5 free agents per club (D-C).
-- **Validity checks at new career:** every club has ≥ 5 fighters and every role is present league-wide; every WB ≥ its club's bill; the pool meets its floors. On failure, retry generation with the next sub-seed up to 3 times, then relax the 95% rule to 100%.
+- **New-career setup:** each club gets its start tier and prestige; starting balance = floor10(tier base × (1 + 1% × (prestige − tier base))), within ±30%; rosters filled to 90% of cap (each world fighter drawn inside the tier's rating band); contracts of 1, 2 and 3 seasons in equal shares at each fighter's ask for his club; then each club's opening bill is **rescaled into 80–87% of its WB** (`budget.worldGenBillBandBp`; wages keep their proportions to the nearest band edge, floor to multiples of 5 and stay within the tier minimum and the maximum wage). Only if the tier minimum keeps a bill above the band is the lowest value-per-wage fighter released, never below 8. The band leaves room for the trials rookie and a tier-minimum signing. World generation adds 2.5 free agents per club (D-C) and a Trials Day class of one rookie per club (D-P).
+- **Opening balance and setup order** (D-P): the career's opening balance is the starting balance (pre-setup cash). The first central-grant installment is one separate setup ledger credit; the season budget counts the season's grant once, and the WB reserve term uses the pre-credit balance, as at every later setup. The AI's season-start setup (captains, vice-captains, training emphasis, opening offers) then runs for every club before P1.
+- **Validity checks at new career:** every club has ≥ 5 fighters and every role is present league-wide; every WB ≥ its club's bill; the pool meets its floors. On failure, retry generation with the next sub-seed up to 3 times, then relax the band's upper edge to 100% of WB.
 - **Variation limits:** the wing draw changes every season; the cross-wing pairing and venues alternate by season parity; clubs, names and tiers are data.
 
 ## 8. Balance and tuning
 
-**Status:** every value is PROPOSED · TUNABLE in the named file. **No harness or soak has run on the real sim.** All figures below are targets, or results from the drafts' simplified scratch models. Each tuning change must be recorded with the report that justified it.
+**Status:** every value is PROPOSED · TUNABLE in the named file. The harness and the soak now run on the real sim (main @ f4b39d9): combat balance pass 1 (§8.2), the tuning pass m1/fix-tuning and the core fix round m1/fix-core (§8.3–8.4). Figures marked "old model" are the drafts' scratch-model estimates. Each tuning change must be recorded with the report that justified it.
+
+**Soak lengths (C9, one ladder for the package):** the M1 gate is 1 seed (`soak-1`) × **10 seasons** with every check passing (met: 11/11). An extended M1 run of **20 seasons** is reported but does not gate M1 (10/11: the dynasty flag, 05 §12). The M7 gate is **10 seeds × 30 seasons** (vis-008, 01 §5, 05 §9). `economy.json` balanceTargets still says 25 seasons (and `dynasty.minDistinctTier1ChampionsIn25`); they should be restated for 30 seasons (content request to the league-economy designer; this sync does not edit content).
 
 ### 8.1 Parameter index
 
@@ -1145,15 +1163,15 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 | --- | --- | --- |
 | Combat coefficients | HP 4% per tgh, Power and Support 4% per weighted point, attack speed 2.5% per agi, crit multiplier 1.5, variance ±4%, reaction delay 0.30 s base (`combat.json` derived, damage, randomness) | Stat-gap win curve; class win rates; mirror spread |
 | Control and pacing | DR steps 1.0/0.6/0.35/0 over 6 s; 2.5 s cap; overtime +3%/−3% per second from 45 s; cap 75 s; decision interval 2 ticks; shield cap 50% (`combat.json` cc, overtime, timing, shields) | Control uptime; overtime and cap rates; the 2 ms per round budget |
-| Class kits | Base values and ability coefficients (`classes.json`, `abilities.json`); ±30% per value per pass | Harness outliers |
+| Class kits | Base values and ability coefficients (`classes.json`, `abilities.json`); ±30% per value per pass (balance pass 1 exceeded it; exception logged in §8.2) | Harness outliers |
 | Development | Season XP target 360; emphasis shift 0.20 (D-A); pace levels 0.75–1.30; mentoring 0.97–1.08; usage floor fixed at 0 (D-A, not tunable) (`development.json` xp, training, pace, captaincy) | Prospect growth bands; peak ÷ potential |
-| Aging and retirement | Physical decline table; mental decline from human-age 60 scaled by lifespan (D-B); retirement hazards 3% (31) to 85% (40), forced at 41 (`development.json` decline, retirement) | Median human retirement 35–37; turnover within 20 seasons |
+| Aging and retirement | Physical decline table; mental decline from human-age 60 scaled by lifespan (D-B); retirement hazards by rating drop from peak (0.3% at 5 to 80% at 30) and by human-years past 30 (0.2% to 50%), forced at 58 (D-T) (`development.json` decline, retirement) | Median retirement human-age about 40 (measured 40.0); physically weighted classes retire before mentally weighted ones |
 | Injuries | Base terms 0.4% / 1.4% per max HP / 1.3% downed; race multipliers; career-ending 8% with a 0.5% per-match cap (`development.json` injury, `races.json`) | 0.75–1.15 per 40 human rounds; elf:human 1.3–1.6× |
-| Traits and captaincy | Negative chance 0.2 per trait; captaincy weights .45/.25/.10/.10/.10; grade thresholds 85/70/55/40; aura and rally by grade; chemistry ÷ 2 (`traits.json`, `development.json`) | 78–82% positive share; 10–35% of AI captains grade A; captain effects ≤ 10% |
-| Intake and pool | Rookies 0.6 per club + retirements in [0.5, 1.6] × clubs (D-H); 2.5 world free agents per club (D-C); pool floors 60 and 5 per role (`development.json` generation, `economy.json` market) | Pool at P1 100–300; floors never breached |
-| Money | Grants, sponsor retainers, gate bases, wage ratios, operating costs, prizes, bonuses (`economy.json` tierProfiles); reserve rule 15/50/25% (budget); signing 10%, release 50%, drop clause 20%, parachute 50%/25%, promotion grant, ascension +800 bp (contracts, finance) | Solvency; wage-to-income; promoted survival |
-| Market | Wage curve 200 × 2^((r − 50) ÷ 12); potential weight 4,000 bp to 0 at 28; calibre 62/47; tier gap +1,500/−500; greed −1,000 to +1,500; flex 1,500/1,000/500; starter bonus 500 (`economy.json` wage, ask, negotiation, market) | Tier bill against WB; pool flow; dynasty flags |
-| League | Points 3/2/1/0; prestige weights and 15% reversion (`leagues.json`, `economy.json` prestige) | Tie frequency; prestige spread |
+| Traits and captaincy | Negative chance 0.2 per trait; captaincy weights .45/.25/.10/.10/.10; grade thresholds 90/70/55/40; aura and rally by grade; chemistry ÷ 2 (`traits.json`, `development.json`) | 78–82% positive share; 10–35% of AI captains grade A; captain effects ≤ 10% |
+| Intake and pool | Rookies 0.75 per club + retirements in [0.5, 1.6] × clubs (D-H); season 1 one per club (D-P); 2.5 world free agents per club (D-C); pool floors 60 and 5 per role (`development.json` generation, `economy.json` market) | Pool at P1 100–300; floors never breached |
+| Money | Grants, sponsor retainers, gate bases, wage ratios, operating costs, prizes, bonuses (`economy.json` tierProfiles); reserve rule 15/50/10% (budget); world-generation bill band 80–87% of WB (D-P); prestige sensitivity of retainer 60 bp per point (±1,500) and gate 50 bp (±1,500); signing 10%, release 50%, drop clause 20%, parachute 50%/25%, promotion grant, ascension +800 bp (contracts, finance) | Solvency; wage-to-income; promoted survival |
+| Market | Wage curve 160 × 2^((r − 50) ÷ 12); tier minimums 260/150/60; potential weight 4,000 bp to 0 at 28; calibre 62/47; tier gap +1,500/−500; ask prestige −20 bp per point (±400); greed −1,000 to +1,500; flex 1,500/1,000/500; starter bonus 1,000; rookie scale 1.25 × tier minimum (D-P); AI starter bonus 10 and veteran penalty 3 per human-year over 31 (`economy.json` wage, ask, negotiation, market, ai) | Tier bill against WB; pool flow; dynasty flags |
+| League | Points 3/2/1/0; prestige weights and 25% reversion (`leagues.json`, `economy.json` prestige) | Tie frequency; prestige spread |
 
 ### 8.2 Combat targets and the balance harness
 
@@ -1178,54 +1196,60 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 
 **Harness** (`npm run balance`; stream `balance`): (1) passes A (all attributes 10, default presets), B (tier-typical attributes, random presets, sides within ±1 mean rating) and C (reference lineups against hand-tailored presets, vis-002); (2) random legal lineups of 5 classes, at most 2 of one class, at least one front-row starter; (3) each pair played twice with the same round seed and sides swapped; (4) 20,000 rounds per pass by default; (5) metrics per class, archetype, hybrid pair, preset, ability and rule (win rate with Wilson 95% intervals, damage, healing, control, downs, lifetime, cast and fire rates), fight-length percentiles, overtime and cap rates, tiebreak-step frequencies, home win rate, idle, overheal and overkill detectors, frozen-unit detector, synergy and counter matrices, ms per round; (6) flags for every band above, an ability never cast in > 50% of its class's rounds, a preset rule never fired in > 80% of rounds, and a median > 2 ms per round; (7) a JSON report plus a text summary, with a non-zero exit in CI mode when any flag fires.
 
-**Recorded tuning (estimate only):** a budget estimate at all-10 attributes showed mirror fights past 45 s, so every class's base Power was raised 25% and outliers were trimmed (Scarhide, Runecleaver, Leechblade, Grovetender, Gaoler, Netcaster, Skullslinger, Sunlance Acolyte). This is not a harness result.
+**Recorded tuning, draft (estimate only):** a budget estimate at all-10 attributes showed mirror fights past 45 s, so every class's base Power was raised 25% and outliers were trimmed (Scarhide, Runecleaver, Leechblade, Grovetender, Gaoler, Netcaster, Skullslinger, Sunlance Acolyte). This was not a harness result.
+
+**Balance pass 1** (content commit 1597f1d, 2026-10-25; the first harness run on the real sim, random legal lineups). *Changes:* base values of the classes (for example Oathguard HP 1,500 → 1,250 and Power 60 → 72; Headsman Power 115 → 140; Gutterknife Power 80 → 110; Bloodhowler Power 80 → 90; Vigilkeeper Support 95 → 105; tank baseline HP 1,492 → 1,244); 12 ability values (among them Clangor's taunt 1.6 s → 1.0 s = 20 ticks, Interpose's guard 40% → 30%, Hollow Ring 25 → 15, Thick Blood 0.8% → 0.5%, Bloodrush's cap 0.40 → 0.25, Rejuvenate 0.15 → 0.20, Rally Beat 0.70 → 1.00); five presets edited, the two War Drummer presets one rule shorter (297 → 295 rules). *Report:* median fight **32.7 s** (target 25–35 s); overtime **15%** (≤ 25%); time cap **0.1%** (≤ 1%); archetype win shares **45–55%** (target 47–53%: outside); class win rates **40–62%** (target 45–55%: outside; `hourglass_sage` 61.7% is the top outlier, 05 §12). The worked examples and §9.1 cases were re-derived from the new values.
+
+**Exception to the ±30% per-pass bound (logged, pass 1 only).** 21 class base values moved by more than 30%: Power of 19 classes (Gutterknife +38%, Chaffcutter +47%, Runecleaver +31%, Blightbrewer +57%, Writ Hunter +31%, Rimebinder +45%, Hexmonger +67%, Galeshaper +100%, Hushweaver +79%, Dreamthief +78%, Snaresetter +79%, War Drummer +73%, Siegebreaker +30%, Harpooner +30%, Vowknight +31%, Netcaster +62%, Leechblade +31%, Sunlance Acolyte +31%, Undertow Mystic +50%) and Support of War Drummer (+35%) and Undertow Mystic (+42%). 8 ability values moved by more than 30%: Clangor duration −38%, Hollow Ring −40% (two mods), Thick Blood −38% (two mods), Bloodrush −38%, Rejuvenate +33%, Rally Beat +43%. *Reason:* the draft's budget estimate had left controllers and several DPS far below the fight-length and win-rate targets once the real sim ran, and one large pass before the M1 build was preferred to several bounded ones. *Consequence:* pass 2 returns to the ±30% bound and targets the out-of-band archetypes and classes, `hourglass_sage` first.
 
 ### 8.3 Lifecycle soak targets
 
-From `development.json` soakTargets. The observed column is from the lifecycle draft's simplified model: 24 clubs, 5 seeds × 20 seasons, abstract fights. **It must be re-run on the full sim with the 48-club league, with the D-A usage rule and the D-A emphasis rule**; both changes lower development for bench fighters and leave the total for starters unchanged.
+From `development.json` soakTargets (bands widened in m1/fix-core for D-T, because mentally weighted veterans now play on). Observed values: *soak* = the real sim, 48 clubs, seed `soak-1`, 20 seasons (`npm run soak`); *population tests* = core/fighters tests on seeds `population-1` and `population-2` with synthetic matches, as last recorded in the core/fighters README (they pass the bands below on main, but some recorded figures predate D-T); *old model* = the lifecycle draft's 24-club estimate.
 
-| Metric (season 3 → 20) | Target | Observed (old model) |
+| Metric (season 3 to the end of the run) | Target | Observed |
 | --- | --- | --- |
-| Population drift (rostered + free agents) | ≤ 10% | ≤ 1.5% |
-| Median human-age | 26–30 | 26.6–28.0 |
-| Share human-age ≤ 22 / ≥ 31 | 15–32% / 20–40% | 19–26% / 25–38% |
-| All-club top-5 rating drift; league mean drift | ≤ 4; ≤ 3 points | −0.1 to −3.2; within ±1 |
-| Highest rating | ≤ 95 | 84–92 |
-| Injuries per 40 rounds (human / elf / dwarf / orc / Ashkin) | 0.75–1.15 / 1.1–1.65 / 0.5–0.85 / 0.55–0.9 / 0.6–0.95 | within band |
-| Serious share; career-ending per league-season | 4–9%; 0.02–0.6 | about 6%; 0.10–0.35 |
-| Starters' peak rating ÷ potential | 0.85–0.95 | 0.91–0.94 |
-| AI captain mean CQ; grade-A share; below 40 | 65–85; 10–35%; ≤ 5% | 73–82; 4–46%; 0% |
-| Rolled-trait positive share | 78–82% | 79.9% |
+| Population drift (rostered + free agents) | ≤ 10% | 2.9% (soak; 1.5% over 10 seasons) |
+| Median human-age | 26–32 | 26.7–31.3 (soak, seasons 1–20; 30.0 at season 20) |
+| Share human-age ≤ 22 / ≥ 31 | 12–32% / 20–55% | not reported by the soak; population tests 22–28% / 20–30% |
+| All-club top-5 rating drift; league mean drift | ≤ 4; ≤ 3 points | population tests −3.5 (59.4 → 55.9); −1.1 (48.9 → 47.8) |
+| Highest rating | ≤ 95 | 94 (population tests) |
+| Injuries per 40 rounds (human / elf / dwarf / orc / Ashkin) | 0.75–1.15 / 1.1–1.65 / 0.5–0.85 / 0.55–0.9 / 0.6–1.05 | 0.99 / 1.28 / 0.76 / 0.79 / 0.85 (population tests) |
+| Serious share; career-ending per league-season | 4–9%; 0.02–1.0 | 6.0%; 0.40 (population tests) |
+| Starters' peak rating ÷ potential | 0.85–0.97 | median 0.94 (population tests) |
+| AI captain mean CQ; grade-A share; below 40 | 65–88; 10–35%; ≤ 5% | 72.8–80.0; 48% at the old A threshold of 85, which m1/fix-tuning raised to 90; 0% |
+| Rolled-trait positive share | 78–82% | 79.7% (population tests) |
+| Retirements per season; median retirement human-age | — (reported) | 1–23, rising as world-generation veterans age out (soak); 40.0, physically weighted 38.8, mentally weighted 44.0 (2 seeds × 20 seasons, m1/fix-core) |
 
-Actions on failure: a falling population raises the intake base; top-5 deflation beyond 4 points tunes the market or AI first; an injury band failure tunes race multipliers first; too many grade-A captains raise the thresholds. Long-save check: by season 20 every world-generation fighter, except some elves, has retired.
+Actions on failure: a falling population raises the intake base; top-5 deflation beyond 4 points tunes the market or AI first; an injury band failure tunes race multipliers first; too many grade-A captains raise the thresholds. Long-save check: by season 20 most world-generation fighters have retired; under D-T mentally weighted ones may still play (forced at human-age 58).
 
 ### 8.4 Economy soak (V1)
 
-10 world seeds × 25 seasons, every club AI-managed (the player club as `balanced`), in the headless harness (`economy.json` balanceTargets). A failed check blocks merging a balance change.
+Every club AI-managed (the player club as `balanced`), in the headless harness (`economy.json` balanceTargets). Length per the soak ladder in §8: 1 seed × 10 seasons for the M1 gate, 10 seeds × 30 seasons for M7. A failed check blocks merging a balance change. The observed column is seed `soak-1` on main @ f4b39d9 (20 seasons unless stated); checks marked "not yet scripted" are not in `npm run soak` yet.
 
-| Check | Pass band |
-| --- | --- |
-| Solvency: clubs with balance ≥ 0 at each season end | ≥ 90% every season (vis-008) |
-| Registry advances; embargo length | ≤ 2% of club-seasons; ≤ 16 weeks per club-season |
-| Median balance ÷ SB at season end | 0.10–1.00, with ≤ 5% of clubs above 2.0 |
-| Wage-to-income: tier mean; per club-season | 0.55–0.80; ≥ 90% within 0.40–0.95 |
-| Money supply growth after season 5 | ≤ 5% of total SB per season |
-| Dynasty | a flag at 4 Reckoning titles by one club in 8 seasons or 6 Shields in 10; ≥ 8 distinct Crown champions in 25 seasons (median) |
-| Promoted survival | 50–80% (target 65%) |
-| Tanking | over 200 paired runs per seed, a club fielding its 5 lowest-rated fit fighters for a season has lower income over seasons s to s+2 and lower prestige at s+2 in ≥ 95% of pairs |
-| Pool health | 100–300 at P1; ≥ 60 in season; ≥ 5 per role |
-| League quality | top-5 mean per club per tier within ±5 of season 1 (vis-008); tier gaps ≥ 6 |
-| Hired blades; AI starter renewals | ≤ 1% of lineup slots; ≥ 70% re-signed |
-| Determinism | identical season summary hash for the same seed run twice (vis-009) |
+| Check | Pass band | Observed |
+| --- | --- | --- |
+| Solvency: clubs with balance ≥ 0 at each season end | ≥ 90% every season (vis-008) | 100% every season |
+| Registry advances; embargo length | ≤ 2% of club-seasons; ≤ 16 weeks per club-season | not yet scripted |
+| Median balance ÷ SB at season end | 0.10–1.00, with ≤ 5% of clubs above 2.0 | not yet scripted |
+| Wage-to-income: tier mean; per club-season | 0.55–0.80; ≥ 90% within 0.40–0.95 | not yet scripted; median weekly wage 240–285, worst season-to-season change 6.1% (≤ 10%) |
+| Money supply growth after season 5 | ≤ 5% of total SB per season | not yet scripted |
+| Dynasty | a flag at 4 Reckoning titles by one club in 8 seasons or 6 Shields in 10; ≥ 8 distinct Crown champions in 25 seasons (median; `dynasty.minDistinctTier1ChampionsIn25`, to be restated for the 30-season M7 run) | 10 seasons: no flag. 20 seasons: **flag** (Cinderpan Cinderjacks, 4 Crown Reckoning titles in seasons 4–11); cautious-style AI clubs won 0 of 20 Crown titles (05 §12) |
+| Promoted survival | 50–80% (target 65%) | not yet scripted |
+| Tanking | over 200 paired runs per seed, a club fielding its 5 lowest-rated fit fighters for a season has lower income over seasons s to s+2 and lower prestige at s+2 in ≥ 95% of pairs | not yet scripted |
+| Pool health | 100–300 at P1; ≥ 60 in season; ≥ 5 per role | 103–217 at P1; in-season minimum 62 |
+| League quality | top-5 mean per club per tier within ±5 of season 1 (vis-008); tier gaps ≥ 6 | not yet scripted |
+| Hired blades; AI starter renewals | ≤ 1% of lineup slots; ≥ 70% re-signed | 0.04% of slots; renewals not yet scripted (24 AI renewals refused by the wage budget in 20 seasons) |
+| Determinism | identical season summary hash for the same seed run twice (vis-009) | identical final checksum; every season-end save round-trips |
 
-**Reference situation:** a par-prestige Banner club with 5 starters at rating 58 and 6 reserves at 50 has a bill of 2,795 ts per week against a WB of 2,960. In an average season its income is about 100,300 against costs of about 84,800 (wages 68,080), a surplus of about 19% of SB, so balances are expected to settle near 0.6 × SB.
+**Reference situation** (re-derived from the v0.3 values): a par-prestige Banner club with 5 starters at rating 58 (market wage curve(58) = 255, ask 255 at human-age 28 or more) and 6 reserves at rating 50 (ask 160) has a bill of 2,235 ts per week, 75% of its WB of 2,960. A new career opens bills at 80–87% of WB (§7), which leaves room for the trials rookie and a tier-minimum signing. The draft's season-flow estimate (income about 100,300, costs about 84,800) used the old wage curve and is withdrawn; the soak evidence above replaces it until the wage-to-income check is scripted.
 
-**Tuning order when a check fails:** solvency → SB components, then wage ratio; hoarding → reserve cap; wage-to-income → wage ratio; promoted survival → ascension or promotion grant; pool → intake base (D-H), then AI slack; dynasty → starter bonus up, prize spread down, reserve cap down.
+**Tuning order when a check fails:** solvency → SB components, then wage ratio; hoarding → reserve cap; wage-to-income → wage ratio; promoted survival → ascension or promotion grant; pool → intake base (D-H), then AI slack; dynasty → starter bonus up, prize spread down, reserve cap down (m1/fix-tuning already moved all three levers it used: starter bonus 500 → 1,000, reserve cap 25% → 10%, prestige reversion 15% → 25%).
 
 ### 8.5 Risks and deliberate asymmetry
 
-- **Dominant strategies:** double-healer turtles (watch healing share and overtime; counters are Festering, Hushweaver and overtime); stacked hard control (the shared track and the cap); back-line dives against unprotected healers (protect presets, Oathguard, Harpooner); all-arcane lineups against armored tanks (ward values); always fielding the same five (prospects stall, so rotation pays, D-A); elf hoarding (injuries, slow climbs, wages); Ashkin churn (short careers, weak captains, no resale); captain ping-pong (free between locks, costly across locks); hoarding then splurging (25% reserve cap); lowballing (it saves at most half the flex and loses contested free agents); release and re-sign cheaper (blocked for the season); tanking (nothing rewards it: win bonuses, form-driven gate, table prize and the Reckoning all pay for winning, and rookies are not assigned by standing).
+- **Dominant strategies:** double-healer turtles (watch healing share and overtime; counters are Festering, Hushweaver and overtime); stacked hard control (the shared track and the cap); back-line dives against unprotected healers (protect presets, Oathguard, Harpooner); all-arcane lineups against armored tanks (ward values); always fielding the same five (prospects stall, so rotation pays, D-A); elf hoarding (injuries, slow climbs, wages); Ashkin churn (short careers, weak captains, no resale); captain ping-pong (free between locks, costly across locks); hoarding then splurging (10% reserve cap); lowballing (it saves at most half the flex and loses contested free agents); release and re-sign cheaper (blocked for the season); tanking (nothing rewards it: win bonuses, form-driven gate, table prize and the Reckoning all pay for winning, and rookies are not assigned by standing).
 - **Snowball and stalemate:** early downs snowball inside a fight by design, and overtime prevents stalemates. Across seasons, potential is fixed, and aging, the starter bonus, the reserve cap and prestige reversion dampen dynasties.
+- **Measured imbalances to fix (M1 known issues, 05 §12):** `hourglass_sage` wins 61.7% of its fights; cautious-style AI clubs won 0 of 20 Crown titles in the 20-season soak; one Crown club took 4 Reckoning titles in 8 seasons on seed `soak-1`; AI clubs keep a full Muster cap after signing their trials rookie.
 - **Deliberate asymmetry:** higher tiers are richer, which is the point of the climb, and talent drifts upward through the tier-gap premium. Races are balanced over a career, not per season. Mental-power classes age more gently. Arcane ignores armor. Long-range classes are fragile.
 
 ## 9. Mechanical acceptance scenarios
@@ -1238,24 +1262,25 @@ Actions on failure: a falling population raises the intake base; top-5 deflation
 | --- | --- | --- | --- | --- | --- |
 | det-001 | Any two lineups, match seed "a1b2c3d4e5f60718", recording `full` | Simulate the match twice in separate processes | Identical round winners, durations in ticks, final HP of all 10 units, event hashes and checksums | sys-fight-sim, sys-match (T4, vis-009) | M1 |
 | det-002 | Same inputs | Simulate at recording `none`, `summary` and `full` | Identical checksums and results at all three levels | sys-match-report | M1 |
-| cs-001 | The worked-example Oathguard | Compute derived values | Exactly the values in sys-combat-stats (1770 HP, armor 68, 163 mm per tick, Power 63, rating 60) | sys-combat-stats | M1 |
+| cs-001 | The worked-example Oathguard (balance pass 1) | Compute derived values | Exactly the values in sys-combat-stats (1475 HP, armor 68, 163 mm per tick, Power 76, rating 60) | sys-combat-stats | M1 |
 | cs-002 | Any class with all attributes 10 | Compute | Exactly the class base values; rating 50 | sys-combat-stats | M1 |
 | cs-003 | Raise TGH by 1 | Compute | Max HP rises by trunc(base.hp × 0.04) ± 1 and armor by 2 | sys-combat-stats | M1 |
 | mv-001 | Two fighters walking into each other | One tick | At least 1 m apart (centres) after separation | sys-movement | M1 |
 | mv-002 | A rooted fighter in contact with a walking one | Separation | The rooted fighter is never pushed | sys-movement | M1 |
 | mv-003 | A 3 m knockback toward a wall 1 m away | Displacement | The target moves 1 m and stops | sys-movement | M1 |
-| cmb-001 | Gutterknife (CMP 12, tenacity 4%) attacking a Longeye, centre 3.8 m from a Gongbearer | Gongbearer releases Clangor (3.5 m) catching it | Taunted for trunc(32 × 0.96) = 30 ticks: decision forced at once to attack the Gongbearer (trace `taunted`); no rule evaluated until it ends; `control` track at step 1 | sys-tactics, sys-abilities | M1 |
+| cmb-001 | Gutterknife (CMP 12, tenacity 4%) attacking a Longeye, centre 3.8 m from a Gongbearer | Gongbearer releases Clangor (3.5 m; taunt 1.0 s = 20 ticks) catching it | Taunted for trunc(20 × 0.96) = 19 ticks: decision forced at once to attack the Gongbearer (trace `taunted`); no rule evaluated until it ends; `control` track at step 1 | sys-tactics, sys-abilities | M1 |
 | cmb-002 | Twinfang, CMP 10 | Stuns at 10.00 s (1.0 s), 11.50 s (0.8 s), 12.50 s (0.6 s); root at 13.00 s | Durations 20, trunc(16 × 0.6) = 9 and trunc(12 × 0.35) = 4 ticks; the root is resisted (`dr_immune`); a control applied at or after 18.50 s has full duration | sys-abilities | M1 |
-| cmb-003 | Bloodhowler (Power 80) against Briarback (armor 80 incl. passive) with Bristle active (+20 armor, thorns 0.15 + 0.40) | One basic hit, no crit, variance 0 | Briarback takes 80 × 100/200 = **40**; next tick the Bloodhowler takes 0.55 × 80 = 44 × 100/125 = **35** reflected | sys-abilities | M1 |
-| cmb-004 | Longeye at 50/780 HP | Same tick: Shadowstep (160% × 80 = 128, +25% = 160, armor 15 → 139) and Suture (220 × 1.3 = 286) | HP = 50 − 139 + 286 = **197**, standing. If the Suture lands one tick later, the Longeye is downed | sys-fight-sim | M1 |
-| cmb-005 | Longeye (armor 15) in the Oathguard's Sworn Shield aura and Guarded by Interpose (Oathguard armor 68, Fortified 15%) | Headsman (Power 131) basic hit, no crit, variance 0 | 40% redirected: Oathguard takes 52.40 × 0.85 × 100/168 → **26**; Longeye takes 78.60 × 0.92 × 100/115 → **62** (113 without guard and aura) | sys-abilities | M1 |
+| cmb-003 | Bloodhowler (Power 90) against Briarback (armor 80 incl. passive) with Bristle active (+20 armor, thorns 0.15 + 0.40) | One basic hit, no crit, variance 0 | Briarback takes 90 × 100/200 = **45**; next tick the Bloodhowler takes 0.55 × 90 = 49.50 × 100/125 = **39** reflected | sys-abilities | M1 |
+| cmb-004 | Longeye at 50/780 HP | Same tick: Shadowstep from a Gutterknife (Power 110: 160% × 110 = 176, +25% = 220, armor 15 → 191) and Suture (220 × 1.3 = 286) | HP = 50 − 191 + 286 = **145**, standing. If the Suture lands one tick later, the Longeye is downed | sys-fight-sim | M1 |
+| cmb-005 | Longeye (armor 15) in the Oathguard's Sworn Shield aura and Guarded by Interpose (Oathguard armor 68, Fortified 15%) | Headsman (STR 14: Power 160) basic hit, no crit, variance 0 | 30% redirected: Oathguard takes 48.00 × 0.85 × 100/168 → **24**; Longeye takes 112.00 × 0.92 × 100/115 → **89** (128 with the aura alone; 139 without guard and aura) | sys-abilities | M1 |
 | cmb-006 | Longeye 0.5 s into Aimed Shot, 100 focus | Hushweaver releases Hush | Cast interrupted (cause silence); focus stays 100; Aimed Shot not on cooldown; Silenced 30 ticks; basic attacks allowed; the rule's trace shows `silenced` | sys-fight-sim, sys-tactics | M1 |
-| cmb-007 | Ally at 40 HP under Vigil (Support 95) | A 300-damage hit | HP set to 1, then healed 95 → **96**; `deathward.save`; ward removed | sys-abilities | M1 |
+| cmb-007 | Ally at 40 HP under Vigil (Vigilkeeper Support 105) | A 300-damage hit | HP set to 1, then healed 105 → **106**; `deathward.save`; ward removed | sys-abilities | M1 |
 | cmb-008 | Tick 1,500; home 2 standing at 400/1500 and 300/850; away 2 standing at 900/1100 and 50/800 | Time cap | Standing 2–2; HP-fraction sums 2,666 + 3,529 = 6,195 against 8,181 + 625 = 8,806 → **away wins**, tiebreak step `hp_fraction_sum` | sys-fight-sim | M1 |
 | cmb-009 | Chirurgeon (Balanced) at 12.40 s; lowest ally 66%; Suture ready in 1.8 s; no ally debuffed or controlled | Evaluation | R1 skip `cond_false`; R2 skip `cooldown` (36 ticks); R3 skip `cond_false`; the cautious stance attacks the nearest enemy | sys-tactics | M1 |
 | cmb-010 | Two enemies at equal gaps of 3.40 m (slots 1 and 3); current target slot 3 | `nearest_enemy` | Slot 3 kept (stickiness); with no current target, slot 1 (lower slot) | sys-targeting | M1 |
 | cmb-011 | 3 front + 2 back per side | Kickoff | Home front (9, 6), (9, 9), (9, 12), back (5, 7.5), (5, 10.5); away mirrored at x = 23 and 27 | sys-arena | M1 |
 | cmb-012 | Any round | Run to completion | Ends by tick 1,500; every fighter's rule fires sum to its committed decisions | sys-fight-sim, sys-tactics | M1 |
+| cmb-014 | Any fighter | Compute the rating in the fighter view, the market wage, the AI value and the harness OVR | All four use the same `combatRating` integer (D-Q) | sys-combat-stats, sys-fighters | M1 |
 | cmb-013 | An AI club with tacticsStyle `cautious` fields an Oathguard | AI preset selection | The first Oathguard preset with style `protective` in presetIds order; if none, the class default | sys-tactics, sys-ai-manager | M1 |
 
 ### 9.2 Fighter lifecycle
@@ -1280,10 +1305,12 @@ Actions on failure: a falling population raises the intake base; top-5 deflation
 | age-002 | Human with Weathers Well at human-age 31 | Season end | Lookup at 29 → 0 wear | sys-development | M1 |
 | age-003 | Dwarf aged 54 (human-age 60.0) | Season end | Mental wear 0.1 × 1.111 = 0.11 per mental stat (D-B) | sys-development | M1 |
 | ret-001 | Human-age 30.9 | Retirement | Chance 0, no roll | sys-development | M1 |
-| ret-002 | Any fighter at human-age 41.0 | Season end | Retires (100%) | sys-development | M1 |
+| ret-002 | Any fighter at human-age 58.0 (human 58, elf 87, dwarf 52.2, orc 46.4, Ashkin 37.7) | Season end | Retires (100%) (D-T) | sys-development | M1 |
 | ret-003 | Chance at P1 with usage 1.0 = 62% | P1 | Status final_season; digest entry; retires at season end without a roll even if the chance fell | sys-development | M1 |
 | ret-004 | Career-ending injury in MW10 | Rest of season | Unavailable; retires at season end; not rolled | sys-injury | M1 |
 | ret-005 | Free agent unsigned at season ends S and S+1 | Season end S+1 | Leaves the league; not counted in intake | sys-development | M1 |
+| ret-006 | Dwarf aged 32 (human-age 35.5), peak rating 66, rating 54, usage 0.6, contract expiring, 1 scar | Retirement chance | hDrop 8%, hAge 0.22%; p = 8.20% × 1.5 + 3 = **15.3%** (D-T) | sys-development | M1 |
+| ret-007 | Human healer at human-age 47, 2 below his peak, usage 0.5, contract running past this season | Retirement chance | 1.5% × 0.6 = **0.9%** (D-T: mentally weighted fighters play on) | sys-development | M1 |
 | inj-001 | Knock rolled in MW5 | MW6, MW7 | Unavailable at the MW6 lock; available at MW7 | sys-injury | M1 |
 | inj-002 | Injury rolls succeed in rounds 1 and 3 | Match end | Exactly one injury (round 1's); rounds 2–3 played | sys-injury | M1 |
 | inj-003 | Human-age 33, 1 scar, serious injury | Career-ending check | Not rolled (not At risk); no badge was shown | sys-injury | M1 |
@@ -1307,10 +1334,11 @@ Actions on failure: a falling population raises the intake base; top-5 deflation
 | cap-004 | A fit captain of 10 matchweeks replaced at the MW8 lock | Lock | Former captain Snubbed 6 weeks (−2 chemistry when fielded) | sys-captaincy | M1 |
 | cap-005 | Captain injured for 5 weeks, replaced | Lock | No Snubbed (exemption) | sys-captaincy | M1 |
 | cap-006 | New captain CQ 52; fit club-mate human-age 31 with CQ 70, not vice | Lock | Club-mate Passed Over; making him vice-captain clears it | sys-captaincy | M1 |
-| cap-007 | Captain of 25 matchweeks released at MW12 | Week processing | Club status Captain Departed 4 weeks; interim captain named | sys-captaincy | M1 |
+| cap-007 | Captain of 25 matchweeks released at MW12 | Week processing | Club status Captain Departed 4 weeks; interim captain named at the next lock by rule 0 (D-S) | sys-captaincy | M1 |
 | cap-008 | Fit club captain not fielded in MW5–MW8 | MW9 lock | Losing the Room −10 CQ; cleared when fielded | sys-captaincy | M1 |
 | cap-009 | Grade-A captain all season; club-mate aged 21 (human-age 21); another club-mate has Shares the Craft | Season end | Mentor ×1.08 × 1.04 = ×1.1232 (≤ 1.15 cap) | sys-captaincy, sys-development | M1 |
 | cap-010 | AI club, season-end AI phase; incumbent CQ 70, challenger 74; then the incumbent is injured for 6 weeks in MW7 | AI phases | No change at the season-end phase (74 < 70 + 5). At MW7 the AI appoints the highest-CQ projected starter; no Snubbed (injury exemption) (D-I) | sys-captaincy, sys-ai-manager | M1 |
+| cap-011 | The player's club has no club captain at the MW1 lock; vice-captain injured; fit starters with CQ 61, 74 (12 matchweeks at the club), 74 (20 matchweeks) | Play match | The 74-CQ starter with 20 matchweeks becomes club captain; `captain.interim` (reason starter) in the digest; Play match was never blocked (D-S) | sys-captaincy | M1 |
 | chem-001 | The worked-example lineup | Lock | Chemistry 0 → composure +0; benching the snubbed fighter → +2 → +1 composure each | sys-chemistry | M1 |
 | chem-002 | A Walks Alone fighter; chemistry +4 | Lock | He gets +0 composure; the others +2 | sys-chemistry | M1 |
 | gen-001 | 1,000 rookies per race | Generate | Ages within debut ranges (Ashkin 16–17, elf 28–33) | sys-youth-intake | M1 |
@@ -1318,7 +1346,8 @@ Actions on failure: a falling population raises the intake base; top-5 deflation
 | gen-003 | Any generation | Validate | P 30–97; caps 2–20; D ≥ 16; potential within ±6 of P before traits | sys-fighters | M1 |
 | gen-004 | World generation, human aged 35 | Generate | Wear 0.3 + 0.4 + 0.5 + 0.6 = 1.8 on each physical stat; career rounds > 0; Sand-Wise if ≥ 300 | sys-fighters | M1 |
 | gen-005 | The same career seed twice | World generation | Identical fighters, names and traits | sys-fighters | M1 |
-| intake-001 | 48 clubs; 40 retirements and 1 career-ending injury this season; 6 leavers | Next-season setup | rookies = 29 + 41 = 70 (within 24–77); trials day gives 1 to each club and 22 by lot (D-H) | sys-youth-intake, sys-transfers | M1 |
+| intake-001 | 48 clubs; 40 retirements and 1 career-ending injury this season; 6 leavers | Next-season setup | rookies = round(48 × 0.75) + 41 = 36 + 41 = 77 (within 24–77); trials day gives 1 to each club and 29 by lot (D-H) | sys-youth-intake, sys-transfers | M1 |
+| intake-002 | New career, any seed | World creation, then the P1 processing | Exactly 48 trials rookies, one per club; every AI club's captains, emphasis and opening offers already set before P1; AI trials signings at the first P1 processing on 3-season deals; each club's opening balance equals its starting balance and the first grant installment is a separate ledger entry (D-P) | sys-youth-intake, sys-transfers, sys-finance | M1 |
 
 ### 9.3 League and economy
 
@@ -1336,34 +1365,36 @@ All values come from the current `economy.json` and `leagues.json`.
 | le-008 | Muster tier-table #1 also wins the Reckoning | Season end | Promoted together with tier-table #2 | sys-league | M1 |
 | le-009 | Banner club with 12 fighters relegated | Setup; the player reaches the end of P4 | P1 shows 12/10 and a cap-relief allowance of 2 at payout 0; Kick off blocked with "Roster over cap: release 2 fighters"; after 2 releases it proceeds | sys-roster | M1 |
 | le-010 | Contract ends this season, not renewed | Season end | Free agent at P1 with formerClubId set; the former club may offer like anyone | sys-contracts | M1 |
-| le-011 | Brannoc at his Banner club (prestige 50), expiring, started 12 of 14 matches (situation −500) | Offer 320 for 2 seasons | Ask 345; ratio 9,275 → counter 330; accepting renews at 330 from next season; signing cost floor10(330 × 46 × 10%) = 1,510 | sys-contracts | M1 |
-| le-012 | Same fighter, patience 3 | Three offers of 300 (ratio 8,695) | Three refusals; then "will not renew this season"; he is a free agent at season end | sys-contracts | M1 |
-| le-013 | Brannoc: ask 360 at A (Banner p50, would start) and at B (Crown p60, would not) | A offers 360, B 375; week processing | Scores 10,500 and 10,416 → signs with A; B's digest says "signed with A" | sys-transfers | M1 |
+| le-011 | Brannoc at his Banner club (prestige 50), expiring, started 12 of 14 matches (situation −500) | Offer 255 for 2 seasons | Ask floor5(285 × 9,800 ÷ 10,000) = 275; ratio 9,272 → counter 265; accepting renews at 265 from next season; signing cost floor10(265 × 46 × 10%) = 1,210 | sys-contracts | M1 |
+| le-012 | Same fighter, patience 3 | Three offers of 240 (ratio 8,727) | Three refusals; then "will not renew this season"; he is a free agent at season end | sys-contracts | M1 |
+| le-013 | Brannoc: ask 290 at A (Banner p50, would start) and 285 at B (Crown p60, would not) | A offers 290, B 310; week processing | Scores 11,000 and 10,877 → signs with A; B's digest says "signed with A" | sys-transfers | M1 |
 | le-014 | Muster club, roster 9, 1 pending offer | A second offer | Refused: "Roster full with pending offers (9 + 1 of 10)" | sys-roster, sys-transfers | M1 |
 | le-015 | Muster club, WB 1,138, bill 1,000, nothing pending | Offers at 150, then 135 | 150 refused ("over wage budget by 12 per week"); 135 accepted as pending | sys-finance | M1 |
-| le-016 | Banner club, balance 1,500, P1 | Offer to Brannoc at 360 for 2 seasons | Refused: signing cost 1,620 > balance 1,500 | sys-finance, sys-contracts | M1 |
-| le-017 | Brannoc on 360 to the end of next season; current week MW6, before processing | Release | Payout 6,660 charged at once; he cannot re-sign with this club this season | sys-contracts | M1 |
+| le-016 | Banner club, balance 1,200, P1 | Offer to Brannoc at 290 for 2 seasons | Refused: signing cost 1,300 > balance 1,200 | sys-finance, sys-contracts | M1 |
+| le-017 | Brannoc on 290 to the end of next season; current week MW6, before processing | Release | Payout floor10(290 × 37 × 50%) = 5,360 charged at once; he cannot re-sign with this club this season | sys-contracts | M1 |
 | le-018 | Muster club (prestige 20), balance 300 before the MW10 processing, bill 900, away week | Process MW10, then MW11 (home, a win, 5 wins in 10 before it) | MW10: 300 + 313 − 900 − 210 = −497 → embargo; an offer at 150 is refused (tier minimum 60). MW11: −497 + 313 + 1,400 + 200 − 900 − 210 = 306 → embargo lifted | sys-finance | M1 |
 | le-019 | Muster club at balance −6,000 after its 8th consecutive debt week | That processing, then setup | Advance 6,000 → balance 0, prestige −5; next grant 14,000 − 4,200 = 9,800 (installments 4,900 + 4,900); 1,800 carried to the following season | sys-finance | M1 |
 | le-020 | Crown club relegated; a fighter earns 721 | Setup | Wage 575; parachute 24,000 now and 12,000 next season; WB computed in the Banner Circuit | sys-contracts, sys-finance | M1 |
-| le-021 | Muster club promoted, prestige 30 after the update, balance 12,000 | Setup in the Banner Circuit | SB 83,076 (includes the 8,500 promotion grant); reserve contribution 0; WB 3,106 per week (7,800 + 800 bp) | sys-finance | M1 |
-| le-022 | P1; the player's Muster club has 2 trials rookies | Sign one at its ask of 150 for 3 seasons; ignore the other; Continue | The first signs at once, signing cost 0, paid from the P1 processing; the second enters the pool at the P1 processing before the AI acts | sys-transfers | M1 |
+| le-021 | Muster club promoted, prestige 30 after the update, balance 12,000 | Setup in the Banner Circuit | SB 86,984 (34,000 grant + 8,500 promotion grant + retainer 17,108 + gate 8 × 3,422); reserve contribution 0; WB 3,252 per week (7,800 + 800 bp) | sys-finance | M1 |
+| le-022 | P1; the player's Muster club has 2 trials rookies (one asks 150 on the open market) | Sign him at his Trials Day ask for 3 seasons; ignore the other; Continue | His ask is capped by the rookie scale at 75 (D-P); he signs at once, signing cost 0, paid from the P1 processing; the second enters the pool at the P1 processing before the AI acts | sys-transfers | M1 |
 | le-023 | MW6; free agent asking 150 for 1 season, no rivals | Offer 150; MW6 processing | Signed at MW6 processing; paid from MW7 (13 weeks); signing cost 190; eligible for the MW7 lineup | sys-transfers, sys-roster | M1 |
-| le-024 | Banner club with 4 fit fighters at lock | Play the match | A hired blade fills the slot, is paid 110 at that processing, and is not on the roster afterwards | sys-roster | M1 |
+| le-024 | Banner club with 4 fit fighters at lock | Play the match | A hired blade fills the slot, is paid 150 (the Banner minimum) at that processing, and is not on the roster afterwards | sys-roster | M1 |
 | le-025 | AI club, fit: Tank 48, Healer 44, others 50, 47, 46, 45, 41; not Seedbed; nobody At risk | AI lineup | Tank 48, Healer 44, 50, 47, 46; presets by tacticsStyle; match captain = club captain if fielded | sys-ai-manager | M1 |
 | le-026 | Ledger-keepers Muster club, WB 1,138 (× 0.88 → 1,001), bill 950, roster 8 | AI action phase | Wage room 51, below the tier minimum 60: no offer this week | sys-ai-manager | M1 |
 | le-027 | Same world seed and inputs | 3 headless seasons, twice | Identical fixtures, results, signings, ledgers and summary hash (P-05, vis-009) | all | M1 |
 | le-028 | Final tier tables | Season end | Banner rank 3 receives 8,750; Crown rank 16 receives 1,560; Muster rank 9 receives 2,000 | sys-finance | M1 |
-| le-029 | Muster club, prestige 26, tier rank 2, wins the Reckoning, promoted | Prestige update | delta = 4 + 5 + 8 = 17; new = 43 − trunc((43 − 45) × 0.15) = 43 | sys-league | M1 |
-| le-030 | New career, any seed | World generation | Free-agent pool = 2.5 × 48 = 120 fighters before P1 (D-C); no patron goal shown or paid (D-C) | sys-transfers, sys-patron | M1 |
+| le-029 | Muster club, prestige 26, tier rank 2, wins the Reckoning, promoted | Prestige update | delta = 4 + 5 + 8 = 17; new = 43 − trunc((43 − 45) × 0.25) = 43 | sys-league | M1 |
+| le-030 | New career, any seed | World generation | Free-agent pool = 2.5 × 48 = 120 fighters before P1 (D-C); every club's opening bill within 80–87% of its WB (D-P); no patron goal shown or paid (D-C) | sys-transfers, sys-patron, sys-finance | M1 |
+| le-031 | MW3; the player's lineup is valid | Play match | The week processing runs, the player's result is committed with every other result and the autosave is written before the report opens; reloading that autosave shows the same result, and quitting at the report changes nothing (D-O) | sys-calendar, sys-save | M1 |
 
 ## 10. Open decisions and completion check
 
-**Linked to document 01 §8:** the delegated decisions D-A to D-I await owner confirmation (01 §8.5, batch A). The PROPOSED rules still open for the owner are: lifecycle C-2 (dwarves shorter-lived) and C-13 (debut floor 16) as open-030; C-7 (permanent scars), C-8 (career-ending only when At risk) and C-14 (a knock misses the next match) as open-031; C-6 (trait roll) within open-012; C-11 (captain-change costs) and C-12 (poor captains hurt) within open-011; open-002, open-006, open-010, open-011, open-012, open-013, open-016, open-019, open-024 (adopted under D-G), open-026 and open-027; and P-02 to P-06, P-09 to P-11, P-17, P-18, P-20 and P-22 as merged. Later milestones: §3.5. Each is a Q item in 01 §8.5.
+**Linked to document 01 §8:** the delegated decisions D-A to D-I and D-N to D-T await owner confirmation (01 §8.5, batch A); M1 was built at risk on them. The PROPOSED rules still open for the owner are: lifecycle C-2 (dwarves shorter-lived) and C-13 (debut floor 16) as open-030; C-7 (permanent scars), C-8 (career-ending only when At risk) and C-14 (a knock misses the next match) as open-031; C-6 (trait roll) within open-012; C-11 (captain-change costs) and C-12 (poor captains hurt) within open-011; open-002, open-006, open-010, open-011, open-012, open-013, open-016, open-019, open-024 (adopted under D-G), open-026 and open-027; and P-02 to P-06, P-09 to P-11, P-17, P-18, P-20 and P-22 as merged. Later milestones: §3.5. Each is a Q item in 01 §8.5.
 
 **Follow-ups for other documents (not design decisions):**
-- Document 05 v0.2 encodes D-E (tech-014, millimetre sim positions), the precomputed retirement tables (§2 determinism rules), the loader conversions and the validators of §6 (05 §4).
-- Document 04 v0.2 specifies the surfaces named in §3 (merged from the UI designer's draft): the match report, lineup screen (presets, rows, captain and vice-captain, injury odds, chemistry, XP bars and trend), finance screen, offer dialog, market list and compare view, embargo banner, captain panel, fighter card (age bar with race zones, cap ticks, wear hatching, trait chips by kind), season development report, the color rules, and the icon keys of §6.
+- Document 05 v0.3 encodes D-E (tech-014, millimetre sim positions), the precomputed retirement tables (§2 determinism rules), the loader conversions and the validators of §6 (05 §4), and the D-O to D-T engine rules; its §12 lists the M1 known issues.
+- **Content requests from this sync** (values the doc cannot change): `economy.json` balanceTargets.seasons 25 → 30 (soak ladder, §8); `combat.json` keys for the MVP weights; `development.json` keys for `PROVISIONAL_TYPICAL_ROUND` and the 2.5 typical rounds per match.
+- Document 04 v0.3 specifies the surfaces named in §3 (merged from the UI designer's draft): the match report, lineup screen (presets, rows, captain and vice-captain, injury odds, chemistry, XP bars and trend), finance screen, offer dialog, market list and compare view, embargo banner, captain panel, fighter card (age bar with race zones, cap ticks, wear hatching, trait chips by kind), season development report, the color rules, and the icon keys of §6.
 
 **Completion check:**
 - [x] Every M1 action has legality, cost, result and failure behavior.
@@ -1371,6 +1402,6 @@ All values come from the current `economy.json` and `leagues.json`.
 - [x] Important rules have worked examples with concrete values.
 - [x] Content entries refer to defined behaviors, and the content files are the declared source of truth.
 - [x] AI and generation have bounded fallbacks (stances, hired blades, journeymen, generation retries, deterministic lots).
-- [ ] The M1 content set proves the central promise: needs the harness and soak runs (§8).
+- [ ] The M1 content set proves the central promise: the harness and the 10-season soak have run (§8); balance pass 2 must bring archetypes and classes into band, and playtests (vis criteria) have not run.
 - [x] Tunable values are distinguishable from required and delegated rules.
 - [ ] Owner confirmation of the delegated decisions and the open proposals (01 §8.5).

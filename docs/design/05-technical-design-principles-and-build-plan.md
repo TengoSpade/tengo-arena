@@ -1,6 +1,6 @@
 # Arena League — technical design principles and build plan
 
-> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.2 · 2026-10-25. Installed from the technical architect's phase-2 draft (`_drafts/05-technical.md`, phase B) and reconciled with documents 01–04 v0.2 by the lead designer. Not approved for implementation and not independently reviewed. This document is the package's technical plan and milestone plan (it replaces the separately planned `plan.md`).
+> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.3 · 2026-10-25. Installed from the technical architect's phase-2 draft (`_drafts/05-technical.md`, phase B), reconciled with documents 01–04 by the lead designer, and synced in v0.3 to the M1 build (main @ f4b39d9), including the draft's later save-v2 change (287da3a) and decisions D-N to D-T. Reviewed by the requirements reviewer and the independent reviewer (01 §8.6); not approved by the owner. M1 was built at risk on the working assumptions of 01 §8.5. This document is the package's technical plan and milestone plan (it replaces the separately planned `plan.md`).
 > Follow the labels, scope, glossary, and authority rules in [document 01](01-game-vision-and-design-principles.md).
 > This document governs implementation constraints and delivery. The owner fixed the language, build tool, renderer and packaging options (01: T1–T6); this document makes the remaining technical choices inside that frame.
 >
@@ -8,11 +8,11 @@
 
 | Field | Value |
 | --- | --- |
-| Game / version / updated | Arena League (working title) / v0.2 (technical phase B) / 2026-10-25 |
-| Status / technical and design owners | Draft, awaiting owner review / technical: architect agent; design: the project owner (G1) |
-| Current milestone | M1 "Season MVP" (01 §5, O14) |
+| Game / version / updated | Arena League (working title) / v0.3 (M1 build sync) / 2026-10-25 |
+| Status / technical and design owners | Draft v0.3; M1 built at risk on main @ f4b39d9; awaiting owner review / technical: architect agent; design: the project owner (G1) |
+| Current milestone | M1 "Season MVP" (01 §5, O14; scope and later order D-N) |
 
-**Labels in this document.** As in 01: REQUIRED only for owner requirements and decisions (R, T, V, G, O IDs); DELEGATED for D-IDs (01 §8.2: binding, pending owner confirmation); PROPOSED for P-IDs; OPEN for open-IDs; EXAMPLE; FUTURE. In addition, **technical decisions** made inside the implementer freedom of §1 carry IDs `tech-nnn`. They bind the coding agents (§11), are not design decisions, and the owner may override any of them. Technical thresholds are written **TUNABLE (tech)** with an initial value.
+**Labels in this document.** As in 01: REQUIRED only for owner requirements and decisions (R, T, V, G, O IDs); DELEGATED for D-IDs (01 §8.2: binding, pending owner confirmation); PROPOSED for P-IDs; OPEN for open-IDs; EXAMPLE; FUTURE (unscheduled only; planned work carries its milestone tag); PERMITTED-CHOICE (behavior chosen within stated bounds, documented as built). In addition, **technical decisions** made inside the implementer freedom of §1 carry IDs `tech-nnn`. They bind the coding agents (§11), are not design decisions, and the owner may override any of them. Technical thresholds are written **TUNABLE (tech)** with an initial value.
 
 **Delegated decisions encoded (01 §8.2; pending owner confirmation):**
 
@@ -25,14 +25,21 @@
 | D-E | Sim positions and per-tick movement in integer millimetres (tech-014) | core/sim |
 | D-F | Race tendency cap ±4, trait stat add cap ±3 (content validator) | core/content |
 | D-G | Combat model per 03 §3.1 (12 stats, accumulators, overtime and tiebreak chain, CC rules, captain model) | core/sim, core/tactics |
-| D-H | Rookies = round(0.6 × clubs) + retirements, clamped to [0.5, 1.6] × clubs; Trials Day floor plus lot; pool floors 60 / 5 per role | core/fighters, core/economy |
+| D-H | Rookies = round(0.75 × clubs) + retirements (basePerClub tuned 0.6 → 0.75), clamped to [0.5, 1.6] × clubs; Trials Day floor plus lot; pool floors 60 / 5 per role | core/fighters, core/economy |
 | D-I | AI captain changes only in the season-end AI phase (5-CQ hysteresis), or mid-season on vacancy or an injury of ≥ 4 weeks | core/ai |
 | D-J | Role glyph shapes paired with role colours (UI only; `data-role` from `combat.json` archetype ids) | src/ui (designer CSS) |
 | D-K | Money formatted "11,840 ts" with a true minus sign | `src/ui/format` |
 | D-L | **Pacing presets in M1** (Thorough, Balanced default, Streamlined, Custom) decide where Continue stops at the lineup and the report. They are a player setting stored outside saves (§5) and never change results: under Streamlined the store dispatches the same `lineup.set` and match commands the player would. No core API changes. See §12 for the ownership note | src/ui store and Continue state machine; Settings screen |
 | D-M | Confirmation dialogs only for binding actions; reversible settings apply at once with Undo, implemented as commands through the store (04 §6.2) | src/ui components and store |
+| D-N | M1 = presets only (no rule editing), free agents only; later order M2 viewer → M3 editor → M4 scouting → M5 academy → M6 regions, cups, transfers → M7 balance, polish, packaging (§9) | §9; package scope |
+| D-O | No separate "play my match" call: `advanceWeek` plays every fixture, the player's included (`WeekReport.playerFixtureId`); the store autosaves after the committed advance and only then opens the report, so a result can never be rerolled | core/game; src/ui store (`create-store.ts`) |
+| D-P | `createWorld` makes a season-1 Trials Day class of exactly one rookie per club (`fighters.generateRookies(draft, content, count)`), rescales opening bills into `budget.worldGenBillBandBp` (80–87% of WB), and runs the AI season-start setup (captains, vice-captains, emphasis, opening offers) for every club before P1, planned as if each club had signed its rookie at his Trials Day ask; AI trials signings at the first P1 processing; `club.choose` withdraws the AI's offers for the chosen club. Opening balance = starting balance; grant installment 1 is a separate setup ledger credit; the WB reserve term uses the pre-credit balance. Rookie ask capped by `market.trialsDay.maxAskBpOfTierMinWage` (12,500) | core/game (`world.ts`), core/economy, core/ai |
+| D-Q | One integer rating function, `combatRating` in core/content (`rating.ts`): fighter ratings and potentials, the market, AI values, the UI and the harness OVR all call it | core/content, core/fighters, core/sim |
+| D-R | The UI reads the next opponent's lineup from its latest stored `MatchResult` input (the five it last fielded, still at the club), labelled "their last lineup". `club.lineup` of an AI club already holds its plan for the coming match, so screens must not show it for an opponent (see §12 KI-9) | src/ui (home, squad) |
+| D-S | `autoCaptain` (core/game `week.ts`) at each lock: missing captain → the vice if fit, else the fit starter with the highest CQ (ties: matchweeks at the club, then id), a `captain.interim` news item (reason vice or starter); the `captain.missing` blocker is gone; the fight lead of an unavailable captain is the vice, else the best-CQ starter (`fighters.lineupCaptain`) | core/game, core/fighters, src/ui |
+| D-T | Retirement p = 1 − (1 − hDrop)(1 − hAge): `retirement.hazardByRatingDrop` on the drop from `career.peakRating`, `hazardPerHumanYearPastPeak` from `physicalPeakHumanAge` 30 precomputed per race (`tables.ageHazardBp`); 0 below human-age 31, forced at 58; heavy-wear add 0. The AI veteran penalty scales with the class's physical rating-weight share | core/fighters (`retirement.ts`, `tables.ts`), core/ai |
 
-**Repository status (as reported by the architect).** `npm run typecheck`, `npm run lint`, `npm test` and `npm run build` pass with every module stubbed. `npm run validate-content` passes on `content/default` (42 classes, 168 abilities, 105 presets, 60 traits, 5 races, 48 clubs). `npm run balance` and `npm run soak` run with their final report shapes (stub results until core/sim and core/game land). These are the architect's results; the lead designer did not re-run them.
+**Repository status (v0.3, as reported by the orchestrator and the module READMEs; the lead designer did not re-run them).** M1 is built and integrated on main @ f4b39d9: every work package of §9.2 merged, then the fix rounds m1/fix-perf, m1/fix-tuning, m1/fix-ui and m1/fix-core. 741 tests pass. `npm run validate-content` passes on `content/default` (42 classes, 168 abilities, 105 presets with 295 rules, 60 traits, 5 races, 48 clubs). `npm run balance` ran balance pass 1 (03 §8.2). `npm run soak` passes 11/11 checks over 10 seasons (seed `soak-1`); the 20-season run flags one dynasty (§12). Budget actuals are in §8 and the known issues in §12.
 
 ## 1. Implementation mandate and freedom
 
@@ -176,13 +183,14 @@ src/render   -> core/{util, rng, model, content, sim}; the only importer of pixi
 
 - **Operation:** `advanceWeek(state, content): Result<{ state, report: WeekReport }, EngineError>` in core/game. Companions: `createWorld`, `applyCommand`, `getBlockers`, `runSeasonEnd`, `prepareMatchInput`, `buildMatchReport` and the views.
 - **Inputs:** a committed state in phase `preseason`, `regular` or `tournament`; the `ContentDB` of `state.content`.
-- **Validation:** `getBlockers` must be empty for the player (lineup of 5 fit roster fighters signed before this week, roster at or under the tier cap from the Kick off commit, a club chosen, other 02 §3 blockers). AI clubs fix their lineups through commands; short-handed clubs get hired blades (open-006).
-- **Pipeline** (leagues.json `calendar.weekProcessingOrder`; module calls in brackets): 1 simulate remaining fixtures [game + sim; lineup lock: fighters.lineupLock, economy.assignHiredBlades]; 2 record results and standings [league.recordResult]; 3 lifecycle weekly [fighters.applyMatchLifecycle per result, fighters.weeklyLifecycle]; 4 income [economy.weeklyIncome]; 5 costs [economy.weeklyCosts]; 6 financial status [economy.financialStatus]; 7 P1 only: unsigned trials rookies to the pool [economy.releaseTrialsRookies]; 8 free-agent decisions [economy.resolveFreeAgentOffers]; 9 AI action phase incl. next week's AI lineups [ai.planWeek -> applyCommand]; 10 pool floor top-up [economy.topUpFreeAgentPool]; 11 advance the calendar (`league.nextCalendar`; at the end of the regular season `league.seedReckonings`), digest; the UI store then autosaves.
+- **Validation:** `getBlockers` must be empty for the player (lineup of 5 fit roster fighters signed before this week, roster at or under the tier cap from the Kick off commit, a club chosen, other 02 §3 blockers). A missing captain is not a blocker (D-S). AI clubs fix their lineups through commands; short-handed clubs get hired blades (open-006).
+- **Pipeline** (leagues.json `calendar.weekProcessingOrder`; module calls in brackets): 1 lock and simulate every fixture of the week, the player's included (D-O) [game + sim; interim captains: game `autoCaptain` (D-S); lineup lock: fighters.lineupLock, economy.assignHiredBlades]; 2 record results and standings [league.recordResult]; 3 lifecycle weekly [fighters.applyMatchLifecycle per result, fighters.weeklyLifecycle]; 4 income [economy.weeklyIncome]; 5 costs [economy.weeklyCosts]; 6 financial status [economy.financialStatus]; 7 P1 only: unsigned trials rookies to the pool [economy.releaseTrialsRookies] (in season 1 the AI's trials signings run before step 1 of the first P1 processing, D-P); 8 free-agent decisions [economy.resolveFreeAgentOffers]; 9 AI action phase incl. next week's AI lineups [ai.planWeek -> applyCommand]; 10 pool floor top-up [economy.topUpFreeAgentPool]; 11 advance the calendar (`league.nextCalendar`; at the end of the regular season `league.seedReckonings`), digest; the UI store then autosaves, and only after the autosave opens the player's match report (D-O).
 - **State changes:** one atomic commit; the input is never mutated.
 - **Repeated request behavior:** pure; the store's busy flag prevents double advances.
 - **Failure / cancellation:** `err(...)` and no state; autosave only after success.
-- **Season end:** `runSeasonEnd` (phase `season-end`) follows `calendar.seasonEndOrder`: placings and titles [league.archiveSeason]; prizes [economy.seasonPrizes]; promotion/relegation [league.promotionRelegation, applyTierMoves]; prestige [economy.updatePrestige]; (M5 academy); aging and development [fighters.seasonEndDevelopment]; retirements [fighters.seasonEndRetirements]; contract expiries [economy.contractExpiries]; off-season recovery [fighters.offseasonRecovery]; (M4, M6 steps); pool maintenance [economy.poolMaintenance]; next-season setup [league.setupSeason, fighters.generateRookies, economy.nextSeasonFinanceSetup]; AI phase [ai.planSeasonEnd]; then the store autosaves. Returns `SeasonEndReport`.
-- **Rule reference:** 02 §3; 03 sys-calendar, sys-league, sys-tournament, sys-roster, sys-finance, sys-transfers, sys-ai-manager; 03 sys-calendar (both processing orders); O2, O9, O14; P-04, P-05; open-005, open-006, open-014, open-016.
+- **Season end:** `runSeasonEnd` (phase `season-end`) follows `calendar.seasonEndOrder`: placings and titles [league.archiveSeason]; prizes [economy.seasonPrizes]; promotion/relegation [league.promotionRelegation, applyTierMoves]; prestige [economy.updatePrestige]; (M5 academy); aging and development [fighters.seasonEndDevelopment]; retirements [fighters.seasonEndRetirements]; contract expiries [economy.contractExpiries]; off-season recovery [fighters.offseasonRecovery]; (M4, M6 steps); pool maintenance [economy.poolMaintenance]; next-season setup [league.setupSeason, fighters.generateRookies, economy.nextSeasonFinanceSetup]; AI phase [ai.planSeasonEnd]; retention [`compactHistory`, then departed fighters move to `alumni`, §5]; then the store autosaves. Returns `SeasonEndReport`. Retirements follow D-T.
+- **New game:** `createWorld` (D-P): clubs → world-generation fighters inside the tier rating bands → free agents → `setupSeason(1)` → `generateRookies` (one per club) → `economy.initialFinances` (contracts at asks, bills rescaled into 80–87% of WB) → `assignTrialsRookies` → per club `ai.planRoster` through commands → `announceFinalSeasons`.
+- **Rule reference:** 02 §3; 03 sys-calendar, sys-league, sys-tournament, sys-roster, sys-finance, sys-transfers, sys-ai-manager; 03 sys-calendar (both processing orders); O2, O9, O14; D-O, D-P, D-S, D-T; P-04, P-05; open-005, open-006, open-014, open-016.
 
 #### Operation contract: save / load
 
@@ -197,7 +205,7 @@ src/render   -> core/{util, rng, model, content, sim}; the only importer of pixi
 
 | Type | Purpose |
 | --- | --- |
-| `GameState` | `schemaVersion`, `content`, `rng`, `ids`, `calendar`, `options`, `playerClubId`, `clubs`, `fighters`, `competitions`, `fixtures`, `results`, `market`, `ai`, `ledger`, `news`, `history`, reserved `knowledge` (M4). `STATE_SCHEMA_VERSION = 1` |
+| `GameState` | `schemaVersion`, `content`, `rng`, `ids`, `calendar`, `options`, `playerClubId`, `clubs`, `fighters`, `competitions`, `fixtures`, `results`, `market`, `ai`, `ledger`, `news`, `history`, reserved `knowledge` (M4), `alumni` (slim records of fighters who left; `personOf`, `personName`). `STATE_SCHEMA_VERSION = 2` (v1 → v2 migration moves agreed renewals to `Contract.next`) |
 | `GameOptions` | `trainingEmphasis` (true), `patronGoals` (false: no patron goal in M1), `retirement` (true) |
 | `Calendar` | `season`, `weekIndex` (1..23, 24 during season end), `weekId` (`P1`…`TW3`), `phase` |
 | `Club` | identity and colours, region/district, tier and wing, AI personality, tactics style, prestige, `ClubFinance` (balance, season and wage budgets, status healthy/watch/embargo, debt weeks, Registry debt, parachute and ascension seasons), captaincy fields, club statuses, `Lineup` (5 × `{ fighterId, row }`, match-captain override, tactics per fighter), shortlist, `ClubSeasonRow` history |
@@ -257,18 +265,19 @@ Each file has a zod schema in `src/core/content/schema/`; types are inferred (`C
 | --- | --- | --- | --- | --- |
 | Career state | `GameState` | new game → career deleted | yes (saves) | core/game (§3.2 per part) |
 | Content | `ContentDB` | app start → exit | no; id and hash saved | core/content |
-| Committed results | `MatchResult` (with full sim input) | when played → kept; results older than the previous season compacted to scores (TUNABLE (tech)) | yes | core/game, core/league |
+| Committed results | `MatchResult` (with full sim input) | when played → kept for the current and previous season, the previous season compacted except the player club's matches; older seasons live on as `ClubSeasonRow` history (TUNABLE (tech)) | yes | core/game, core/league |
+| Departed fighters | `alumni` (retired, career-ended, left unsigned; past hired blades) | at the season end they leave → kept as slim records; past hired blades and leavers who never played are dropped once their season leaves the window | yes | core/game |
 | Fight runtime | positions, HP, cooldowns inside `simulateFight` | one call | no; M2 quit-mid-fight resumes by re-simulation to the same tick (open-016) | core/sim |
 | Fight logs | event streams | built on demand from stored inputs | no | core/sim |
 | View state | route, sort, filters, tab | session | optional per device (localStorage) | src/ui |
 | Player settings | UI scale, theme, reduced motion, pacing preset (D-L), tooltip delay, number format | across careers | yes, separate settings record | src/ui + src/platform |
 | Command log | commands since the last save | until the next save | only in state dumps | src/ui store |
 
-- **Save availability:** manual save on any management screen while no transition runs; autosave after every committed advance and after season end (covers open-016's week-start and post-match autosaves, because M1 commits matches inside week processing). 3 rotating autosave slots and 10 manual slots (TUNABLE (tech)); hardcore ironman in M7.
+- **Save availability:** manual save on any management screen while no transition runs; autosave after every committed advance and after season end (covers open-016's week-start and post-match autosaves, because M1 commits matches inside week processing). **Commit before the report (D-O):** the store writes the autosave after the advance commits and before it opens the match report, so quitting at the report or reloading cannot change a result. 3 rotating autosave slots and 10 manual slots (TUNABLE (tech)); hardcore ironman in M7.
 - **Resume guarantee:** loading restores the exact `GameState`; advancing from it with identical inputs reproduces the original results (seeds derive from the root and fixture identity). Committed results never change.
 - **Commit boundaries:** one atomic commit per transition (tech-007): results, XP, injuries, ledger, offers and the calendar move together.
 - **Save identity / version, interrupted writes, invalid saves, migrations, deletion, settings:** as specified in §3.3 and phase A: versioned envelope with checksum; one IndexedDB transaction per write (temp file + rename on desktop); unreadable saves stay listed with export for support; ordered pure migrations with fixture saves; confirm dialogs for deletion; settings outside saves.
-- **Size:** ≤ 3 MB after 10 seasons (TUNABLE (tech)) through compaction of results, per-season ledger summaries in `ClubSeasonRow`, news retention of two seasons and fighter history rows of about 20 integers.
+- **Size:** ≤ 3 MB after 10 seasons (TUNABLE (tech)) through compaction of results, per-season ledger summaries in `ClubSeasonRow`, news retention of two seasons and fighter history rows of about 20 integers. **Retention (schema v2):** results, fixtures and competitions of the current and previous season only, the previous season compacted except the player club's matches; fighters who left become `alumni` records (past hired blades and leavers who never played are dropped once their season leaves the window); display stats on the last two history rows of a fighter. **Measured (bench-season, 10 seasons, main):** 2.9–3.9 MB at season end, but **4–10 MB during a season** (peaking near 10 MB late in the season), because each full current-season result is about 13 KB. **OPEN (G1, owner question Q36):** whether to compact AI-vs-AI results after a few weeks, which keeps the save near budget but removes detailed reports and per-match fighter logs for those matches.
 
 ## 6. Time, randomness, and reproducibility
 
@@ -286,18 +295,18 @@ Each file has a zod schema in `src/core/content/schema/`; types are inferred (`C
 
 ## 8. Performance, packaging, and diagnostics
 
-Reference machine: **OPEN (tech)** until the owner names one; working reference is a mid-range Windows laptop from 2020 or later (4 cores, 8 GB) with Node 24 and current Chromium. Thresholds are TUNABLE (tech).
+Reference machine: **OPEN (tech)** until the owner names one (owner question Q35); working reference is a mid-range Windows laptop from 2020 or later (4 cores, 8 GB) with Node 24 and current Chromium. Thresholds are TUNABLE (tech). The M1 actuals below were measured on the development machine, which has not been compared with that reference, so a pass or a miss is provisional until Q35 is answered.
 
-| Constraint | Target conditions | Required threshold / behavior | Verification |
-| --- | --- | --- | --- |
-| Fight sim | one 5v5 round, record `none` | median ≤ 2 ms, p99 ≤ 6 ms; `full` ≤ 3x; if over, raise `decisionIntervalTicks` to 4 first (03 §8.1) | `npm run balance` ms/fight; sim bench test |
-| Matchweek | 48 clubs: 24 fixtures (≈ 60 rounds) + all weekly steps incl. AI market work (≈ 48 × 150 evaluations) | ≤ 250 ms typical, hard ceiling 1 s; M6 scale ≤ 1 s; over budget → Web Worker (tech-011) | debug overlay; soak timing |
-| Season headless | 384 league + 21 Reckoning matches, season end | ≤ 10 s; 30-season soak ≤ 5 min | `npm run soak` |
-| UI interaction | 300-row tables | screen switch ≤ 100 ms; sort ≤ 50 ms; input ≤ 50 ms; responsive during an advance | browser checks |
-| Startup / load | content validation, save load | main menu ≤ 2 s; validation ≤ 200 ms; 10-season save load ≤ 500 ms | debug overlay |
-| Bundle | M1 production build | main JS ≤ 250 KB gzip excluding lazy chunks (phase B: 120 KB gzip, most of it the bundled content JSON) | `npm run build` |
-| Memory / storage | 10-season career | ≤ 400 MB (desktop); save ≤ 3 MB | task manager; overlay |
-| Offline | `dist/` and desktop build | launches and plays with no network | clean launch, network off |
+| Constraint | Target conditions | Required threshold / behavior | Verification | M1 actual (main @ f4b39d9, development machine) |
+| --- | --- | --- | --- | --- |
+| Fight sim | one 5v5 round, record `none` | median ≤ 2 ms, p99 ≤ 6 ms; `full` ≤ 3x; if over, raise `decisionIntervalTicks` to 4 first (03 §8.1) | `npm run balance` ms/fight; sim bench test | **2.4 ms per round median: over budget** (§12) |
+| Matchweek | 48 clubs: 24 fixtures (≈ 60 rounds) + all weekly steps incl. AI market work (≈ 48 × 150 evaluations) | ≤ 250 ms typical, hard ceiling 1 s; M6 scale ≤ 1 s; over budget → Web Worker (tech-011) | debug overlay; soak timing | median 189–221 ms per week, maximum 340 ms (10 seasons) |
+| Season headless | 384 league + 21 Reckoning matches, season end | ≤ 10 s; 30-season soak ≤ 5 min | `npm run soak` | 3.4–4.7 s per season; 10-season soak 73 s including the determinism replay, 20 seasons 147 s |
+| UI interaction | 300-row tables | screen switch ≤ 100 ms; sort ≤ 50 ms; input ≤ 50 ms; responsive during an advance | browser checks | not yet measured |
+| Startup / load | content validation, save load | main menu ≤ 2 s; validation ≤ 200 ms; 10-season save load ≤ 500 ms | debug overlay | world creation 159 ms; others not yet measured |
+| Bundle | M1 production build | main JS ≤ 250 KB gzip excluding lazy chunks (phase B: 120 KB gzip, most of it the bundled content JSON) | `npm run build` | **within budget by 0.5 KB** after lazy-loading the shortcut sheet, search and debug overlay; fix: strip `_` documentation keys from the bundled content (§12) |
+| Memory / storage | 10-season career | ≤ 400 MB (desktop); save ≤ 3 MB | task manager; overlay | **save 4–10 MB in season** (2.9–3.9 MB at season end): over budget, Q36; autosave 16–24 ms; memory not yet measured |
+| Offline | `dist/` and desktop build | launches and plays with no network | clean launch, network off | not yet verified |
 
 **Packaging recommendation (T6, open-017; owner decides at M7):** Electron, for one predictable Chromium/V8 engine on Windows, Linux and Steam Deck (parity with the Node/V8 tests and harness; predictable PixiJS WebGL), and mature Steamworks bindings in TypeScript (`steamworks.js`); size matters little on Steam. Tauri 2 remains a viable fallback (system webviews: WebView2 on Windows, WebKitGTK on Linux whose WebGL behaviour is less predictable; WebView2 under Proton is not a well-trodden path; `steamworks-rs` from Rust). Steam overlay support must be verified for either. M7 spike: a minimal shell of each, the M2 arena on Windows 11 and a Steam Deck; overlay, achievements, cloud saves, frame rate. Only `src/platform` differs between wrappers.
 
@@ -310,7 +319,7 @@ Reference machine: **OPEN (tech)** until the owner names one; working reference 
 
 | Milestone | Player-visible outcome | Included requirement IDs / content | Dependencies | Exit criteria | Exclusions |
 | --- | --- | --- | --- | --- | --- |
-| **M1 Season MVP** (current) | 01 §5 finish line | R1 (headless), R4 (tiers), R6, R7, T2–T5, V1; O1–O6 (M1 parts), O8–O14; P-02–P-06, P-09 (free agents), P-10, P-11, P-17, P-18, P-20, P-22 (recap, report); D-A to D-M | owner answers to 01 §8.5 Q1–Q16 and Q23–Q26, or their documented working assumptions; DELEGATED D-A to D-M bind meanwhile | finish line in the browser without developer help; §10 M1 rows pass; 10-season soak with no failed check; balance report delivered (designers tune outliers); §8 budgets met | viewer, editor, scouting, academy, regions/cups/transfers, difficulty, packaging, patron goals |
+| **M1 Season MVP** (current) | 01 §5 finish line | R1 (headless), R4 (tiers), R6, R7, T2–T5, V1; O1–O6 (M1 parts), O8–O14; P-02–P-06, P-09 (free agents), P-10, P-11, P-17, P-18, P-20, P-22 (recap, report); D-A to D-T | owner answers to 01 §8.5 batches A and B, or their documented working assumptions; DELEGATED D-A to D-T bind meanwhile (M1 was built at risk on them; the answers are still pending) | finish line in the browser without developer help; §10 M1 rows pass; 10-season soak with no failed check; balance report delivered (designers tune outliers); §8 budgets met | viewer, editor, scouting, academy, regions/cups/transfers, difficulty, packaging, patron goals |
 | M2 Arena viewer | watch and replay matches at 1x/2x/4x with pause; inspector; calls; rule badges | T1; P-01, P-22; vis-003, vis-009 | M1; `full` logs | viewed result hash-identical to headless | editor |
 | M3 Tactics editor | edit rules from presets; lint; library and codes; between-round edits; sandbox | R2; P-07, P-13, P-21; vis-002, vis-010 | M2; tactics rule model | newcomer edit test; tailored rules beat presets | Workshop |
 | M4 Scouting | scouts, assignments, ranges, knowledge, opponent reveal | R3; O4; P-12, P-13, P-19; vis-004 | M1–M3; reserved `knowledge` | vis-004; no true-value leaks in UI | — |
@@ -324,9 +333,9 @@ Reference machine: **OPEN (tech)** until the owner names one; working reference 
 | --- | --- | --- |
 | M1.0 Foundation | architect (phase A) | done: scaffold, RNG, purity checks, CLIs, app shell |
 | M1.1 Contracts | architect (phase B) | done: content schemas + validator, full model, every module API stubbed, testkit fixtures, route table, store contract, work packages |
-| M1.2 Parallel build | WP1–WP7 in separate worktrees | each package's acceptance criteria (§9.2) with `npm run check` green on a rebase onto `main` |
-| M1.3 Integration | WP5 (integrator) with WP6 | stubs replaced as packages merge; a full season headless (soak) and in the browser |
-| M1.4 Verification and polish | QA tester (browser), WP1 (balance), WP5 (soak), UI designer review | all M1 rows of §10 with recorded evidence |
+| M1.2 Parallel build | WP1–WP7 in separate worktrees | each package's acceptance criteria (§9.2) with `npm run check` green on a rebase onto `main` (done: all seven merged) |
+| M1.3 Integration | WP5 (integrator) with WP6 | stubs replaced as packages merge; a full season headless (soak) and in the browser (done for headless: main @ f4b39d9, 10-season soak 11/11; fix rounds fix-perf, fix-tuning, fix-ui, fix-core merged) |
+| M1.4 Verification and polish | QA tester (browser), WP1 (balance), WP5 (soak), UI designer review | all M1 rows of §10 with recorded evidence (in progress: balance pass 1 done, pass 2 due; browser checklist not yet recorded here; §12 known issues open) |
 
 ### 9.2 Work packages for parallel coding agents
 
@@ -403,7 +412,7 @@ Reference machine: **OPEN (tech)** until the owner names one; working reference 
 | T4, P-05, vis-009 (determinism) | Vitest: 3 runs → equal event hash; `checksum` equal at every record level; golden hash in Node and Chromium; same seed full season → equal state checksum; save → load → advance equals advance | fixture content, fixed seeds | equal hashes | M1 |
 | V1 (sim and tactics) | unit tests per vocabulary entry, effect, status and the 03 §9.1 cases | fixture content | WP1 test list green | M1 |
 | V1, vis-002 (balance) | `npm run balance` (random-draft, mirror, preset-vs-default) | `content/default`, seeds `balance-1..k` | JSON report; M1 first pass: outliers outside 40–60% reported to designers; M7 target 45–55% | M1, M7 |
-| vis-008 (soak) | `npm run soak` with every `SOAK_CHECKS` entry and the bands in `development.json soakTargets` and `economy.json balanceTargets` | `content/default`, seed `soak-1` | JSON report, all `pass` | M1 (10 seasons), M7 (30) |
+| vis-008 (soak) | `npm run soak` with every `SOAK_CHECKS` entry and the bands in `development.json soakTargets` and `economy.json balanceTargets` | `content/default`, seed `soak-1` (M7: 10 seeds) | JSON report, all `pass` | M1 gate 10 seasons, 1 seed (met: 11/11); 20 seasons reported, not gating; M7 gate 30 seasons × 10 seeds (03 §8). `economy.json` balanceTargets.seasons (25) should become 30: content request |
 | R7, open-016 (saves) | round trip, checksum, migrations, too-new, references; browser save, close, reload, continue | fixture saves | tests green; checklist step | M1 |
 | O2, O9, open-014 (league) | WP3 tests | generated world | green | M1 |
 | O10, open-007, open-028 (economy) | WP4 tests incl. worked examples | fixture world | green | M1 |
@@ -412,7 +421,7 @@ Reference machine: **OPEN (tech)** until the owner names one; working reference 
 | §8 budgets | bench, soak timing, build output | reference machine | numbers in the milestone report | M1 |
 | vis-003, vis-009 (viewer) | viewer log hash = headless hash; observer test | M2 build | equal hashes; observer notes | M2 |
 
-Browser end-to-end automation (Playwright) is FUTURE (tech); M1 uses the scripted checklist and component tests.
+Browser end-to-end automation (Playwright) is unscheduled (FUTURE, tech); M1 uses the scripted checklist and component tests.
 
 **A work package is done when:** its public API is fully implemented (no `notImplemented` left in its folders); its tests from §9.2 exist and pass, including failure paths and seeded determinism; `npm run check` and `npm run build` pass after a rebase onto `main`; its acceptance criteria are demonstrated with evidence (commands and outputs); its README states status, decisions and known gaps; it touched no file outside its ownership; the report of §11 is delivered.
 
@@ -430,7 +439,7 @@ A milestone is done when:
 
 1. Read the full specification (01–05, the 03 §3 specs of your systems, the content files, and the README of each folder you own) before making dependent design choices. The phase-2 drafts in `docs/design/_drafts/` are merged and superseded by 03 and 04.
 2. Identify the current milestone (M1) and blockers; do not interpret all future scope as immediate work.
-3. Ask about missing decisions that change player-visible behavior (G1). Use a documented working assumption only where 01–04 mark one; DELEGATED decisions (D-A to D-M) are binding; otherwise ask in your report and continue with independent work.
+3. Ask about missing decisions that change player-visible behavior (G1). Use a documented working assumption only where 01–04 mark one; DELEGATED decisions (D-A to D-T) are binding; otherwise ask in your report and continue with independent work.
 4. Record consequential technical choices in your README; the architect merges them here as `tech-` entries.
 5. Implement and verify complete slices of the player experience.
 6. Keep approved design changes synchronized across affected documents and acceptance scenarios (through the lead designer and the architect, not by editing their files).
@@ -458,11 +467,26 @@ A milestone is done when:
 | open-010 | lineups and presets fixed for the whole match in M1; per-round inputs are possible later without API changes | M1 |
 | open-006 | hired blades: `FighterStatus 'hired-blade'`, `economy.assignHiredBlades`, `MatchResult.hiredBladeIds` | M1 |
 | open-005, open-014 | week layout and league structure are data (`leagues.json`); code must not assume 23 weeks or 16 clubs | M1 |
-| D-A to D-M (01 §8.2) | encoded as listed in the header; reversible by data (`development.json`, `leagues.json`, `economy.json`) or `GameOptions`, except mm positions (sim-internal) and the UI policies | M1 |
+| D-A to D-T (01 §8.2) | encoded as listed in the header; reversible by data (`development.json`, `leagues.json`, `economy.json`) or `GameOptions`, except mm positions (sim-internal), the UI policies and the engine rules of D-O, D-P and D-S | M1 |
 | D-L ownership note | Pacing presets fall inside existing ownership without a §9.2 change: the Continue state machine and store (WP6) and the Settings screen (WP7). Raised to the architect as a scope note for those packages' acceptance; no contract changes | M1 |
-| Owner questions | 01 §8.5 Q1–Q27; M1 needs Q1–Q16 and Q23–Q26 answered or their working assumptions accepted | M1 |
+| Owner questions | 01 §8.5 Q1–Q36; M1 needs batches A and B answered or their working assumptions accepted (M1 was built at risk on them) | M1 |
 | Structural content requests 1–3 (§4) | consistency only; none blocks M1 | — |
-| Reference machine (tech) | numeric budgets in §8 | M1 verification |
+| Reference machine (tech) | numeric budgets in §8; owner question Q35 | M1 verification |
+| §9.2 frozen text | §9.2 is kept verbatim (agents executed against it); values it quotes from before balance pass 1 (for example "the Behead worked example (315)", now 384) are superseded by 03 v0.3 | — |
+
+**M1 known issues (main @ f4b39d9, recorded in the v0.3 doc sync).** None blocks playing a full season; each has an owner and a next step.
+
+| # | Issue | Evidence | Owner / next step | Blocks |
+| --- | --- | --- | --- | --- |
+| KI-1 | The 20-season soak can flag a dynasty: Cinderpan Cinderjacks (Crown) won 4 Reckoning titles in seasons 4–11 on seed `soak-1` | `npm run soak -- --seasons 20`: competitive-balance FAIL; the 10-season gate passes | league-economy designer: dynasty levers (03 §8.4 tuning order) after balance pass 2 | M7 gate |
+| KI-2 | Save size 4–10 MB during a season against the 3 MB budget | bench-season: 2.9–3.9 MB at season end, up to 10.2 MB late in a season | **G1 decision (Q36):** compact in-season AI-vs-AI results after a few weeks, or raise the budget | M1 §8 budget |
+| KI-3 | Main bundle only 0.5 KB under its 250 KB gzip budget | `npm run build` | WP6: strip `_`-prefixed documentation keys from the bundled content JSON | M1 §8 budget (headroom) |
+| KI-4 | Fight sim 2.4 ms per round (median) against the 2 ms budget | sim bench | WP1: profile; the §8 fallback is `decisionIntervalTicks` 4; re-measure on the reference machine (Q35) | M1 §8 budget |
+| KI-5 | `hourglass_sage` wins 61.7% of its fights; class win rates span 40–62% and archetypes 45–55%, outside the 03 §8.2 targets | balance pass 1 report | combat designer: balance pass 2 within ±30% | M7 balance |
+| KI-6 | Cautious-style AI clubs won 0 of 20 Crown titles in the 20-season soak | soak season summaries | combat and economy designers: protective presets and the AI style mapping | M7 balance |
+| KI-7 | AI clubs keep a full Muster roster cap after signing their trials rookie, leaving little room for later signings | soak rosters | league-economy designer: depth floor and trials-as-depth rule (03 sys-ai-manager) | — |
+| KI-8 | The per-match career-ending estimate (`careerEndingChancePerMatchBp`) is computed but not shown on the lineup screen (03 sys-injury, inj-004) | UI review | WP7 | — |
+| KI-9 | Before an opponent's first match of the career (the MW1 hub), the Home hero's "their last lineup" falls back to that club's current `club.lineup`, which for an AI club is its planned MW1 lineup: a small D-R leak | `src/ui/screens/home` `lineupFighters` fallback (found in the v0.3 doc sync) | WP7: show "No lineup fielded yet" instead | — |
 
 - [x] Fixed design requirements and replaceable implementation choices are distinguishable (REQUIRED IDs versus `tech-` decisions).
 - [x] State and rule ownership are clear at important boundaries (§3, enforced by tests and package ownership).
