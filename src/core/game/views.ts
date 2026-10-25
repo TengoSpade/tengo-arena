@@ -122,3 +122,26 @@ export function suggestLineup(ports: GamePorts, state: GameState, clubId: ClubId
   const choice = ports.ai.chooseLineup(state, clubId, content);
   return { type: 'lineup.set', clubId, fighters: choice.fighters, matchCaptainId: choice.matchCaptainId };
 }
+
+/** Release preview for the confirmation dialog (D-M): payout now, balance after, and whether it is a cap-relief release. */
+export interface ReleasePreview {
+  fighterId: FighterId;
+  payout: Gold;
+  balanceAfter: Gold;
+  capRelief: boolean;
+  /** The fighter is the club captain or vice-captain (an interim captain is named on release). */
+  holdsCaptaincy: boolean;
+}
+
+export function releasePreview(ports: GamePorts, state: GameState, clubId: ClubId, fighterId: FighterId, content: ContentDB): ReleasePreview | null {
+  const club = state.clubs[clubId];
+  if (!club || onRoster(state, clubId, fighterId) === null) return null;
+  const payout = ports.economy.releasePayout(state, clubId, fighterId, content);
+  return {
+    fighterId,
+    payout,
+    balanceAfter: club.finance.balance - payout,
+    capRelief: ports.economy.capReliefAllowance(state, clubId, content) > 0,
+    holdsCaptaincy: club.captainId === fighterId || club.viceCaptainId === fighterId,
+  };
+}

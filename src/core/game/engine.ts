@@ -11,7 +11,7 @@ import { buildMatchReport, prepareMatchInput } from './match';
 import type { GamePorts } from './ports';
 import { processSeasonEnd, type SeasonEndOutcome } from './season-end';
 import { newsSince } from './shared';
-import { fighterView, freeAgents, getBlockers, roster, suggestLineup, type FighterView } from './views';
+import { fighterView, freeAgents, getBlockers, releasePreview, roster, suggestLineup, type FighterView, type ReleasePreview } from './views';
 import { processWeek, type WeekOutcome } from './week';
 import { createWorld, type NewGameParams } from './world';
 import type { OfferResponse, NewsId } from '../model';
@@ -39,6 +39,7 @@ export interface GameEngine {
   fighterView(state: GameState, fighterId: FighterId, content: ContentDB): FighterView;
   freeAgents(state: GameState, content?: ContentDB): Fighter[];
   suggestLineup(state: GameState, clubId: ClubId, content: ContentDB): Command;
+  releasePreview(state: GameState, clubId: ClubId, fighterId: FighterId, content: ContentDB): ReleasePreview | null;
 }
 
 export function createGameEngine(ports: GamePorts): GameEngine {
@@ -80,5 +81,6 @@ export function createGameEngine(ports: GamePorts): GameEngine {
     fighterView: (state, fighterId, content) => fighterView(ports, state, fighterId, content),
     freeAgents: (state, content) => freeAgents(ports, state, content),
     suggestLineup: (state, clubId, content) => suggestLineup(ports, state, clubId, content),
+    releasePreview: (state, clubId, fighterId, content) => releasePreview(ports, state, clubId, fighterId, content),
   };
 }

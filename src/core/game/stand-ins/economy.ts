@@ -327,6 +327,14 @@ export function makeStandInEconomy(fighters: GamePorts['fighters']): Port {
     committedWageBill: wageBill,
     agreedRenewal: () => null,
     preferredLength: () => 2,
+    releasePayout: (state, clubId, fighterId, content) => {
+      const f = state.fighters[fighterId];
+      if (!f || f.clubId !== clubId || !f.contract) return 0;
+      if (state.calendar.phase === 'preseason' && rosterCount(state, clubId) > cap(state, clubId, content)) return 0;
+      const left = Math.max(0, weeks(content) - state.calendar.weekIndex + 1) + (f.contract.endSeason - state.calendar.season) * weeks(content);
+      return Math.floor((f.contract.wagePerWeek * left * content.economy.contracts.releasePayoutBp) / BP / 10) * 10;
+    },
+    capReliefAllowance: (state, clubId, content) => (state.calendar.phase === 'preseason' ? Math.max(0, rosterCount(state, clubId) - cap(state, clubId, content)) : 0),
     rollContractProfile: () => undefined,
   };
 }

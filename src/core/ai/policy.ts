@@ -50,6 +50,8 @@ export interface AiApi {
    * Also used by core/game to name an interim captain on a vacancy.
    */
   chooseCaptains(state: GameState, clubId: ClubId, content: ContentDB, mode: 'season-end' | 'week'): CaptainChoice;
+  /** Start of an AI action phase (the engine calls it before planning every club on one draft). */
+  beginPhase(): void;
   /** Captain, vice, training emphasis, presets and lineup only (no market actions): new-world setup. */
   planRoster(state: GameState, clubId: ClubId, content: ContentDB): Command[];
 }
@@ -141,10 +143,21 @@ export function emphasisFor(f: Fighter, content: ContentDB): TrainingEmphasis {
  * Per-call memo of derived fighter values (rating and friends are pure but
  * not free), so one plan evaluates each fighter once.
  */
+/** Club-independent fighter values, shared by every club planned on the same state object. */
+interface FighterMemo {
+  ratings: Map<string, number>;
+  potentials: Map<string, number>;
+  ages: Map<string, number>;
+}
+
+function freshMemo(): FighterMemo {
+  return { ratings: new Map(), potentials: new Map(), ages: new Map() };
+}
+
 class Ctx {
-  private ratings = new Map<string, number>();
-  private potentials = new Map<string, number>();
-  private ages = new Map<string, number>();
+  private ratings: Map<string, number>;
+  private potentials: Map<string, number>;
+  private ages: Map<string, number>;
   private cqs = new Map<string, number>();
   private familyCache = new Map<string, RoleFamily[]>();
   private leagueNext: boolean | null = null;
@@ -159,7 +172,11 @@ class Ctx {
     readonly clubId: ClubId,
     readonly content: ContentDB,
     readonly ports: AiPorts,
+    memo: FighterMemo,
   ) {
+    this.ratings = memo.ratings;
+    this.potentials = memo.potentials;
+    this.ages = memo.ages;
     const club = state.clubs[clubId];
     if (!club) throw new RangeError(`ai: unknown club "${clubId}"`);
     this.club = club;
@@ -486,14 +503,6 @@ function renewals(ctx: Ctx, roster: readonly Fighter[]): Command[] {
   return cmds;
 }
 
-/** Remaining paid weeks of a contract from the current week (estimate for the voluntary-release rule). */
-function remainingWeeks(ctx: Ctx, f: Fighter): number {
-  const c = f.contract;
-  if (!c) return 0;
-  const left = ctx.weekCount - ctx.state.calendar.weekIndex + 1;
-  return Math.max(0, left + (c.endSeason - ctx.state.calendar.season) * ctx.weekCount);
-}
-
 function releases(ctx: Ctx, roster: readonly Fighter[]): FighterId[] {
   if (ctx.state.calendar.phase !== 'preseason') return [];
   const ranked = [...roster].sort((a, b) => ctx.value(a, roster) - ctx.value(b, roster) || byIdNumber(b, a));
@@ -503,11 +512,10 @@ function releases(ctx: Ctx, roster: readonly Fighter[]): FighterId[] {
   let allowance = ctx.personality.maxVoluntaryReleasesPerSeason - (memory?.voluntaryReleasesThisSeason ?? 0);
   const out: FighterId[] = [];
   let balance = ctx.finance.balance;
-  const contracts = ctx.content.economy.contracts;
   for (const f of ranked) {
     if (allowance <= 0 || roster.length - out.length <= ctx.content.economy.ai.rosterMinimum) break;
     if (ctx.surplus(f, roster) >= 0) break;
-    const payout = Math.floor((f.contract!.wagePerWeek * remainingWeeks(ctx, f) * contracts.releasePayoutBp) / BP / 10) * 10;
+    const payout = ctx.ports.economy.releasePayout(ctx.state, ctx.clubId, f.id, ctx.content);
     if (payout * BP > ctx.finance.seasonBudget * PROVISIONAL_VOLUNTARY_RELEASE_MAX_PAYOUT_BP) continue;
     if (balance - payout < ctx.reserveFloor(roster.length)) continue;
     balance -= payout;
@@ -640,10 +648,26 @@ function trialsSignings(ctx: Ctx, roster: readonly Fighter[]): { cmds: Command[]
 // ---- the API ---------------------------------------------------------------------------------------------------
 
 export function createAi(ports: AiPorts): AiApi {
+  // An AI action phase plans every club on one draft: rating, potential and human-age do not depend on
+  // the club and no AI command changes them, so planWeek / planSeasonEnd share them within a phase
+  // (beginPhase starts a new one; a different state object always does). Other calls use a fresh memo.
+  let memoState: GameState | null = null;
+  let memo: FighterMemo = freshMemo();
+  const phaseMemo = (state: GameState): FighterMemo => {
+    if (state !== memoState) {
+      memoState = state;
+      memo = freshMemo();
+    }
+    return memo;
+  };
   return {
+    beginPhase() {
+      memoState = null;
+    },
+
     planWeek(state, clubId, content) {
       if (state.calendar.phase === 'season-end') return [];
-      const ctx = new Ctx(state, clubId, content, ports);
+      const ctx = new Ctx(state, clubId, content, ports, phaseMemo(state));
       const roster = ctx.roster();
       const cmds: Command[] = [];
       cmds.push(...renewals(ctx, roster));
@@ -656,7 +680,7 @@ export function createAi(ports: AiPorts): AiApi {
     },
 
     planSeasonEnd(state, clubId, content) {
-      const ctx = new Ctx(state, clubId, content, ports);
+      const ctx = new Ctx(state, clubId, content, ports, phaseMemo(state));
       const roster = ctx.roster();
       const cmds: Command[] = [];
       const trials = trialsSignings(ctx, roster);
@@ -674,25 +698,25 @@ export function createAi(ports: AiPorts): AiApi {
     },
 
     chooseLineup(state, clubId, content) {
-      const ctx = new Ctx(state, clubId, content, ports);
+      const ctx = new Ctx(state, clubId, content, ports, freshMemo());
       return lineupFrom(ctx, ctx.roster());
     },
 
     valueFighter(state, clubId, fighterId, content) {
-      const ctx = new Ctx(state, clubId, content, ports);
+      const ctx = new Ctx(state, clubId, content, ports, freshMemo());
       const roster = ctx.roster();
       return ctx.value(ctx.fighter(fighterId), roster);
     },
 
     chooseCaptains(state, clubId, content, mode) {
-      const ctx = new Ctx(state, clubId, content, ports);
+      const ctx = new Ctx(state, clubId, content, ports, freshMemo());
       const roster = ctx.roster();
       const choice = lineupFrom(ctx, roster);
       return captainsFrom(ctx, roster, choice.fighters.map((e) => e.fighterId), mode);
     },
 
     planRoster(state, clubId, content) {
-      const ctx = new Ctx(state, clubId, content, ports);
+      const ctx = new Ctx(state, clubId, content, ports, freshMemo());
       return rosterCommands(ctx, ctx.roster(), 'season-end');
     },
   };

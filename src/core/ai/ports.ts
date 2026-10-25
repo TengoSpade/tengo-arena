@@ -10,7 +10,7 @@ import * as fighters from '../fighters';
 export interface AiPorts {
   fighters: Pick<typeof fighters, 'rating' | 'potential' | 'humanAge100' | 'isFit' | 'captaincy'>;
   /** wageBill is the bill the commitment rule uses (agreed renewal raises included: economy.committedWageBill). */
-  economy: Pick<typeof economy, 'ask' | 'checkOffer' | 'wageBill' | 'pendingWages' | 'agreedRenewal' | 'preferredLength'>;
+  economy: Pick<typeof economy, 'ask' | 'checkOffer' | 'wageBill' | 'pendingWages' | 'agreedRenewal' | 'preferredLength' | 'releasePayout'>;
 }
 
 export const realAiPorts: AiPorts = {
@@ -28,5 +28,6 @@ export const realAiPorts: AiPorts = {
     pendingWages: economy.pendingWages,
     agreedRenewal: economy.agreedRenewal,
     preferredLength: economy.preferredLength,
+    releasePayout: economy.releasePayout,
   },
 };

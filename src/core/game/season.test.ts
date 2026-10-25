@@ -220,6 +220,17 @@ describe('match preparation and reports', () => {
     expect(engine.applyCommand(s, cmd, content).ok).toBe(true);
     expect(() => engine.fighterView(s, asId<FighterId>('f-0'), content)).toThrow();
   });
+
+  it('releasePreview states the payout and the balance after, and matches the release', () => {
+    const clubId = Object.keys(s.clubs).sort()[0] as ClubId;
+    const id = engine.roster(s, clubId, content).at(-1)!.id;
+    const preview = engine.releasePreview(s, clubId, id, content)!;
+    expect(preview.payout).toBeGreaterThan(0);
+    const r = engine.applyCommand(s, { type: 'roster.release', clubId, fighterId: id }, content);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.state.clubs[clubId]!.finance.balance).toBe(preview.balanceAfter);
+    expect(engine.releasePreview(s, clubId, asId<FighterId>('f-0'), content)).toBeNull();
+  });
 });
 
 describe('blockers (02 §3)', () => {

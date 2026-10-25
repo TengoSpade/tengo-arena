@@ -25,7 +25,7 @@ import type {
 import { STREAM, deriveSeed } from '../rng';
 import { clamp, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
-import { addNews, defaultTactics, fail, onRoster } from './shared';
+import { GAME_NEWS_KEYS, addNews, defaultTactics, fail, onRoster } from './shared';
 
 export function matchSeed(state: GameState, fixtureId: FixtureId): string {
   return deriveSeed(state.rng.root, STREAM.match, state.calendar.season, fixtureId);
@@ -155,13 +155,13 @@ export function addMatchNews(
   for (const [fid, xp] of Object.entries(outcome.xp)) params[`x:${fid}`] = xp;
   for (const inj of outcome.injuries) params[`i:${inj.fighterId}`] = `${inj.severity}:${inj.weeksOut}`;
   const playerInvolved = draft.playerClubId !== null && (result.homeClubId === draft.playerClubId || result.awayClubId === draft.playerClubId);
-  addNews(draft, { key: 'match.result', clubId: null, params, refs: { fixtureId: result.fixtureId }, importance: playerInvolved ? 'notable' : 'info' });
+  addNews(draft, { key: GAME_NEWS_KEYS.matchResult, clubId: null, params, refs: { fixtureId: result.fixtureId }, importance: playerInvolved ? 'notable' : 'info' });
 }
 
 function aftermathOf(state: GameState, result: MatchResult): MatchAftermath {
   const xp: Record<FighterId, number> = {};
   const injuries: MatchAftermath['injuries'] = [];
-  const item = state.news.find((n) => n.key === 'match.result' && n.refs.fixtureId === result.fixtureId);
+  const item = state.news.find((n) => n.key === GAME_NEWS_KEYS.matchResult && n.refs.fixtureId === result.fixtureId);
   if (item) {
     for (const [k, v] of Object.entries(item.params)) {
       if (k.startsWith('x:') && typeof v === 'number') xp[k.slice(2) as FighterId] = v;

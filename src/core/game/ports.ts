@@ -88,6 +88,8 @@ export interface GamePorts {
     | 'committedWageBill'
     | 'agreedRenewal'
     | 'preferredLength'
+    | 'releasePayout'
+    | 'capReliefAllowance'
   >;
   ai: AiApi;
 }
@@ -165,6 +167,8 @@ export const realGamePorts: GamePorts = {
     committedWageBill: economy.committedWageBill,
     agreedRenewal: economy.agreedRenewal,
     preferredLength: economy.preferredLength,
+    releasePayout: economy.releasePayout,
+    capReliefAllowance: economy.capReliefAllowance,
   },
   ai: ai.createAi(ai.realAiPorts),
 };
@@ -186,6 +190,7 @@ export function aiPortsOf(ports: GamePorts): AiPorts {
       pendingWages: ports.economy.pendingWages,
       agreedRenewal: ports.economy.agreedRenewal,
       preferredLength: ports.economy.preferredLength,
+      releasePayout: ports.economy.releasePayout,
     },
   };
 }

@@ -28,17 +28,18 @@ import type {
 import type { EngineError, Result } from '../util';
 import { createGameEngine, type CommandOutcome } from './engine';
 import { realGamePorts } from './ports';
-import type { FighterView } from './views';
+import type { FighterView, ReleasePreview } from './views';
 import type { NewGameParams } from './world';
 
 export { createGameEngine } from './engine';
 export type { CommandOutcome, GameEngine } from './engine';
-export type { FighterView } from './views';
+export type { FighterView, ReleasePreview } from './views';
 export type { NewGameParams } from './world';
 export type { AiRejection, PhaseLog } from './week';
 export { realGamePorts, aiPortsOf } from './ports';
 export type { GamePorts } from './ports';
 export { createStandInPorts } from './stand-ins';
+export { GAME_NEWS_KEYS } from './shared';
 
 const engine = createGameEngine(realGamePorts);
 
@@ -107,3 +108,9 @@ export function freeAgents(state: GameState, content?: ContentDB): Fighter[] {
 export function suggestLineup(state: GameState, clubId: ClubId, content: ContentDB): Command {
   return engine.suggestLineup(state, clubId, content);
 }
+
+/** Release preview for the confirmation dialog: payout, balance after, cap relief (WP6 request b). */
+export function releasePreview(state: GameState, clubId: ClubId, fighterId: FighterId, content: ContentDB): ReleasePreview | null {
+  return engine.releasePreview(state, clubId, fighterId, content);
+}
+

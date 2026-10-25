@@ -26,6 +26,7 @@ function fakePorts(opts: { ratings?: Map<string, number>; cqs?: Map<string, numb
       pendingWages: (s, clubId) => s.market.offers.filter((o) => o.clubId === clubId).reduce((sum, o) => sum + o.wagePerWeek, 0),
       agreedRenewal: () => null,
       preferredLength: () => 2,
+      releasePayout: () => 0,
     },
   };
 }

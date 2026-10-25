@@ -37,6 +37,7 @@ export function runAiPhase(
   plan: (state: GameState, clubId: ClubId) => ReturnType<GamePorts['ai']['planWeek']>,
   log: PhaseLog,
 ): void {
+  ports.ai.beginPhase();
   for (const club of clubsInOrder(draft, content)) {
     if (club.id === draft.playerClubId) continue;
     for (const cmd of plan(draft, club.id)) {

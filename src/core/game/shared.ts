@@ -105,7 +105,7 @@ export function tidyClub(ports: GamePorts, draft: GameState, clubId: ClubId, con
       club.captainId = pick.captainId;
       if (club.viceCaptainId === null || club.viceCaptainId === club.captainId) club.viceCaptainId = pick.viceCaptainId === club.captainId ? null : pick.viceCaptainId;
       if (clubId === draft.playerClubId && pick.captainId !== null) {
-        addNews(draft, { key: 'captain.interim', clubId, refs: { fighterId: pick.captainId }, importance: 'notable' });
+        addNews(draft, { key: GAME_NEWS_KEYS.captainInterim, clubId, refs: { fighterId: pick.captainId }, importance: 'notable' });
       }
     }
   }
@@ -119,3 +119,11 @@ export function tidyAll(ports: GamePorts, draft: GameState, content: ContentDB):
 export function isFirstWeek(state: GameState): boolean {
   return state.calendar.weekIndex === 1;
 }
+
+/** News keys core/game itself writes (other modules document theirs). UI digest templates match on these. */
+export const GAME_NEWS_KEYS = {
+  /** League-wide, one per played fixture. params: home, away, scoreHome, scoreAway, winner; x:<fighterId> = XP; i:<fighterId> = "<severity>:<weeksOut>". refs.fixtureId. */
+  matchResult: 'match.result',
+  /** Player club: the game named an interim captain after the captain left. refs.fighterId = the new captain. */
+  captainInterim: 'captain.interim',
+} as const;
