@@ -51,6 +51,8 @@ const TEMPLATES: Record<string, { kind: DigestKind; title: string; text?: string
   'captaincy.losing_the_room': { kind: 'development', title: 'Captain {fighter} is losing the room', text: 'Not fielded for 4 matches: −10 captaincy until he plays again.', action: ['Squad', '#/squad'], needsAction: true },
   'captaincy.departed': { kind: 'development', title: 'Your long-serving captain has left', text: '−1 chemistry for 4 matchweeks.', action: ['Squad', '#/squad'] },
   'captaincy.interim': { kind: 'development', title: '{fighter} is interim captain', text: 'Named by the club; choose a captain on the squad screen.', action: ['Squad', '#/squad'], needsAction: true },
+  // core/game (D-S): named at kickoff when the captain is missing (params.reason vice | starter) or after the captain left.
+  'captain.interim': { kind: 'development', title: '{fighter} is interim captain', text: '{interimReason} Choose a captain on the squad screen to change it.', action: ['Squad', '#/squad'], needsAction: true },
   'offer.lost': { kind: 'market', title: '{fighter} signed for {otherClub}', action: ['Market', '#/market'] },
   'offer.void': { kind: 'market', title: 'Your offer to {fighter} lapsed', text: 'It no longer met the rules at week processing.', action: ['Market', '#/market'] },
   'finance.embargo-lifted': { kind: 'contract', title: 'Spending embargo lifted', action: ['Finances', '#/finances'] },
@@ -101,6 +103,7 @@ function paramsOf(item: NewsItem, names: DigestNames = {}): Record<string, strin
     const id = p['severity'];
     p['severity'] = names.content?.development.injury.severityLadder.find((x) => x.id === id)?.label ?? `${capitalize(id)} injury`;
   }
+  if (item.key === 'captain.interim') p['interimReason'] = interimReasonText(p['reason']);
   if (typeof p['traitId'] === 'string') p['trait'] = names.content?.traits.get(p['traitId'])?.name ?? String(p['traitId']);
   for (const k of ['wage', 'counterWage', 'amount', 'registryDebt'] as const) if (typeof p[k] === 'number') p[k] = formatMoney(p[k], k === 'wage' || k === 'counterWage' ? { perWeek: true } : {});
   if (p['won'] !== undefined && p['result'] === undefined) p['result'] = Number(p['won']) ? 'Won' : 'Lost';
@@ -108,6 +111,13 @@ function paramsOf(item: NewsItem, names: DigestNames = {}): Record<string, strin
   if (p['score'] === undefined && p['for'] !== undefined && p['against'] !== undefined) p['score'] = `${p['for']}–${p['against']}`;
   if (p['score'] === undefined && p['home'] !== undefined && p['away'] !== undefined) p['score'] = `${p['home']}–${p['away']}`;
   return p;
+}
+
+/** Why core/game named an interim captain (GAME_NEWS_KEYS.captainInterim params.reason). */
+function interimReasonText(reason: string | number | undefined): string {
+  if (reason === 'vice') return 'Your club had no captain at kickoff, so the vice-captain took the armband.';
+  if (reason === 'starter') return 'Your club had no captain at kickoff, so the fit starter with the best captaincy took the armband.';
+  return 'Your captain left the club, so the club named a stand-in.';
 }
 
 function capitalize(s: string): string {

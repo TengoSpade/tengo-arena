@@ -8,7 +8,7 @@
  * exercised end to end (club choice, lineup, Continue, saves). Loaded only
  * behind import.meta.env.DEV or from tests; never in a production bundle.
  */
-import type { ContentDB, PresetDef } from '../../core/content';
+import { combatRating, type ContentDB, type PresetDef } from '../../core/content';
 import type { FighterView } from '../../core/game';
 import {
   SAVE_FORMAT,
@@ -78,12 +78,9 @@ function devStats(f: Fighter, content: ContentDB): Record<StatId, number> {
   return out;
 }
 
+/** The one rating formula (core/content combatRating) on the provisional dev stats. */
 function devRating(f: Fighter, content: ContentDB): number {
-  const k = content.classes.require(f.classId);
-  const stats = devStats(f, content);
-  let s = 0;
-  for (const [stat, w] of Object.entries(k.ratingWeights)) s += w * (stats[stat as StatId] ?? 0);
-  return clamp(Math.round(5 * s), 1, 100);
+  return combatRating(content, f.classId, devStats(f, content));
 }
 
 function devCaptaincy(f: Fighter, content: ContentDB) {
@@ -194,7 +191,6 @@ function blockersDev(state: GameState, _content: ContentDB): Blocker[] {
     else if (!isFitDev(f)) out.push({ code: 'lineup.unavailable', fighterId: e.fighterId });
   }
   if (fit.length < 5 && out.length === 0) out.push({ code: 'lineup.incomplete', details: { have: fit.length } });
-  if (!club.captainId) out.push({ code: 'captain.missing' });
   return out;
 }
 

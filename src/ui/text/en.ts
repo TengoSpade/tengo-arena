@@ -176,7 +176,6 @@ export const en = {
   'blocker.roster.over-cap': 'Release {n} {n?fighter|fighters}',
   'blocker.club.not-chosen': 'Pick a club',
   'blocker.phase.season-end': 'Season review',
-  'blocker.captain.missing': 'Choose a captain',
   'blocker.unknown': 'Something needs a decision',
 
   // ---- errors (EngineError / SaveError codes) --------------------------------------------------------
