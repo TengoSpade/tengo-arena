@@ -485,7 +485,7 @@ export function buildSampleSeason(base: GameState, content: ContentDB, opts: Sam
   for (const f of Object.values(state.fighters)) {
     if (f.contract && f.clubId) {
       const rating = fakeRating(f);
-      f.contract.wagePerWeek = Math.max(60, Math.floor((200 * 2 ** ((rating - 50) / 12)) / 5) * 5);
+      f.contract.wagePerWeek = Math.max(60, Math.floor((640 * 2 ** ((rating - 50) / 12)) / 5) * 5);
       const k = Number(f.id.slice(2));
       f.contract.startSeason = playedSeason - 1;
       f.contract.endSeason = playedSeason + (k % 3);
