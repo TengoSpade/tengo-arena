@@ -4,7 +4,7 @@
  * cmb-012, and a coarse speed check (the real bench is `npm run balance -- --bench`).
  */
 import { describe, expect, it, vi } from 'vitest';
-import { SUMMARY_EVENT_TYPES, type MatchInput } from '../model';
+import { SUMMARY_EVENT_TYPES, hashEventStream, type MatchInput } from '../model';
 import { deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
 import { ENGINE_VERSION, combatProfile, fighterInput, sideInput, simulateFight, simulateMatch } from './index';
@@ -26,6 +26,10 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
       expect(r.fighterStats).toEqual(runs[0]!.fighterStats);
     }
     expect(runs[0]!.rounds.every((r) => r.eventHash !== null)).toBe(true);
+    // The incremental hash equals hashEventStream over the finished log (the M2 viewer recomputes it).
+    for (const level of ['summary', 'full'] as const) {
+      for (const log of simulateMatch(match(), content, { record: level }).logs!) expect(log.hash).toBe(hashEventStream(log.header, log.events));
+    }
   });
 
   it('checksums and results are identical at every record level', () => {

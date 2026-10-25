@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { loadContent, type ContentDB, type ContentFileName, type RawContentFiles } from '../content';
-import { asId, type TacticsPresetId } from '../model';
+import { asId, hashEventStream, type TacticsPresetId } from '../model';
 import { evaluateTactics } from '../tactics';
 import { snapshotTargets } from './act';
 import { fighterInput, sideInput, type FighterSpec } from './build';
@@ -852,6 +852,18 @@ describe('captain model and combat traits (sys-fight-captain, sys-fight-traits)'
     prep(f);
     expect(f.units[1]!.cmpEff).toBe(7);
     expect(bh.shakenMultBp).toBe(0);
+  });
+});
+
+describe('event hashing', () => {
+  it('the incremental event hash equals hashEventStream on varied lineups', () => {
+    const ids = content.classes.list.map((k) => k.id);
+    for (let i = 0; i < 12; i++) {
+      const pick = (o: number) => Array.from({ length: 5 }, (_, j) => ids[(i * 7 + j * 11 + o) % ids.length]!);
+      const out = simulateFight({ seed: `hash-${i}`, round: 1, home: sideInput(content, 'h', pick(0)), away: sideInput(content, 'a', pick(3)) }, content, { record: 'full' });
+      expect(out.log!.hash).toBe(hashEventStream(out.log!.header, out.log!.events));
+      expect(out.result.eventHash).toBe(out.log!.hash);
+    }
   });
 });
 
