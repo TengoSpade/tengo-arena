@@ -10,7 +10,7 @@ import type { ContentDB } from '../content';
 import type { FightHeader, FightFighterInput, RecordLevel, RoundTiebreakStep, SideInput } from '../model';
 import { FIGHT_LOG_FORMAT } from '../model';
 import { Rng, type Seed } from '../rng';
-import { compileTactics, resolveTactics } from '../tactics';
+import { compileTactics, resolveTactics, type CompiledTactics } from '../tactics';
 import { InvariantError, StreamHasher, stableStringify } from '../util';
 import { actions, decisions } from './act';
 import { movement } from './motion';
@@ -24,6 +24,7 @@ import {
   removeStatusInst,
   resolution,
   statusInst,
+  has,
 } from './resolve';
 import { clampAttrs, initStatic } from './profile';
 import {
@@ -37,7 +38,7 @@ import {
   type Snap,
   type Zone,
 } from './state';
-import { BP, ST, STAT_COUNT, simTables, type CEffect, type CPred, type CStatMod, type CStatus, type SimTables } from './tables';
+import { BP, SC_RALLIED, SC_ROOT, SC_SILENCE, SC_SLEEP, SC_STUN, ST, STAT_COUNT, simTables, type CClass, type CEffect, type CPred, type CStatMod, type CStatus, type SimTables } from './tables';
 
 export interface SideState {
   /** Acting captain unit index, or -1 while vacant (Shaken window) or gone. */
@@ -136,6 +137,7 @@ export class Fight {
     this.buildSide(1, setup.away);
     this.spawn();
     this.initCaptains(setup);
+    this.hasAllyHpTrigger = this.units.some((u) => u.triggers.some((tr) => tr.on === 'ally_hp_below'));
     this.header = {
       format: FIGHT_LOG_FORMAT,
       engineVersion: SIM_ENGINE_VERSION,
@@ -169,9 +171,7 @@ export class Fight {
       const index = side * 5 + slot;
       const cls = this.tb.classes.get(f.classId);
       if (!cls) throw new InvariantError(`sim: unknown class "${f.classId}"`);
-      const list = resolveTactics(f.tactics, f.classId, this.content);
-      if (!list.ok) throw new InvariantError(`sim: ${list.error.message}`);
-      const tactics = compileTactics(list.value, { a1: cls.a1.def, a2: cls.a2.def }, this.content);
+      const tactics = compiledFor(this.content, f, cls);
       const attrs = clampAttrs(f);
       const u = new Unit(
         index,
@@ -435,24 +435,48 @@ export class Fight {
   }
 
   // ---- Auras and modifier blocks ---------------------------------------------------------------
+  /** Units projecting an aura, with a per-fight slot per distinct aura ability (strongest-of-same-aura rule). */
+  private auraOwners: { u: Unit; slot: number }[] | null = null;
+  private auraBest = new Int32Array(10 * 10 * 4);
+  private auraSeen = new Uint8Array(10 * 10 * 4);
+  private enemyAuraOwners: Unit[] = [];
+
+  private initAuras(): void {
+    const slots = new Map<string, number>();
+    this.auraOwners = [];
+    for (const u of this.units) {
+      const aura = u.cls.passive.passive?.aura;
+      if (aura) {
+        let slot = slots.get(u.cls.passive.id);
+        if (slot === undefined) {
+          slot = slots.size;
+          slots.set(u.cls.passive.id, slot);
+        }
+        this.auraOwners.push({ u, slot });
+      }
+      if (u.enemyAura) this.enemyAuraOwners.push(u);
+    }
+  }
+
   recomputeAuras(): void {
-    const best = new Map<string, number>();
+    if (!this.auraOwners) this.initAuras();
     for (const u of this.units) {
       u.auraMods.fill(0);
-      u.auraHitTaken = [];
+      if (u.auraHitTaken.length > 0) u.auraHitTaken = [];
       u.auraTraitComposure = 0;
     }
-    for (const owner of this.units) {
-      if (!owner.standing) continue;
-      const aura = owner.cls.passive.passive?.aura;
-      if (aura) {
+    if (this.auraOwners!.length > 0) {
+      this.auraSeen.fill(0);
+      for (const { u: owner, slot } of this.auraOwners!) {
+        if (!owner.standing) continue;
+        const aura = owner.cls.passive.passive!.aura!;
         for (const r of this.units) {
           if (!r.standing) continue;
           const ally = r.side === owner.side;
           if (aura.affects === 'enemies' ? ally : !ally) continue;
           if (r === owner && aura.affects !== 'allies_incl_self') continue;
           if (r !== owner && this.gap(owner.index, r.index) > aura.radiusMm) continue;
-          for (let k = 0; k < aura.statMods.length; k++) {
+          for (let k = 0; k < aura.statMods.length && k < 4; k++) {
             const m = aura.statMods[k]!;
             if (m.pred && m.pred.kind === 'attacker') {
               if (!r.auraHitTaken.includes(m)) r.auraHitTaken.push(m);
@@ -460,26 +484,33 @@ export class Fight {
             }
             const v = this.statModValue(m, r, owner);
             // Several fighters projecting the same aura: only the strongest counts.
-            const key = `${r.index}:${owner.cls.passive.id}:${k}`;
-            const prev = best.get(key);
-            if (prev === undefined) {
-              best.set(key, v);
+            const key = (r.index * 10 + slot) * 4 + k;
+            if (this.auraSeen[key] === 0) {
+              this.auraSeen[key] = 1;
+              this.auraBest[key] = v;
               r.auraMods[m.stat]! += v;
-            } else if (Math.abs(v) > Math.abs(prev)) {
-              best.set(key, v);
-              r.auraMods[m.stat]! += v - prev;
+            } else {
+              const prev = this.auraBest[key]!;
+              if (Math.abs(v) > Math.abs(prev)) {
+                this.auraBest[key] = v;
+                r.auraMods[m.stat]! += v - prev;
+              }
             }
           }
         }
       }
-      if (owner.enemyAura) {
-        for (const r of this.units) {
-          if (!r.standing || r.side === owner.side) continue;
-          if (this.gap(owner.index, r.index) <= owner.enemyAura.bandMm) r.auraTraitComposure += owner.enemyAura.composure;
-        }
+    }
+    for (const owner of this.enemyAuraOwners) {
+      if (!owner.standing) continue;
+      for (const r of this.units) {
+        if (!r.standing || r.side === owner.side) continue;
+        if (this.gap(owner.index, r.index) <= owner.enemyAura!.bandMm) r.auraTraitComposure += owner.enemyAura!.composure;
       }
     }
   }
+
+  /** Set when an acting captain changes (aura on / off), so every block is rebuilt this tick. */
+  captainChanged = true;
 
   recomputeMods(u: Unit): void {
     const m = u.mods;
@@ -500,31 +531,33 @@ export class Fight {
   }
 
   private addStatusMods(u: Unit): void {
-    const n = this.tb.statusList.length;
     const total = this.statusScratch;
     const longest = this.statusScratch2;
-    for (let i = 0; i < n; i++) {
-      total[i] = 0;
-      longest[i] = -1;
-    }
+    const touched = this.statusTouched;
+    touched.length = 0;
     for (const inst of u.statuses) {
       const st = inst.st;
       if (st.stat < 0) continue;
+      const i = st.index;
       const mag = inst.magnitude * inst.stacks;
-      if (st.stacking === 'stacks') total[st.index]! += mag;
-      else if (mag > total[st.index]! || (mag === total[st.index]! && inst.end > longest[st.index]!)) {
-        total[st.index] = mag;
-        longest[st.index] = inst.end;
+      if (!touched.includes(st)) {
+        touched.push(st);
+        total[i] = mag;
+        longest[i] = inst.end;
+      } else if (st.stacking === 'stacks') total[i]! += mag;
+      else if (mag > total[i]! || (mag === total[i]! && inst.end > longest[i]!)) {
+        total[i] = mag;
+        longest[i] = inst.end;
       }
     }
-    for (let i = 0; i < n; i++) {
-      const v = total[i]!;
+    for (const st of touched) {
+      const v = total[st.index]!;
       if (v === 0) continue;
-      const st = this.tb.statusList[i]!;
       const capped = st.cap >= 0 && v > st.cap ? st.cap : v;
       u.mods[st.stat]! += st.sign * capped;
     }
   }
+  private statusTouched: CStatus[] = [];
   private statusScratch = new Int32Array(64);
   private statusScratch2 = new Int32Array(64);
   private traitScratch = new Int32Array(STAT_COUNT);
@@ -532,7 +565,7 @@ export class Fight {
   private addTraitMods(u: Unit): void {
     const sum = this.traitScratch;
     sum.fill(0);
-    const rallied = hasStatus(u, 'rallied');
+    const rallied = has(u, SC_RALLIED);
     for (const tm of u.traitMods) {
       if (tm.pred && !this.predSelf(tm.pred, u)) continue;
       let v = tm.value;
@@ -564,7 +597,8 @@ export class Fight {
     const evenFirst = t % 2 === 0 ? 0 : 1;
     this.order = evenFirst === 0 ? ORDER_EVEN : ORDER_ODD;
     for (let i = 0; i < 10; i++) this.rank[this.order[i]!] = i;
-    this.computeDistances();
+    // Positions change only in the movement phase, so last tick's post-movement distances are this tick's start.
+    if (t === 0) this.computeDistances();
     this.timers();
     decisions(this);
     actions(this);
@@ -588,9 +622,9 @@ export class Fight {
       u: this.units.map((u) => {
         let bits = 0;
         if (u.act === 2 || u.act === 3) bits |= 1;
-        if (hasStatus(u, 'stun') || hasStatus(u, 'sleep')) bits |= 2;
-        if (hasStatus(u, 'root')) bits |= 4;
-        if (hasStatus(u, 'silence')) bits |= 8;
+        if (has(u, SC_STUN) || has(u, SC_SLEEP)) bits |= 2;
+        if (has(u, SC_ROOT)) bits |= 4;
+        if (has(u, SC_SILENCE)) bits |= 8;
         if (!u.standing) bits |= 16;
         return [cm(u.x), cm(u.y), u.hp, bits] as [number, number, number, number];
       }),
@@ -601,13 +635,20 @@ export class Fight {
   private timers(): void {
     const t = this.tick;
     const tb = this.tb;
-    for (let i = 0; i < 10; i++) {
-      this.pendDmg[i] = 0;
-      this.dmgTotal[i] = 0;
-      this.maxHit[i] = 0;
-      this.maxHitSrc[i] = -1;
-      this.maxHitAbility[i] = null;
-      this.heals[i]!.length = 0;
+    if (this.touchedDamage) {
+      this.touchedDamage = false;
+      this.pendDmg.fill(0);
+      this.dmgTotal.fill(0);
+      this.maxHit.fill(0);
+      this.maxHitSrc.fill(-1);
+      for (let i = 0; i < 10; i++) this.maxHitAbility[i] = null;
+    }
+    if (this.touchedHeals) {
+      this.touchedHeals = false;
+      for (let i = 0; i < 10; i++) {
+        const h = this.heals[i]!;
+        if (h.length > 0) h.length = 0;
+      }
     }
     if (t === tb.overtime.start && this.rec) this.rec.emit('overtime.start', t, undefined, undefined, {});
 
@@ -626,7 +667,9 @@ export class Fight {
           }
         }
       }
-      if (u.shields.length > 0) u.shields = u.shields.filter((s: ShieldInst) => t <= s.end && s.amount > 0);
+      if (u.shields.length > 0 && u.shields.some((s: ShieldInst) => t > s.end || s.amount <= 0)) {
+        u.shields = u.shields.filter((s: ShieldInst) => t <= s.end && s.amount > 0);
+      }
     }
 
     for (const z of this.zones) {
@@ -648,24 +691,29 @@ export class Fight {
     }
     if (this.zones.length > 16) this.zones = this.zones.filter((z) => !z.dead);
 
-    for (const side of [0, 1] as const) {
-      const s = this.sides[side];
-      if (s.handoverAt === t) this.handover(side);
-    }
+    if (this.sides[0].handoverAt === t) this.handover(0);
+    if (this.sides[1].handoverAt === t) this.handover(1);
 
-    if (t % tb.timing.auraRecalc === 0) this.recomputeAuras();
+    const auraTick = t % tb.timing.auraRecalc === 0;
+    if (auraTick) this.recomputeAuras();
     for (const u of this.units) {
       if (!u.standing) continue;
-      this.recomputeMods(u);
+      if (auraTick || u.modsDirty || u.modsVolatile || this.captainChanged) {
+        this.recomputeMods(u);
+        u.modsDirty = false;
+        u.atkNow = this.attackSpeedBp(u);
+        u.cdRateNow = BP + u.mods[ST.cooldownRate]!;
+        u.focusRegenNow = Math.trunc((u.focusRegen0 * (BP + u.mods[ST.focusRegen]!)) / BP);
+        u.regenNow = u.mods[ST.hpRegenPct]! !== 0 || u.mods[ST.hpRegenFlat]! !== 0;
+      }
       u.tally.ticksStanding++;
       // Accumulators (03 sys-combat-stats "Integer implementation").
-      u.swingAcc = Math.min(u.swingThreshold, u.swingAcc + this.attackSpeedBp(u));
-      const cdRate = BP + u.mods[ST.cooldownRate]!;
-      if (u.cdA1 > 0) u.cdA1 = Math.max(0, u.cdA1 - cdRate);
-      if (u.cdA2 > 0) u.cdA2 = Math.max(0, u.cdA2 - cdRate);
-      const regen = Math.trunc((u.focusRegen0 * (BP + u.mods[ST.focusRegen]!)) / BP);
-      u.focus = Math.min(tb.derived.focusMaxMilli, u.focus + regen);
-      if (t > 0 && t % tb.timing.regenInterval === 0 && (u.mods[ST.hpRegenPct]! !== 0 || u.mods[ST.hpRegenFlat]! !== 0)) {
+      const sw = u.swingAcc + u.atkNow;
+      u.swingAcc = sw < u.swingThreshold ? sw : u.swingThreshold;
+      if (u.cdA1 > 0) u.cdA1 = u.cdA1 > u.cdRateNow ? u.cdA1 - u.cdRateNow : 0;
+      if (u.cdA2 > 0) u.cdA2 = u.cdA2 > u.cdRateNow ? u.cdA2 - u.cdRateNow : 0;
+      if (u.focus < tb.derived.focusMaxMilli) u.focus = Math.min(tb.derived.focusMaxMilli, u.focus + u.focusRegenNow);
+      if (u.regenNow && t > 0 && t % tb.timing.regenInterval === 0) {
         this.schedule(t, { kind: 'regen', seq: this.nextSeq(), source: u.index });
       }
       if (u.committed) {
@@ -673,6 +721,7 @@ export class Fight {
         if (r >= 0) u.tally.ruleTicks[r]!++;
       }
     }
+    this.captainChanged = false;
   }
 
   /** sys-fight-captain handover when Shaken ends. */
@@ -693,6 +742,7 @@ export class Fight {
     }
     if (next < 0) return;
     s.captain = next;
+    this.captainChanged = true;
     s.captainCq = Math.max(0, this.units[next]!.cq - this.tb.captain.actingPenalty);
     if (s.vice === next) s.vice = -1;
     if (this.rec) this.rec.emit('captain.handover', this.tick, next, undefined, { newCaptain: next, cq: s.captainCq });
@@ -702,7 +752,7 @@ export class Fight {
   private commit(): void {
     const t = this.tick;
     const prevHpBp = this.prevHpBp;
-    for (const u of this.units) prevHpBp[u.index] = this.hpBp(u);
+    if (this.hasAllyHpTrigger) for (const u of this.units) prevHpBp[u.index] = this.hpBp(u);
 
     // HP = min(maxHp, HP - damage + healing); overheal attributed in processing order.
     for (const u of this.units) {
@@ -723,7 +773,9 @@ export class Fight {
         if (this.rec && this.rec.full) this.rec.emit('heal', t, h.src, u.index, { ability: h.ability, amount: eff, overheal: h.amount - eff });
         if (eff > 0) u.lastSupportTick = t;
       }
-      u.hp = Math.min(u.maxHp, base + total);
+      const hp = Math.min(u.maxHp, base + total);
+      if (hp !== u.hp && u.hpMods) u.modsDirty = true;
+      u.hp = hp;
     }
 
     // Deathward: active at the start of the tick, saves at 1 HP plus its heal.
@@ -735,6 +787,7 @@ export class Fight {
       const recv = this.healRecvBp(u);
       const healed = Math.trunc((Math.trunc((ward.wardHealCenti * recv) / BP) * this.overtimeHealBp()) / BP / 100);
       u.hp = Math.min(u.maxHp, 1 + healed);
+      u.modsDirty = true;
       removeStatusInst(this, u, ward, 'consumed');
       if (ward.source >= 0) this.units[ward.source]!.tally.healingDone += healed;
       if (this.rec) this.rec.emit('deathward.save', t, u.index, ward.source >= 0 ? ward.source : undefined, { by: ward.source >= 0 ? ward.source : null, healed });
@@ -758,14 +811,15 @@ export class Fight {
     }
 
     // Queued statuses (DR, tenacity, resolve) in resolution order (= source order(t)).
-    const qs = this.qStatus;
-    this.qStatus = [];
-    for (const q of qs) applyQueuedStatus(this, q);
+    if (this.qStatus.length > 0) {
+      for (const q of this.qStatus) applyQueuedStatus(this, q);
+      this.qStatus.length = 0;
+    }
 
     this.applyQueues();
 
     // ally_hp_below triggers (Lamplight): an ally crossing below the threshold this tick.
-    for (const holder of this.units) {
+    if (this.hasAllyHpTrigger) for (const holder of this.units) {
       if (!holder.standing) continue;
       for (let k = 0; k < holder.triggers.length; k++) {
         const trig = holder.triggers[k]!;
@@ -785,6 +839,10 @@ export class Fight {
     }
   }
   private prevHpBp = new Int32Array(10);
+  private hasAllyHpTrigger = false;
+  /** Per-tick accumulators need a reset at the next timers phase. */
+  touchedDamage = true;
+  touchedHeals = true;
 
   healRecvBp(u: Unit): number {
     const [lo, hi] = this.tb.derived.healRecvClamp;
@@ -858,6 +916,7 @@ export class Fight {
       // Re-evaluate units whose target went down.
       for (const o of this.units) if (o.standing && (o.committed?.target === u.index || o.actTarget === u.index)) o.nextEval = Math.min(o.nextEval, t + 1);
       u.statuses = [];
+      u.statusCount.fill(0);
       u.shields = [];
     }
     this.onKill = [];
@@ -871,6 +930,7 @@ export class Fight {
       if (captainFell) {
         const fallenCaptain = s.captain;
         s.captain = -1;
+        this.captainChanged = true;
         if (this.rec) this.rec.emit('captain.down', this.tick, fallenCaptain, undefined, {});
         for (const a of this.units) {
           if (a.side !== side || !a.standing) continue;
@@ -894,12 +954,14 @@ export class Fight {
 
   private addCaptainStatus(u: Unit, id: string, magnitude: number, duration: number): void {
     const st: CStatus = this.tb.statuses.get(id)!;
+    u.modsDirty = true;
     const existing = u.statuses.find((s) => s.st === st && s.source === -1);
     if (existing) {
       existing.end = Math.max(existing.end, this.tick + duration);
       existing.magnitude = Math.max(existing.magnitude, magnitude);
       return;
     }
+    u.statusCount[st.code]!++;
     u.statuses.push({
       st,
       source: -1,
@@ -1019,6 +1081,27 @@ export class Fight {
 }
 
 export const SIM_ENGINE_VERSION = 1;
+
+/** Compiled presets are immutable: cache them per content and (class, preset). Custom lists compile per fight. */
+const compiledCache = new WeakMap<ContentDB, Map<string, CompiledTactics>>();
+
+function compiledFor(content: ContentDB, f: FightFighterInput, cls: CClass): CompiledTactics {
+  const key = f.tactics.kind === 'preset' ? `${f.classId}|${f.tactics.presetId}` : null;
+  let cache = compiledCache.get(content);
+  if (!cache) {
+    cache = new Map();
+    compiledCache.set(content, cache);
+  }
+  if (key) {
+    const hit = cache.get(key);
+    if (hit) return hit;
+  }
+  const list = resolveTactics(f.tactics, f.classId, content);
+  if (!list.ok) throw new InvariantError(`sim: ${list.error.message}`);
+  const compiled = compileTactics(list.value, { a1: cls.a1.def, a2: cls.a2.def }, content);
+  if (key) cache.set(key, compiled);
+  return compiled;
+}
 
 const ORDER_EVEN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const ORDER_ODD = [5, 6, 7, 8, 9, 0, 1, 2, 3, 4];

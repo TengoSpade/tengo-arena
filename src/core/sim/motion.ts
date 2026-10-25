@@ -5,9 +5,9 @@
  */
 import type { Fight } from './fight';
 import { abilityUsable } from './act';
-import { hasStatus, isImmobile, nearestEnemyInRange, retreatGap } from './resolve';
+import { has, isImmobile, nearestEnemyInRange, retreatGap } from './resolve';
 import { ACT_CAST, ACT_CHANNEL, ACT_WINDUP, type Unit } from './state';
-import { BP } from './tables';
+import { BP, SC_ANCHORED, SC_ROOT, SC_SLEEP, SC_STUN } from './tables';
 
 const stepX = new Int32Array(10);
 const stepY = new Int32Array(10);
@@ -312,10 +312,10 @@ function advanceDisplacement(f: Fight, u: Unit): void {
 
 function immovable(u: Unit): boolean {
   return (
-    hasStatus(u, 'anchored') ||
-    hasStatus(u, 'root') ||
-    hasStatus(u, 'stun') ||
-    hasStatus(u, 'sleep') ||
+    has(u, SC_ANCHORED) ||
+    has(u, SC_ROOT) ||
+    has(u, SC_STUN) ||
+    has(u, SC_SLEEP) ||
     u.act === ACT_CAST ||
     (u.act === ACT_CHANNEL && !(u.actAbility?.channel?.mobile ?? false))
   );
@@ -326,6 +326,7 @@ function separate(f: Fight): void {
   const minD = 2 * f.tb.arena.radiusMm;
   const us = f.units;
   for (let pass = 0; pass < f.tb.movement.passes; pass++) {
+    let pushed = false;
     for (let i = 0; i < 10; i++) {
       const a = us[i]!;
       if (!a.standing || a.disp) continue;
@@ -339,6 +340,7 @@ function separate(f: Fight): void {
         const fixA = immovable(a);
         const fixB = immovable(b);
         if (fixA && fixB) continue;
+        pushed = true;
         const d = Math.sqrt(d2);
         const overlap = minD - d;
         let ux: number;
@@ -372,6 +374,7 @@ function separate(f: Fight): void {
         }
       }
     }
+    if (!pushed) break;
   }
 }
 

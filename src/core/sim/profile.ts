@@ -154,4 +154,20 @@ export function initStatic(u: Unit, tb: SimTables): void {
   u.rallyMultBp = s.rallyMultBp;
   u.cq = Math.min(100, Math.max(0, Math.trunc(u.input.captainQuality)));
   u.triggers = u.cls.passive.passive?.triggers ?? [];
+  for (const m of [...s.condMods, ...s.traitMods]) {
+    const kinds = new Set<string>();
+    if (m.per) kinds.add(m.per.source);
+    collectPreds(m.pred, kinds);
+    for (const k of kinds) {
+      if (k === 'self_hp_below' || k === 'selfMissingHpPct') u.hpMods = true;
+      else if (k === 'self_targeted_by' || k === 'attackersOnSelf') u.targetedMods = true;
+      else u.modsVolatile = true;
+    }
+  }
+}
+
+function collectPreds(p: CStatMod['pred'], out: Set<string>): void {
+  if (!p) return;
+  if (p.p === 'any') for (const x of p.of) collectPreds(x, out);
+  else out.add(p.p);
 }

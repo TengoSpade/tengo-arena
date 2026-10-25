@@ -204,12 +204,27 @@ export class Unit {
   standing = true;
   downTick = -1;
   mods = new Int32Array(STAT_COUNT);
+  /** Values derived from the modifier block, refreshed with it. */
+  atkNow = 10_000;
+  cdRateNow = 10_000;
+  focusRegenNow = 0;
+  regenNow = false;
+  /** Modifier block must be rebuilt (statuses changed, ...). */
+  modsDirty = true;
+  /** Has conditional mods on time, position or ally downs: rebuild every tick. */
+  modsVolatile = false;
+  /** Has conditional mods on own HP: rebuild when HP changes. */
+  hpMods = false;
+  /** Has conditional mods on attackers: rebuild when targeting changes. */
+  targetedMods = false;
   auraMods = new Int32Array(STAT_COUNT);
   auraTraitComposure = 0;
   /** Aura entries conditioned on the attacker (e.g. Cover), evaluated per hit. */
   auraHitTaken: CStatMod[] = [];
   cmpEff = 10;
   statuses: StatusInst[] = [];
+  /** Live instance count per status code (fast status tests). */
+  statusCount = new Int32Array(64);
   shields: ShieldInst[] = [];
   cdA1 = 0;
   cdA2 = 0;

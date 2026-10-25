@@ -12,14 +12,19 @@ import { forceDecision } from './act';
 import type { Fight } from './fight';
 import { cm } from './record';
 import { ACT_CHANNEL, ACT_NONE, ACT_WINDUP, type Job, type QueuedStatus, type Release, type StatusInst, type Unit, type Zone } from './state';
-import { BP, DT_ARCANE, DT_PHYSICAL, ST, type CAbility, type CAmount, type CEffect, type CStatus } from './tables';
+import { BP, DT_ARCANE, DT_PHYSICAL, SC_ANCHORED, SC_ROOT, SC_SLEEP, SC_STUN, ST, STATUS_CODE, type CAbility, type CAmount, type CEffect, type CStatus } from './tables';
 
 // ---- Small queries ----------------------------------------------------------------------------
 
+/** Status test by code (SC_* constants). */
+export function has(u: Unit, code: number): boolean {
+  return u.statusCount[code]! > 0;
+}
+
+/** Status test by id (content-driven ids). */
 export function hasStatus(u: Unit, id: string): boolean {
-  const list = u.statuses;
-  for (let i = 0; i < list.length; i++) if (list[i]!.st.id === id) return true;
-  return false;
+  const c = STATUS_CODE.get(id);
+  return c !== undefined && u.statusCount[c]! > 0;
 }
 
 export function statusInst(u: Unit, id: string): StatusInst | null {
@@ -34,11 +39,11 @@ export function statusStacks(u: Unit, id: string): number {
 }
 
 export function canEvaluate(u: Unit): boolean {
-  return u.standing && u.disp === null && u.act === ACT_NONE && !hasStatus(u, 'stun') && !hasStatus(u, 'sleep');
+  return u.standing && u.disp === null && u.act === ACT_NONE && !has(u, SC_STUN) && !has(u, SC_SLEEP);
 }
 
 export function isImmobile(u: Unit): boolean {
-  return hasStatus(u, 'stun') || hasStatus(u, 'sleep') || hasStatus(u, 'root') || hasStatus(u, 'anchored');
+  return has(u, SC_STUN) || has(u, SC_SLEEP) || has(u, SC_ROOT) || has(u, SC_ANCHORED);
 }
 
 export function sameDecision(a: Decision, b: Decision): boolean {
@@ -65,7 +70,7 @@ export function retreatGap(f: Fight, u: Unit, _band: null): number {
 }
 
 function displaceImmune(u: Unit): boolean {
-  return hasStatus(u, 'anchored') || u.mods[ST.displaceImmune]! > 0;
+  return has(u, SC_ANCHORED) || u.mods[ST.displaceImmune]! > 0;
 }
 
 // ---- Status bookkeeping ------------------------------------------------------------------------
@@ -74,6 +79,8 @@ export function removeStatusInst(f: Fight, u: Unit, inst: StatusInst, _reason: s
   const i = u.statuses.indexOf(inst);
   if (i < 0) return;
   u.statuses.splice(i, 1);
+  u.statusCount[inst.st.code]!--;
+  u.modsDirty = true;
   const id = inst.st.id;
   if (id === 'taunt') {
     u.forced = false;
@@ -580,7 +587,7 @@ export function damageInstance(
 ): number {
   const src = f.units[rel.source]!;
   let a = amountCenti;
-  if (evadable && !hasStatus(tgt, 'stun') && !hasStatus(tgt, 'sleep')) {
+  if (evadable && !has(tgt, SC_STUN) && !has(tgt, SC_SLEEP)) {
     tgt.evadeAcc += f.evadeBp(tgt);
     if (tgt.evadeAcc >= BP) {
       tgt.evadeAcc -= BP;
@@ -680,6 +687,7 @@ function applyHit(
     }
   }
   const hpDmg = rem;
+  f.touchedDamage = true;
   f.pendDmg[recv.index]! += hpDmg;
   f.dmgTotal[recv.index]! += pts;
   if (hpDmg > f.maxHit[recv.index]!) {
@@ -760,6 +768,7 @@ function healPipeline(f: Fight, rel: Release, src: Unit, recv: Unit, centi: numb
   a = Math.trunc((a * f.overtimeHealBp()) / BP);
   const pts = Math.trunc(a / 100);
   if (pts <= 0) return 0;
+  f.touchedHeals = true;
   f.heals[recv.index]!.push({ src: src.index, amount: pts, ability });
   void rel;
   return pts;
@@ -838,9 +847,15 @@ export function applyQueuedStatus(f: Fight, q: QueuedStatus): void {
   if (dur <= 0) return;
   const end = t + dur;
   const ability = q.rel.ability?.id ?? null;
+  tgt.modsDirty = true;
   let inst: StatusInst | null = null;
   if (st.stacking === 'latest') {
-    for (let i = tgt.statuses.length - 1; i >= 0; i--) if (tgt.statuses[i]!.st === st) tgt.statuses.splice(i, 1);
+    for (let i = tgt.statuses.length - 1; i >= 0; i--) {
+      if (tgt.statuses[i]!.st === st) {
+        tgt.statuses.splice(i, 1);
+        tgt.statusCount[st.code]!--;
+      }
+    }
   } else if (st.stacking === 'refresh') {
     inst = tgt.statuses.find((s) => s.st === st) ?? null;
     if (inst) {
@@ -877,6 +892,7 @@ export function applyQueuedStatus(f: Fight, q: QueuedStatus): void {
       seq: f.nextSeq(),
     };
     tgt.statuses.push(inst);
+    tgt.statusCount[st.code]!++;
   }
   if (f.rec && (f.rec.full || st.hardCc)) {
     f.rec.emit('status.apply', t, tgt.index, srcIdx, { status: st.id, ability, durationTicks: dur, magnitude: eff.magnitude, stacks: inst.stacks, drStep: drStepOut }, st.hardCc);
@@ -898,6 +914,20 @@ export function applyQueuedStatus(f: Fight, q: QueuedStatus): void {
 
 export function applyCommitQueues(f: Fight): void {
   const t = f.tick;
+  if (
+    f.qShield.length === 0 &&
+    f.qCleanse.length === 0 &&
+    f.qDispel.length === 0 &&
+    f.qInterrupt.length === 0 &&
+    f.qDisplace.length === 0 &&
+    f.qCooldown.length === 0 &&
+    f.qFocus.length === 0 &&
+    f.qZone.length === 0 &&
+    f.qConsume.length === 0 &&
+    !f.units.some((u) => u.momentumReset)
+  ) {
+    return;
+  }
   // Shields (cap: total <= shields.maxTotalPctOfMaxHp of max HP; excess trimmed).
   for (const q of f.qShield) {
     const u = f.units[q.target]!;
@@ -912,7 +942,7 @@ export function applyCommitQueues(f: Fight): void {
     u.lastSupportTick = t;
     if (f.rec && f.rec.full) f.rec.emit('shield.gain', t, u.index, q.rel.source, { ability: q.rel.ability?.id ?? null, amount: add, expiresTick: t + q.duration });
   }
-  f.qShield = [];
+  f.qShield.length = 0;
   for (const q of f.qCleanse) {
     const u = f.units[q.target]!;
     if (!u.standing) continue;
@@ -922,7 +952,7 @@ export function applyCommitQueues(f: Fight): void {
       .sort((a, b) => b.end - a.end || a.seq - b.seq);
     for (const s of cands.slice(0, c.count)) removeStatusInst(f, u, s, 'cleansed');
   }
-  f.qCleanse = [];
+  f.qCleanse.length = 0;
   for (const q of f.qDispel) {
     const u = f.units[q.target]!;
     if (!u.standing) continue;
@@ -939,14 +969,14 @@ export function applyCommitQueues(f: Fight): void {
     }
     if (drop.size > 0) u.shields = u.shields.filter((_, i) => !drop.has(i));
   }
-  f.qDispel = [];
+  f.qDispel.length = 0;
   for (const q of f.qInterrupt) {
     const u = f.units[q.target]!;
     if (u.standing) cancelAction(f, u, 'interrupt', q.rel.source);
   }
-  f.qInterrupt = [];
+  f.qInterrupt.length = 0;
   for (const q of f.qDisplace) startDisplacement(f, q);
-  f.qDisplace = [];
+  f.qDisplace.length = 0;
   for (const q of f.qCooldown) {
     const u = f.units[q.target]!;
     const slot = q.eff.slot === 'self' ? q.rel.ability?.slot : q.eff.slot;
@@ -957,12 +987,12 @@ export function applyCommitQueues(f: Fight): void {
     if (real === 'a1') u.cdA1 = next;
     else u.cdA2 = next;
   }
-  f.qCooldown = [];
+  f.qCooldown.length = 0;
   for (const q of f.qFocus) {
     const u = f.units[q.target]!;
     if (u.standing) u.focus = Math.min(f.tb.derived.focusMaxMilli, u.focus + q.milli);
   }
-  f.qFocus = [];
+  f.qFocus.length = 0;
   for (const z of f.qZone) {
     const limit = z.maxActive;
     if (limit > 0) {
@@ -972,12 +1002,12 @@ export function applyCommitQueues(f: Fight): void {
     f.zones.push(z);
     if (f.rec && f.rec.full) f.rec.emit('zone.spawn', t, z.owner, undefined, { ability: z.ability ?? '', x: cm(z.x), y: cm(z.y), radius: cm(z.radiusMm) });
   }
-  f.qZone = [];
+  f.qZone.length = 0;
   for (const q of f.qConsume) {
     const u = f.units[q.target]!;
     for (const s of [...u.statuses]) if (s.st.id === q.status) removeStatusInst(f, u, s, 'consumed');
   }
-  f.qConsume = [];
+  f.qConsume.length = 0;
   for (const u of f.units) {
     if (!u.momentumReset) continue;
     u.momentumReset = false;
@@ -998,7 +1028,7 @@ function startDisplacement(f: Fight, q: Fight['qDisplace'][number]): void {
   let stopUnit = -1;
   let stopGap = -1;
   if (q.kind === 'dash') {
-    if (hasStatus(u, 'root') || hasStatus(u, 'anchored')) return;
+    if (has(u, SC_ROOT) || has(u, SC_ANCHORED)) return;
     const p = f.units[q.d.stopUnit]!;
     const dx = p.x - u.x;
     const dy = p.y - u.y;

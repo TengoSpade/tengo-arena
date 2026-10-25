@@ -14,8 +14,32 @@ export type RoleId = 'tank' | 'melee' | 'ranged' | 'controller' | 'healer';
 export type StanceId = 'aggressive' | 'steady' | 'cautious';
 export type TargetPool = 'enemies' | 'allies' | 'self' | 'any';
 
+/** Numeric codes for the closed vocabularies (fast switches in the evaluator). */
+export const COND_CODES = [
+  'always', 'self_hp_below', 'ally_hp_below', 'allies_hp_below', 'enemy_hp_below', 'enemy_within', 'enemies_within',
+  'enemies_clustered', 'allies_clustered', 'self_targeted', 'ally_targeted', 'enemy_casting', 'self_has_status',
+  'ally_has_status', 'enemy_has_status', 'fight_time_below', 'focus_at_least', 'outnumbered', 'allies_down',
+  'enemy_role_within', 'captain_alive',
+] as const;
+export const SEL_CODES = [
+  'self', 'nearest_enemy', 'furthest_enemy', 'lowest_hp_enemy', 'top_damage_enemy', 'enemy_targeting_me',
+  'enemy_targeting_ally', 'casting_enemy', 'densest_enemy', 'captain_target', 'marked_enemy', 'enemy_role',
+  'lowest_hp_ally', 'most_targeted_ally', 'ally_role', 'densest_ally', 'captain', 'current_target',
+] as const;
+export const PRED_CODES = [
+  'in_range', 'within', 'hp_below', 'hp_above', 'has_status', 'lacks_status', 'has_buff', 'role', 'not_role',
+  'not_targeted_by_ally', 'targeting_me', 'not_self',
+] as const;
+
+function codeOf(list: readonly string[], id: string, what: string): number {
+  const i = list.indexOf(id);
+  if (i < 0) throw new InvariantError(`Unknown ${what} "${id}"`);
+  return i;
+}
+
 /** One condition with every parameter resolved (unused fields are 0 / null). */
 export interface CCond {
+  code: number;
   id: string;
   not: boolean;
   /** HP threshold in bp (strictly below). */
@@ -33,7 +57,12 @@ export interface CCond {
 }
 
 export interface CSelector {
+  code: number;
   id: string;
+  /** Candidate pool when the action does not fix one. */
+  pool: 'enemies' | 'allies' | 'self';
+  /** Primary-key kind for stickiness tolerance: 0 gap, 1 HP, 2 count. */
+  keyKind: number;
   includeSelf: boolean;
   /** -1 when not limited. */
   withinMm: number;
@@ -42,6 +71,7 @@ export interface CSelector {
 }
 
 export interface CPredicate {
+  code: number;
   id: string;
   bandMm: number;
   hpBp: number;
@@ -82,6 +112,8 @@ export interface CRule {
 export interface CompiledInternal {
   rules: CRule[];
   stance: StanceId;
+  /** Per rule: may the deciding unit be its own target? */
+  selfAllowed: boolean[];
   bandMm: Record<BandId, number>;
   stickGapMm: number;
   stickHpBp: number;
@@ -155,6 +187,7 @@ export function compileRules(
     const specs = predSpecs.get(raw.pred);
     if (!specs) throw new InvariantError(`Unknown rule predicate "${raw.pred}"`);
     return {
+      code: codeOf(PRED_CODES, raw.pred, 'rule predicate'),
       id: raw.pred,
       bandMm: bandMm(bands, param(raw, specs, 'band')),
       hpBp: num(param(raw, specs, 'pct')) * 100,
@@ -171,6 +204,7 @@ export function compileRules(
       if (!specs) throw new InvariantError(`Unknown rule condition "${raw.cond}"`);
       const bag = raw as ParamBag;
       return {
+        code: codeOf(COND_CODES, raw.cond, 'rule condition'),
         id: raw.cond,
         not: raw.not === true,
         hpBp: num(param(bag, specs, 'pct')) * 100,
@@ -226,8 +260,12 @@ export function compileRules(
     const sSpecs = selSpecs.get(rule.on.sel);
     if (!sSpecs) throw new InvariantError(`Unknown selector "${rule.on.sel}"`);
     const withinRaw = onBag['withinM'];
+    const selCode = codeOf(SEL_CODES, rule.on.sel, 'selector');
     const sel: CSelector = {
+      code: selCode,
       id: rule.on.sel,
+      pool: poolOfSelector(rule.on.sel),
+      keyKind: keyKindOf(rule.on.sel),
       includeSelf: bool(param(onBag, sSpecs, 'includeSelf'), false),
       withinMm: typeof withinRaw === 'number' ? Math.round(withinRaw * 1000) : -1,
       radiusMm: Math.round(num(param(onBag, sSpecs, 'radiusM')) * 1000),
@@ -249,10 +287,53 @@ export function compileRules(
   return {
     rules: out,
     stance,
+    selfAllowed: out.map((r) => allowsSelf(r.sel, r.action)),
     bandMm: bands,
     stickGapMm: Math.round(content.combat.movement.stickiness.gapM * 1000),
     stickHpBp: Math.round(content.combat.movement.stickiness.hpPct * 100),
   };
+}
+
+function poolOfSelector(id: string): 'enemies' | 'allies' | 'self' {
+  if (id === 'self') return 'self';
+  if (id === 'lowest_hp_ally' || id === 'most_targeted_ally' || id === 'ally_role' || id === 'densest_ally' || id === 'captain') return 'allies';
+  return 'enemies';
+}
+
+function keyKindOf(id: string): number {
+  switch (id) {
+    case 'nearest_enemy':
+    case 'furthest_enemy':
+    case 'enemy_targeting_me':
+    case 'casting_enemy':
+    case 'marked_enemy':
+    case 'enemy_role':
+    case 'ally_role':
+      return 0;
+    case 'lowest_hp_enemy':
+    case 'lowest_hp_ally':
+    case 'enemy_targeting_ally':
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+/** Ally pools exclude the deciding unit unless the selector's includeSelf allows it (protect / regroup never). */
+function allowsSelf(sel: CSelector, action: CAction): boolean {
+  if (action.type === 'protect' || action.type === 'regroup') return false;
+  if (action.type === 'ability' && !action.selfAllowed) return false;
+  switch (sel.id) {
+    case 'lowest_hp_ally':
+    case 'most_targeted_ally':
+      return sel.includeSelf;
+    case 'captain':
+      return action.type === 'ability' ? action.selfAllowed : true;
+    case 'self':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function isOptional(specs: readonly RuleParamSpec[] | undefined, name: string): boolean {

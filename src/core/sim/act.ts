@@ -5,9 +5,9 @@
  */
 import { evaluateTactics, type Decision, type TraceEntry } from '../tactics';
 import type { Fight } from './fight';
-import { canEvaluate, hasStatus, isImmobile, nearestEnemyInRange, retreatGap, sameDecision } from './resolve';
+import { canEvaluate, has, isImmobile, nearestEnemyInRange, retreatGap, sameDecision } from './resolve';
 import { ACT_CAST, ACT_CHANNEL, ACT_NONE, ACT_WINDUP, type Unit } from './state';
-import { BP } from './tables';
+import { BP, SC_ANCHORED, SC_ROOT, SC_SILENCE, SC_SLEEP, SC_STUN, SC_TAUNT } from './tables';
 import { SimView } from './view';
 
 const views = new WeakMap<Fight, SimView>();
@@ -23,7 +23,7 @@ function viewOf(f: Fight): SimView {
 
 /** Start-of-tick snapshot of who targets whom (decisions read it, never live commits). */
 export function snapshotTargets(f: Fight): void {
-  for (let i = 0; i < 10; i++) f.targeters[i]!.length = 0;
+  let changed = f.tick === 0;
   for (const u of f.units) {
     const d = u.committed;
     let target = -1;
@@ -34,9 +34,21 @@ export function snapshotTargets(f: Fight): void {
     }
     if (u.standing && aim < 0 && u.subTarget >= 0 && f.units[u.subTarget]!.standing && f.units[u.subTarget]!.side !== u.side) aim = u.subTarget;
     f.snapTarget[u.index] = target;
-    f.snapAim[u.index] = aim;
-    if (aim >= 0) f.targeters[aim]!.push(u.index);
+    if (f.snapAim[u.index] !== aim) {
+      f.snapAim[u.index] = aim;
+      changed = true;
+    }
   }
+  if (!changed) return;
+  for (let i = 0; i < 10; i++) {
+    const list = f.targeters[i]!;
+    if (list.length > 0) list.length = 0;
+  }
+  for (let i = 0; i < 10; i++) {
+    const aim = f.snapAim[i]!;
+    if (aim >= 0) f.targeters[aim]!.push(i);
+  }
+  for (const u of f.units) if (u.targetedMods) u.modsDirty = true;
 }
 
 export function decisions(f: Fight): void {
@@ -143,7 +155,7 @@ export function actions(f: Fight): void {
   for (const idx of f.order) {
     const u = f.units[idx]!;
     if (!u.standing || u.disp) continue;
-    if (hasStatus(u, 'stun') || hasStatus(u, 'sleep')) continue;
+    if (has(u, SC_STUN) || has(u, SC_SLEEP)) continue;
     switch (u.act) {
       case ACT_WINDUP:
         if (--u.actLeft <= 0) releaseBasic(f, u);
@@ -192,8 +204,8 @@ export function abilityUsable(_f: Fight, u: Unit, slot: 'a1' | 'a2'): boolean {
   const ab = slot === 'a1' ? u.cls.a1 : u.cls.a2;
   if ((slot === 'a1' ? u.cdA1 : u.cdA2) > 0) return false;
   if (u.focus < ab.focusMilli) return false;
-  if (hasStatus(u, 'silence') || hasStatus(u, 'taunt')) return false;
-  if (ab.movesCaster && (hasStatus(u, 'root') || hasStatus(u, 'anchored'))) return false;
+  if (has(u, SC_SILENCE) || has(u, SC_TAUNT)) return false;
+  if (ab.movesCaster && (has(u, SC_ROOT) || has(u, SC_ANCHORED))) return false;
   return true;
 }
 

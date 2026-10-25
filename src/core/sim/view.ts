@@ -7,9 +7,9 @@
 import type { Side, UnitIndex } from '../model';
 import type { Band, BattleView, Role } from '../tactics';
 import type { Fight } from './fight';
-import { hasStatus, statusInst, statusStacks } from './resolve';
+import { has, hasStatus, statusInst, statusStacks } from './resolve';
 import { ACT_CAST, ACT_CHANNEL } from './state';
-import { BP, ST } from './tables';
+import { BP, SC_ANCHORED, SC_ROOT, ST } from './tables';
 
 export class SimView implements BattleView {
   private readonly f: Fight;
@@ -21,9 +21,13 @@ export class SimView implements BattleView {
     this.f = f;
   }
 
+  /** Start-of-tick HP fractions (HP changes only at the commit, after decisions). */
+  private hp = new Int32Array(10);
+
   sync(): void {
     this.tick = this.f.tick;
     this.fightTicks = this.f.tick;
+    for (const u of this.f.units) this.hp[u.index] = this.f.hpBp(u);
   }
 
   side(unit: UnitIndex): Side {
@@ -33,7 +37,7 @@ export class SimView implements BattleView {
     return this.f.units[unit]!.standing;
   }
   hpBp(unit: UnitIndex): number {
-    return this.f.hpBp(this.f.units[unit]!);
+    return this.hp[unit]!;
   }
   focus(unit: UnitIndex): number {
     return Math.trunc(this.f.units[unit]!.focus / 1000);
@@ -142,6 +146,6 @@ export class SimView implements BattleView {
   abilityBlocked(unit: UnitIndex, slot: 'a1' | 'a2'): boolean {
     const u = this.f.units[unit]!;
     const ab = slot === 'a1' ? u.cls.a1 : u.cls.a2;
-    return ab.movesCaster && (hasStatus(u, 'root') || hasStatus(u, 'anchored'));
+    return ab.movesCaster && (has(u, SC_ROOT) || has(u, SC_ANCHORED));
   }
 }

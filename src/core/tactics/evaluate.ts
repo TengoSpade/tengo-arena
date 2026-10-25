@@ -56,13 +56,13 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
   observed = null;
   const side = view.side(me);
   const n = view.unitCount;
-  switch (c.id) {
-    case 'always':
+  switch (c.code) {
+    case 0: // always
       return true;
-    case 'self_hp_below':
+    case 1: // self_hp_below
       observed = view.hpBp(me);
       return observed < c.hpBp;
-    case 'ally_hp_below': {
+    case 2: { // ally_hp_below
       let low = Number.MAX_SAFE_INTEGER;
       for (let u = 0; u < n; u++) {
         if (!view.standing(u) || view.side(u) !== side || (u === me && !c.includeSelf)) continue;
@@ -72,7 +72,7 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
       observed = low === Number.MAX_SAFE_INTEGER ? null : low;
       return low < c.hpBp;
     }
-    case 'allies_hp_below': {
+    case 3: { // allies_hp_below
       let count = 0;
       for (let u = 0; u < n; u++) {
         if (!view.standing(u) || view.side(u) !== side) continue;
@@ -82,7 +82,7 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
       observed = count;
       return count >= c.count;
     }
-    case 'enemy_hp_below': {
+    case 4: { // enemy_hp_below
       let low = Number.MAX_SAFE_INTEGER;
       for (let u = 0; u < n; u++) {
         if (!view.standing(u) || view.side(u) === side) continue;
@@ -93,12 +93,12 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
       observed = low === Number.MAX_SAFE_INTEGER ? null : low;
       return low < c.hpBp;
     }
-    case 'enemy_within': {
+    case 5: { // enemy_within
       const g = nearestEnemyGap(view, me);
       observed = g === Number.MAX_SAFE_INTEGER ? null : g;
       return g <= c.bandMm;
     }
-    case 'enemies_within': {
+    case 6: { // enemies_within
       let count = 0;
       for (let u = 0; u < n; u++) {
         if (view.standing(u) && view.side(u) !== side && view.gapMm(me, u) <= c.bandMm) count++;
@@ -106,9 +106,9 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
       observed = count;
       return count >= c.count;
     }
-    case 'enemies_clustered':
-    case 'allies_clustered': {
-      const wantSide = c.id === 'enemies_clustered' ? (side === 0 ? 1 : 0) : side;
+    case 7: // enemies_clustered
+    case 8: { // allies_clustered
+      const wantSide = c.code === 7 ? (side === 0 ? 1 : 0) : side;
       let best = 0;
       for (let u = 0; u < n; u++) {
         if (!view.standing(u) || view.side(u) !== wantSide) continue;
@@ -118,12 +118,12 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
       observed = best;
       return best >= c.count;
     }
-    case 'self_targeted': {
+    case 9: { // self_targeted
       const k = view.targetersOf(me).length;
       observed = k;
       return k >= c.count;
     }
-    case 'ally_targeted': {
+    case 10: { // ally_targeted
       let best = 0;
       for (let u = 0; u < n; u++) {
         if (u === me || !view.standing(u) || view.side(u) !== side || !hasRole(view, u, c.role)) continue;
@@ -133,21 +133,21 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
       observed = best;
       return best >= c.count;
     }
-    case 'enemy_casting': {
+    case 11: { // enemy_casting
       for (let u = 0; u < n; u++) {
         if (view.standing(u) && view.side(u) !== side && view.isCasting(u) && view.gapMm(me, u) <= c.bandMm) return true;
       }
       return false;
     }
-    case 'self_has_status':
+    case 12: // self_has_status
       return hasStatusOrCategory(view, me, c.status, c.category);
-    case 'ally_has_status': {
+    case 13: { // ally_has_status
       for (let u = 0; u < n; u++) {
         if (view.standing(u) && view.side(u) === side && hasStatusOrCategory(view, u, c.status, c.category)) return true;
       }
       return false;
     }
-    case 'enemy_has_status': {
+    case 14: { // enemy_has_status
       for (let u = 0; u < n; u++) {
         if (!view.standing(u) || view.side(u) === side) continue;
         if (c.bandMm >= 0 && view.gapMm(me, u) > c.bandMm) continue;
@@ -155,28 +155,28 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
       }
       return false;
     }
-    case 'fight_time_below':
+    case 15: // fight_time_below
       observed = view.fightTicks;
       return view.fightTicks < c.ticks;
-    case 'focus_at_least':
+    case 16: // focus_at_least
       observed = view.focus(me);
       return observed >= c.amount;
-    case 'outnumbered': {
+    case 17: { // outnumbered
       const mine = view.standingCount(side);
       const theirs = view.standingCount(side === 0 ? 1 : 0);
       observed = mine - theirs;
       return mine < theirs;
     }
-    case 'allies_down':
+    case 18: // allies_down
       observed = view.downedCount(side);
       return observed >= c.count;
-    case 'enemy_role_within': {
+    case 19: { // enemy_role_within
       for (let u = 0; u < n; u++) {
         if (view.standing(u) && view.side(u) !== side && hasRole(view, u, c.role) && view.gapMm(me, u) <= c.bandMm) return true;
       }
       return false;
     }
-    case 'captain_alive':
+    case 20: // captain_alive
       return view.captainOf(side) !== null;
     default:
       return false;
@@ -186,34 +186,34 @@ function checkCond(c: CCond, view: BattleView, me: UnitIndex): boolean {
 // ---- Predicates (ONLY / PREFER) -------------------------------------------------------------
 
 function checkPred(p: CPredicate, view: BattleView, me: UnitIndex, cand: UnitIndex, action: CAction): boolean {
-  switch (p.id) {
-    case 'in_range':
+  switch (p.code) {
+    case 0: // in_range
       return inActionRange(view, me, cand, action);
-    case 'within':
+    case 1: // within
       return view.gapMm(me, cand) <= p.bandMm;
-    case 'hp_below':
+    case 2: // hp_below
       return view.hpBp(cand) < p.hpBp;
-    case 'hp_above':
+    case 3: // hp_above
       return view.hpBp(cand) > p.hpBp;
-    case 'has_status':
+    case 4: // has_status
       if (p.status !== null) return view.statusStacks(cand, p.status) >= p.minStacks;
       return hasStatusOrCategory(view, cand, null, p.category);
-    case 'lacks_status':
+    case 5: // lacks_status
       return !hasStatusOrCategory(view, cand, p.status, p.category);
-    case 'has_buff':
+    case 6: // has_buff
       return view.hasBuff(cand);
-    case 'role':
+    case 7: // role
       return hasRole(view, cand, p.role);
-    case 'not_role':
+    case 8: // not_role
       return !hasRole(view, cand, p.role);
-    case 'not_targeted_by_ally': {
+    case 9: { // not_targeted_by_ally
       const side = view.side(me);
       for (const t of view.targetersOf(cand)) if (view.side(t) === side && t !== me) return false;
       return true;
     }
-    case 'targeting_me':
+    case 10: // targeting_me
       return aimOf(view, cand) === me;
-    case 'not_self':
+    case 11: // not_self
       return cand !== me;
     default:
       return false;
@@ -228,16 +228,14 @@ function inActionRange(view: BattleView, me: UnitIndex, cand: UnitIndex, action:
 
 // ---- Selectors -----------------------------------------------------------------------------
 
-/** Kind of primary key, for stickiness tolerance. */
-type KeyKind = 'gap' | 'hp' | 'count';
 
 const candidates: UnitIndex[] = [];
 const keys: number[] = [];
 
-function buildPool(sel: CSelector, action: CAction, view: BattleView, me: UnitIndex): void {
+function buildPool(sel: CSelector, action: CAction, selfOk: boolean, view: BattleView, me: UnitIndex): void {
   candidates.length = 0;
   const side = view.side(me);
-  const pool = action.pool === 'any' ? poolOfSelector(sel.id) : action.pool;
+  const pool = action.pool === 'any' ? sel.pool : action.pool;
   if (pool === 'self') {
     candidates.push(me);
     return;
@@ -247,53 +245,29 @@ function buildPool(sel: CSelector, action: CAction, view: BattleView, me: UnitIn
     if (pool === 'enemies') {
       if (view.side(u) !== side) candidates.push(u);
     } else if (view.side(u) === side) {
-      if (u === me && !allowsSelf(sel, action)) continue;
+      if (u === me && !selfOk) continue;
       candidates.push(u);
     }
   }
 }
 
-function poolOfSelector(id: string): 'enemies' | 'allies' | 'self' {
-  if (id === 'self') return 'self';
-  if (id === 'lowest_hp_ally' || id === 'most_targeted_ally' || id === 'ally_role' || id === 'densest_ally' || id === 'captain') {
-    return 'allies';
-  }
-  return 'enemies';
-}
-
-function allowsSelf(sel: CSelector, action: CAction): boolean {
-  if (action.type === 'protect' || action.type === 'regroup') return false;
-  if (action.type === 'ability' && !action.selfAllowed) return false;
-  switch (sel.id) {
-    case 'lowest_hp_ally':
-    case 'most_targeted_ally':
-      return sel.includeSelf;
-    case 'captain':
-      return action.type === 'ability' ? action.selfAllowed : true;
-    case 'self':
-      return true;
-    default:
-      return false;
-  }
-}
-
 /** Selector filter (before ONLY); returns whether the candidate stays. */
 function selectorFilter(sel: CSelector, view: BattleView, me: UnitIndex, cand: UnitIndex): boolean {
-  switch (sel.id) {
-    case 'enemy_targeting_me':
+  switch (sel.code) {
+    case 5: // enemy_targeting_me
       return aimOf(view, cand) === me;
-    case 'enemy_targeting_ally': {
+    case 6: { // enemy_targeting_ally
       const victim = aimOf(view, cand);
       return victim !== null && victim !== me && hasRole(view, victim, sel.role);
     }
-    case 'casting_enemy':
+    case 7: // casting_enemy
       return view.isCasting(cand);
-    case 'marked_enemy':
+    case 10: // marked_enemy
       return view.hasStatus(cand, 'marked');
-    case 'enemy_role':
-    case 'ally_role':
+    case 11: // enemy_role
+    case 14: // ally_role
       return hasRole(view, cand, sel.role);
-    case 'lowest_hp_ally':
+    case 12: // lowest_hp_ally
       return sel.withinMm < 0 || cand === me || view.gapMm(me, cand) <= sel.withinMm;
     default:
       return true;
@@ -301,51 +275,32 @@ function selectorFilter(sel: CSelector, view: BattleView, me: UnitIndex, cand: U
 }
 
 function primaryKey(sel: CSelector, view: BattleView, me: UnitIndex, cand: UnitIndex): number {
-  switch (sel.id) {
-    case 'nearest_enemy':
-    case 'enemy_targeting_me':
-    case 'casting_enemy':
-    case 'marked_enemy':
-    case 'enemy_role':
-    case 'ally_role':
+  switch (sel.code) {
+    case 1: // nearest_enemy
+    case 5: // enemy_targeting_me
+    case 7: // casting_enemy
+    case 10: // marked_enemy
+    case 11: // enemy_role
+    case 14: // ally_role
       return view.gapMm(me, cand);
-    case 'furthest_enemy':
+    case 2: // furthest_enemy
       return -view.gapMm(me, cand);
-    case 'lowest_hp_enemy':
-    case 'lowest_hp_ally':
+    case 3: // lowest_hp_enemy
+    case 12: // lowest_hp_ally
       return view.hpBp(cand);
-    case 'top_damage_enemy':
+    case 4: // top_damage_enemy
       return -view.damageDealt(cand);
-    case 'enemy_targeting_ally': {
+    case 6: { // enemy_targeting_ally
       const victim = aimOf(view, cand);
       return victim === null ? Number.MAX_SAFE_INTEGER : view.hpBp(victim);
     }
-    case 'densest_enemy':
-    case 'densest_ally':
+    case 8: // densest_enemy
+    case 15: // densest_ally
       return -view.neighboursWithin(cand, sel.radiusMm, view.side(cand));
-    case 'most_targeted_ally':
+    case 13: // most_targeted_ally
       return -view.targetersOf(cand).length;
     default:
       return 0;
-  }
-}
-
-function keyKind(id: string): KeyKind {
-  switch (id) {
-    case 'nearest_enemy':
-    case 'furthest_enemy':
-    case 'enemy_targeting_me':
-    case 'casting_enemy':
-    case 'marked_enemy':
-    case 'enemy_role':
-    case 'ally_role':
-      return 'gap';
-    case 'lowest_hp_enemy':
-    case 'lowest_hp_ally':
-    case 'enemy_targeting_ally':
-      return 'hp';
-    default:
-      return 'count';
   }
 }
 
@@ -382,8 +337,7 @@ function pickBest(
   if (current !== null && current !== best) {
     const idx = pool.indexOf(current);
     if (idx >= 0) {
-      const kind = keyKind(sel.id);
-      const tol = kind === 'gap' ? ct.stickGapMm : kind === 'hp' ? ct.stickHpBp : 0;
+      const tol = sel.keyKind === 0 ? ct.stickGapMm : sel.keyKind === 1 ? ct.stickHpBp : 0;
       if (poolKeys[idx]! - bestKey <= tol) return current;
     }
   }
@@ -399,22 +353,23 @@ function select(ct: CompiledInternal, rule: CRule, view: BattleView, me: UnitInd
   const sel = rule.sel;
   const action = rule.action;
   const side = view.side(me);
+  const selfOk = ct.selfAllowed[rule.index]!;
   // Single-unit selectors.
   let single: UnitIndex | null | undefined;
-  switch (sel.id) {
-    case 'self':
+  switch (sel.code) {
+    case 0: // self
       single = me;
       break;
-    case 'captain_target': {
+    case 9: { // captain_target
       const t = view.captainTarget(side);
       single = t !== null && view.standing(t) && view.side(t) !== side ? t : null;
       break;
     }
-    case 'current_target': {
+    case 17: { // current_target
       single = aimOf(view, me);
       break;
     }
-    case 'captain': {
+    case 16: { // captain
       const c = view.captainOf(side);
       single = c;
       break;
@@ -424,13 +379,13 @@ function select(ct: CompiledInternal, rule: CRule, view: BattleView, me: UnitInd
   }
   if (single !== undefined) {
     if (single === null) return { target: NO_UNIT, reason: 'no_target' };
-    buildPool(sel, action, view, me);
+    buildPool(sel, action, selfOk, view, me);
     if (!candidates.includes(single)) return { target: NO_UNIT, reason: 'no_target' };
     if (rule.only && !checkPred(rule.only, view, me, single, action)) return { target: NO_UNIT, reason: 'only_filtered' };
     return { target: single, reason: null };
   }
 
-  buildPool(sel, action, view, me);
+  buildPool(sel, action, selfOk, view, me);
   // Selector filter.
   let w = 0;
   for (let i = 0; i < candidates.length; i++) {
@@ -476,7 +431,7 @@ function stanceTarget(ct: CompiledInternal, view: BattleView, me: UnitIndex): Un
   return pickBest(ct, NEAREST, view, me, candidates, keys);
 }
 
-const NEAREST: CSelector = { id: 'nearest_enemy', includeSelf: false, withinMm: -1, radiusMm: 0, role: null };
+const NEAREST: CSelector = { code: 1, id: 'nearest_enemy', pool: 'enemies', keyKind: 0, includeSelf: false, withinMm: -1, radiusMm: 0, role: null };
 
 // ---- Evaluation ----------------------------------------------------------------------------
 

@@ -8,7 +8,7 @@
  * -> bp, flat/points/flag -> whole units, hp_per_s -> centipoints.
  */
 import type { AbilityDef, Amount, ClassDef, ContentDB, Effect, EffectPredicate, StatMod, StatusDef, TraitDef, Trigger } from '../content';
-import { STAT_MOD_STATS } from '../content';
+import { STATUS_IDS, STAT_MOD_STATS } from '../content';
 import { InvariantError } from '../util';
 
 export const BP = 10_000;
@@ -51,6 +51,17 @@ export const ST = {
 } as const;
 export const STAT_COUNT = 27;
 
+/** Status codes: index in the closed STATUS_IDS vocabulary (stable, code-owned). */
+export const STATUS_CODE = new Map<string, number>(STATUS_IDS.map((id, i) => [id, i]));
+const code = (id: (typeof STATUS_IDS)[number]): number => STATUS_IDS.indexOf(id);
+export const SC_STUN = code('stun');
+export const SC_SLEEP = code('sleep');
+export const SC_ROOT = code('root');
+export const SC_SILENCE = code('silence');
+export const SC_TAUNT = code('taunt');
+export const SC_ANCHORED = code('anchored');
+export const SC_RALLIED = code('rallied');
+
 export const DT_PHYSICAL = 0;
 export const DT_ARCANE = 1;
 export const DT_TRUE = 2;
@@ -91,6 +102,8 @@ export interface CStatMod {
 export interface CStatus {
   id: string;
   index: number;
+  /** STATUS_IDS index (statusCount slot). */
+  code: number;
   category: StatusDef['category'];
   polarity: 'buff' | 'debuff';
   dr: 'control' | 'displace' | null;
@@ -360,6 +373,7 @@ function build(content: ContentDB): SimTables {
     const cs: CStatus = {
       id: s.id,
       index,
+      code: STATUS_CODE.get(s.id) ?? -1,
       category: s.category,
       polarity: s.polarity,
       dr: s.dr,
