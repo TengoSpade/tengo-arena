@@ -1,15 +1,15 @@
 # Arena League — gameplay systems and content
 
-> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.3 · 2026-10-25. §1–2 were written by the lead designer (phase 1). §3–10 merge the three phase-2 drafts (`_drafts/03-combat.md`, `_drafts/03-fighter-lifecycle.md`, `_drafts/03-league-economy.md`) and resolve their conflicts using decisions D-A to D-I, which were made under delegation (document 01 §8.2). **v0.3 is the M1 doc sync:** values now match `content/default` on main @ f4b39d9 after combat balance pass 1 (1597f1d), the tuning pass (m1/fix-tuning) and the core fix round (m1/fix-core), and decisions D-N to D-T are folded in. M1 was built at risk on these working assumptions under the owner's goal (01 §8.5). Two reviews have run (01 §8.6); the owner has not yet approved the package.
+> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.4 · 2026-10-25. §1–2 were written by the lead designer (phase 1). §3–10 merge the three phase-2 drafts (`_drafts/03-combat.md`, `_drafts/03-fighter-lifecycle.md`, `_drafts/03-league-economy.md`) and resolve their conflicts using decisions D-A to D-I, which were made under delegation (document 01 §8.2). **v0.3 is the M1 doc sync:** values now match `content/default` on main @ f4b39d9 after combat balance pass 1 (1597f1d), the tuning pass (m1/fix-tuning) and the core fix round (m1/fix-core), and decisions D-N to D-T are folded in. **v0.4** adds the QA polish round (m1/polish-core @ 60ccdd1, m1/polish-ui @ c35d12a; main tagged `m1-season-mvp` @ 3e682d5). M1 was built at risk on these working assumptions under the owner's goal (01 §8.5). Two reviews have run (01 §8.6); the owner has not yet approved the package.
 > Follow the labels, scope, glossary, and authority rules in [document 01](01-game-vision-and-design-principles.md).
 > This document owns mechanical truth. [Document 02](02-player-experience-and-game-flow.md) owns when systems appear in the player journey. [Document 05](05-technical-design-principles-and-build-plan.md) owns how their state and implementation are organized.
 
 | Field | Value |
 | --- | --- |
-| Game / version / updated | Arena League / v0.3 / 2026-10-25 |
+| Game / version / updated | Arena League / v0.4 / 2026-10-25 |
 | Status / design owner | Draft: all sections written for M1 and synced to the M1 build (main @ f4b39d9, 741 tests, 10-season soak 11/11) / the project owner |
 | Milestone covered | M1 "Season MVP" (O14; scope D-N) in full. Later systems are tagged with their milestone in §2 and summarized in §3.5 |
-| Content source of truth | `content/default/`: `combat.json`, `classes.json`, `abilities.json`, `tactics-presets.json`, `races.json`, `traits.json`, `names.json`, `development.json`, `leagues.json`, `clubs.json`, `economy.json`. Where this text quotes a number, it is the working value on main @ f4b39d9 (v0.3 sync). **The data file holds the working value**; a disagreement between text and data is a defect to report, not a choice |
+| Content source of truth | `content/default/`: `combat.json`, `classes.json`, `abilities.json`, `tactics-presets.json`, `races.json`, `traits.json`, `names.json`, `development.json`, `leagues.json`, `clubs.json`, `economy.json`. Where this text quotes a number, it is the working value on main @ 3e682d5 (v0.4 sync). **The data file holds the working value**; a disagreement between text and data is a defect to report, not a choice |
 
 **Labels in this document.** REQUIRED cites an owner ID (R, T, O). **DELEGATED** cites a D-ID: a decision the orchestrator made under the owner's goal instruction. It is the binding working design, but it still awaits owner confirmation (01 §8.2). PROPOSED marks rules from the phase-2 drafts that no decision has yet covered. Every number is PROPOSED · TUNABLE unless a REQUIRED or DELEGATED rule fixes it. EXAMPLE, OPEN, FUTURE and PERMITTED-CHOICE are as defined in 01. **FUTURE is used only for ideas no milestone schedules**; planned work carries its milestone tag (M2–M7, D-N). Untagged prose follows its section's status line.
 
@@ -438,7 +438,7 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 
 **Death summary** (per down): the credited fighter, the ability, the last three hits taken with their sources, active debuffs, and whether a heal or shield arrived in the last 2 s.
 
-**M1 match report content** (presentation in 04): score and per-round winner, duration and end reason (with the tiebreak step); a key-event timeline (downs with cause, interrupts, Deathward saves, rallies, overtime); per-fighter recap cards with rule-fire bars labelled by the preset's rules; "never fired" warnings; MVP data (damage, healing, downs); injuries and XP (from sys-injury and sys-development). **MVP as built** (PROPOSED · TUNABLE; presentation only): the fighter on the match winner's side with the highest score = damage dealt (to HP and to shields) + healing + shielding + 150 × downs inflicted + 50 × assists, summed over the match. The weights are `PROVISIONAL_MVP_DOWN_POINTS` and `PROVISIONAL_MVP_ASSIST_POINTS` in core/sim until `combat.json` gets a key (content request). The report's "What decided it" selection is a presentation heuristic specified in 04 ui-report.
+**M1 match report content** (presentation in 04): score and per-round winner, duration and end reason (with the tiebreak step); a key-event timeline (downs with cause, interrupts caused by another fighter, Deathward saves, rallies, overtime; a cast the caster dropped itself, because its target went out of range or down, is not a key moment); per-fighter recap cards with rule-fire bars labelled by the preset's rules; "never fired" warnings; MVP data (damage, healing, downs); injuries and XP (from sys-injury and sys-development). **MVP as built** (PROPOSED · TUNABLE; presentation only): the fighter on the match winner's side with the highest score = damage dealt (to HP and to shields) + healing + shielding + 150 × downs inflicted + 50 × assists, summed over the match. The weights are `PROVISIONAL_MVP_DOWN_POINTS` and `PROVISIONAL_MVP_ASSIST_POINTS` in core/sim until `combat.json` gets a key (content request). The report's "What decided it" selection is a presentation heuristic specified in 04 ui-report.
 
 **Determinism** (T4, vis-009): the event hash is identical for identical inputs at a given level, and the round checksum is identical at every level.
 
@@ -459,17 +459,17 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 | Human | 80 | 1.000 | 17–21 | 28 (28–30) | 31 | 60 | 1.00 | 1.00 | 58 |
 | Elf | 120 | 0.667 | 28–33 | 42 (42–46) | 47 | 90 | 1.25 | 1.20 | 87 |
 | Dwarf | 72 | 1.111 | 16–19 | 25 (26–27) | 28 | 54 | 0.80 | 0.90 | 52.2 |
-| Orc | 64 | 1.250 | 16–18 | 22 (23–24) | 25 | 48 | 0.85 | 0.85 | 46.4 |
+| Orc | 64 | 1.250 | 16–18 | 22 (23–24) | 25 | 48 | 0.75 | 0.80 | 46.4 |
 | Ashkin (original race) | 52 | 1.538 | 16–17 | 18 (19–20) | 21 | 39 | 0.85 | 0.80 | 37.7 |
 
-The last column is the real age at human-age 58 (58 × lifespan ÷ 80). Career length now depends on the class as well as the race (D-T): in the 48-club measurement (2 seeds × 20 seasons, §8.3) the median retirement human-age was 40.0 for every race except dwarves (41.1) and elves (39.0), which is real age 40 for a human, 60 for an elf, 36 for a dwarf, 32 for an orc and 26 for an Ashkin.
+The last column is the real age at human-age 58 (58 × lifespan ÷ 80). Career length now depends on the class as well as the race (D-T): after the polish-round recalibration the median retirement human-age is 38.8 for physically weighted classes, 42.0 for mixed and 46.1 for mentally weighted (§8.3); for a physically weighted class that is real age 39 for a human, 58 for an elf, 35 for a dwarf, 31 for an orc and 25 for an Ashkin.
 
 **Identities (PROPOSED; values in `races.json`):** tendencies are cap offsets in stat points, at most ±4 per stat by rule (D-F), and at most ±1.6 in the data.
 - **Human:** no tendencies. *Adaptable:* training emphasis works 1.5× as strongly.
 - **Elf:** agile, precise, aware; frail (tgh −1.6, str −1.2); mental growth ×1.1. The slowest climb and the longest prime, the most injuries and the slowest healing. Long elf careers are kept (D-B).
 - **Dwarf:** shorter-lived than humans (the literal reading of O11, PROPOSED C-2); tough and composed, slow (pac −1.6); physical decline ×0.85; the lowest injury rate.
-- **Orc:** strong and tough (str +1.6), less disciplined; physical growth ×1.05, mental ×0.9; useful almost at once, and in a physically weighted class usually done by about 31 (human-age 39, D-T).
-- **Ashkin:** original race (kept, D-B): fast, weak captains; they debut at the age floor of 16, which already equals human-age 24.6, so they arrive near their peak and decline the most steeply; at the D-T median (human-age 40, real age 26) an Ashkin career lasts about 10 seasons.
+- **Orc:** strong and tough (str +1.6), less disciplined, and the most durable after dwarves (injury chance ×0.75, recovery ×0.80, scar chance ×0.9 since the polish round, per O11); physical growth ×1.05, mental ×0.9; useful almost at once, and in a physically weighted class usually done by about 31 (human-age 39, D-T).
+- **Ashkin:** original race (kept, D-B): fast, weak captains; they debut at the age floor of 16, which already equals human-age 24.6, so they arrive near their peak and decline the most steeply; in a physically weighted class an Ashkin retires around real age 25 (human-age 38.8), about 9 seasons after his debut.
 
 **Invariants** (validator; O11): a race longer-lived than humans must not have a lower injury-chance multiplier than humans, and a shorter-lived race must not have a higher one; among shorter-lived races the order is free. Every debut age is ≥ 16 (PROPOSED C-13). Every race lists all 12 stat ids. A tendency above ±4 is rejected.
 
@@ -490,7 +490,7 @@ The last column is the real age at human-age 58 (58 × lifespan ÷ 80). Career l
 6. **Bloom**ᵢ: a uniform integer −2 to +2, so some stats ripen earlier than others.
 7. **Development clocks:** D_g = min(human-age + 4, 16 + max(0, human-age − 16) × U × pace × race.growthMult[g]), with U uniform 0.65–1.00 standing for earlier playing time.
 8. **Wear history:** wearᵢ = the physical decline table summed over every human-year from 31 to floor(human-age) − 1, × race.declineMult.
-9. **Veteran history** (older than a sampled debut age): proSeasons = age − debut; careerRounds = round(proSeasons × 40 × U); each pro season rolls a 1.6% scar chance; acquired-trait thresholds are checked once.
+9. **Veteran history** (older than a sampled debut age): proSeasons = age − debut; careerRounds = round(proSeasons × 40 × U); each pro season rolls a 1.6% scar chance; acquired-trait thresholds are checked once. The career line adds up (polish round): matches = round(careerRounds × 2 ÷ (bestOf + 2)), rounds won = careerRounds ÷ 2, and debutSeason = 1 − proSeasons, so a veteran is never shown as a first-season fighter. **Titles:** at the season-end development step every fighter on a Reckoning champion's roster gains one title in his career record.
 10. **Traits** (sys-traits roll), then **name**.
 
 **Effective stats** (the single function used by fight setup, rating and captaincy): developed100ᵢ = cap100ᵢ × M_g(D_g + bloomᵢ) (interpolated maturity curve, truncated); base100ᵢ = max(100, developed100ᵢ − wear100ᵢ); eff100ᵢ = base100ᵢ + 100 × (trait stat adds + status stat mods + chemistry composure on cmp + contextStat if the match qualifies); the displayed and fight value is clamp(floor(eff100ᵢ ÷ 100), 1, 20). **Rating** = `combatRating` (D-Q, boundary contract 7) of the displayed integer stats clamp(floor(eff100ᵢ ÷ 100), 1, 20), so the rating shown is the rating combat and the market use; the lifecycle draft's centipoint form is retired (flooring puts potential about 2.5 below the draft's P on average). **Potential** (displayed) is the same function with every stat at its cap, no wear, and only permanent modifiers (physique traits and scars), so a scar lowers potential (the "injury" event change allowed by P-12).
@@ -571,18 +571,18 @@ The two multipliers always sum to 2, so emphasis moves development between the p
 | --- | --- | --- | --- |
 | Human | 18 (18.0) debut | 9 | 7 |
 | Human | 28 (28.0) | 16 | 11 |
-| Human | 34 (34.0) | 14 (wear 1.2) | 13 |
-| Human | 40 (40.0) | 9 (wear 6.2) | 14 |
+| Human | 34 (34.0) | 15 (wear 0.7) | 13 |
+| Human | 40 (40.0) | 12 (wear 3.4) | 14 |
 | Elf | 30 (20.0) | 11 | 9 |
 | Elf | 42 (28.0) | 16 | 12 |
 | Orc | 20 (25.0) | 14 | 10 |
-| Orc | 26 (32.5) | 15 (wear 0.38) | 12 |
+| Orc | 26 (32.5) | 15 (wear 0.25) | 12 |
 | Ashkin | 16 (24.6) debut | 14 | 10 |
-| Ashkin | 24 (36.9) | 13 (wear 2.46) | 13 |
+| Ashkin | 24 (36.9) | 14 (wear 1.38) | 13 |
 
 v0.3 drops the draft's rating/potential and retirement columns: the ratings came from the retired centipoint formula and need the full stat set (D-Q), and retirement no longer depends on age alone (D-T; see the worked example in "aging, decline and retirement").
 
-The human at 34 has D 34, so developed STR is 16.00; wear 0.3 + 0.4 + 0.5 = 1.2 gives 14.80, shown as 14. A human who debuts at 18 (D = 18) and **never plays** (usage 0, D-A) still has D = 18 at age 28: STR = 16 × 0.60 = 9.6, shown as 9 ("potential reached" about 60%). A slow-paced human who plays every round reaches D 25.5 at 28 (STR 14.76) and hits his cap only around 31, just as decline starts.
+The human at 34 has D 34, so developed STR is 16.00; wear 0.2 + 0.2 + 0.3 = 0.7 gives 15.30, shown as 15. A human who debuts at 18 (D = 18) and **never plays** (usage 0, D-A) still has D = 18 at age 28: STR = 16 × 0.60 = 9.6, shown as 9 ("potential reached" about 60%). A slow-paced human who plays every round reaches D 25.5 at 28 (STR 14.76) and hits his cap only around 31, just as decline starts.
 
 **Acceptance cases:** dev-001 to dev-010 (§9.2).
 
@@ -590,11 +590,11 @@ The human at 34 has D 34, so developed STR is 16.00; wear 0.3 + 0.4 + 0.5 = 1.2 
 
 **Status:** the human peak of 28 scaled by lifespan is REQUIRED (O11), and so is the owner's "Mental skills don't decline until ~60" (O11 states no race scaling for mental decline). **Scaling the mental-decline age by lifespan is a departure from that literal wording**, DELEGATED under D-B and pending owner confirmation (human 60, elf 90, dwarf 54, orc 48, Ashkin 39; `development.json` decline.mentalDeclineScalesWithLifespan = true). Retirement driven by effectiveness and forced at human-age 58 is DELEGATED (D-T). Retirement on by default is PROPOSED (P-10).
 
-**Decline (wear)** in stat points per human-year, looked up at floor(human-age during the season) − any trait declineShift, then × k × race.declineMult[g] × trait decline multipliers: physical 0 up to 30, then 0.3 (31), 0.4 (32), 0.5 (33), 0.6 (34), 0.7 (35), 0.8 (36), 0.9 (37), 1.0 from 38. Mental: 0 before human-age 60, 0.1 per human-year at 60–64, 0.2 at 65–69, 0.3 from 70. With scaling, human-age is used for every race, so mental decline never touches a playing career. Cumulative human physical wear: 1.2 points by 34, 4.5 by 37, 6.2 by 40.
+**Decline (wear)** in stat points per human-year, looked up at floor(human-age during the season) − any trait declineShift, then × k × race.declineMult[g] × trait decline multipliers: physical 0 up to 30, then 0.2 (31–32), 0.3 (33–34), 0.4 (35–36), 0.5 (37–38), 0.6 (39–40), 0.7 (41–43), 0.85 (44–46), 1.0 from 47 (softened in the polish round). Mental: 0 before human-age 60, 0.1 per human-year at 60–64, 0.2 at 65–69, 0.3 from 70. With scaling, human-age is used for every race, so mental decline never touches a playing career. Cumulative human physical wear: 0.7 points by 34, 1.8 by 37, 3.4 by 40, 4.7 by 42, so a human at 42 keeps about 55–65% of an 11–13-point physical attribute. The flip side: a low-rated veteran over 40 can show physical stats of 1–2 (05 §12).
 
 **Retirement** (stream `retirement`):
 1. **Chance** (D-T; computed live all season and shown on the card): 0 below human-age 31; 100% from human-age **58**, with a career-ending injury, or in a final season; otherwise **p = 1 − (1 − hDrop) × (1 − hAge)**.
-   - hDrop (per season) is a step table on the drop from the fighter's career-peak rating to his current rating (`development.json` retirement.hazardByRatingDrop): drop ≥ 5 → 0.3%, ≥ 8 → 1%, ≥ 10 → 4%, ≥ 12 → 8%, ≥ 14 → 13%, ≥ 16 → 19%, ≥ 19 → 29%, ≥ 22 → 41%, ≥ 26 → 60%, ≥ 30 → 80%. Physical decline lowers the rating of a physically weighted class, so it shows up here.
+   - hDrop (per season) is a step table on the drop from the fighter's career-peak rating to his current rating (`development.json` retirement.hazardByRatingDrop): drop ≥ 3 → 1%, ≥ 4 → 2.5%, ≥ 5 → 4.5%, ≥ 6 → 7.5%, ≥ 7 → 12%, ≥ 8 → 18%, ≥ 9 → 25%, ≥ 11 → 35%, ≥ 13 → 47%, ≥ 16 → 63%, ≥ 20 → 82% (recalibrated in the polish round to match the softer decline). Physical decline lowers the rating of a physically weighted class, so it shows up here.
    - hAge = 1 − (1 − h)^k, with h a step table on the human-years past the physical peak of 30 (`hazardPerHumanYearPastPeak`): 1–9 years 0.2%, 10–14 0.8%, 15–17 1.5%, 18–20 3%, 21–22 6%, 23–24 10%, 25 18%, 26 30%, 27 50%. The conversion is a precomputed basis-point table per (race, human-age).
    Because mental stats hold until human-age 60, mentally weighted fighters keep their rating and play into their 40s and 50s, and physically weighted fighters usually retire in their late 30s.
 2. **Modifiers**, in this order. Multiply: usage ≥ 0.75 → ×0.8; usage ≤ 0.30 → ×1.5; no contract for next season → ×1.5; a contract running past this season → ×0.6; trait multipliers (Glory-Hungry 0.8, Weathers Well 0.85, Keeps the Edge 0.9, Idle Hands 1.2). Then add 3 points per scar (the heavy-wear add is 0 under D-T, because the rating drop already carries physical decline). Then clamp to 0–100%.
@@ -602,13 +602,13 @@ The human at 34 has D 34, so developed STR is 16.00; wear 0.3 + 0.4 + 0.5 = 1.2 
 4. **Roll** at season-end step 7. A retiring fighter's contract ends with no payout. He leaves a career record (an `alumni` entry, 05 §5) and, FUTURE (unscheduled), may become staff (P-10).
 5. **Leaving the league:** a free agent unsigned at 2 consecutive season ends leaves. This is pool maintenance, and it is not counted as a retirement for intake.
 
-**Distributions** (real sim, 48 clubs, 2 seeds × 20 seasons, measured in m1/fix-core): median retirement human-age **40.0** (36.2 under the draft's age-only rule). By class weighting: mentally weighted 44.0, mixed 41.2, physically weighted 38.8. By race: human 40.0, elf 39.0, dwarf 41.1, orc 40.0, Ashkin 40.0.
+**Distributions** (real sim, 48 clubs, measured in m1/polish-core): median retirement human-age **38.8** for physically weighted classes, **42.0** for mixed and **46.1** for mentally weighted (the draft's age-only rule gave 36.2 overall).
 
 **Player information:** the age bar shows rising, prime and declining zones for the race; a retirement-chance badge from human-age 31; the final-season status; the P1 digest lists final-season announcements.
 
 **Edge cases:** retirement never happens mid-season; a career-ending injury removes the fighter from play at once, and he retires at season end. Pending offers to a retiring fighter are void. A free agent's chance uses "no contract next season". Human-age 57.9 is still below 58.
 
-**Worked example (EXAMPLE):** a dwarf Bladeturner aged 32 (human-age 35.5) whose rating fell from a career peak of 66 to 54 (drop 12 → hDrop 8%), usage 0.6, an expiring contract not renewed, 1 scar. He is 5 human-years past the peak, so h = 0.2% and hAge = 1 − 0.998^1.111 = 0.22% (22 bp). p = 1 − 0.92 × 0.9978 = 8.20%; × 1.5 (no contract) = 12.30%; + 3 (scar) = **15.3%**. A human healer at human-age 47 who is 2 below his peak (hDrop 0; 17 years past the peak, h = 1.5%), with usage 0.5 and a contract running past this season, has p = 1.5% × 0.6 = **0.9%**, so he plays on.
+**Worked example (EXAMPLE):** a dwarf Bladeturner aged 32 (human-age 35.5) whose rating fell from a career peak of 66 to 60 (drop 6 → hDrop 7.5%), usage 0.6, an expiring contract not renewed, 1 scar. He is 5 human-years past the peak, so h = 0.2% and hAge = 1 − 0.998^1.111 = 0.22% (22 bp). p = 1 − 0.925 × 0.9978 = 7.70%; × 1.5 (no contract) = 11.55%; + 3 (scar) = **14.55%**. A human healer at human-age 47 who is 2 below his peak (hDrop 0; 17 years past the peak, h = 1.5%), with usage 0.5 and a contract running past this season, has p = 1.5% × 0.6 = **0.9%**, so he plays on.
 
 **Acceptance cases:** age-001 to age-003, ret-001 to ret-007 (§9.2).
 
@@ -627,7 +627,7 @@ The human at 34 has D 34, so developed STR is 16.00; wear 0.3 + 0.4 + 0.5 = 1.2 
 6. **Timing:** an injury takes effect when the match ends. The fighter plays out the remaining rounds, and no further injury can be rolled for him in that match. Weeks out count down at each week processing; the off-season in the season-end step removes 8 weeks.
 7. After a moderate or serious injury the fighter is **Still tender** (injury chance ×1.25) for his next 2 matches started. Back from the Brink is gained on the first round started after a serious injury.
 
-**Expected rates** (soak model, injuries per 40 rounds): human 0.95–1.04, elf 1.26–1.46, dwarf 0.64–0.77, orc 0.71–0.79, Ashkin 0.77–0.94. Serious injuries are about 6% of all injuries. A 24-club league sees about 3–5 scars and 0.1–0.35 career-ending injuries a season.
+**Expected rates** (soak model, injuries per 40 rounds): human 0.95–1.04, elf 1.26–1.46, dwarf 0.64–0.77, orc 0.71–0.79, Ashkin 0.77–0.94. **Measured in m1/polish-core** (injuries per full-season starter, after the orc change): dwarf 0.54–0.66, orc 0.64–0.69, Ashkin 0.77–0.81, human 0.92–0.97, elf 1.10–1.26. Serious injuries are about 6% of all injuries. A 24-club league sees about 3–5 scars and 0.1–0.35 career-ending injuries a season.
 
 **Player information:** *before* the match, on the lineup screen per fighter: the risk word and an **estimate** of the chance per round started, shown with ≈ and labelled as an estimate ("≈1.95% injury chance per round started, estimated from typical rounds (not exact)"). As built (PROPOSED · TUNABLE), the estimate is the per-round formula of step 1 for a *typical round* (downed 55%, damage taken 60% of max HP: `PROVISIONAL_TYPICAL_ROUND` in core/fighters), times the fighter's proneness factors, capped at 15%; the example is a human with tgh 10, human-age under 30 and no traits. The real chance depends on the round, so the estimate is never presented as exact. If At risk, the At-risk status text says a serious injury could end the career; core also estimates the per-match career-ending chance from 2.5 typical rounds per match, which M1 does not yet display (05 §12). *After*, in the match report: each injury with its round, cause ("downed by X after taking 118% of max HP"), severity, weeks out, return week and pre-match odds, and for scars the new trait and the potential change. *Also:* the digest, a roster medical column with countdowns, and the season review tally.
 
@@ -834,7 +834,7 @@ Changing captain A → B → A between two locks costs nothing, because only loc
 14. **AI action phase:** trials-rookie signings, cap-relief releases, opening free-agent offers for P1, club captain and vice-captain for the new season (D-I).
 15. Autosave, then the season-end review screens (02 §2 step 10).
 
-**Digest triggers:** offer accepted, countered, refused or lost; rival offers on a shortlisted fighter; contracts expiring this season (listed from P1, highlighted at MW4, MW12 and TW1); Watch, embargo entry and exit, Registry advance; tournament place clinched or lost; relegation zone entered or left; injuries and returns; a fit count of 5 or fewer for next week; final-season announcements; trait gains and losses.
+**Digest triggers:** offer accepted, countered, refused or lost; rival offers on a shortlisted fighter; contracts expiring this season (listed from P1, highlighted at MW4, MW12 and TW1, and one urgent `contract.expiring` item per unrenewed player contract at the processing that leaves 4 weeks in the season, `economy.json` contracts.expiryReminderWeeksBeforeEnd); contracts raised to the tier minimum at setup (`contract.minimum_raise`); Watch, embargo entry and exit, Registry advance; tournament place clinched or lost; relegation zone entered or left; injuries and returns; a fit count of 5 or fewer for next week; final-season announcements; trait gains and losses.
 
 **Cancellation:** none after Continue. Before it, pending offers can be withdrawn. The debt counter carries over the season boundary unless the balance is ≥ 0 at setup.
 
@@ -934,7 +934,7 @@ The base is club-independent, so promotion **does not** inflate an existing squa
 
 **Rookie scale** (D-P): on Trials Day a rookie's ask from his own club is capped at max(tier minimum, floor5(tier minimum × 1.25)), that is 325 / 185 / 75 (`market.trialsDay.maxAskBpOfTierMinWage` 12,500). On the open market he asks normally.
 
-**Renewals:** allowed in any week of a contract's final season, by the holding club only, answered at once. The new terms start at season-end setup; meanwhile the old wage continues.
+**Renewals:** allowed in any week of a contract's final season, by the holding club only, answered at once, and still allowed while the season-end step is pending, until the expiry step runs (polish round: the final-season check uses the season being played, because the market clock already reads the coming season then; the renewal situation counts starts in the season being played). The new terms start at season-end setup; meanwhile the old wage continues.
 
 **Negotiation** (one offer, one counter). ratio = offer × 10,000 ÷ ask (or ÷ the club's valid counter price):
 - ratio ≥ 10,000: acceptable. A renewal signs at once, and a free-agent offer goes to decision.
@@ -946,11 +946,11 @@ The base is club-independent, so promotion **does not** inflate an existing squa
 
 **Expiry:** at season-end step 8. **Retirement** (step 7) ends a contract with no payout.
 
-**Drop clause and tier minimum** (setup): every contract of a relegated club becomes max(new tier minimum, floor5(wage × 80%)). A contract below its club's tier minimum is raised to it (e.g. after promotion).
+**Drop clause and tier minimum** (setup): every contract of a relegated club becomes max(new tier minimum, floor5(wage × 80%)). A contract below its club's tier minimum is raised to it (e.g. after promotion). Each raise is recorded on the ending season's `SeasonRecord.wageRaises` and reported to the player (news `contract.minimum_raise`; season review step 5).
 
 **Worked example (EXAMPLE): Brannoc**, a human aged 23, rating 58, potential 64, Fair greed +400, with one positive and one negative trait. EQ = 58 + floor(6 × 0.4) = 60, so his market wage is curve(60) = **285**. His ask from a Banner club at prestige 50 for 2 seasons is 285 × (10,000 + 0 − 100 + 0 + 400) ÷ 10,000 = 293.5 → floor5 → **290 ts per week**. A Muster club (prestige 20) is asked 285 × 11,900 ÷ 10,000 → **335** (tier gap +1,500), and a Crown club at prestige 70 is asked 285 × 9,900 ÷ 10,000 → **280** (tier gap −500; at or above the Crown minimum 260). Signed at the P1 processing: 45 paid weeks, so the signing cost is floor10(290 × 45 × 10%) = **1,300**. An offer of 270 (ratio 9,310) draws a counter of floor5((270 + 290) ÷ 2) = **280**; 255 (ratio 8,793) is refused. Released while MW6 is the current week, with a contract to the end of next season: 37 weeks, so the payout is floor10(290 × 37 × 50%) = **5,360**.
 
-**Acceptance cases:** le-010 to le-012, le-016, le-017, le-020 (§9.3).
+**Acceptance cases:** le-010 to le-012, le-016, le-017, le-020, le-032 (§9.3).
 
 #### sys-transfers: the free-agent market
 
@@ -1165,7 +1165,7 @@ These systems have no §3 spec yet. The constraints already decided bind whoever
 | Control and pacing | DR steps 1.0/0.6/0.35/0 over 6 s; 2.5 s cap; overtime +3%/−3% per second from 45 s; cap 75 s; decision interval 2 ticks; shield cap 50% (`combat.json` cc, overtime, timing, shields) | Control uptime; overtime and cap rates; the 2 ms per round budget |
 | Class kits | Base values and ability coefficients (`classes.json`, `abilities.json`); ±30% per value per pass (balance pass 1 exceeded it; exception logged in §8.2) | Harness outliers |
 | Development | Season XP target 360; emphasis shift 0.20 (D-A); pace levels 0.75–1.30; mentoring 0.97–1.08; usage floor fixed at 0 (D-A, not tunable) (`development.json` xp, training, pace, captaincy) | Prospect growth bands; peak ÷ potential |
-| Aging and retirement | Physical decline table; mental decline from human-age 60 scaled by lifespan (D-B); retirement hazards by rating drop from peak (0.3% at 5 to 80% at 30) and by human-years past 30 (0.2% to 50%), forced at 58 (D-T) (`development.json` decline, retirement) | Median retirement human-age about 40 (measured 40.0); physically weighted classes retire before mentally weighted ones |
+| Aging and retirement | Physical decline table; mental decline from human-age 60 scaled by lifespan (D-B); retirement hazards by rating drop from peak (1% at 3 to 82% at 20) and by human-years past 30 (0.2% to 50%), forced at 58 (D-T) (`development.json` decline, retirement) | Median retirement human-age by class weighting (measured: physical 38.8, mixed 42.0, mental 46.1); physically weighted classes retire before mentally weighted ones |
 | Injuries | Base terms 0.4% / 1.4% per max HP / 1.3% downed; race multipliers; career-ending 8% with a 0.5% per-match cap (`development.json` injury, `races.json`) | 0.75–1.15 per 40 human rounds; elf:human 1.3–1.6× |
 | Traits and captaincy | Negative chance 0.2 per trait; captaincy weights .45/.25/.10/.10/.10; grade thresholds 90/70/55/40; aura and rally by grade; chemistry ÷ 2 (`traits.json`, `development.json`) | 78–82% positive share; 10–35% of AI captains grade A; captain effects ≤ 10% |
 | Intake and pool | Rookies 0.75 per club + retirements in [0.5, 1.6] × clubs (D-H); season 1 one per club (D-P); 2.5 world free agents per club (D-C); pool floors 60 and 5 per role (`development.json` generation, `economy.json` market) | Pool at P1 100–300; floors never breached |
@@ -1213,12 +1213,12 @@ From `development.json` soakTargets (bands widened in m1/fix-core for D-T, becau
 | Share human-age ≤ 22 / ≥ 31 | 12–32% / 20–55% | not reported by the soak; population tests 22–28% / 20–30% |
 | All-club top-5 rating drift; league mean drift | ≤ 4; ≤ 3 points | population tests −3.5 (59.4 → 55.9); −1.1 (48.9 → 47.8) |
 | Highest rating | ≤ 95 | 94 (population tests) |
-| Injuries per 40 rounds (human / elf / dwarf / orc / Ashkin) | 0.75–1.15 / 1.1–1.65 / 0.5–0.85 / 0.55–0.9 / 0.6–1.05 | 0.99 / 1.28 / 0.76 / 0.79 / 0.85 (population tests) |
+| Injuries per 40 rounds (human / elf / dwarf / orc / Ashkin) | 0.75–1.15 / 1.1–1.65 / 0.5–0.85 / 0.55–0.9 / 0.6–1.05 | per full-season starter (polish round): 0.92–0.97 / 1.10–1.26 / 0.54–0.66 / 0.64–0.69 / 0.77–0.81 |
 | Serious share; career-ending per league-season | 4–9%; 0.02–1.0 | 6.0%; 0.40 (population tests) |
 | Starters' peak rating ÷ potential | 0.85–0.97 | median 0.94 (population tests) |
 | AI captain mean CQ; grade-A share; below 40 | 65–88; 10–35%; ≤ 5% | 72.8–80.0; 48% at the old A threshold of 85, which m1/fix-tuning raised to 90; 0% |
 | Rolled-trait positive share | 78–82% | 79.7% (population tests) |
-| Retirements per season; median retirement human-age | — (reported) | 1–23, rising as world-generation veterans age out (soak); 40.0, physically weighted 38.8, mentally weighted 44.0 (2 seeds × 20 seasons, m1/fix-core) |
+| Retirements per season; median retirement human-age | — (reported) | 1–23, rising as world-generation veterans age out (soak, v0.3 values); physically weighted 38.8, mixed 42.0, mentally weighted 46.1 (m1/polish-core) |
 
 Actions on failure: a falling population raises the intake base; top-5 deflation beyond 4 points tunes the market or AI first; an injury band failure tunes race multipliers first; too many grade-A captains raise the thresholds. Long-save check: by season 20 most world-generation fighters have retired; under D-T mentally weighted ones may still play (forced at human-age 58).
 
@@ -1230,7 +1230,7 @@ Every club AI-managed (the player club as `balanced`), in the headless harness (
 | --- | --- | --- |
 | Solvency: clubs with balance ≥ 0 at each season end | ≥ 90% every season (vis-008) | 100% every season |
 | Registry advances; embargo length | ≤ 2% of club-seasons; ≤ 16 weeks per club-season | not yet scripted |
-| Median balance ÷ SB at season end | 0.10–1.00, with ≤ 5% of clubs above 2.0 | not yet scripted |
+| Median balance ÷ SB at season end | 0.10–1.00, with ≤ 5% of clubs above 2.0 | QA money check: **1.84 by season 9** (outside the band). No double crediting; balances pile up because a club spends at most its WB and M1 has no other spending outlet (05 §12 KI-10) |
 | Wage-to-income: tier mean; per club-season | 0.55–0.80; ≥ 90% within 0.40–0.95 | not yet scripted; median weekly wage 240–285, worst season-to-season change 6.1% (≤ 10%) |
 | Money supply growth after season 5 | ≤ 5% of total SB per season | not yet scripted |
 | Dynasty | a flag at 4 Reckoning titles by one club in 8 seasons or 6 Shields in 10; ≥ 8 distinct Crown champions in 25 seasons (median; `dynasty.minDistinctTier1ChampionsIn25`, to be restated for the 30-season M7 run) | 10 seasons: no flag. 20 seasons: **flag** (Cinderpan Cinderjacks, 4 Crown Reckoning titles in seasons 4–11); cautious-style AI clubs won 0 of 20 Crown titles (05 §12) |
@@ -1301,7 +1301,7 @@ Every club AI-managed (the player club as `balanced`), in the headless harness (
 | dev-008 | MW8; a fighter's projected rating change +3 | Roster view | Trend "Surging" | sys-development | M1 |
 | dev-009 | Two prospects, 40 rounds available, 13 XP per round: A starts 40 and B 0, or both start 20 | Season end | Concentrated: usage 1.0 + 0 = 1.0. Split: 260 XP each → usage 0.72 + 0.72 = 1.44 (D-A) | sys-development | M1 |
 | dev-010 | Human (a = 1.5) under Body for all 23 weeks | Season end | Physical multiplier 1.30 and mental 0.70 (sum 2.00); wear unchanged; with Regimented too (a clamped to 2) 1.40 and 0.60 (D-A) | sys-development | M1 |
-| age-001 | Human at human-age 31 | Season end | +0.3 wear (30 centipoints) on each physical stat; mental 0 | sys-development | M1 |
+| age-001 | Human at human-age 31 | Season end | +0.2 wear (20 centipoints) on each physical stat; mental 0 | sys-development | M1 |
 | age-002 | Human with Weathers Well at human-age 31 | Season end | Lookup at 29 → 0 wear | sys-development | M1 |
 | age-003 | Dwarf aged 54 (human-age 60.0) | Season end | Mental wear 0.1 × 1.111 = 0.11 per mental stat (D-B) | sys-development | M1 |
 | ret-001 | Human-age 30.9 | Retirement | Chance 0, no roll | sys-development | M1 |
@@ -1309,7 +1309,7 @@ Every club AI-managed (the player club as `balanced`), in the headless harness (
 | ret-003 | Chance at P1 with usage 1.0 = 62% | P1 | Status final_season; digest entry; retires at season end without a roll even if the chance fell | sys-development | M1 |
 | ret-004 | Career-ending injury in MW10 | Rest of season | Unavailable; retires at season end; not rolled | sys-injury | M1 |
 | ret-005 | Free agent unsigned at season ends S and S+1 | Season end S+1 | Leaves the league; not counted in intake | sys-development | M1 |
-| ret-006 | Dwarf aged 32 (human-age 35.5), peak rating 66, rating 54, usage 0.6, contract expiring, 1 scar | Retirement chance | hDrop 8%, hAge 0.22%; p = 8.20% × 1.5 + 3 = **15.3%** (D-T) | sys-development | M1 |
+| ret-006 | Dwarf aged 32 (human-age 35.5), peak rating 66, rating 60, usage 0.6, contract expiring, 1 scar | Retirement chance | hDrop 7.5%, hAge 0.22%; p = 7.70% × 1.5 + 3 = **14.55%** (D-T) | sys-development | M1 |
 | ret-007 | Human healer at human-age 47, 2 below his peak, usage 0.5, contract running past this season | Retirement chance | 1.5% × 0.6 = **0.9%** (D-T: mentally weighted fighters play on) | sys-development | M1 |
 | inj-001 | Knock rolled in MW5 | MW6, MW7 | Unavailable at the MW6 lock; available at MW7 | sys-injury | M1 |
 | inj-002 | Injury rolls succeed in rounds 1 and 3 | Match end | Exactly one injury (round 1's); rounds 2–3 played | sys-injury | M1 |
@@ -1344,7 +1344,7 @@ Every club AI-managed (the player club as `balanced`), in the headless harness (
 | gen-001 | 1,000 rookies per race | Generate | Ages within debut ranges (Ashkin 16–17, elf 28–33) | sys-youth-intake | M1 |
 | gen-002 | A name collision with a living fighter | Generate | Retried; never two identical full names among living fighters | sys-fighters | M1 |
 | gen-003 | Any generation | Validate | P 30–97; caps 2–20; D ≥ 16; potential within ±6 of P before traits | sys-fighters | M1 |
-| gen-004 | World generation, human aged 35 | Generate | Wear 0.3 + 0.4 + 0.5 + 0.6 = 1.8 on each physical stat; career rounds > 0; Sand-Wise if ≥ 300 | sys-fighters | M1 |
+| gen-004 | World generation, human aged 35 | Generate | Wear 0.2 + 0.2 + 0.3 + 0.3 = 1.0 on each physical stat; career rounds > 0 with matches and rounds won consistent with them; debutSeason = 1 − proSeasons; Sand-Wise if ≥ 300 | sys-fighters | M1 |
 | gen-005 | The same career seed twice | World generation | Identical fighters, names and traits | sys-fighters | M1 |
 | intake-001 | 48 clubs; 40 retirements and 1 career-ending injury this season; 6 leavers | Next-season setup | rookies = round(48 × 0.75) + 41 = 36 + 41 = 77 (within 24–77); trials day gives 1 to each club and 29 by lot (D-H) | sys-youth-intake, sys-transfers | M1 |
 | intake-002 | New career, any seed | World creation, then the P1 processing | Exactly 48 trials rookies, one per club; every AI club's captains, emphasis and opening offers already set before P1; AI trials signings at the first P1 processing on 3-season deals; each club's opening balance equals its starting balance and the first grant installment is a separate ledger entry (D-P) | sys-youth-intake, sys-transfers, sys-finance | M1 |
@@ -1365,6 +1365,7 @@ All values come from the current `economy.json` and `leagues.json`.
 | le-008 | Muster tier-table #1 also wins the Reckoning | Season end | Promoted together with tier-table #2 | sys-league | M1 |
 | le-009 | Banner club with 12 fighters relegated | Setup; the player reaches the end of P4 | P1 shows 12/10 and a cap-relief allowance of 2 at payout 0; Kick off blocked with "Roster over cap: release 2 fighters"; after 2 releases it proceeds | sys-roster | M1 |
 | le-010 | Contract ends this season, not renewed | Season end | Free agent at P1 with formerClubId set; the former club may offer like anyone | sys-contracts | M1 |
+| le-032 | The player's fighter on an expiring contract, after TW3, season-end step pending | Renew him, then run the season end | The renewal is accepted; the expiry step keeps the renewed contract. Four weeks before the season's end the digest had one urgent `contract.expiring` item for him | sys-contracts, sys-calendar | M1 |
 | le-011 | Brannoc at his Banner club (prestige 50), expiring, started 12 of 14 matches (situation −500) | Offer 255 for 2 seasons | Ask floor5(285 × 9,800 ÷ 10,000) = 275; ratio 9,272 → counter 265; accepting renews at 265 from next season; signing cost floor10(265 × 46 × 10%) = 1,210 | sys-contracts | M1 |
 | le-012 | Same fighter, patience 3 | Three offers of 240 (ratio 8,727) | Three refusals; then "will not renew this season"; he is a free agent at season end | sys-contracts | M1 |
 | le-013 | Brannoc: ask 290 at A (Banner p50, would start) and 285 at B (Crown p60, would not) | A offers 290, B 310; week processing | Scores 11,000 and 10,877 → signs with A; B's digest says "signed with A" | sys-transfers | M1 |
