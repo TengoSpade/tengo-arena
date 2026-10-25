@@ -358,7 +358,13 @@ function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const bill = ctx.finance?.wageBill ?? ctx.wageBill ?? 0;
   const budget = ctx.finance?.wageBudgetPerWeek ?? 0;
   return (
-    <Panel hero title={T.preseasonTitle} icon="calendar-check" subtitle={format(T.preseasonSub, { week: weekName(content, week.index, tier) })} testId="preseason-checklist">
+    <Panel
+      hero
+      title={state.calendar.phase === 'preseason' ? T.preseasonTitle : T.weekChecklistTitle}
+      icon="calendar-check"
+      subtitle={format(T.preseasonSub, { week: weekName(content, week.index, tier) })}
+      testId="preseason-checklist"
+    >
       <ul class="checklist" role="list">
         <li data-state={budget > 0 && bill > budget ? 'bad' : undefined}>
           {format(T.checkBudget, { bill: formatMoney(bill, { perWeek: true }), budget: formatMoney(budget, { perWeek: true }) })}
@@ -596,7 +602,8 @@ function currencyUnit(): string {
 
 function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
   const { state, content, roster, engine } = ctx;
-  const injured = roster.filter((f) => f.injury && f.injury.weeksOut > 0);
+  const out = (f: Fighter) => !!f.injury && f.injury.weeksOut > 0;
+  const injured = roster.filter(out);
   const ending = roster.filter((f) => !injured.includes(f) && contractEnds(f.contract, state.calendar.season).final);
   const list = [...injured, ...ending];
   const role = (f: Fighter) => rolesOf(content.classes.require(f.classId))[0];
@@ -623,9 +630,9 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
                     href={`#/fighter/${f.id}`}
                     role={role(f)}
                     race={f.raceId}
-                    injured={!!f.injury}
+                    injured={out(f)}
                     sub={
-                      f.injury ? (
+                      f.injury && out(f) ? (
                         <span class="u-bad" {...tipAttrs(injuryTip(f.injury, content))}>
                           <Icon name="injury" size="sm" /> {injuryLabel(f.injury, content)}
                         </span>
@@ -637,8 +644,8 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
                     }
                   />
                 </td>
-                <td class={`cell-num${f.injury ? '' : ' u-muted'}`}>
-                  {f.injury ? (
+                <td class={`cell-num${out(f) ? '' : ' u-muted'}`}>
+                  {f.injury && out(f) ? (
                     <span {...tipAttrs(format(T.backFor, { n: f.injury.weeksOut }))}>{formatInt(f.injury.weeksOut)} wk</span>
                   ) : (
                     <span {...tipAttrs(fighterViewOf(engine, state, content, f.id) ? `Wage ${formatMoney(f.contract?.wagePerWeek ?? 0, { perWeek: true })}` : null)}>

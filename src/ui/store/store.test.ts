@@ -6,6 +6,8 @@ import { createTestStore } from '../debug/test-store';
 import { coreEngine, type GameEngine } from './engine';
 import { errorText } from './messages';
 import { AUTOSAVE_SLOTS } from './create-store';
+import { newsToDigest } from './digest';
+import type { NewsItem } from '../../core/model';
 
 function playerClub(state: GameState) {
   return state.clubs[state.playerClubId as ClubId]!;
@@ -250,3 +252,57 @@ async function metaOf(store: ReturnType<typeof createTestStore>['store']) {
   await store.deleteSave('manual-10');
   return res.value;
 }
+
+describe('digest copy from core news', () => {
+  const news = (key: string, params: Record<string, string | number>, refs: NewsItem['refs'] = {}): NewsItem =>
+    ({ id: 'n-1', at: { season: 1, weekIndex: 3 }, key, params, clubId: null, refs, importance: 'notable', read: false }) as NewsItem;
+
+  it('names the fighter and fills every slot for the keys core writes', () => {
+    const { store } = createTestStore();
+    const state = store.game.value!;
+    const content = store.content.value!;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const starter = club.lineup.fighters[0]!.fighterId;
+    const trait = content.traits.list[0]!.id;
+    const cases: [string, Record<string, string | number>][] = [
+      ['fighter.injured', { severity: content.development.injury.severityLadder[0]!.id, weeksOut: 3, round: 2 }],
+      ['fighter.career_ended', {}],
+      ['fighter.scarred', { traitId: trait }],
+      ['fighter.trait_gained', { traitId: trait }],
+      ['fighter.trait_lost', { traitId: trait }],
+      ['fighter.trait_skipped', { traitId: trait }],
+      ['fighter.final_season', { age: 34 }],
+      ['fighter.retired', { age: 35, cause: 'age' }],
+      ['captaincy.snubbed', {}],
+      ['captaincy.passed_over', {}],
+      ['captaincy.losing_the_room', {}],
+      ['captaincy.interim', {}],
+      ['offer.accepted', { wage: 450, seasons: 2 }],
+      ['offer.countered', { counterWage: 480, validUntilWeek: 5 }],
+      ['offer.refused', { patienceLeft: 1 }],
+      ['offer.void', { reason: 'fighter.unavailable' }],
+      ['finance.registry-advance', { amount: 5000, registryDebt: 5000 }],
+    ];
+    const name = state.fighters[starter]!.name.full;
+    for (const [key, params] of cases) {
+      const d = newsToDigest(news(key, params, { fighterId: starter }), { state, content });
+      expect(`${d.title} ${d.text}`, key).not.toMatch(/[{}]/);
+      if (key.startsWith('fighter.') || key.startsWith('offer.') || key === 'captaincy.interim') expect(d.title, key).toContain(name);
+    }
+    const lost = newsToDigest(news('offer.lost', {}, { fighterId: starter, otherClubId: Object.keys(state.clubs).find((id) => id !== club.id) as ClubId }), { state, content });
+    expect(lost.title).not.toMatch(/[{}]|another club/);
+    expect(newsToDigest(news('offer.accepted', { wage: 450, seasons: 1 }, { fighterId: starter }), { state, content }).text).toBe('450 ts/wk for 1 season.');
+  });
+
+  it('flags an injury as needing action only while the fighter is an unfit starter', () => {
+    const { store } = createTestStore();
+    const state = structuredClone(store.game.value!) as GameState;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const starter = club.lineup.fighters[0]!.fighterId;
+    const item = news('fighter.injured', { severity: 'minor', weeksOut: 2, round: 1 }, { fighterId: starter });
+    state.fighters[starter]!.injury = { severity: 'minor', weeksOut: 2, fixtureId: null, round: 1, causeFighterId: null, damageBp: 0, since: { season: 1, weekIndex: 1 } };
+    expect(newsToDigest(item, { state }).needsAction).toBe(true);
+    club.lineup.fighters = club.lineup.fighters.slice(1);
+    expect(newsToDigest(item, { state }).needsAction).toBe(false);
+  });
+});

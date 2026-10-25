@@ -45,6 +45,7 @@ export const T = {
   then: 'Then: {list}',
   allFixtures: 'All fixtures',
   preseasonTitle: 'Preseason checklist',
+  weekChecklistTitle: 'Before you continue',
   preseasonSub: '{week} · no match this week',
   checkBudget: 'Wage bill {bill} of the {budget} wage budget',
   checkRoster: 'Roster {n} of {cap}',

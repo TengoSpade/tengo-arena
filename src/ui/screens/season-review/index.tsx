@@ -312,7 +312,7 @@ function MoneyStep({ game, content, record, report, career }: { game: GameState;
         <dl class="kv">
           <div>
             <dt>{t('money.prizes')}</dt>
-            <dd>{report?.playerClub ? fmtMoney(report.playerClub.prizes, content, { signed: true }) : '—'}</dd>
+            <dd {...(report?.playerClub ? {} : { 'data-tip': t('money.prizesLater') })}>{report?.playerClub ? fmtMoney(report.playerClub.prizes, content, { signed: true }) : '—'}</dd>
           </div>
           <div>
             <dt>{t('money.income')}</dt>

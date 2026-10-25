@@ -57,6 +57,7 @@ export const REVIEW_TEXT = {
   'reckoning.noBracket': 'The bracket of this season is no longer stored; the champion is kept in the records.',
   'money.title': 'Money',
   'money.prizes': 'Table and Reckoning prizes',
+  'money.prizesLater': 'The prize breakdown is kept only in the session that ran the season end. Season income below includes the prizes.',
   'money.income': 'Season income',
   'money.costs': 'Season costs',
   'money.end': 'Balance at season end',
