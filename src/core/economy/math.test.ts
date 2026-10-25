@@ -10,7 +10,7 @@ describe('integer money helpers (03 §1 rounding)', () => {
     expect(mulDiv(85_008, 7_800, 10_000)).toBe(66_306);
     expect(mulDiv(-497, 3, 2)).toBe(-745);
     expect(divTrunc(-1, 2)).toBe(0);
-    expect(() => mulDiv(2 ** 30, 2 ** 30, 1)).toThrow();
+    expect(() => mulDiv(1_073_741_824, 1_073_741_824, 1)).toThrow();
   });
 
   it('step tables use the largest key <= the lookup; curves interpolate toward zero and are flat outside', () => {

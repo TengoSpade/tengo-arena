@@ -32,7 +32,7 @@ import { pendingSigningCostsOf } from './offers';
 import { assignTrialsRookies, makeFreeAgent, rollContractProfileImpl } from './pool';
 import { agreedRenewal, clubsInOrder, compareFighterIds, poolFighters, profileOf, rosterOf, tierOf, wageBillOf } from './queries';
 import { grantSchedule, processingStamp, seasonEndWeekIndex, SETUP_WEEK_INDEX, setupSeason, weeksPerSeason } from './time';
-import { askOf, potentialBonus, preferredLengthOf } from './wages';
+import { askOf, potentialBonus } from './wages';
 
 const BP = 10_000;
 
@@ -491,19 +491,10 @@ export function initialFinancesImpl(draft: GameState, content: ContentDB): NewsI
       worst.freeAgency = { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null };
       roster = rosterOf(draft, club.id);
     }
-    setStatusAfterTrim(draft, club, season, content, news);
+    setStatus(draft, club, season, SETUP_WEEK_INDEX, content, news);
   }
   draft.market.negotiations = [];
   draft.market.refusalsThisSeason = {};
   draft.market.releasedThisSeason = [];
   return news;
-}
-
-function setStatusAfterTrim(draft: GameState, club: Club, season: number, content: ContentDB, news: NewsId[]): void {
-  setStatus(draft, club, season, SETUP_WEEK_INDEX, content, news);
-}
-
-/** Preferred length helper re-exported for world generation callers. */
-export function preferredLengthForClub(f: Fighter, content: ContentDB): number {
-  return preferredLengthOf(fighterRating(f, content), fighterPotential(f, content), fighterHumanAge(f, content), content);
 }

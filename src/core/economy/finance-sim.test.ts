@@ -9,7 +9,7 @@ import type { ClubId, GameState } from '../model';
 import { buildFixtureWorld, fixtureContent } from '../testkit';
 import { stableStringify } from '../util';
 import { simulateFinanceSeason, type SimResult, type TierFlows } from './finance-sim';
-import { initialFinances, ledgerInvariantViolations, reserveContribution, seasonBudgetOf, wageBudgetOf } from './index';
+import { initialFinances, ledgerInvariantViolations, reserveContribution, wageBudgetOf } from './index';
 import { addFighter, resetFighterDoubles, setFighterValues, setWeek } from './testing';
 
 vi.mock('../fighters', async () => (await import('./testing')).fightersDouble);
