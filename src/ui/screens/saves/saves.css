@@ -1,0 +1,13 @@
+/* Save / Load layout glue (screen-scoped). */
+.saves-error {
+  margin-bottom: var(--sp-4);
+}
+
+.saves-actions {
+  --row-gap: var(--sp-1);
+  justify-content: flex-end;
+}
+
+.saves-name {
+  --row-gap: var(--sp-2);
+}
