@@ -197,6 +197,10 @@ export const en = {
   'error.save.storage': 'The save storage failed: {message}',
   'error.save.empty': 'That save slot is empty.',
   'error.save.full': 'Every save slot is in use. Delete one first.',
+  'error.save.tooLarge': 'This file is {mb} MB, far larger than any save. Nothing was imported.',
+  'error.save.noSlot': 'Choose a slot for this career first (Save as).',
+  'save.contentChanged': 'This save was made with different game data',
+  'save.contentChangedSub': 'It loaded. Timelines of old matches may be unavailable.',
   'error.generic': '{message}',
 
   // ---- saves -------------------------------------------------------------------------------------------

@@ -12,6 +12,8 @@ export function errorText(error: EngineError | SaveError): string {
   if (error.code === 'save.storage') {
     if (details['empty']) return t('error.save.empty');
     if (details['full']) return t('error.save.full');
+    if (details['tooLarge']) return t('error.save.tooLarge', { mb: Number(details['sizeMb'] ?? 0) });
+    if (details['noSlot']) return t('error.save.noSlot');
   }
   const what = typeof details['what'] === 'string' ? details['what'] : '';
   return tKey(`error.${error.code}`, 'error.generic', { message: error.message, what });
@@ -21,6 +23,7 @@ export function errorText(error: EngineError | SaveError): string {
 export function blockerText(blocker: Blocker, state?: GameState | null): string {
   const params: Record<string, string | number> = {};
   for (const [k, v] of Object.entries(blocker.details ?? {})) params[k] = v;
+  if (params['n'] === undefined && typeof params['release'] === 'number') params['n'] = params['release'];
   if (params['n'] === undefined && typeof params['excess'] === 'number') params['n'] = params['excess'];
   if (params['n'] === undefined) params['n'] = 1;
   const name = blocker.fighterId ? state?.fighters[blocker.fighterId]?.name.full : undefined;

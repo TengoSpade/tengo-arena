@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { ClubId, GameState } from '../../core/model';
+import type { ClubId, GameState, SaveError } from '../../core/model';
 import { NotImplementedError, engineError, err } from '../../core/util';
 import { createDevEngine } from '../debug/dev-engine';
 import { createTestStore } from '../debug/test-store';
 import { coreEngine, type GameEngine } from './engine';
 import { blockerText, distinctBlockers, errorText } from './messages';
-import { AUTOSAVE_SLOTS } from './create-store';
+import { resetToasts, toasts } from '../components/Toast';
+import { AUTOSAVE_SLOTS, MAX_IMPORT_BYTES } from './create-store';
 import { newsToDigest } from './digest';
 import type { NewsItem } from '../../core/model';
 
@@ -211,12 +212,42 @@ describe('store: saves', () => {
     expect(!junk.ok && junk.error.code).toBe('save.format');
   });
 
-  it('quick save uses the current slot, else the first free one', async () => {
+  it('quick save uses the current manual slot and asks for one when there is none', async () => {
     const { store } = createTestStore();
-    const a = await store.quickSave();
-    expect(a.ok && a.value.slotId).toBe('manual-1');
+    const none = await store.quickSave();
+    expect(!none.ok && none.error.details?.['noSlot']).toBe(true);
+    expect((await store.save('manual-2')).ok).toBe(true);
     const b = await store.quickSave();
-    expect(b.ok && b.value.slotId).toBe('manual-1');
+    expect(b.ok && b.value.slotId).toBe('manual-2');
+  });
+
+  it("never quick-saves career B into career A's manual slot after loading an autosave", async () => {
+    const { store, saves } = createTestStore();
+    expect((await store.save('manual-1', 'Career A')).ok).toBe(true);
+    const rootA = store.game.value!.rng.root;
+    // Career B, autosaved by a week processing, then career A loaded, then B's autosave loaded.
+    await store.newGame({ seed: 'career-b' });
+    const b = store.game.value!;
+    store.dispatch({ type: 'club.choose', clubId: Object.keys(b.clubs)[0] as ClubId });
+    if (store.blockers.value.length > 0) store.dispatch(coreEngine.suggestLineup(store.game.value!, store.playerClubId.value!, store.content.value!));
+    expect((await store.advance()).ok).toBe(true);
+    const auto = (await saves.list()).find((m) => m.kind === 'auto')!;
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(store.currentSlot.value).toBe('manual-1');
+    expect((await store.load(auto.slotId)).ok).toBe(true);
+    expect(store.currentSlot.value).toBeNull();
+    const q = await store.quickSave();
+    expect(q.ok).toBe(false);
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(store.game.value!.rng.root).toBe(rootA);
+  }, 20_000);
+
+  it('refuses to import a file far larger than any save', async () => {
+    const { store } = createTestStore();
+    const big = { size: MAX_IMPORT_BYTES + 1, text: async () => '{}' } as unknown as File;
+    const r = await store.importSave(big);
+    expect(!r.ok && r.error.details?.['tooLarge']).toBe(true);
+    expect(errorText((r as { error: SaveError }).error)).toMatch(/far larger than any save/);
   });
 
   it('dumps the state with the command log and build info', () => {
@@ -308,7 +339,30 @@ describe('digest copy from core news', () => {
   });
 });
 
+describe('load warnings', () => {
+  it('says so when a save was made with different game data, and still loads it', async () => {
+    const base = createDevEngine();
+    const engine: GameEngine = {
+      ...base,
+      parseSave: (json, c) => {
+        const r = base.parseSave(json, c);
+        return r.ok ? { ...r, value: { ...r.value, warnings: ['Save was made with different content'] } } : r;
+      },
+    };
+    const { store } = createTestStore({ engine });
+    expect((await store.save('manual-1')).ok).toBe(true);
+    resetToasts();
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(toasts.value.map((x) => x.title)).toContain('This save was made with different game data');
+  });
+});
+
 describe('blocker copy', () => {
+  it('reads the over-cap count from core details.release', () => {
+    expect(blockerText({ code: 'roster.over-cap', details: { roster: 13, cap: 12, release: 1 } })).toBe('Release 1 fighter');
+    expect(blockerText({ code: 'roster.over-cap', details: { roster: 14, cap: 12, release: 2 } })).toBe('Release 2 fighters');
+  });
+
   it('names the unfit starter and lists the cause once', () => {
     const { store } = createTestStore();
     const state = store.game.value!;

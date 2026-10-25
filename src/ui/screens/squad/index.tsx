@@ -521,7 +521,12 @@ function LineupBoard(props: BoardProps) {
               )}
             >
               {T.meanRating} <strong>{mean.toFixed(1)}</strong>
-              {opponentMean !== null && <span class="u-faint"> vs {opponentMean.toFixed(1)}</span>}
+              {opponentMean !== null && (
+                <span class="u-faint">
+                  {' '}
+                  · {T.theirLastLineup} {opponentMean.toFixed(1)}
+                </span>
+              )}
             </span>
           )}
           <span class="u-num" tabIndex={0} {...tipAttrs(lineupRows.map((r) => `${r.f.name.full} ${formatMoney(r.f.contract?.wagePerWeek ?? 0)}`).join(' · '))}>

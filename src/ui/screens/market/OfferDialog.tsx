@@ -35,18 +35,17 @@ export function offerErrorText(error: EngineError, m: ClubMarket, content: Conte
       return m.pendingOffers > 0
         ? t('disabled.fullPending', { roster: m.roster, pending: m.pendingOffers, cap: m.cap })
         : t('err.roster.full', { roster: m.roster, cap: m.cap });
-    // Core codes (core/economy/offers.ts) first; the dotted pairs after them are the provisional engine's.
+    // Codes and detail keys as core/economy/offers.ts evaluateOffer emits them.
     case 'budget.wage':
-    case 'wage.budget':
-      return t('err.wage.budget', { excess: fmtMoney(Number(d['over'] ?? d['excess'] ?? 0), content) });
+      return t('err.wage.budget', { excess: fmtMoney(Number(d['over'] ?? 0), content) });
     case 'budget.cash':
-    case 'cash.balance':
-      return t('err.cash.balance', { cost: fmtMoney(Number(d['signingCost'] ?? 0), content) });
+      return t('err.cash.balance', { cost: fmtMoney(Number(d['signingCost'] ?? 0), content), available: fmtMoney(Number(d['available'] ?? 0), content) });
     case 'embargo.wage':
+      return t('err.finance.embargo', { min: fmtMoney(Number(d['tierMinWage'] ?? m.tierMinWage), content) });
     case 'embargo.length':
+      return t('err.embargo.length');
     case 'embargo.roster':
-    case 'finance.embargo':
-      return t('err.finance.embargo', { min: fmtMoney(m.tierMinWage, content) });
+      return t('err.embargo.roster', { fit: Number(d['fit'] ?? 5) });
     case 'embargo.trials':
       return t('err.embargo.trials');
     case 'offer.below-minimum':

@@ -36,6 +36,7 @@ import { isValidSeed, seedFromEntropy } from '../../core/rng';
 import { ENGINE_VERSION } from '../../core/sim';
 import { deepFreeze, engineError, err, NotImplementedError, ok, type EngineError, type Result } from '../../core/util';
 import { AUTOSAVE_SLOTS, MANUAL_SLOT_COUNT } from '../../platform/save-store';
+import { showToast } from '../components/Toast';
 import { configureFormat } from '../format';
 import { t } from '../text';
 import type { GameStore, StorePlatform } from './contract';
@@ -399,10 +400,14 @@ export function createGameStore(platform: StorePlatform): AppStore {
         commandLog.value = [];
         recentCommands.value = [];
         dirty.value = false;
-        currentSlot.value = envelope.meta.kind === 'manual' ? slotId : currentSlot.value;
+        // Only a manual slot becomes the Ctrl S target. Loading an autosave (possibly another career)
+        // clears it, so a quick save can never overwrite a different career's manual slot.
+        currentSlot.value = envelope.meta.kind === 'manual' ? slotId : null;
       });
       playtimeBase = envelope.meta.playtimeSec;
       sessionStartMs = platform.clock.nowMs();
+      // Content changed since the save (core parseSave warnings): say so once, the save still loads.
+      if (parsed.value.warnings.length > 0) showToast({ kind: 'info', title: t('save.contentChanged'), sub: t('save.contentChangedSub') });
       return ok(undefined);
     } finally {
       busy.value = false;
@@ -435,6 +440,8 @@ export function createGameStore(platform: StorePlatform): AppStore {
   const importSave: GameStore['importSave'] = async (file) => {
     const c = content.value;
     if (!c) return fail({ code: 'save.content-missing', message: 'content not loaded' });
+    // Saves are a few MB (up to ~10 MB late in a long career); refuse anything far larger before reading it.
+    if (file.size > MAX_IMPORT_BYTES) return fail({ code: 'save.storage', message: 'file too large', details: { tooLarge: true, sizeMb: Math.round(file.size / 1e6) } });
     let text: string;
     try {
       text = await platform.files.readText(file);
@@ -465,12 +472,10 @@ export function createGameStore(platform: StorePlatform): AppStore {
     return ok(envelope.meta);
   };
 
+  /** Save to the current manual slot. Without one (new career, an autosave loaded) the caller asks for a slot. */
   const quickSave = async (): Promise<Result<SaveMeta, SaveError>> => {
-    let slot = currentSlot.value;
-    if (!slot) {
-      const metas = await listSaves();
-      slot = MANUAL_SLOT_IDS.find((id) => !metas.some((m) => m.slotId === id)) ?? MANUAL_SLOT_IDS[0]!;
-    }
+    const slot = currentSlot.value;
+    if (!slot) return fail({ code: 'save.storage', message: 'no current slot', details: { noSlot: true } });
     return save(slot);
   };
 
@@ -580,6 +585,9 @@ export function createGameStore(platform: StorePlatform): AppStore {
 
   return store;
 }
+
+/** Largest save file Import reads (saves are up to ~10 MB). */
+export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
 
 function fileSafe(label: string): string {
   return label.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'save';

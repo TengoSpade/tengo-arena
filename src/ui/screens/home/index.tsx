@@ -10,6 +10,7 @@ import type { ContentDB } from '../../../core/content';
 import type { Club, ClubId, Fighter, Fixture, GameState, StandingRow } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
+import { quickSaveOrAsk } from '../../app/save-intent';
 import { useShortcuts } from '../../app/shortcuts';
 import {
   CapMeter,
@@ -36,7 +37,7 @@ import {
 import { formatInt, formatMoney, formatPercent, formatSigned, ordinal } from '../../format';
 import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
 import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
-import { slotName, useStore, type AppStore } from '../../store';
+import { useStore, type AppStore } from '../../store';
 import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf, usePlayerClub, type ClubContext } from '../../store/views';
@@ -96,10 +97,7 @@ export default function HomeScreen(_props: ScreenProps) {
             <button
               class="btn btn--ghost"
               type="button"
-              onClick={async () => {
-                const res = await store.quickSave?.();
-                if (res?.ok) showToast({ title: t('save.saved', { slot: slotName(res.value.slotId) }), sub: res.value.label, kind: 'good' });
-              }}
+              onClick={() => void quickSaveOrAsk(store)}
             >
               <Icon name="save" />
               {T.save} <kbd>Ctrl S</kbd>

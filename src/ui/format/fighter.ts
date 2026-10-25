@@ -161,7 +161,7 @@ export function injuryRiskText(view: FighterView, content: ContentDB): { word: s
     word,
     atRisk,
     notable: atRisk || tender,
-    tip: `Injury risk: ${word}. Injury chance ${formatPercentBp(view.injuryChanceBp, 2)} per round started.${atRisk ? ` ${statusLabel('at_risk', content).text}` : ''}${tender ? ` ${statusLabel('still_tender', content).text}` : ''}`,
+    tip: `Injury risk: ${word}. ≈${formatPercentBp(view.injuryChanceBp, 2)} injury chance per round started, estimated from typical rounds (not exact).${atRisk ? ` ${statusLabel('at_risk', content).text}` : ''}${tender ? ` ${statusLabel('still_tender', content).text}` : ''}`,
   };
 }
 

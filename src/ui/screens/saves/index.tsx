@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ScreenProps } from '../../app/routes';
+import { saveAsRequested } from '../../app/save-intent';
 import { useShortcuts } from '../../app/shortcuts';
 import { STATE_SCHEMA_VERSION, type SaveError, type SaveMeta } from '../../../core/model';
 import { ConfirmButton, DataTable, Icon, Modal, PageHeader, Panel, showToast, type Column } from '../../components';
@@ -65,7 +66,14 @@ function Saves({ store }: { store: GameStore }) {
   const manual = (list ?? []).filter((m) => !isAutosaveSlot(m.slotId)).sort((a, b) => MANUAL_SLOT_IDS.indexOf(a.slotId) - MANUAL_SLOT_IDS.indexOf(b.slotId));
   const autos = (list ?? []).filter((m) => isAutosaveSlot(m.slotId)).sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
   const freeSlot = MANUAL_SLOT_IDS.find((id) => !manual.some((m) => m.slotId === id)) ?? null;
-  const target = current && !isAutosaveSlot(current) ? current : freeSlot;
+  // Save (and Ctrl S) writes only to this career's own manual slot; otherwise Save as asks for one.
+  const target = current && !isAutosaveSlot(current) ? current : null;
+  useEffect(() => {
+    if (saveAsRequested.value) {
+      saveAsRequested.value = false;
+      if (game?.playerClubId) setSaveAsOpen(true);
+    }
+  }, []);
 
   const doSave = async (slotId: string, label?: string) => {
     setError(null);
@@ -105,7 +113,7 @@ function Saves({ store }: { store: GameStore }) {
   };
 
   // Ctrl S on this screen saves too (the frame also maps it globally).
-  useShortcuts({ 'ctrl+s': () => (game && target && !busy ? void doSave(target) : false) });
+  useShortcuts({ 'ctrl+s': () => (game && !busy ? (target ? void doSave(target) : setSaveAsOpen(true)) : false) });
 
   const saveBlocked = !game ? t('noCareer') : busy ? t('busy') : null;
   const columns = (auto: boolean): Column<SaveMeta>[] => [
@@ -236,7 +244,7 @@ function Saves({ store }: { store: GameStore }) {
               class="btn btn--primary"
               type="button"
               aria-disabled={saveBlocked || !target ? 'true' : undefined}
-              data-tip={saveBlocked ?? (target ? t('saveTip', { slot: slotName(target) }) : t('saveAs.full'))}
+              data-tip={saveBlocked ?? (target ? t('saveTip', { slot: slotName(target) }) : freeSlot ? t('saveTipChoose') : t('saveAs.full'))}
               onClick={() => {
                 if (!saveBlocked && target) void doSave(target);
                 else if (!saveBlocked) setSaveAsOpen(true);

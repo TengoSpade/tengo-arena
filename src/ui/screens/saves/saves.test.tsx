@@ -54,10 +54,14 @@ describe('Saves screen', () => {
     expect(autos[0]!.textContent).toContain('Autosave 1');
   });
 
-  it('saves to the first free manual slot and confirms with a toast', async () => {
+  it('asks for a slot (Save as, first free slot preselected) when the career has none, then saves there', async () => {
     const store = renderSaves();
     await screen.findByText('Before the derby');
     fireEvent.click(screen.getByTestId('save-button'));
+    const dialog = await screen.findByTestId('save-as-dialog');
+    expect(store.calls.some((c) => c.method === 'save')).toBe(false);
+    fireEvent.input(within(dialog).getByRole('textbox'), { target: { value: 'Before the final' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Save/ }));
     await waitFor(() => expect(store.calls.some((c) => c.method === 'save' && c.args[0] === 'manual-3')).toBe(true));
     await waitFor(() => expect(toasts.value.at(-1)?.title).toBe('Saved to Slot 3'));
   });

@@ -16,7 +16,7 @@ import { ToastRegion, clearUndos, showToast, undoLast } from '../components/Toas
 import { TooltipLayer, tipAttrs, type Tip } from '../components/Tooltip';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
-import { slotName, useStore, type AppStore } from '../store';
+import { useStore, type AppStore } from '../store';
 import { buildDigest, needsActionCount } from '../store/digest';
 import { useEngine } from '../store/engine';
 import { effectiveTheme, pacingStops, reducedMotion, settings, updateSettings } from '../store/settings';
@@ -25,6 +25,7 @@ import { t } from '../text';
 import { continueModel, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
 import { SimulatingPanel } from './overlays';
+import { quickSaveOrAsk } from './save-intent';
 import type * as Palettes from './palettes';
 import { goBack, navigate, useRoute } from './router';
 import type { RouteId } from './routes';
@@ -165,11 +166,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
     }
   };
 
-  const quickSave = async () => {
-    if (!store.game.value?.playerClubId) return;
-    const res = await store.quickSave();
-    if (res.ok) showToast({ title: t('save.saved', { slot: slotName(res.value.slotId) }), sub: res.value.label, kind: 'good' });
-  };
+  const quickSave = () => quickSaveOrAsk(store);
 
   // Global shortcuts (04 §6.4). Screens add their own layers with useShortcuts().
   useEffect(() => {
