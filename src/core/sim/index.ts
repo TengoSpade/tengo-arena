@@ -179,3 +179,6 @@ export function simulateRound(input: RoundInput, roundSeed: Seed, content: Conte
 /** Additive: fight-input builders (harness, tests, dev tools). */
 export { fighterInput, sideInput } from './build';
 export type { FighterSpec } from './build';
+
+/** Additive (M1.1): skill eligibility (perks and rank steps) for the harness and tests; lifecycle's offers follow the same rules. */
+export { eligiblePerks, eligibleRankSteps, perkEligible, perkPool } from './skills';
