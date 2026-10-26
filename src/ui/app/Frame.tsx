@@ -26,11 +26,12 @@ import type * as ContinueDialogs from './continue-dialogs';
 import type { ConfirmVariant } from './continue-dialogs';
 import { afterMatch } from './after-match';
 import { expiringUnrenewed } from './expiring';
-import { skipToKickOffRequest } from './intents';
+import { levelUpRequest, skipToKickOffRequest } from './intents';
 import { openTicketTool, playtestToolsOn, ticketBusy } from '../tickets/launcher';
 import { SimulatingPanel } from './overlays';
 import { quickSaveOrAsk } from './save-intent';
 import type * as Palettes from './palettes';
+import type * as LevelUps from '../levelup/host';
 import { goBack, navigate, useRoute } from './router';
 import type { RouteId } from './routes';
 import { installShortcuts, type ShortcutMap } from './shortcuts';
@@ -69,6 +70,12 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
 
   // The shortcut sheet and search load on first use, or shortly after start (bundle budget).
   const [palettes, setPalettes] = useState<typeof Palettes | null>(null);
+  // M1.1 level-ups: the dialog host loads when a week brought level-ups or a screen asks for one.
+  const [levelUps, setLevelUps] = useState<typeof LevelUps | null>(null);
+  const wantLevelUps = !!store.lastWeekReport.value?.levelUps?.length || levelUpRequest.value !== null;
+  useEffect(() => {
+    if (wantLevelUps && !levelUps) void import('../levelup/host').then(setLevelUps);
+  }, [wantLevelUps, levelUps]);
   useEffect(() => {
     if (palettes) return;
     const load = () => void import('./palettes').then(setPalettes);
@@ -286,6 +293,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       <TooltipLayer />
       <ToastRegion />
       {palettes && <palettes.ShortcutSheet open={sheet} onClose={() => setSheet(false)} />}
+      {levelUps && <levelUps.LevelUpHost />}
       {palettes && <palettes.SearchPalette open={search} onClose={() => setSearch(false)} state={store.game.value} content={store.content.value} />}
       {simulating !== null && <SimulatingPanel rounds={simulating} />}
       {dialogs && (

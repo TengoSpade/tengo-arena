@@ -1,0 +1,162 @@
+/* Level-up dialog (M1.1 WP-D). */
+.lu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lu__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-5);
+}
+
+.lu__lead {
+  margin: 0;
+}
+
+.lu__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+.lu-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--c-border);
+  border-top: 3px solid var(--c-border-strong);
+  border-radius: var(--r-md, var(--r-sm));
+  background: var(--c-surface-1);
+  color: var(--c-text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--dur-fast, 120ms), background var(--dur-fast, 120ms), transform var(--dur-fast, 120ms);
+}
+
+.lu-card[data-kind="rank"] {
+  border-top-color: var(--c-info);
+}
+
+.lu-card[data-kind="perk"] {
+  border-top-color: var(--c-accent);
+}
+
+.lu-card:hover:not(:disabled) {
+  border-color: var(--c-accent-line);
+  transform: translateY(-1px);
+}
+
+.lu-card:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+}
+
+.lu-card.is-picked {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+  box-shadow: 0 0 0 1px var(--c-accent) inset;
+}
+
+.lu-card.is-illegal {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lu-card__top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.lu-card__kind {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+.lu-card__top .tag {
+  margin-left: auto;
+}
+
+.lu-card__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug, 1.25);
+}
+
+.lu-card__change {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--c-accent-text);
+}
+
+.lu-card__detail {
+  font-size: var(--fs-sm);
+}
+
+.lu-card__rating {
+  font-weight: var(--fw-semibold);
+  color: var(--c-good);
+}
+
+.lu__traits {
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--c-divider);
+}
+
+.lu__traits-title {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.lu__trait-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.lu-trait {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: 24rem;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: var(--c-surface-1);
+  color: var(--c-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lu-trait.is-picked {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+
+.lu-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-right: auto;
+}
+
+@media (max-width: 1100px) {
+  .lu__options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

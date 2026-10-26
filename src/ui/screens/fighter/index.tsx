@@ -13,6 +13,8 @@ import type { FighterView } from '../../../core/game';
 import type { Fighter, FighterId, GameState, StatId } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
+import { useEffect } from 'preact/hooks';
+import { levelUpRequest } from '../../app/intents';
 import { useShortcuts } from '../../app/shortcuts';
 import {
   Callout,
@@ -24,7 +26,6 @@ import {
   Icon,
   Panel,
   Portrait,
-  Progress,
   Rating,
   RoleBadge,
   RowMark,
@@ -60,13 +61,14 @@ import {
   rolesOf,
   statusLabel,
   trainingOptions,
-  trendInfo,
 } from '../../format/fighter';
 import { ruleParts, stanceDescription, stanceName } from '../../format/rules';
 import { useStore } from '../../store';
 import { clubActions } from '../../store/actions';
 import { safeView, useEngine } from '../../store/engine';
+import { useMatchDay } from '../../store/match-day';
 import { fighterViewOf, usePlayerClub, type ClubContext } from '../../store/views';
+import { LevelPanel, SkillsPanel } from './Skills';
 import { format } from '../../text';
 import { T } from './text';
 import './fighter.css';
@@ -101,6 +103,12 @@ export default function FighterScreen({ params }: ScreenProps) {
           emphasis: '{name}: training {emphasis}',
         }, (c, v) => captaincyConsequences(safeView(() => engine.captaincyPreview(state, ctx.club.id, c, v, content), null), state, content))
       : null;
+
+  // #/fighter/<id>?levelup=1 (digest "Choose"): open his level-up dialog.
+  const askLevelUp = params['levelup'] === '1';
+  useEffect(() => {
+    if (askLevelUp && f && f.pendingLevelUps.length > 0 && own) levelUpRequest.value = f.id;
+  }, [askLevelUp, id]);
 
   useShortcuts({
     '[': () => (prev && prev !== id ? navigate(`#/fighter/${prev}`) : false),
@@ -366,6 +374,9 @@ function ProfileHeader(props: {
 
 function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef; race: RaceDef; state: GameState; content: ContentDB; own: boolean; actions: Actions }) {
   const { f, view, klass, race, state, content, own, actions } = props;
+  const store = useStore();
+  const engine = useEngine();
+  const md = useMatchDay(store);
   const lastRow = f.history[f.history.length - 1];
   const stats = content.stats.list;
   const statBar = (id: string) => {
@@ -385,8 +396,6 @@ function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef
   const mental = stats.filter((s) => s.group === 'mental');
   const traits = fighterTraits(f, content);
   const injured = f.injury && f.injury.weeksOut > 0 ? f.injury : null;
-  const trend = view ? trendInfo(view.trend, content) : null;
-  const xpCfg = content.development.xp;
   const contract = contractEnds(f.contract, state.calendar.season);
   const statuses = f.statuses.map((s) => statusLabel(s.id, content));
 
@@ -417,7 +426,7 @@ function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef
         <AgeCurve f={f} race={race} content={content} humanAge={view?.humanAge ?? f.age} />
         <Panel
           title={T.development}
-          subtitle={view ? format(T.developmentSub, { p: view.potential, trend: trend?.label ?? '—' }) : undefined}
+          subtitle={view ? format(T.developmentSub, { p: view.potential }) : undefined}
           subtitleTip={view ? potentialTip(view.potential) : undefined}
           bodyClass="l-stack l-stack--sm"
           actions={
@@ -433,19 +442,12 @@ function Overview(props: { f: Fighter; view: FighterView | null; klass: ClassDef
             ) : undefined
           }
         >
-          <div class="l-row u-sm" {...tipAttrs(format(T.seasonXpTip, { per: xpCfg.perRoundStarted, win: xpCfg.winBonus, down: xpCfg.downCreditEach, max: xpCfg.downCreditMax, target: xpCfg.seasonTarget }))}>
-            <span class="u-muted" {...tipAttrs(format(T.seasonXpTip, { per: xpCfg.perRoundStarted, win: xpCfg.winBonus, down: xpCfg.downCreditEach, max: xpCfg.downCreditMax, target: xpCfg.seasonTarget }))}>
-              {T.seasonXp}
-            </span>
-            <span class="l-push u-num">
-              <strong>{formatInt(f.season.xp)}</strong> <span class="u-muted">{format(T.typical, { n: xpCfg.seasonTarget })}</span>
-            </span>
-          </div>
-          <Progress value={f.season.xp / Math.max(1, xpCfg.seasonTarget)} tip={format(T.seasonXpTip, { per: xpCfg.perRoundStarted, win: xpCfg.winBonus, down: xpCfg.downCreditEach, max: xpCfg.downCreditMax, target: xpCfg.seasonTarget })} />
           <RatingHistory f={f} view={view} state={state} />
         </Panel>
+        <LevelPanel f={f} state={state} content={content} engine={engine} own={own} onMode={(m) => void md.setLevelUpPolicy(f.id, m)} />
       </div>
       <div class="span-4 l-stack">
+        <SkillsPanel f={f} state={state} content={content} engine={engine} />
         <Panel
           title={T.traits}
           subtitle={format(T.traitsSub, { pos: traits.filter((x) => x.polarity !== 'neg').length, neg: traits.filter((x) => x.polarity === 'neg').length })}
@@ -535,7 +537,7 @@ function RatingHistory({ f, view, state }: { f: Fighter; view: FighterView | nul
       <div class="stat-tile">
         <span class="stat-tile__label">{T.ratingBySeason}</span>
         <span class="u-sm u-muted" {...tipAttrs(T.ratingHistoryTip)}>
-          {view ? `S${state.calendar.season} ${view.rating}` : '—'} · {T.firstSeasonTrend}
+          {view ? `S${state.calendar.season} ${view.rating}` : '—'} · {T.firstSeasonHistory}
         </span>
       </div>
     );

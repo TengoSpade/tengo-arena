@@ -67,3 +67,27 @@
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
+
+/* M1.1 skills: ability ranks with pips and the next rank's change. */
+.skill-ranks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+}
+
+.skill-rank {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0 var(--sp-2);
+}
+
+.skill-rank__name {
+  font-weight: var(--fw-semibold);
+}
+
+.skill-rank__next {
+  grid-column: 1 / -1;
+}

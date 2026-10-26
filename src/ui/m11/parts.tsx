@@ -86,7 +86,7 @@ export function PendingBadge({ n, tip }: { n: number; tip?: string }) {
 /** XP bar with the level and "next level in ≈ N matches". */
 export function XpBar({ info, testId }: { info: LevelInfo; testId?: string }) {
   return (
-    <div class="xpbar" data-testid={testId}>
+    <div class="xpbar" data-testid={testId} {...tipAttrs(levelTip(info))}>
       <div class="xpbar__head">
         <span class="u-strong">Level {info.level}</span>
         <span class="u-xs u-muted u-num">
