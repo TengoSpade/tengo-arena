@@ -76,7 +76,6 @@ export const REVIEW_TEXT = {
   'col.change': 'Change',
   'col.attributes': 'Attributes',
   'col.potential': 'Potential',
-  'col.trend': 'Trend',
   'col.xp': 'XP',
   'col.usage': 'Usage',
   'age': '{race} {age}',

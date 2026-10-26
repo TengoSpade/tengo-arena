@@ -130,14 +130,6 @@ export function injuryTip(injury: Injury, content: ContentDB): string {
   return `${label}${where}. Out for ${injury.weeksOut} more ${injury.weeksOut === 1 ? 'week' : 'weeks'}.`;
 }
 
-export function trendInfo(trendId: string, content: ContentDB): { label: string; dir: number } {
-  const levels = content.development.trend.levels;
-  const i = levels.findIndex((l) => l.id === trendId);
-  const level = levels[i];
-  if (!level) return { label: trendId, dir: 0 };
-  return { label: level.label, dir: level.minDelta > 0 ? 1 : level.minDelta < 0 ? -1 : 0 };
-}
-
 export function trainingOptions(content: ContentDB): { id: 'balanced' | 'body' | 'mind'; label: string }[] {
   return content.development.training.options.map((o) => ({ id: o.id as 'balanced' | 'body' | 'mind', label: o.label }));
 }
