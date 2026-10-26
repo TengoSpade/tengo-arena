@@ -10,7 +10,7 @@
  * M1.1 modes (combat-skills.md §8): progression (skills per --profile, chosen
  * by --pick), perk-impact and rank-impact (--per fights per perk / ability;
  * default fights / items), fatigue (the four Freshness profiles; --fights
- * split between them), squad-match (needs WP-C).
+ * split between them), squad-match (full matches with 7-fighter squads through core/game playMatchAuto; --fights = matches).
  * --bench N times N extra rounds at record 'none' and 'full' (05 §8 budgets).
  * --strict exits 1 when any class or archetype is outside the target band,
  * or (M1.1 modes) any perk, rank or fatigue flag is raised.
@@ -86,6 +86,18 @@ if (report.fatigue) {
     );
   }
 }
+if (report.squadMatch) {
+  const q = report.squadMatch;
+  console.log(`  squad-match: ${q.matches} matches (${q.matchups} matchups x 5 rows x 2 sides x policy/off)`);
+  console.log('    policy side vs off       matches   win%   95% CI          comeback  (off)   swaps/match  target');
+  for (const r of q.rows) {
+    const cb = r.comebackRate === null ? '   -' : pct(r.comebackRate);
+    const ocb = r.offComebackRate === null ? '   -' : pct(r.offComebackRate);
+    console.log(`    ${r.id.padEnd(22)} ${String(r.matches).padStart(7)} ${pct(r.winRate).padStart(6)}   ${`${pct(r.ci.low)}-${pct(r.ci.high)}`.padEnd(13)} ${cb.padStart(8)} ${ocb.padStart(7)}   ${r.swapsPerMatch.toFixed(2).padStart(10)}  ${r.target ? `${pct(r.target.min)}-${pct(r.target.max)}` : '-'}${r.inTarget ? '' : '  <-- off target'}`);
+  }
+  console.log(`    all: swaps/match ${q.swapsPerMatch.toFixed(2)}, forced ${q.forcedPer100.toFixed(1)} and emergency ${q.emergencyPer100.toFixed(1)} per 100 matches, Tired ${pct(q.tiredShare)} Spent ${pct(q.spentShare)} of fighter-rounds, ${q.roundsPerMatch.toFixed(2)} rounds a match, time cap ${pct(q.timeCapShare)}`);
+  for (const f of q.flags) console.log(`    FLAG ${f}`);
+}
 console.log(`  abilities never cast in >50% of rounds: ${(report.rarelyCastAbilities ?? []).length}; preset rules never fired in >80%: ${(report.idleRules ?? []).length}`);
 if (report.timing) console.log(`  ms per round (record none): median ${report.timing.medianMs.toFixed(2)}, p99 ${report.timing.p99Ms.toFixed(2)}, mean ${report.timing.meanMs.toFixed(2)}`);
 console.log(`  time: ${ms.toFixed(0)} ms total`);
@@ -101,5 +113,5 @@ if (bench > 0) {
 const path = writeReport(typeof out === 'string' ? out : undefined, `balance-${mode}-${seed}.json`, { ...report, timingMs: ms, theme, bench: benchReport });
 console.log(`  report: ${path}`);
 
-const m11Flags = (report.perks ?? []).some((p) => p.flags.length > 0) || (report.ranks ?? []).some((r) => r.flags.length > 0) || (report.fatigue ?? []).some((r) => !r.inTarget);
+const m11Flags = (report.perks ?? []).some((p) => p.flags.length > 0) || (report.ranks ?? []).some((r) => r.flags.length > 0) || (report.fatigue ?? []).some((r) => !r.inTarget) || (report.squadMatch?.flags.length ?? 0) > 0;
 if (args.has('strict') && (report.outliers.length > 0 || (report.archetypeOutliers ?? []).length > 0 || m11Flags)) process.exitCode = 1;

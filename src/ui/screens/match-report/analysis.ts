@@ -413,6 +413,9 @@ function momentFor(e: ReportEvent, round: number, i: number, infos: FighterInfo[
         text: t('ev.overtimeText', { cap: content.combat.overtime.hardCapS }),
         focusId: null,
       };
+    case 'perk_proc':
+      // M1.1 perk procs (core report kind 'perk_proc'); not listed as key moments yet (WP-D decides their display).
+      return { ...base, event: 'rule', title: e.perkId ?? '', text: '', focusId: e.actorId };
   }
 }
 
@@ -426,7 +429,7 @@ export function moments(report: MatchReport, result: MatchResult | null, infos: 
   let hw = 0;
   let aw = 0;
   report.rounds.forEach((round) => {
-    const list = round.keyEvents.map((e, i) => momentFor(e, round.round, i, infos, persp, state, content, injured));
+    const list = round.keyEvents.filter((e) => e.kind !== 'perk_proc').map((e, i) => momentFor(e, round.round, i, infos, persp, state, content, injured));
     if (round.winner === 'home') hw++;
     else aw++;
     const rr = result?.rounds.find((x) => x.round === round.round);

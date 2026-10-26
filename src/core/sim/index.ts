@@ -183,3 +183,6 @@ export type { FighterSpec } from './build';
 
 /** Additive (M1.1): skill eligibility (perks and rank steps) for the harness and tests; lifecycle's offers follow the same rules. */
 export { eligiblePerks, eligibleRankSteps, perkEligible, perkPool } from './skills';
+
+/** Additive (M1.1 integration): per-round stats summed over a match, and the PROVISIONAL MVP score; core/game's orchestrator assembles round-by-round results with them. */
+export { mergeStats, mvpScore } from './match';

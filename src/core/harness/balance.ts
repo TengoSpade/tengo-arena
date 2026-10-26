@@ -3,6 +3,7 @@ import { asId, type AbilityRanks, type FighterMatchStats, type PerkId, type Reco
 import { Rng, STREAM, deriveSeed, type Seed } from '../rng';
 import { eligiblePerks, eligibleRankSteps, perkEligible, perkPool, simulateFight, simulateRound, sideInput, type FighterSpec } from '../sim';
 import { byNumber, byString, chain } from '../util';
+import { runSquadMatch, type SquadMatchReport } from './squad-match';
 
 /**
  * Headless balance harness: many seeded fights -> per-class win rates (V1,
@@ -200,6 +201,8 @@ export interface BalanceReport {
   ranks?: RankImpactRow[];
   /** Additive (M1.1): fatigue rows. */
   fatigue?: FatigueRow[];
+  /** Additive (M1.1): squad-match results (full matches with squads and swaps). */
+  squadMatch?: SquadMatchReport;
 }
 
 /** TUNABLE (tech): M1 first-pass band; M7 target 45-55%. */
@@ -675,7 +678,21 @@ export function runBalance(options: BalanceOptions): BalanceReport {
   const mode = options.mode ?? 'random-draft';
   if (!Number.isSafeInteger(fights) || fights < 0) throw new RangeError(`fights must be a non-negative integer, got ${fights}`);
   if (mode === 'squad-match') {
-    throw new Error('balance: squad-match runs game.playMatchAuto with 7-fighter squads and swaps, which lands with M1.1 WP-C (not merged on this branch)');
+    // Full matches through core/game's orchestrator (./squad-match.ts, wired at the M1.1 integration).
+    const squadMatch = runSquadMatch({ seed, fights, content });
+    return {
+      kind: 'balance',
+      stub: false,
+      mode,
+      seed,
+      fights: squadMatch.matches,
+      contentHash: content.ref.hash,
+      classes: [],
+      outliers: [],
+      targetBand: { ...M11_TARGETS.class },
+      flags: squadMatch.flags,
+      squadMatch,
+    };
   }
   const record = options.record ?? 'none';
   const col = collector(content, record, options.clock);

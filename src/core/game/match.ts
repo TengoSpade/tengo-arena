@@ -21,6 +21,7 @@ import type {
   BetweenRoundRecord,
   MatchSquad,
   NewsItem,
+  PerkId,
   ReportEvent,
   RoundLineups,
   RuleSkipReason,
@@ -231,6 +232,7 @@ const REPORT_KINDS: Partial<Record<string, ReportEvent['kind']>> = {
   'captain.down': 'captain_down',
   'captain.handover': 'handover',
   'overtime.start': 'overtime',
+  'perk.proc': 'perk_proc',
 };
 
 function keyEvents(log: FightLog): ReportEvent[] {
@@ -271,6 +273,9 @@ function keyEvents(log: FightLog): ReportEvent[] {
         actor = ev.data?.newCaptain;
         amount = ev.data?.cq ?? null;
         break;
+      case 'perk.proc':
+        out.push({ tick: ev.tick, kind, actorId: fid(ev.unit), targetId: fid(ev.target), abilityId: null, amount: null, perkId: (ev.data?.perk ?? '') as PerkId });
+        continue;
       default:
         break;
     }

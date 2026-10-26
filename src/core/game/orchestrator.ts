@@ -59,6 +59,7 @@ import {
   type SwapRejection,
 } from '../model';
 import { deriveSeed } from '../rng';
+import { mergeStats, mvpScore } from '../sim';
 import { InvariantError } from '../util';
 import { buildMatchInput, fightInputOf, matchTypeOf } from './match';
 import { sideFrom } from './rounds';
@@ -249,48 +250,6 @@ function lineupOf(ports: GamePorts, state: GameState, ms: MatchState, side: Matc
   };
 }
 
-/** Mirrors core/sim mergeStats (sim/match.ts): per-round stats summed over the match. */
-export function mergeFighterStats(into: FighterMatchStats, add: FighterMatchStats): FighterMatchStats {
-  const casts: Record<string, number> = { ...into.casts };
-  for (const [k, v] of Object.entries(add.casts)) casts[k] = (casts[k] ?? 0) + v;
-  const sortedC: Record<string, number> = {};
-  for (const k of Object.keys(casts).sort()) sortedC[k] = casts[k]!;
-  const fires = into.ruleFires.map((n, i) => n + (add.ruleFires[i] ?? 0));
-  const ticks = into.ruleCommittedTicks.map((n, i) => n + (add.ruleCommittedTicks[i] ?? 0));
-  const ruleCount = fires.length - 1;
-  return {
-    clubId: into.clubId,
-    roundsPlayed: into.roundsPlayed + add.roundsPlayed,
-    roundsSurvived: into.roundsSurvived + add.roundsSurvived,
-    ticksOnArena: into.ticksOnArena + add.ticksOnArena,
-    damageDealt: into.damageDealt + add.damageDealt,
-    damageToShields: into.damageToShields + add.damageToShields,
-    damageTaken: into.damageTaken + add.damageTaken,
-    healingDone: into.healingDone + add.healingDone,
-    shieldingDone: into.shieldingDone + add.shieldingDone,
-    overheal: into.overheal + add.overheal,
-    ccAppliedTicks: into.ccAppliedTicks + add.ccAppliedTicks,
-    ccReceivedTicks: into.ccReceivedTicks + add.ccReceivedTicks,
-    downsInflicted: into.downsInflicted + add.downsInflicted,
-    downsSuffered: into.downsSuffered + add.downsSuffered,
-    assists: into.assists + add.assists,
-    focusSpent: into.focusSpent + add.focusSpent,
-    casts: sortedC as FighterMatchStats['casts'],
-    ruleFires: fires,
-    ruleCommittedTicks: ticks,
-    rulesNeverFired: fires.slice(0, ruleCount).flatMap((n, i) => (n === 0 ? [i] : [])),
-    downs: [...into.downs, ...add.downs],
-    opponentIds: [...new Set([...into.opponentIds, ...add.opponentIds])].sort() as FighterId[],
-    roundDamageTaken: [...(into.roundDamageTaken ?? []), ...(add.roundDamageTaken ?? [])],
-    roundMaxHp: [...(into.roundMaxHp ?? []), ...(add.roundMaxHp ?? [])],
-  };
-}
-
-/** Mirrors core/sim's PROVISIONAL MVP score (sim/match.ts mvpScore). */
-function mvpScore(s: FighterMatchStats): number {
-  return s.damageDealt + s.damageToShields + s.healingDone + s.shieldingDone + s.downsInflicted * 150 + s.assists * 50;
-}
-
 /** Play the next round: build its RoundInput, simulateRound(deriveSeed(seed, 'round', n)), the lifecycle hooks, the score; phase moves on. */
 export function playRound(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB): RoundOutcome {
   if (ms.phase !== 'round_pending') throw new InvariantError(`playRound: ${ms.fixtureId} is ${ms.phase}`);
@@ -312,7 +271,7 @@ export function playRound(ports: GamePorts, draft: GameState, ms: MatchState, co
     const add = out.fighterStats[id];
     if (!add) continue;
     const prev = ms.fighterStats[id];
-    ms.fighterStats[id] = prev ? mergeFighterStats(prev, add) : add;
+    ms.fighterStats[id] = prev ? mergeStats(prev, add) : add;
   }
   ms.home.entering = [];
   ms.away.entering = [];

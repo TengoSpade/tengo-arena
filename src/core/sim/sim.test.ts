@@ -99,6 +99,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
   });
 
   // M1.1 round API golden (approved with ENGINE_VERSION 2): ranks, perks and Freshness on the fixture.
+  // Event hash re-pinned at the M1.1 integration (WP-C): the summary-level perk.proc event joined the stream; checksum unchanged.
   it('golden: the pinned M1.1 round (ranks, perks, Freshness)', () => {
     const runs = [0, 1].map(() => simulateRound(m11Round(), 'r-golden', content, { record: 'full' }));
     expect(runs[1]!.result).toEqual(runs[0]!.result);
@@ -108,7 +109,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
         "home",
         896,
         "128648c2c01315596ceda6c8db45ee69",
-        "3283934bc367285e24e562df94aa073e",
+        "f97f39be4598d89633f95f32052f7597",
       ]
     `);
   });

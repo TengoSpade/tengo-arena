@@ -1,6 +1,6 @@
 import type { SeasonPhase } from './calendar';
 import type { FixtureStage } from './competition';
-import type { AbilityId, ClubId, FighterId, FixtureId, NewsId, WeekId } from './ids';
+import type { AbilityId, ClubId, FighterId, FixtureId, NewsId, PerkId, WeekId } from './ids';
 import type { FighterMatchStats, RoundTiebreakStep } from './match';
 import type { Gold } from './ledger';
 import type { SeasonRecord, WageRaise } from './history';
@@ -47,12 +47,14 @@ export interface ReportRound {
 
 export interface ReportEvent {
   tick: number;
-  kind: 'down' | 'interrupt' | 'deathward' | 'rally' | 'captain_down' | 'handover' | 'overtime';
+  kind: 'down' | 'interrupt' | 'deathward' | 'rally' | 'captain_down' | 'handover' | 'overtime' | 'perk_proc';
   actorId: FighterId | null;
   targetId: FighterId | null;
   abilityId: AbilityId | null;
   /** e.g. hit size for downs. */
   amount: number | null;
+  /** perk_proc (M1.1): the perk whose trigger fired. */
+  perkId?: PerkId;
 }
 
 export interface FighterRecap {

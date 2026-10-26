@@ -129,8 +129,16 @@ describe('balance harness', () => {
     expect(r.fatigue!.find((x) => x.id === 'all_f10')!.winRate).toBeLessThan(0.5);
   });
 
-  it('squad-match waits for game.playMatchAuto (WP-C)', () => {
-    expect(() => runBalance({ seed: 's', fights: 2, content, mode: 'squad-match' })).toThrow(/WP-C/);
+  it('squad-match plays full matches through game.playMatchAuto: policy rows against off, reserve value, swaps and Freshness', { timeout: 120_000 }, () => {
+    const r = runBalance({ seed: 's', fights: 20, content, mode: 'squad-match' });
+    const q = r.squadMatch!;
+    expect(q.rows.map((x) => x.id)).toEqual(['off', 'injured_only', 'threshold40', 'threshold60', 'reserves2v0']);
+    expect(q.matchups).toBe(2);
+    for (const row of q.rows) expect(row.matches).toBe(4);
+    expect(q.matches).toBe(40);
+    expect(q.roundsPerMatch).toBeGreaterThanOrEqual(2);
+    expect(q.tiredShare + q.spentShare).toBeGreaterThan(0);
+    expect(r.fights).toBe(40);
   });
 
   it('auto-pick values follow combat-skills.md §5 (captain tag, tier III, preset use, clamp)', () => {
