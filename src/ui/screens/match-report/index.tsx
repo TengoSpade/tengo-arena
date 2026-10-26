@@ -18,6 +18,7 @@ import { Callout, Empty, NoCareer, Tabs } from '../league/lib/ui';
 import { adjacentReports, eventLogText, fighterInfos, moments, perspective } from './analysis';
 import { BoxScore } from './BoxScore';
 import { Aftermath, Downs, Moments } from './Moments';
+import { MatchDayPanel } from './MatchDay';
 import { Recaps } from './Recaps';
 import { Scoreboard } from './Scoreboard';
 import { Traces } from './Traces';
@@ -171,6 +172,7 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
             <Moments state={game} content={content} report={report} all={all} persp={persp} round={round} focusId={focusId} onFocus={setFocusId} />
           )}
           <Downs state={game} content={content} infos={infos} persp={persp} round={round} focusId={focusId} />
+          <MatchDayPanel state={game} content={content} report={report} persp={persp} />
           <Aftermath state={game} content={content} report={report} infos={infos} persp={persp} />
         </div>
       </div>
