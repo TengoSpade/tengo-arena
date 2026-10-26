@@ -54,6 +54,7 @@ export const MARKET_TEXT = {
   'col.age': 'Age',
   'tip.offerRivals': 'Make an offer. Signing fee {fee} on acceptance · rival offers {n} · patience {patience} of {max}.',
   'tip.humanAge': 'Age {age}, human-age {human}',
+  'col.fresh': 'Fresh',
   'col.rating': 'Rating',
   'col.potential': 'Potential',
   'col.traits': 'Traits',
