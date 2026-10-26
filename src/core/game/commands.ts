@@ -4,8 +4,9 @@
  * then delegates market and contract rules to core/economy, which validates
  * its own (05 §3.2). Error codes are stable; the UI maps them to text.
  */
-import { TRAINING_EMPHASES, type ContentDB } from '../content';
-import type { ClubId, Command, Fighter, FighterId, GameState, LineupEntry, OfferResponse } from '../model';
+import { AUTO_SWAP_MODES, LEVEL_UP_MODES, LEVEL_UP_PACING, PAUSE_BETWEEN_ROUNDS, TRAINING_EMPHASES, clubMatchDefaults, type ContentDB } from '../content';
+import type { AutoSwapRules, ClubId, Command, Fighter, FighterId, GameState, LineupEntry, OfferResponse } from '../model';
+import { checkSwaps } from './orchestrator';
 import { getOwn, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
 import { defaultTactics, fail, onRoster, rosterOf, tidyClub } from './shared';
@@ -14,7 +15,18 @@ import { defaultTactics, fail, onRoster, rosterOf, tidyClub } from './shared';
  * Commands allowed while the season-end step is pending. Renewals stay open until the expiry
  * step runs: it is still every expiring contract's final season.
  */
-const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set(['news.markRead', 'news.setRead', 'shortlist.toggle', 'club.choose', 'contract.renew']);
+const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set([
+  'news.markRead',
+  'news.setRead',
+  'shortlist.toggle',
+  'club.choose',
+  'contract.renew',
+  // M1.1 settings and picks (pending level-ups auto-resolve when the season-end step runs).
+  'levelup.choose',
+  'levelup.policy',
+  'autoswap.set',
+  'pacing.set',
+]);
 
 function clubCheck(state: GameState, clubId: ClubId): EngineError | null {
   return getOwn(state.clubs, clubId) ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };
@@ -45,13 +57,16 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
       const e = clubCheck(draft, cmd.clubId);
       if (e) return { ok: false, error: e };
       draft.playerClubId = cmd.clubId;
+      // M1.1: the player's club asks about level-ups and pauses between rounds (AI clubs auto-pick).
+      Object.assign(draft.clubs[cmd.clubId]!, clubMatchDefaults(content, { player: true }));
       // The player makes the club's own market decisions (as after every season end, where the AI phase
       // skips the player's club): the AI's opening offers made for it at world creation are withdrawn.
       for (const o of draft.market.offers.filter((x) => x.clubId === cmd.clubId)) ports.economy.withdrawOffer(draft, o.clubId, o.fighterId);
       return ok(null);
     }
 
-    case 'lineup.set': {
+    case 'lineup.set':
+    case 'squad.set': {
       if (cmd.fighters.length > 5) return fail('lineup.size', `A lineup has at most 5 fighters (got ${cmd.fighters.length})`);
       const seen = new Set<string>();
       for (const e of cmd.fighters) {
@@ -65,11 +80,84 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
         return fail('lineup.captain-not-fielded', 'The match captain must be in the lineup', { fighterId: cmd.matchCaptainId });
       }
       const club = draft.clubs[cmd.clubId]!;
-      club.lineup.fighters = cmd.fighters.map((e): LineupEntry => ({ fighterId: e.fighterId, row: e.row }));
-      club.lineup.matchCaptainId = cmd.matchCaptainId;
-      for (const e of cmd.fighters) {
-        if (!club.lineup.tactics[e.fighterId]) club.lineup.tactics[e.fighterId] = defaultTactics(content, draft.fighters[e.fighterId]!);
+      let reserves = club.lineup.reserves.filter((id) => !seen.has(id));
+      if (cmd.type === 'squad.set') {
+        const max = content.combat.match.squad.reservesMax;
+        if (cmd.reserves.length > max) return fail('squad.reserves-size', `A squad has at most ${max} reserves (got ${cmd.reserves.length})`);
+        for (const id of cmd.reserves) {
+          if (seen.has(id)) return fail('squad.duplicate', `Fighter "${id}" is named twice`, { fighterId: id });
+          seen.add(id);
+          const f = rosterFighter(draft, cmd.clubId, id, 'squad.not-on-roster');
+          if (!f.ok) return f;
+          if (!ports.fighters.isFit(f.value)) return fail('squad.reserve-unfit', `Reserve "${id}" is not fit`, { fighterId: id });
+        }
+        reserves = [...cmd.reserves];
       }
+      club.lineup.fighters = cmd.fighters.map((e): LineupEntry => ({ fighterId: e.fighterId, row: e.row }));
+      club.lineup.reserves = reserves;
+      club.lineup.matchCaptainId = cmd.matchCaptainId;
+      for (const id of [...cmd.fighters.map((e) => e.fighterId), ...reserves]) {
+        if (!club.lineup.tactics[id]) club.lineup.tactics[id] = defaultTactics(content, draft.fighters[id]!);
+      }
+      return ok(null);
+    }
+
+    // ---- M1.1 ----------------------------------------------------------------------------------------
+    case 'levelup.choose': {
+      if (draft.liveMatch !== null) return fail('levelup.match-in-progress', 'Level-up picks wait until the match is over');
+      const f = rosterFighter(draft, cmd.clubId, cmd.fighterId, 'levelup.not-on-roster');
+      if (!f.ok) return f;
+      if (!f.value.pendingLevelUps.some((p) => p.level === cmd.level)) {
+        return fail('levelup.unknown', `No pending level-up ${cmd.level} for "${cmd.fighterId}"`, { fighterId: cmd.fighterId, level: cmd.level });
+      }
+      const r = ports.fighters.resolveLevelUp(draft, cmd.fighterId, cmd.level, { optionIndex: cmd.optionIndex, traitIndex: cmd.traitIndex }, 'player', content);
+      return r.ok ? ok(null) : r;
+    }
+
+    case 'levelup.policy': {
+      if (!(cmd.mode === 'inherit' || (LEVEL_UP_MODES as readonly string[]).includes(cmd.mode))) return fail('levelup.mode', `Unknown level-up mode "${String(cmd.mode)}"`);
+      if (cmd.fighterId === null) {
+        if (cmd.mode === 'inherit') return fail('levelup.mode', 'The club default cannot be "inherit"');
+        draft.clubs[cmd.clubId]!.levelUpDefault = cmd.mode;
+        return ok(null);
+      }
+      const f = rosterFighter(draft, cmd.clubId, cmd.fighterId, 'levelup.not-on-roster');
+      if (!f.ok) return f;
+      f.value.levelUpMode = cmd.mode;
+      return ok(null);
+    }
+
+    case 'match.swap': {
+      const ms = draft.liveMatch;
+      if (ms === null || ms.fixtureId !== cmd.fixtureId) return fail('match.not-live', 'That match is not waiting between rounds', { fixtureId: cmd.fixtureId });
+      if (ms.phase !== 'between_rounds' || ms.rounds.length !== cmd.afterRound) {
+        return fail('match.not-between-rounds', `No between-round step after round ${cmd.afterRound}`, { afterRound: cmd.afterRound });
+      }
+      const side = ms.home.clubId === cmd.clubId ? 'home' : ms.away.clubId === cmd.clubId ? 'away' : null;
+      if (side === null) return fail('match.not-a-side', `"${cmd.clubId}" does not play this match`);
+      const check = checkSwaps(ms, side, cmd.swaps, content.combat.match.swaps.maxPerMatch, (id) => {
+        const f = draft.fighters[id];
+        return !f || !ports.fighters.isFit(f);
+      });
+      const first = check.rejected[0];
+      if (first) return fail(`swap.${first.reason}`, `Swap ${first.decision.out} -> ${first.decision.in} refused: ${first.reason}`, { ...first.decision, reason: first.reason });
+      ms.playerDecisions = cmd.swaps.map((d) => ({ ...d }));
+      return ok(null);
+    }
+
+    case 'autoswap.set': {
+      const e = autoSwapRulesError(cmd.rules);
+      if (e) return fail('autoswap.rules', e);
+      draft.clubs[cmd.clubId]!.autoSwap = { ...cmd.rules };
+      return ok(null);
+    }
+
+    case 'pacing.set': {
+      if (!(LEVEL_UP_PACING as readonly string[]).includes(cmd.levelUpPacing)) return fail('pacing.level-up', `Unknown pacing "${String(cmd.levelUpPacing)}"`);
+      if (!(PAUSE_BETWEEN_ROUNDS as readonly string[]).includes(cmd.pauseBetweenRounds)) return fail('pacing.pause', `Unknown pause rule "${String(cmd.pauseBetweenRounds)}"`);
+      const club = draft.clubs[cmd.clubId]!;
+      club.levelUpPacing = cmd.levelUpPacing;
+      club.pauseBetweenRounds = cmd.pauseBetweenRounds;
       return ok(null);
     }
 
@@ -181,6 +269,16 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
       return ok(null);
     }
   }
+}
+
+function autoSwapRulesError(r: AutoSwapRules): string | null {
+  if (!(AUTO_SWAP_MODES as readonly string[]).includes(r.mode)) return `Unknown auto-swap mode "${String(r.mode)}"`;
+  for (const k of ['freshnessBelow', 'reserveMargin', 'maxRatingGap', 'lostRoundBonus'] as const) {
+    const v = r[k];
+    if (!Number.isSafeInteger(v) || v < 0 || v > 100) return `${k} must be a whole number 0-100 (got ${String(v)})`;
+  }
+  if (typeof r.keepOneForInjury !== 'boolean' || typeof r.sameRoleFamilyFirst !== 'boolean') return 'keepOneForInjury and sameRoleFamilyFirst are on/off';
+  return null;
 }
 
 function checkTerms(content: ContentDB, wage: number, seasons: number): { ok: false; error: EngineError } | null {

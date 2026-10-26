@@ -7,6 +7,8 @@
  */
 import { z } from 'zod';
 import {
+  AUTO_SWAP_MODES,
+  PAUSE_BETWEEN_ROUNDS,
   ROUND_TIEBREAKS,
   STAT_GROUPS,
   affinityGroup,
@@ -246,6 +248,40 @@ export const CombatFileSchema = z.object({
       }).strict(),
     }).strict(),
     resetBetweenRounds: z.array(z.string()),
+    _squadDoc: z.string().optional(),
+    /** M1.1 sys-match: 5 starters and up to 2 reserves; at most 2 swaps a match, between rounds, no return. */
+    squad: z.object({ starters: z.number().int().positive(), reservesMax: z.number().int().nonnegative(), reservesMin: z.number().int().nonnegative() }).strict(),
+    swaps: z.object({
+      maxPerMatch: z.number().int().nonnegative(),
+      between: z.string(),
+      returnAllowed: z.boolean(),
+      decision: z.string(),
+      injuryReplacement: z.string(),
+      emergencyEntrant: z.string(),
+    }).strict(),
+    autoSwapDefaults: z.object({
+      mode: z.enum(AUTO_SWAP_MODES),
+      freshnessBelow: z.number(),
+      reserveMargin: z.number(),
+      maxRatingGap: z.number(),
+      keepOneForInjury: z.boolean(),
+      sameRoleFamilyFirst: z.boolean(),
+    }).strict(),
+    autoSwapModes: z.array(z.enum(AUTO_SWAP_MODES)),
+    pauseBetweenRounds: z.object({ options: z.array(z.enum(PAUSE_BETWEEN_ROUNDS)), defaultM11: z.enum(PAUSE_BETWEEN_ROUNDS) }).strict(),
+  }).strict(),
+  /** M1.1 sys-fight-freshness: penalty at each round start from the fighter's freshness (lifecycle owns the meter). */
+  freshness: z.object({
+    _doc: z.string().optional(),
+    appliedAt: z.literal('round_start'),
+    thresholdBelow: z.number(),
+    fullPenaltyAtOrBelow: z.number(),
+    penaltyAtFull: z.object({ attackSpeed: z.number(), moveSpeed: z.number(), power: z.number(), support: z.number(), reactionDelay: z.number() }).strict(),
+    labelsFrom: z.string(),
+    thresholdFrom: z.string(),
+    resistStat: z.literal('fatigueResist'),
+    resistClamp: z.tuple([z.number(), z.number()]),
+    default: z.number(),
   }).strict(),
   captain: z.object({
     _doc: z.string().optional(),

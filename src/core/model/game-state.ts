@@ -8,14 +8,14 @@ import type { SeasonRecord } from './history';
 import type { ClubId, CompetitionId, FighterId, FixtureId, IdCounters, IdMap } from './ids';
 import type { Ledger } from './ledger';
 import type { AiClubMemory, KnowledgeEntry, MarketState } from './market';
-import type { MatchResult } from './match';
+import type { MatchResult, MatchState } from './match';
 import type { NewsItem } from './news';
 
 /**
  * Version of the GameState shape. Any change to a persisted type in
  * core/model bumps this and adds a migration in core/save (architect-owned).
  */
-export const STATE_SCHEMA_VERSION = 2;
+export const STATE_SCHEMA_VERSION = 3;
 
 /**
  * The complete, authoritative, JSON-safe state of one career. Everything
@@ -58,6 +58,12 @@ export interface GameState {
    * personOf / personName (core/model alumni.ts).
    */
   alumni: IdMap<FighterId, Alumnus>;
+  /**
+   * M1.1 (v3): the player's match while week processing waits at a
+   * between-round step (combat-skills.md sys-match); null otherwise. The rest
+   * of that week runs when the match is done (core/game advance).
+   */
+  liveMatch: MatchState | null;
 }
 
 /** Content identity: theme folder name + hash of the raw content files. */

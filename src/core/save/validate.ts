@@ -4,7 +4,7 @@
  * Pure; reports issues and never repairs (05 §5).
  */
 import type { ContentDB } from '../content';
-import { type GameState, idNumber } from '../model';
+import { type GameState, type LevelOption, idNumber } from '../model';
 import { isReservedName } from '../util';
 import { GameStateSchema, formatZodPath } from './schema';
 
@@ -107,6 +107,23 @@ export function contentIssues(state: GameState, content: ContentDB): StateIssue[
     for (const t of f.traits) if (!content.traits.has(t.id)) add(`${p}.traits`, `unknown trait "${t.id}"`);
     checkStatKeys(`${p}.cap100`, f.cap100);
     checkStatKeys(`${p}.wear100`, f.wear100);
+    // M1.1 (v3)
+    checkStatKeys(`${p}.bloom`, f.bloom);
+    checkStatKeys(`${p}.train100`, f.train100);
+    for (const id of f.perkIds) if (!content.perks.has(id)) add(`${p}.perkIds`, `unknown perk "${id}"`);
+    const checkOption = (q: string, o: LevelOption): void => {
+      if (o.kind === 'stat' && !stats.has(o.stat)) add(q, `unknown stat "${o.stat}"`);
+      if (o.kind === 'rank' && !content.abilities.has(o.abilityId)) add(q, `unknown ability "${o.abilityId}"`);
+      if (o.kind === 'perk' && !content.perks.has(o.perkId)) add(q, `unknown perk "${o.perkId}"`);
+    };
+    f.pendingLevelUps.forEach((u, i) => {
+      u.options.forEach((o, j) => checkOption(`${p}.pendingLevelUps[${i}].options[${j}]`, o));
+      for (const t of u.traitOffer ?? []) if (!content.traits.has(t)) add(`${p}.pendingLevelUps[${i}].traitOffer`, `unknown trait "${t}"`);
+    });
+    f.season.levelLog.forEach((u, i) => {
+      if (u.picked) checkOption(`${p}.season.levelLog[${i}].picked`, u.picked);
+      if (u.trait !== null && !content.traits.has(u.trait)) add(`${p}.season.levelLog[${i}].trait`, `unknown trait "${u.trait}"`);
+    });
   }
   for (const [aid, a] of Object.entries(state.alumni)) {
     // Records and history screens show an alumnus's class and race.
@@ -188,6 +205,14 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
     if (c.lineup.matchCaptainId !== null && !seen.has(c.lineup.matchCaptainId)) {
       add(`${p}.lineup.matchCaptainId`, `"${c.lineup.matchCaptainId}" is not in the lineup`);
     }
+    // M1.1: reserves are roster fighters, distinct from the starters and from each other.
+    c.lineup.reserves.forEach((fid, i) => {
+      if (seen.has(fid)) add(`${p}.lineup.reserves[${i}]`, `duplicate fighter "${fid}"`);
+      seen.add(fid);
+      const f = fighters[fid];
+      if (!f) add(`${p}.lineup.reserves[${i}]`, `unknown fighter "${fid}"`);
+      else if (f.clubId !== cid) add(`${p}.lineup.reserves[${i}]`, `fighter "${fid}" is not on this club's roster`);
+    });
     for (const fid of Object.keys(c.lineup.tactics)) if (!isFighter(fid)) add(`${p}.lineup.tactics`, `unknown fighter "${fid}"`);
     for (const fid of c.shortlist) if (!isFighter(fid)) add(`${p}.shortlist`, `unknown fighter "${fid}"`);
     if (opening[c.id] === undefined) add(`ledger.openingBalances.${cid}`, 'missing');
@@ -235,6 +260,20 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
     if (r.fixtureId !== xid) add(`${p}.fixtureId`, 'key/id mismatch');
     if (!fixtures[xid]) add(p, 'result without fixture');
     if (r.winnerClubId !== r.homeClubId && r.winnerClubId !== r.awayClubId) add(`${p}.winnerClubId`, 'winner is neither side');
+  }
+  // M1.1: a live match belongs to a scheduled fixture of the two clubs, and only names known fighters.
+  const live = state.liveMatch;
+  if (live !== null) {
+    const fx = fixtures[live.fixtureId];
+    if (!fx) add('liveMatch.fixtureId', `unknown fixture "${live.fixtureId}"`);
+    else {
+      if (fx.status !== 'scheduled') add('liveMatch.fixtureId', 'the fixture has already been played');
+      if (live.home.clubId !== fx.homeClubId || live.away.clubId !== fx.awayClubId) add('liveMatch', 'sides differ from the fixture');
+    }
+    for (const side of ['home', 'away'] as const) {
+      const s = live[side];
+      for (const fid of [...s.active, ...s.squad.reserves, ...s.withdrawn, ...s.emergencyEntrants]) if (!fighters[fid]) add(`liveMatch.${side}`, `unknown fighter "${fid}"`);
+    }
   }
 
   // market

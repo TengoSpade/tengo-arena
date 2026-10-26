@@ -46,6 +46,8 @@ export const STREAM = {
   balance: 'balance',
   /** Headless season soak harness. */
   soak: 'soak',
+  /** Save migrations that must invent a value (M1.1 v2 -> v3: Stamina; path 'm1.1', fighter id, purpose). */
+  migration: 'migration',
 } as const;
 
 export type StreamName = (typeof STREAM)[keyof typeof STREAM];

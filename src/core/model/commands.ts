@@ -1,7 +1,9 @@
 import type { LineupEntry, TacticsAssignment } from './club';
 import type { TrainingEmphasis } from './fighter';
-import type { ClubId, FighterId, NewsId } from './ids';
+import type { ClubId, FighterId, FixtureId, NewsId } from './ids';
 import type { Gold } from './ledger';
+import type { SwapDecision } from './match';
+import type { AutoSwapRules, LevelUpModeSetting, LevelUpPacing, PauseBetweenRounds } from './progression';
 
 /**
  * Commands are the ONLY way management decisions change GameState, for the
@@ -33,7 +35,24 @@ export type Command =
   | { type: 'shortlist.toggle'; clubId: ClubId; fighterId: FighterId }
   | { type: 'news.markRead'; newsIds: NewsId[] }
   /** Set the read flag either way (Undo of mark-read). */
-  | { type: 'news.setRead'; newsIds: NewsId[]; read: boolean };
+  | { type: 'news.setRead'; newsIds: NewsId[]; read: boolean }
+  // ---- M1.1 (05 M1.1 addendum) ----------------------------------------------------------------------
+  /** Set the whole match squad: 5 starters with rows, 0-2 reserves, optional match-captain override (lineup.set keeps the reserves). */
+  | { type: 'squad.set'; clubId: ClubId; fighters: LineupEntry[]; reserves: FighterId[]; matchCaptainId: FighterId | null }
+  /**
+   * Resolve one pending level-up of an own fighter: option index into the
+   * offer (null only for an empty level) and the trait offer answer (index,
+   * or null for "neither" / no offer). Refused while a match is in progress.
+   */
+  | { type: 'levelup.choose'; clubId: ClubId; fighterId: FighterId; level: number; optionIndex: number | null; traitIndex: number | null }
+  /** Auto-pick policy of one fighter, or (fighterId null) the club default; the club default cannot be 'inherit'. */
+  | { type: 'levelup.policy'; clubId: ClubId; fighterId: FighterId | null; mode: LevelUpModeSetting }
+  /** The player's swaps for the pending between-round step of GameState.liveMatch ([] = no swaps). Applied when the match continues. */
+  | { type: 'match.swap'; clubId: ClubId; fixtureId: FixtureId; afterRound: number; swaps: SwapDecision[] }
+  /** Auto-swap rules of the club. */
+  | { type: 'autoswap.set'; clubId: ClubId; rules: AutoSwapRules }
+  /** Pacing: when level-up dialogs open and when the club's matches pause between rounds. */
+  | { type: 'pacing.set'; clubId: ClubId; levelUpPacing: LevelUpPacing; pauseBetweenRounds: PauseBetweenRounds };
 
 export type CommandType = Command['type'];
 

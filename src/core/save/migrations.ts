@@ -1,8 +1,11 @@
 /**
  * GameState migrations (05 §5): pure, stepwise vN -> vN+1 functions on the
  * parsed JSON of an older save. parseSave runs them after the checksum check
- * and validates the result against the current schema.
+ * and validates the result against the current schema. A step receives the
+ * loaded content (v2 -> v3 derives Stamina, levels and club defaults from it).
  */
+import { clubMatchDefaults, type ContentDB } from '../content';
+import { migrateFightersToV3 } from '../fighters';
 import {
   CAREER_ENDING_WEEKS,
   alumnusOf,
@@ -11,6 +14,7 @@ import {
   type AlumnusCause,
   type ClubId,
   type Fighter,
+  type GameState,
   type ReckoningStage,
 } from '../model';
 
@@ -18,7 +22,7 @@ import {
 export interface Migration {
   from: number;
   to: number;
-  migrate(state: unknown): unknown;
+  migrate(state: unknown, content: ContentDB): unknown;
 }
 
 type Json = Record<string, unknown>;
@@ -109,5 +113,38 @@ export function migrateV1ToV2(raw: unknown): unknown {
   return s;
 }
 
+/**
+ * v2 -> v3 (M1.1 "Playtest round 1"; progression.md §6, combat-skills.md sys-match):
+ * - every fighter: Stamina rolled from Rng(root, 'migration', 'm1.1', fighterId,
+ *   purpose) (cap, bloom; wear = his str wear), train100 = the M1 developed value
+ *   (every shown stat unchanged), peakRating shifted by the reweight, the level
+ *   from the formula, this season's round XP carried into the bar (below one
+ *   level), no pending level-ups, Freshness 100, rank 1, no perks, zeroed
+ *   M1.1 season counters, null new history columns (core/fighters migrateFightersToV3);
+ * - every club: lineup reserves [], level-up policy (player 'manual', AI 'auto'),
+ *   pacing, auto-swap rules and the between-round pause from content;
+ * - alumni careers gain levelsGained 0;
+ * - liveMatch null (v2 saves never hold a match in progress).
+ * Deterministic: migrating a save twice gives byte-identical states (mig-002).
+ */
+export function migrateV2ToV3(raw: unknown, content: ContentDB): unknown {
+  const s = raw as Loose;
+  for (const club of Object.values(s.clubs as Record<string, Loose>)) {
+    const l = club.lineup as Loose;
+    club.lineup = { fighters: l.fighters, reserves: [], matchCaptainId: l.matchCaptainId, tactics: l.tactics };
+    const who = club.id === s.playerClubId ? ({ player: true } as const) : ({ player: false, personalityId: club.aiPersonalityId as string } as const);
+    Object.assign(club, clubMatchDefaults(content, who));
+  }
+  migrateFightersToV3(s as unknown as GameState, content);
+  // Alumni keep their career totals; the M1.1 counter reads 0.
+  for (const a of Object.values((s.alumni ?? {}) as Record<string, Loose>)) if (a.career.levelsGained === undefined) a.career.levelsGained = 0;
+  s.liveMatch = null;
+  s.schemaVersion = 3;
+  return s;
+}
+
 /** Ordered migrations up to STATE_SCHEMA_VERSION. */
-export const MIGRATIONS: readonly Migration[] = [{ from: 1, to: 2, migrate: migrateV1ToV2 }];
+export const MIGRATIONS: readonly Migration[] = [
+  { from: 1, to: 2, migrate: migrateV1ToV2 },
+  { from: 2, to: 3, migrate: migrateV2ToV3 },
+];

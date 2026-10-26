@@ -152,7 +152,8 @@
       "usedFor": [
         "focus regen +3%/pt"
       ]
-    }
+    },
+    { "id": "stamina", "name": "Stamina", "abbr": "STA", "group": "physical", "lifecycleTag": "stamina", "description": "Staying power: how many rounds and matches a fighter can play before tiring. It acts only through Freshness (lifecycle); it has no effect during a fight.", "usedFor": ["freshness drain per round played and recovery between weeks (lifecycle)"] }
   ],
   "archetypes": [
     {
@@ -491,7 +492,13 @@
       "positions",
       "zones",
       "captaincy"
-    ]
+    ],
+    "_squadDoc": "sys-match (M1.1): match squads and swaps. Owner rules: squad of 5 starters + 2 reserves; at most 2 swaps per match, between rounds only; a fighter swapped out cannot return in that match (owner ruling 2026-10-26).",
+    "squad": { "starters": 5, "reservesMax": 2, "reservesMin": 0 },
+    "swaps": { "maxPerMatch": 2, "between": "rounds only (never before round 1, never after the deciding round)", "returnAllowed": false, "decision": "simultaneous and blind; applied home then away", "injuryReplacement": "forced; an unused reserve enters and uses a swap; with none left an emergency entrant enters without a swap", "emergencyEntrant": "best-fit fit roster fighter outside the match squad (same role family, then rating, then freshness, then fighter id); else a hired blade" },
+    "autoSwapDefaults": { "mode": "threshold", "freshnessBelow": 40, "reserveMargin": 15, "maxRatingGap": 6, "keepOneForInjury": true, "sameRoleFamilyFirst": true },
+    "autoSwapModes": ["off", "injured_only", "threshold"],
+    "pauseBetweenRounds": { "options": ["always", "when_urgent", "never"], "defaultM11": "always" }
   },
   "captain": {
     "_doc": "sys-fight-captain. Adopts the lifecycle proposal (development.json captaincy.inFightProposal): reliability through composure, never raw damage. Grades come from development.json captaincy.grades by CQ; CQ arrives with the fight setup.",
@@ -1224,6 +1231,8 @@
     {
       "id": "displaceImmune",
       "kind": "flag"
-    }
-  ]
+    },
+    { "id": "fatigueResist", "kind": "fraction" }
+  ],
+  "freshness": { "_doc": "Per-fighter freshness 0-100 arrives in each round input (lifecycle owns drain per round played, recovery and labels). Severity s = clamp((thresholdBelow - F) / (thresholdBelow - fullPenaltyAtOrBelow), 0, 1) from the freshness at the start of that round; fixed for the whole round. Each penalty = penaltyAtFull x s x (1 - fatigueResist).", "appliedAt": "round_start", "thresholdBelow": 60, "fullPenaltyAtOrBelow": 10, "penaltyAtFull": { "attackSpeed": -0.1, "moveSpeed": -0.06, "power": -0.08, "support": -0.08, "reactionDelay": 0.25 }, "labelsFrom": "levels.json freshness.labels (fresh >= 80, ready >= 60, tired >= 40, spent < 40); reports tag a fighter Tired or Spent with the penalty applied", "thresholdFrom": "levels.json freshness.threshold (must equal thresholdBelow)", "resistStat": "fatigueResist", "resistClamp": [0, 1], "default": 100 }
 }

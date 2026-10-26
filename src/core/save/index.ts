@@ -33,7 +33,7 @@ import { checkState, type StateIssue } from './validate';
 
 export type { StateIssue } from './validate';
 export { GameStateSchema } from './schema';
-export { MIGRATIONS, migrateV1ToV2, type Migration } from './migrations';
+export { MIGRATIONS, migrateV1ToV2, migrateV2ToV3, type Migration } from './migrations';
 export { checksumV1 } from './encode';
 
 /** Checksum of a current-version state (v2 rule: the state as written, ./encode.ts). */
@@ -158,7 +158,7 @@ export function parseSaveWith(
     const step = options.migrations.find((m) => m.from === v);
     if (!step || step.to !== v + 1) return fail('save.migration', `No migration from schema version ${v}`, { from: v });
     try {
-      state = step.migrate(state);
+      state = step.migrate(state, content);
     } catch (e) {
       return fail('save.migration', `Migration ${step.from} -> ${step.to} failed: ${e instanceof Error ? e.message : String(e)}`, { from: v });
     }

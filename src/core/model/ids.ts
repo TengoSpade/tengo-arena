@@ -35,6 +35,8 @@ export type NewsId = Brand<string, 'NewsId'>;
 export type StatId = Brand<string, 'StatId'>;
 export type ClassId = Brand<string, 'ClassId'>;
 export type AbilityId = Brand<string, 'AbilityId'>;
+/** M1.1 perks.json id. */
+export type PerkId = Brand<string, 'PerkId'>;
 export type TacticsPresetId = Brand<string, 'TacticsPresetId'>;
 export type RaceId = Brand<string, 'RaceId'>;
 export type TraitId = Brand<string, 'TraitId'>;

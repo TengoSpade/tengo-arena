@@ -20,12 +20,14 @@ import {
   type RegionId,
   type RetirementRecord,
   type SeasonRecord,
+  type StatId,
   type TraitId,
 } from '../model';
 import { Rng, STREAM } from '../rng';
 import { checkThresholds, type TraitChange } from './acquired';
 import { captaincyBreakdown, isCareerEnded, topFiveMean } from './captaincy';
 import { developSeason, usageBpOf, type DevelopmentInputs } from './development';
+import { trainFromClocks } from './levels';
 import { effectSources } from './effects';
 import { BP, bp, roundN } from './fixed';
 import { createFighterOn } from './generation';
@@ -166,6 +168,8 @@ export function seasonEndDevelopmentOn(draft: GameState, content: ContentDB): Ne
       trainingEnabled: enabled,
     };
     const delta = developSeason(f, content, inputs);
+    // M1.1 contracts: effective stats still read the clocks; train100 follows them until WP-B switches (05 M1.1 addendum).
+    f.train100 = trainFromClocks(f, content);
     if (f.season.roundsStarted > 0 || (f.clubId !== null && f.status === 'active')) f.career.proSeasons += 1;
     const changes = [
       ...seasonEndLosses(f, info, delta.usageBp, content, root, season),
@@ -190,6 +194,11 @@ export function seasonEndDevelopmentOn(draft: GameState, content: ContentDB): Ne
         ...f.traits.filter((t) => t.gainedSeason === season && (t.source === 'event' || t.source === 'scar')).map((t) => t.id),
       ],
       traitsLost: changes.filter((c) => c.change === 'lost').map((c) => c.traitId as TraitId),
+      levelStart: f.level - f.season.levelLog.length,
+      levelEnd: f.level,
+      stamina: effectiveStatsOf(f, content)['stamina' as StatId] ?? null,
+      benchXp: f.season.benchXp,
+      tiredRoundStarts: f.season.tiredRoundStarts + f.season.spentRoundStarts,
     });
     trimHistoryStats(f.history);
     f.season = emptySeasonCounters();

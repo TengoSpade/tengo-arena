@@ -1,0 +1,243 @@
+{
+  "_doc": "M1.1 in-season leveling, bench XP, level-up offers, auto-pick, Stamina and Freshness (sys-development, new sys-freshness). Spec: docs/design/_drafts/m1.1/progression.md. Every number is PROPOSED · TUNABLE. Fractions are decimals; the loader converts them to basis points. Step tables are [key, value] pairs: use the entry with the largest key <= the lookup value. Proposed new content file content/default/levels.json (the architect integrates it). Match-squad, swap and match-flow rules are combat's (docs/design/_drafts/m1.1/combat-skills.md); the numbers repeated here must equal combat's.",
+  "version": 1,
+  "status": "DRAFT 2026-10-26 (fighter-lifecycle designer), M1.1 playtest round 1 (owner tickets T003, T004, T005; owner rules: per-round Freshness between rounds, 5 + 2 match squad with at most 2 swaps, a swapped-out fighter cannot return).",
+
+  "benchXp": {
+    "_doc": "T004 (owner decision): per match his club plays, a roster fighter who is fit at lineup lock and starts no round earns floor(shareOfStarterMean x clubMatchXp x his trait XP multipliers / lineupSlots), one floor after all multipliers (basis-point math: shareOfStarterMean = 3,333 bp). clubMatchXp = the sum of the round XP earned by every fighter of the club who started a round in the match (before personal trait multipliers, after the Reckoning multiplier); dividing by 5 makes it the XP of one lineup slot. This covers match-squad reserves who never enter and every roster fighter outside the match squad. A fighter who started any round of the match earns only the XP of the rounds he started (no bench top-up): a starter swapped out keeps the XP of every round he started; a reserve or emergency entrant earns from the first round he starts. Round XP is committed after each round (xpAfterRound); bench XP at match end. Injured fighters (weeksOut > 0 at the lock, or career-ending) get 0. Free agents, retired fighters and hired blades get 0. M5: called-up academy fighters who are not used get 0 (O3).",
+    "shareOfStarterMean": 0.3333,
+    "lineupSlots": 5
+  },
+
+  "level": {
+    "_doc": "level is a stored integer, +1 per level-up. initialLevel is computed once (generation and save migration): 1 + round(sum over all 13 stats of max(0, train100_i - initialFloorShareOfCap x cap100_i) / 100). It never decreases (wear and scars do not change it).",
+    "initialFloorShareOfCap": 0.5
+  },
+
+  "xpPerLevel": {
+    "_doc": "xpNeeded = clamp(round5(B x A x G x lifeScale / (pace x raceGrowth x traitDev x mentor)), min, max). B = base + perLevel x level. A = wPhys x ageFactorPhysical(humanAge) + (1 - wPhys) x ageFactorMental(humanAge); wPhys = the class's rating-weight share on physical stats, stamina included. G = gapFactor(devGap); devGap = potential - trainedRating, where trainedRating is the rating of the trained values with no wear (so decline does not speed leveling). lifeScale = lifespan / 80 (one clock, D-B; humans 1.0). raceGrowth = wPhys x race.growthMult.physical + (1 - wPhys) x race.growthMult.mental. traitDev = the same blend of the fighter's devClock trait multipliers active at his human-age. mentor = the mentoring multiplier (captain grade x trait mentors, cap 1.15) for humanAge <= 23. Frozen when the level starts; recomputed at each level-up and at season end after age +1.",
+    "base": 115,
+    "perLevel": 0.6,
+    "ageFactorPhysical": [[0, 0.72], [20, 0.8], [22, 0.95], [24, 1.25], [28, 1.45], [31, 1.9], [34, 2.6], [37, 3.6]],
+    "ageFactorMental": [[0, 0.85], [22, 1.1], [30, 1.2], [36, 1.45], [42, 1.9], [48, 2.6]],
+    "gapFactor": [[-99, 4.0], [1, 2.6], [2, 1.8], [4, 1.3], [6, 1.0], [15, 0.9], [22, 0.82], [30, 0.72]],
+    "lifespanScaling": true,
+    "min": 60,
+    "max": 2500,
+    "rounding": "round to the nearest multiple of 5 (half up)",
+    "carryOver": "XP above xpNeeded carries into the next level",
+    "levelUpsCheckedAt": "match end (after the match result is committed), never between rounds",
+    "maxLevelUpsPerMatch": 2,
+    "_maxNote": "XP beyond the second level-up in one match stays in the bar and triggers at the next match end."
+  },
+
+  "offers": {
+    "_doc": "A level-up is a choice of 1 of optionsPerLevelUp options, generated once at match end (stream development, keyed by season, week, fighter, level) and stored; reload never rerolls (P-05). Stat options are drawn without replacement with weight max(floor, classRatingWeight_i) x emphasisWeight(group_i) among stats with room (train100_i < cap100_i). A stat pick adds min(statGainCentipoints, room) centipoints to train100_i (+1 point, or the remainder up to the cap).",
+    "optionsPerLevelUp": 3,
+    "statGainCentipoints": 100,
+    "weightFloor": 0.03,
+    "staminaWeightFloor": 0.08,
+    "emphasisWeight": {
+      "_doc": "a = training-emphasis strength (human Adaptable 1.5, Regimented 1.5, Set in Their Ways 0; clamp 0-2; training.enabled false -> Balanced). Body: physical stats x (1 + perStrength x a), mental / (1 + perStrength x a). Mind: the reverse. Balanced: x1.",
+      "perStrength": 1.0
+    },
+    "skillSlots": {
+      "_doc": "Skills are ability ranks and perks from the combat catalog (docs/design/_drafts/m1.1/content/ability-ranks.json, perks.json); combat owns eligibility, the kind/item draw and the effects (perks.json rules.offerDraw). On a level where level % everyNthLevel == 0 one option is a skill; where level % twoSkillsEveryNthLevel == 0 two options are skills (drawn without replacement; when both kinds have eligible items, one is a rank step and one a perk).",
+      "everyNthLevel": 3,
+      "twoSkillsEveryNthLevel": 9,
+      "fallback": "no eligible skill -> the slot becomes a stat option; no stat with room -> the slot becomes a skill; nothing at all -> the slot is empty (the level still counts)"
+    },
+    "traitOffer": {
+      "_doc": "Rolled per level-up (stream traits, keyed by season, week, fighter, level) with probability chance, only if the fighter holds fewer than maxRolledAndLearned rolled + learned traits. An extra, optional choice next to the main pick: 2 trait options and 'neither'. Option 1 is always positive (boon or edge); option 2 is positive with probability secondOptionPositive, else a burden from the pool (never a flaw). Both drawn without replacement from traitOfferPool by rollWeight x raceWeight x fit, with the roll's eligibility rules (not held; no opposite or exclusion either way; not the same exclusiveGroup; category cap 2). A chosen trait has source 'level'.",
+      "chance": 0.125,
+      "options": 2,
+      "secondOptionPositive": 0.75,
+      "allowDecline": true,
+      "maxRolledAndLearned": 4,
+      "fitMult": { "fits": 2.0, "neutral": 1.0 }
+    },
+    "pending": {
+      "_doc": "Unspent level-ups queue on the fighter (oldest first). When a new one would exceed maxQueued, the oldest is resolved by the auto-pick policy and the digest says so. All pending level-ups are auto-resolved at the start of the season-end step. Pending level-ups never block Continue or a lineup lock.",
+      "maxQueued": 3
+    }
+  },
+
+  "traitOfferPool": {
+    "_doc": "Traits that can be offered on level-up. 'fit' lists combat.json archetypes (tank, melee, ranged, controller, healer) or 'captain'; a match gives fitMult.fits. 'requires' are hard filters. Physique traits, storied traits and flaws are never offered.",
+    "positive": [
+      { "id": "still_water", "fit": ["controller", "healer"] },
+      { "id": "steel_spine", "fit": ["tank"] },
+      { "id": "good_company", "fit": [] },
+      { "id": "glory_hungry", "fit": [], "requires": { "humanAgeAtMost": 26 } },
+      { "id": "big_stage", "fit": [] },
+      { "id": "thunder_opener", "fit": ["melee", "tank"] },
+      { "id": "hard_to_drop", "fit": ["tank", "melee"] },
+      { "id": "pays_it_back", "fit": ["melee", "tank"] },
+      { "id": "smells_blood", "fit": ["melee", "ranged"] },
+      { "id": "guard_first", "fit": ["tank", "healer"] },
+      { "id": "quick_study", "fit": ["controller", "healer"], "requires": { "humanAgeAtMost": 25 } },
+      { "id": "regimented", "fit": [] },
+      { "id": "late_ripener", "fit": [], "requires": { "humanAgeAtMost": 22 } },
+      { "id": "early_spark", "fit": [], "requires": { "humanAgeAtMost": 19 } },
+      { "id": "student_of_sand", "fit": ["controller", "healer"] },
+      { "id": "keeps_the_edge", "fit": ["tank", "melee", "ranged"], "requires": { "humanAgeAtLeast": 27 } },
+      { "id": "rallying_voice", "fit": ["captain"], "requires": { "ldrAtLeast": 11 } },
+      { "id": "quiet_steel", "fit": ["captain"], "requires": { "humanAgeAtLeast": 25 } },
+      { "id": "shares_the_craft", "fit": ["captain"], "requires": { "humanAgeAtLeast": 27 } },
+      { "id": "kin_bound", "fit": [] },
+      { "id": "crowd_darling", "fit": [] }
+    ],
+    "burdens": [
+      { "id": "all_edge", "fit": ["melee"] },
+      { "id": "cold_starter", "fit": ["tank"] },
+      { "id": "prickly", "fit": [] },
+      { "id": "showboat", "fit": ["melee", "ranged"] },
+      { "id": "set_in_ways", "fit": [], "requires": { "humanAgeAtLeast": 28 } },
+      { "id": "counts_every_coin", "fit": [] },
+      { "id": "hot_blood", "fit": ["melee", "tank"] },
+      { "id": "heavy_hands", "fit": ["melee", "tank"] }
+    ],
+    "_fitNote": "A hybrid class fits if either of its archetypes fits. 'captain' fits the club captain and the vice-captain."
+  },
+
+  "autoPick": {
+    "_doc": "Used by AI clubs always, and by player fighters whose levelUpMode is not manual (per fighter, or the club default). Score each option and take the highest; ties: stat over skill, then the lower option index. stat score = 5 x ratingWeight_i x (gain / 100) x emphasisPreference + staminaBonus (stamina only, by current effective stamina). skill score = combat's value for the item (perks.json aiPreferences; the rank formula in combat-skills.md section 5; skillDefaultValue if absent) x skillPreference. Trait offer: take the option with the higher rollWeight x fit if it is a boon or edge; never take a burden; else neither.",
+    "emphasisPreference": { "emphasised": 1.15, "other": 0.9, "balanced": 1.0 },
+    "staminaBonusByStamina": [[0, 0.7], [10, 0.45], [13, 0.2], [16, 0]],
+    "skillDefaultValue": 1.0,
+    "playerModes": [
+      { "id": "manual", "label": "Ask me", "skillPreference": 1.0 },
+      { "id": "auto", "label": "Auto (balanced)", "skillPreference": 1.0 },
+      { "id": "auto_stats", "label": "Auto (favour stats)", "skillPreference": 0.6 },
+      { "id": "auto_skills", "label": "Auto (favour skills)", "skillPreference": 1.5 }
+    ],
+    "playerClubDefault": "manual",
+    "aiMode": "auto"
+  },
+
+  "pacing": {
+    "_doc": "Whether a level-up opens the level-up dialog after the match report. It never blocks Continue: unanswered level-ups wait in the queue (offers.pending).",
+    "presets": {
+      "detailed": "open the dialog after the match report for every manual fighter",
+      "balanced": "open it only for manual fighters who started a round of the match; others show a 'Level-ups (n)' badge",
+      "fast": "never open it; manual fighters keep a badge, and the queue auto-resolves when full"
+    },
+    "default": "detailed",
+    "_defaultNote": "M1.1 playtest default, so the owner sees every level-up (as combat's pauseBetweenRounds 'always'); recommended 'balanced' after the playtest."
+  },
+
+  "levelEta": {
+    "_doc": "Replaces the M1 development trend. Shown per fighter: level, XP bar (xp / xpNeeded), levels this season, and 'next level in about N matches' with N = ceil((xpNeeded - xp) / expected XP per match); expected = this season's mean match XP when he started a round (or as a reserve if he has not), default 32 starter / 11 reserve before his first match."
+  },
+
+  "stamina": {
+    "_doc": "New physical attribute id 'stamina' (1-20; agreed with combat: id, rating weight and statEmphasis are in combat's proposed classes.json; no in-fight effect under the owner's between-rounds rule). Generated like every physical stat: cap100 from P, the class offset (classes.json statEmphasis.stamina; classEmphasisFallback by affinityGroup only if a class lacks it), the race tendency (races.json statTendencies.stamina), capOffsetPoints and a wider jitter. Current value = cap x physical maturity at generation; it grows only through level-up picks and declines with the physical wear table.",
+    "classEmphasisFallback": { "frontline": 1.2, "skirmisher": 1.2, "ranged": 1.0, "caster": 0.9, "support": 0.9 },
+    "capOffsetPoints": 2.5,
+    "jitterPoints": 3.0
+  },
+
+  "freshness": {
+    "_doc": "T003 plus the owner's round rule. Per-fighter meter 0-100 (100 = fully rested), stored in tenths (0-1000); the sim and the UI receive floor(value / 10). It never changes during combat. When a round ends, each fighter who started it loses roundDrain; the new value applies from the start of the next round of the same match (combat reads freshness per round) and carries into later weeks. At each week processing of a matchweek or tournament week in which he started no round: += rest (x squadReserveRestShare if he was a match-squad reserve who never entered). Each preseason week: += preseason. Season-end step: = seasonEndReset. Clamp 0-100.",
+    "start": 100,
+    "storageUnitsPerPoint": 10,
+    "drainAt0": 11.88,
+    "drainPerStaminaPoint": -0.48,
+    "drainMin": 2,
+    "drainMax": 12,
+    "intensityBase": 0.55,
+    "intensityPerDuration": 0.25,
+    "intensityDurationRefS": 30,
+    "intensityPerDamage": 0.2,
+    "intensityDowned": 0.12,
+    "intensityMin": 0.6,
+    "intensityMax": 1.5,
+    "youngHumanAgeBelow": 21,
+    "youngDrainMult": 1.1,
+    "restAt0": 30,
+    "restPerStaminaPoint": 1.0,
+    "squadReserveRestShare": 0.8,
+    "preseasonWeekRecovery": 50,
+    "recoveryAgeMult": [[0, 1.0], [31, 0.85], [35, 0.7]],
+    "seasonEndReset": 100,
+    "threshold": 60,
+    "labels": [
+      { "id": "fresh", "label": "Fresh", "min": 80, "icon": "fresh_full" },
+      { "id": "ready", "label": "Ready", "min": 60, "icon": "fresh_ready" },
+      { "id": "tired", "label": "Tired", "min": 40, "icon": "fresh_tired" },
+      { "id": "spent", "label": "Spent", "min": 0, "icon": "fresh_spent" }
+    ],
+    "betweenRounds": "At each between-round step (combat's applyBetweenRound) every squad member who is active or an unused reserve, not withdrawn and not injured, gains his freshnessBetweenRounds total (perk Second Breath +8; none otherwise), after that round's drain and before the next round; clamp 100.",
+    "withdrawn": "A fighter swapped out (withdrawn) cannot return in that match (owner ruling); his freshness reflects only the rounds he played: no drain and no between-round gain after he leaves. He started a round that week, so he gets no weekly rest that week.",
+    "injuryMultPerPointBelow": 0.006,
+    "injuryMultMax": 1.4,
+    "_formulas": "base = clamp(drainAt0 + drainPerStaminaPoint x stamina, drainMin, drainMax). intensity = clamp(intensityBase + intensityPerDuration x min(2, roundDurationS / intensityDurationRefS) + intensityPerDamage x min(2, damageTaken / maxHp) + intensityDowned x [downed], intensityMin, intensityMax). roundDrain = round(base x intensity x (youngDrainMult if humanAge < youngHumanAgeBelow) x freshnessDrainMult (perk Campaign Legs 0.85) x 10) tenths. rest = round((restAt0 + restPerStaminaPoint x stamina) x recoveryAgeMult(humanAge) x 10) tenths. preseason = round(preseasonWeekRecovery x recoveryAgeMult x 10) tenths. Injury chance in a round x min(injuryMultMax, 1 + injuryMultPerPointBelow x (threshold - freshness)) when freshness at that round's start < threshold. stamina = effective stamina (1-20) at the time of the step. A typical round (30 s, 60% of max HP taken, downed 55% of the time) has intensity about 1.0."
+  },
+
+  "matchSquad": {
+    "_doc": "OWNED BY COMBAT (combat-skills.md: match squad, swaps and match flow). Repeated here only so lifecycle data reads consistently; the combat file is the source of truth and these must match it.",
+    "starters": 5,
+    "reserves": 2,
+    "maxSwapsPerMatch": 2,
+    "swapsBetweenRoundsOnly": true,
+    "swappedOutMayReturn": false
+  },
+
+  "aiRotation": {
+    "_doc": "Lifecycle-side rules the AI applies when it picks its match squad each week (sys-ai-manager owns the lineup; it applies these after choosing its five by rating and role). 1) Rest: each starter whose freshness at the coming lock is < threshold + his typical round drain (Reckoning: < tournamentRestBelow) is replaced by the best fit fighter with freshness >= threshold in the same role family whose rating >= starter rating - (leagueMaxRatingGap + extraGapPerPointBelow x max(0, threshold - starter freshness)); most tired first; at most maxRestsPerMatch. 2) Spent floor: a starter below spentFloorAtLock is replaced by any fit fighter with freshness >= spentFloorAltMin even without a rating match. 3) Reserves: the 2 match-squad reserves are the best remaining fit fighters with freshness >= threshold, one front-line (tank or melee family) and one back-line (ranged, controller or healer family) when available, then by rating.",
+    "leagueMaxRatingGap": 6,
+    "extraGapPerPointBelow": 0.25,
+    "projectOneRound": true,
+    "tournamentRestBelow": 40,
+    "tournamentMaxRatingGap": 3,
+    "maxRestsPerMatch": 3,
+    "spentFloorAtLock": 30,
+    "spentFloorAltMin": 40
+  },
+
+  "aiSubstitution": {
+    "_doc": "Lifecycle inputs to combat's auto-swap procedure (combat-skills.md sys-match 'Auto-swap'; combat.patch.json match.autoSwapDefaults). The procedure is combat's: 1) forced injury replacement (an unused reserve, costing a swap; else an emergency entrant from outside the squad, no swap; never 4 v 5); 2) threshold: active fighters with freshness < freshnessBelow (+ lostRoundThresholdBonus if the side lost the round just played), lowest first, each swapped for the best-fit unused reserve with freshness >= the starter's + reserveMargin and rating >= the starter's - maxRatingGap (same role family first); 3) keepOneForInjury: the last swap is not used for freshness before the last possible between-round step. A swapped-out fighter cannot return. Lifecycle supplies the per-personality freshnessBelow (economy.json aiPersonalities ids) and proposes lostRoundThresholdBonus to combat.",
+    "freshnessBelowByPersonality": { "balanced": 40, "thrifty": 35, "star_chasing": 30, "youth_focused": 50, "veteran": 40 },
+    "playerAutoDefault": 40,
+    "lostRoundThresholdBonus": 10,
+    "reserveMargin": 15,
+    "maxRatingGap": 6,
+    "keepOneForInjury": true,
+    "sameRoleFamilyFirst": true,
+    "freshnessBelow": 40
+  },
+
+  "hooks": {
+    "_doc": "Lifecycle functions the core/game match orchestrator calls (combat-skills.md Operation contract). All pure; all randomness from the injury stream keyed by fixture, round and fighter.",
+    "freshnessAfterRound": "after each round, for every fighter who started it: freshness -= roundDrain (from RoundOutput.aftermath damageTaken, downed and the round duration)",
+    "xpAfterRound": "after each round, for every fighter who started it: round XP (development.json xp) into a per-match accumulator; committed to the fighter at match end with the result",
+    "injuriesAfterRound": "after each round, roll injuries for every fighter who started it (sys-injury, with the freshness multiplier at that round's start); an injured fighter misses every later round of the match; at most one new injury per fighter per match",
+    "freshnessBetweenRounds": "at each between-round step: freshness.betweenRounds",
+    "matchEnd": "commit round XP, then bench XP (benchXp), then check level-ups (xpPerLevel.levelUpsCheckedAt, maxLevelUpsPerMatch) and generate their offers (offers); update still_tender, Losing the Room and season counters"
+  },
+
+  "migration": {
+    "_doc": "State schema upgrade for careers saved before M1.1 (progression.md, Save migration). Every random value comes from Rng.create(rootSeed, 'migration', 'm1.1', fighterId, purpose).",
+    "staminaPurpose": "stamina",
+    "bloomPurpose": "stamina-bloom",
+    "freshness": 100,
+    "carrySeasonXpIntoBar": true,
+    "pendingLevelUps": 0
+  },
+
+  "soakTargets": {
+    "_doc": "Additions to development.json soakTargets for the M1.1 soak (bands for the real sim).",
+    "starterLevelsPerSeasonByHumanAge": { "18-20 potential>=70": [4.0, 6.5], "21-23": [3.0, 4.5], "24-26 potential 50-65": [2.2, 3.5], "27-30": [1.6, 2.8], "31-34": [0.9, 2.0], "35+": [0.4, 1.3] },
+    "matchesPerLevelMidCohort": [4.0, 6.0],
+    "benchLevelsToStarterLevelsRatio": [0.25, 0.45],
+    "aiTiredRoundStartShareMax": 0.36,
+    "aiSpentRoundStartShareMax": 0.12,
+    "starterStaminaMedian": [10, 14]
+  },
+
+  "simAssumptions": {
+    "_doc": "Used only by the designer's scratch model; NOT game rules.",
+    "skillTakeRate": 0.5,
+    "tiredRatingPenalty": 3
+  }
+}

@@ -4,6 +4,7 @@
  */
 import type { ContentDB } from '../content';
 import type { ClubId, Fighter, FighterId, FighterMatchStats, FixtureId, GameState, MatchResult, StatId, TacticsPresetId, WeekId } from '../model';
+import { trainFromClocks } from './levels';
 import { effectiveStatsOf, ratingOf } from './stats';
 import { tables } from './tables';
 
@@ -15,7 +16,8 @@ export function withStats(fighter: Fighter, content: ContentDB, values: Partial<
     cap100[id] = (values[id] ?? fallback) * 100;
     zero[id] = 0;
   }
-  return { ...fighter, cap100, bloom: { ...zero }, wear100: { ...zero }, dev100: { physical: 2800, mental: 4000 }, traits: [], statuses: [], injury: null };
+  const out: Fighter = { ...fighter, cap100, bloom: { ...zero }, wear100: { ...zero }, dev100: { physical: 2800, mental: 4000 }, traits: [], statuses: [], injury: null };
+  return { ...out, train100: trainFromClocks(out, content) };
 }
 
 export interface RoundSpec {

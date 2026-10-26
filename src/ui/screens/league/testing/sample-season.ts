@@ -507,6 +507,11 @@ export function buildSampleSeason(base: GameState, content: ContentDB, opts: Sam
       injuries: 0,
       traitsGained: [],
       traitsLost: [],
+      levelStart: null,
+      levelEnd: null,
+      stamina: null,
+      benchXp: null,
+      tiredRoundStarts: null,
     });
   }
 
@@ -742,6 +747,11 @@ function applyReview(state: GameState, content: ContentDB, season: number): void
       injuries: f.injury ? 1 : 0,
       traitsGained: [],
       traitsLost: [],
+      levelStart: null,
+      levelEnd: null,
+      stamina: null,
+      benchXp: null,
+      tiredRoundStarts: null,
     });
     f.age += 1;
     f.injury = null;

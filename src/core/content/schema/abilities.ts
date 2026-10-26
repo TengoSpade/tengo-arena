@@ -60,7 +60,11 @@ export type EffectPredicate =
   | { p: 'fight_time_below'; seconds: number }
   | { p: 'fight_time_at_least'; seconds: number }
   | { p: 'ally_downed_within'; seconds: number }
-  | { p: 'any'; of: EffectPredicate[] };
+  | { p: 'any'; of: EffectPredicate[] }
+  // M1.1 (perks): start-of-round facts, constant for the round.
+  | { p: 'self_is_captain' }
+  | { p: 'self_freshness_below'; pct: number }
+  | { p: 'self_fresh_entry' };
 
 export const EffectPredicateSchema: z.ZodType<EffectPredicate> = z.lazy(() =>
   z.discriminatedUnion('p', [
@@ -77,6 +81,9 @@ export const EffectPredicateSchema: z.ZodType<EffectPredicate> = z.lazy(() =>
     z.object({ p: z.literal('fight_time_at_least'), seconds: z.number() }).strict(),
     z.object({ p: z.literal('ally_downed_within'), seconds: z.number() }).strict(),
     z.object({ p: z.literal('any'), of: z.array(EffectPredicateSchema).min(1) }).strict(),
+    z.object({ p: z.literal('self_is_captain') }).strict(),
+    z.object({ p: z.literal('self_freshness_below'), pct: z.number() }).strict(),
+    z.object({ p: z.literal('self_fresh_entry') }).strict(),
   ]),
 );
 
@@ -318,6 +325,10 @@ export interface Trigger {
   target: TriggerTarget;
   internalCooldownS: number;
   effects: Effect[];
+  /** M1.1: checked when the event happens. */
+  if?: EffectPredicate;
+  /** M1.1: ability_release only. */
+  slot?: 'a1' | 'a2';
 }
 export const TriggerSchema: z.ZodType<Trigger> = z
   .object({
@@ -334,6 +345,8 @@ export const TriggerSchema: z.ZodType<Trigger> = z
     ]),
     internalCooldownS: z.number().nonnegative(),
     effects: z.array(EffectSchema).min(1),
+    if: EffectPredicateSchema.optional(),
+    slot: z.enum(['a1', 'a2']).optional(),
   })
   .strict();
 
@@ -345,6 +358,8 @@ export const PassiveSchema = z
         radiusM: z.number().positive(),
         affects: z.enum(['allies', 'allies_incl_self', 'enemies']),
         statMods: z.array(StatModSchema).min(1),
+        /** M1.1: optional predicate on the aura owner. */
+        requires: EffectPredicateSchema.optional(),
       })
       .strict()
       .nullable(),

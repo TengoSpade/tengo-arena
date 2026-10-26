@@ -1,6 +1,7 @@
 import type { GameTime } from './calendar';
-import type { AbilityId, ClassId, ClubId, FighterId, FixtureId, PaceId, RaceId, RegionId, StatId, TraitId } from './ids';
+import type { AbilityId, ClassId, ClubId, FighterId, FixtureId, PaceId, PerkId, RaceId, RegionId, StatId, TraitId } from './ids';
 import type { Gold } from './ledger';
+import type { AbilityRanks, LevelUpModeSetting, PendingLevelUp, ResolvedLevelUp } from './progression';
 
 /**
  * A fighter. Owners: core/fighters (lifecycle fields), core/economy
@@ -8,8 +9,8 @@ import type { Gold } from './ledger';
  *
  * Stats are DERIVED, never stored (03-fighter-lifecycle schema note 1):
  * `effectiveStats(fighter, context)` in core/fighters computes them from the
- * stored inputs (caps, development clocks, bloom, wear, race, traits,
- * statuses, injury). Rating (1-100) and captaincy (CQ 1-100) are derived the
+ * stored inputs (caps, trained values, wear, race, traits, statuses, injury;
+ * M1.1 v3: `train100` replaces the M1 development clocks). Rating (1-100) and captaincy (CQ 1-100) are derived the
  * same way. Units: "100" fields are hundredths of a stat point (03 §1
  * internalUnitsPerPoint); ages are whole years.
  */
@@ -43,17 +44,41 @@ export interface Fighter {
   cap100: Record<StatId, number>;
   /** Per-stat bloom offset (hundredths of a human-year) on the maturity curve. */
   bloom: Record<StatId, number>;
-  /** Development clocks D_physical / D_mental in hundredths of a human-year. */
+  /** Development clocks D_physical / D_mental in hundredths of a human-year. M1.1 (v3): legacy, frozen after generation (progression.md sys-development). */
   dev100: { physical: number; mental: number };
   /** Accumulated decline per stat in hundredths of a point. */
   wear100: Record<StatId, number>;
   traits: FighterTrait[];
   statuses: FighterStatusEntry[];
   injury: Injury | null;
-  /** Standing training emphasis (M1, cuttable by GameOptions.trainingEmphasis). Routes earned growth only. */
+  /** Standing training emphasis (cuttable by GameOptions.trainingEmphasis). M1.1: weights which stats level-up offers draw. */
   trainingEmphasis: TrainingEmphasis;
   /** Announced last season (retires at season end). */
   finalSeason: boolean;
+
+  // ---- M1.1 progression (state v3; progression.md, combat-skills.md) ---------------------------
+  /**
+   * Trained value per stat in centipoints (13 stats): set once at generation
+   * (cap100 × M_g(D_g + bloom)), raised only by level-up stat picks, clipped
+   * to cap100 by a cap-lowering scar. The developed value of effective stats.
+   */
+  train100: Record<StatId, number>;
+  /** Level, 1 or more; never decreases (initial level from the formula in progression.md). */
+  level: number;
+  /** XP into the current level (carry-over kept). */
+  xpIntoLevel: number;
+  /** XP for the next level, frozen when the level starts and recomputed at season end after age +1 (levels.json xpPerLevel). */
+  xpNeeded: number;
+  /** Level-ups waiting for a choice, oldest first (levels.json offers.pending.maxQueued). Never block Continue. */
+  pendingLevelUps: PendingLevelUp[];
+  /** 'inherit' follows Club.levelUpDefault. */
+  levelUpMode: LevelUpModeSetting;
+  /** Combat sys-ability-ranks: rank 1-3 per rankable slot of the class kit. */
+  abilityRanks: AbilityRanks;
+  /** Combat sys-perks: held perks in pick order (perks.json rules.perkCap, at most rules.maxTier3 of tier III). Permanent. */
+  perkIds: PerkId[];
+  /** sys-freshness: 0-1000 tenths (1000 = fully rested); the sim and UI read floor(freshness10 ÷ 10). */
+  freshness10: number;
 
   career: CareerStats;
   /** Counters of the current season; reset at season end after history is written. */
@@ -85,7 +110,8 @@ export interface PersonName {
 export interface FighterTrait {
   id: TraitId;
   gainedSeason: number;
-  source: 'worldgen' | 'rolled' | 'event' | 'scar';
+  /** 'level' (M1.1): learned from a level-up trait offer (traits.json rollRules.learned). */
+  source: 'worldgen' | 'rolled' | 'event' | 'scar' | 'level';
 }
 
 /** Lifecycle status (development.json statuses), e.g. still_tender, at_risk, snubbed. */
@@ -171,15 +197,32 @@ export interface CareerStats {
   matchweeksAsClubCaptain: number;
   peakRating: number;
   titles: number;
+  /** M1.1: levels gained since the fighter's initial level. */
+  levelsGained: number;
 }
 
 export interface SeasonCounters {
+  /** All XP this season (round XP + bench XP; M1: round XP only). */
   xp: number;
   matchesStarted: number;
   roundsStarted: number;
   emphasisWeeks: Record<TrainingEmphasis, number>;
   captainWeeksByClub: Record<ClubId, number>;
   injuries: number;
+  // ---- M1.1 -----------------------------------------------------------------------------------
+  /** XP from rounds started (retirement usage = min(1, roundXp ÷ 360)). */
+  roundXp: number;
+  /** XP from matches the club played while he started no round (levels.json benchXp). */
+  benchXp: number;
+  /** Level-ups resolved this season, in order. */
+  levelLog: ResolvedLevelUp[];
+  /** Rounds he started Tired (40-59) or Spent (< 40). */
+  tiredRoundStarts: number;
+  spentRoundStarts: number;
+  /** Week processings in which he recovered Freshness (started no round). */
+  restWeeks: number;
+  /** Matches in which he was a squad reserve and never entered. */
+  squadReserveMatches: number;
 }
 
 /** One row per fighter-season (about 20 integers; 03-fighter-lifecycle schema note 7). */
@@ -201,6 +244,13 @@ export interface FighterSeasonRow {
   injuries: number;
   traitsGained: TraitId[];
   traitsLost: TraitId[];
+  // ---- M1.1 (null on rows written before state v3) ----------------------------------------------
+  levelStart: number | null;
+  levelEnd: number | null;
+  /** Effective Stamina at season end. */
+  stamina: number | null;
+  benchXp: number | null;
+  tiredRoundStarts: number | null;
 }
 
 /** Rows of Fighter.history that keep their display stats (FighterSeasonRow.stats). */
@@ -236,6 +286,33 @@ export function emptyCareerStats(): CareerStats {
     matchweeksAsClubCaptain: 0,
     peakRating: 0,
     titles: 0,
+    levelsGained: 0,
+  };
+}
+
+/** The M1.1 progression fields of a fighter (state v3). */
+export type ProgressionFields = Pick<Fighter, 'train100' | 'level' | 'xpIntoLevel' | 'xpNeeded' | 'pendingLevelUps' | 'levelUpMode' | 'abilityRanks' | 'perkIds' | 'freshness10'>;
+
+/** XP per level for hand-built fighters (the lvl-001 worked example); core/fighters initProgression computes the real value. */
+export const PLACEHOLDER_XP_NEEDED = 155;
+
+/**
+ * Progression fields for a hand-built fighter (tests, stand-ins, dev worlds):
+ * the given trained values, level 1, rested, rank 1, no perks. Generated
+ * fighters use core/fighters initProgression (initial level and xpNeeded from
+ * the formulas).
+ */
+export function blankProgression(train100: Record<StatId, number>): ProgressionFields {
+  return {
+    train100: { ...train100 },
+    level: 1,
+    xpIntoLevel: 0,
+    xpNeeded: PLACEHOLDER_XP_NEEDED,
+    pendingLevelUps: [],
+    levelUpMode: 'inherit',
+    abilityRanks: { a1: 1, a2: 1, passive: 1 },
+    perkIds: [],
+    freshness10: 1000,
   };
 }
 
@@ -247,5 +324,12 @@ export function emptySeasonCounters(): SeasonCounters {
     emphasisWeeks: { balanced: 0, body: 0, mind: 0 },
     captainWeeksByClub: {},
     injuries: 0,
+    roundXp: 0,
+    benchXp: 0,
+    levelLog: [],
+    tiredRoundStarts: 0,
+    spentRoundStarts: 0,
+    restWeeks: 0,
+    squadReserveMatches: 0,
   };
 }

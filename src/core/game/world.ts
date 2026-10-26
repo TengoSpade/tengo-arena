@@ -7,7 +7,7 @@
  * lineup by the AI rule (through commands). playerClubId stays null until
  * 'club.choose'.
  */
-import type { ContentDB } from '../content';
+import { clubMatchDefaults, type ContentDB } from '../content';
 import {
   beginTransition,
   setMembership,
@@ -62,7 +62,9 @@ function newClub(content: ContentDB, t: ContentDB['clubs']['list'][number]): Clu
     captainSince: null,
     captainNotFieldedStreak: 0,
     statuses: [],
-    lineup: { fighters: [], matchCaptainId: null, tactics: {} },
+    lineup: { fighters: [], reserves: [], matchCaptainId: null, tactics: {} },
+    // AI defaults; club.choose gives the player's club the player defaults.
+    ...clubMatchDefaults(content, { player: false, personalityId: t.aiPersonality }),
     shortlist: [],
     history: [],
   };

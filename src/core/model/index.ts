@@ -7,6 +7,7 @@ export * from './ids';
 export * from './calendar';
 export type * from './club';
 export * from './fighter';
+export * from './progression';
 export type * from './competition';
 export * from './events';
 export type * from './match';

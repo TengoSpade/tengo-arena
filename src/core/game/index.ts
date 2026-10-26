@@ -128,3 +128,10 @@ export function captaincyPreview(
 }
 
 export { developmentSummary } from './views';
+
+// ---- M1.1 contract (WP-C; docs/design/05 M1.1 addendum) -------------------------------------------
+
+export { applyBetweenRound, autoSwapDecisions, betweenRounds, checkSwaps, finishMatch, playMatchAuto, playRound, roundInputOf, startMatch } from './orchestrator';
+export type { BetweenRoundSideView, BetweenRoundView, LockedSquads, MatchSide, SwapCheck } from './orchestrator';
+export { advance, betweenRoundView, levelUpView } from './live';
+export type { AdvanceOutcome, LevelUpOptionView, LevelUpView } from './live';

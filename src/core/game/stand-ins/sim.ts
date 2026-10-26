@@ -18,7 +18,7 @@ import {
   type RoundResult,
 } from '../../model';
 import { Rng, deriveSeed } from '../../rng';
-import { clamp, hashString, stableStringify } from '../../util';
+import { clamp, hashString, notImplemented, stableStringify } from '../../util';
 import type { GamePorts } from '../ports';
 
 export const STAND_IN_ENGINE_VERSION = 9000;
@@ -155,5 +155,10 @@ function simulateMatch(input: MatchInput, content: ContentDB, options?: SimOptio
 }
 
 export function standInSim(): GamePorts['sim'] {
-  return { simulateMatch, engineVersion: STAND_IN_ENGINE_VERSION };
+  return {
+    simulateMatch,
+    // M1.1 (WP-C adds a rating-coin round when the orchestrator lands).
+    simulateRound: (input, seed, content) => notImplemented('stand-in sim.simulateRound (M1.1 WP-C)', input, seed, content),
+    engineVersion: STAND_IN_ENGINE_VERSION,
+  };
 }

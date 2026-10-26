@@ -32,7 +32,8 @@ export const CORE_MODULE_DEPS: Readonly<Record<string, readonly string[]>> = {
   league: ['util', 'rng', 'model', 'content'],
   economy: ['util', 'rng', 'model', 'content', 'fighters'],
   ai: ['util', 'rng', 'model', 'content', 'tactics', 'fighters', 'league', 'economy'],
-  save: ['util', 'rng', 'model', 'content'],
+  /** fighters: the v2 -> v3 migration derives Stamina and levels with core/fighters (M1.1 contracts). */
+  save: ['util', 'rng', 'model', 'content', 'fighters'],
   game: ['util', 'rng', 'model', 'content', 'tactics', 'sim', 'fighters', 'league', 'economy', 'ai'],
   harness: ['util', 'rng', 'model', 'content', 'tactics', 'sim', 'fighters', 'league', 'economy', 'ai', 'game', 'save'],
   /** Test fixtures; importable only from test files (see TESTKIT rule). */

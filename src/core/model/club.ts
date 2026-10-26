@@ -10,6 +10,7 @@ import type {
   WingId,
 } from './ids';
 import type { Gold } from './ledger';
+import type { AutoSwapRules, LevelUpMode, LevelUpPacing, PauseBetweenRounds } from './progression';
 
 /**
  * A club (player or AI). One rulebook (P-04): the player's club is an
@@ -51,6 +52,16 @@ export interface Club {
 
   /** Next match lineup. AI lineups for week w + 1 are stored at processing w. */
   lineup: Lineup;
+
+  // ---- M1.1 match-day settings (progression.md, combat-skills.md sys-match) --------------------------
+  /** Level-up policy of fighters set to 'inherit': the player's club 'manual', AI clubs 'auto' (levels.json autoPick). */
+  levelUpDefault: LevelUpMode;
+  /** When the level-up dialog opens (player's club; AI clubs never pause). */
+  levelUpPacing: LevelUpPacing;
+  /** Auto-swap rules: suggestions on the player's between-round screen, decisions for AI clubs and unpaused matches. */
+  autoSwap: AutoSwapRules;
+  /** When the player's matches pause between rounds (AI-vs-AI matches never pause). */
+  pauseBetweenRounds: PauseBetweenRounds;
   /** Player's watch list (UI convenience, persisted). Empty for AI clubs. */
   shortlist: FighterId[];
   /** One row per completed season. */
@@ -83,12 +94,15 @@ export interface ClubStatusEntry {
 }
 
 /**
- * The 5 fighters a club fields in its next match, with starting rows and
- * tactics. Locked at match start; no changes during a match in M1 (open-010).
+ * The match squad a club names for its next match: 5 starters with starting
+ * rows and up to 2 reserves (M1.1 sys-match), plus tactics. Locked at match
+ * start; between rounds only swaps change the active five.
  */
 export interface Lineup {
-  /** Up to 5 entries (O1); complete when exactly 5 eligible fighters. Order = slot order. */
+  /** The starters: up to 5 entries (O1); complete when exactly 5 eligible fighters. Order = slot order. */
   fighters: LineupEntry[];
+  /** M1.1: 0-2 squad reserves (combat.json match.squad.reservesMax), distinct from the starters. They enter in the outgoing fighter's slot and row. */
+  reserves: FighterId[];
   /** Match-captain override when neither the club captain nor vice-captain is fielded (open-011). */
   matchCaptainId: FighterId | null;
   /** Tactics per fighter, kept while a reserve; removed when the fighter leaves. */

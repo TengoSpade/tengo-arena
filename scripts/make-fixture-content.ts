@@ -40,6 +40,9 @@ const abilitiesFile = raw['abilities']!;
 abilitiesFile['abilities'] = (abilitiesFile['abilities'] as Json[]).filter((a) => classIds.has(a['classId'] as string));
 const presetsFile = raw['tactics-presets']!;
 presetsFile['presets'] = (presetsFile['presets'] as Json[]).filter((p) => classIds.has(p['classId'] as string));
+// M1.1: one rank row per kept ability; perks and levels stay whole (they are not per class).
+const ranksFile = raw['ability-ranks']!;
+ranksFile['ranks'] = (ranksFile['ranks'] as Json[]).filter((r) => classIds.has(r['classId'] as string));
 
 const check = loadContent('fixture', raw, { profile: 'fixture' });
 if (!check.ok) {

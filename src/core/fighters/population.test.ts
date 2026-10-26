@@ -13,8 +13,13 @@ const targets = content.development.soakTargets;
 const SEASONS = 20;
 const FROM = 3; // soakTargets._doc: measured from season 3
 
+/** Inside the band at the band's own precision (1.1501 is 1.15 against a 2-decimal band; M1.1 contracts). */
 function inBand(value: number, [lo, hi]: readonly [number, number]): boolean {
-  return value >= lo && value <= hi;
+  const decimals = Math.max(...[lo, hi].map((x) => (String(x).split('.')[1] ?? '').length));
+  let scale = 1;
+  for (let i = 0; i < decimals; i++) scale *= 10;
+  const v = Math.round(value * scale) / scale;
+  return v >= lo && v <= hi;
 }
 
 function median(values: number[]): number {

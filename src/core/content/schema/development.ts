@@ -37,6 +37,7 @@ export const DevelopmentFileSchema = z.object({
   }).strict(),
   potential: z.object({
     _doc: z.string().optional(),
+    _staminaNote: z.string().optional(),
     bands: z.array(z.object({
       id: id(),
       min: z.number(),
@@ -136,12 +137,8 @@ export const DevelopmentFileSchema = z.object({
     emphasisBonus: z.number(),
     offEmphasisPenalty: z.number(),
     bodyWearReduction: z.number(),
-    formulas: z.object({
-      physicalDevMult: z.string(),
-      mentalDevMult: z.string(),
-      physicalWearMult: z.string(),
-      a: z.string(),
-    }).strict(),
+    /** Formula notes (designer text; M1.1: a and offerWeight). Never read by code. */
+    formulas: z.record(z.string(), z.string()),
   }).strict(),
   trend: z.object({
     _doc: z.string().optional(),
@@ -155,6 +152,7 @@ export const DevelopmentFileSchema = z.object({
   }).strict(),
   retirement: z.object({
     _doc: z.string().optional(),
+    _usageDoc: z.string().optional(),
     minHumanAge: z.number(),
     forcedHumanAge: z.number(),
     /** D-T: human-age of the physical peak; the age hazard counts the years past it. */
@@ -328,8 +326,13 @@ export const DevelopmentFileSchema = z.object({
       appliesWhen: z.string(),
     }).strict(),
     losingTheRoom: z.object({
+      _doc: z.string().optional(),
       consecutiveMatchesNotFieldedWhileFit: z.number(),
       status: z.string(),
+      /** M1.1: started a round or was named a match-squad reserve. */
+      fieldedMeans: z.string(),
+      /** M1.1: left out of the squad below this freshness at the lock is a rest (neither extends nor resets the count). */
+      freshnessRestExemptBelow: z.number(),
     }).strict(),
     armbandTraitMatchweeks: z.number(),
     aiPolicy: z.string(),
@@ -379,6 +382,7 @@ export const DevelopmentFileSchema = z.object({
   }).strict(),
   soakTargets: z.object({
     _doc: z.string().optional(),
+    _m11Note: z.string().optional(),
     populationDriftMaxPct: z.number(),
     medianHumanAge: z.tuple([z.number(), z.number()]),
     shareHumanAgeAtMost22: z.tuple([z.number(), z.number()]),

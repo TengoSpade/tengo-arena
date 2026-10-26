@@ -20,7 +20,8 @@ describe('human-age (life-001)', () => {
 
 describe('rating is the combat formula (sys-combat-stats, cs-001, cs-002)', () => {
   it('worked-example Oathguard rates 60', () => {
-    const f = withStats(base(), content, { str: 12, agi: 9, pac: 11, tgh: 14, pre: 9, arc: 6, spi: 5, wil: 10, cmp: 13, ldr: 11, awr: 8, dis: 10 });
+    // M1.1: the 13th stat (Stamina 12; weight 0.02) joins the M1 worked example.
+    const f = withStats(base(), content, { str: 12, agi: 9, pac: 11, tgh: 14, pre: 9, stamina: 12, arc: 6, spi: 5, wil: 10, cmp: 13, ldr: 11, awr: 8, dis: 10 });
     expect(rating(f, content)).toBe(60);
   });
   it('all attributes 10 rate 50 for every class', () => {

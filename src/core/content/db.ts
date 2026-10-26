@@ -12,8 +12,13 @@ import type {
   DevelopmentConstants,
   EconomyConstants,
   LeaguesConfig,
+  LevelsConstants,
   NamesConfig,
+  PerkDef,
+  PerkAiPreferences,
+  PerkRules,
   PresetDef,
+  RankRow,
   RaceDef,
   RegionDef,
   StatDef,
@@ -69,6 +74,11 @@ export interface ContentDB {
   readonly names: NamesConfig;
   readonly vocabulary: Vocabulary;
   readonly tacticsLimits: TacticsLimits;
+  /** M1.1 levels.json. */
+  readonly levels: LevelsConstants;
+  /** M1.1 perks.json rules and AI preferences (the catalog is `perks`). */
+  readonly perkRules: PerkRules;
+  readonly perkAiPreferences: PerkAiPreferences;
 
   readonly stats: Registry<StatDef>;
   readonly statuses: Registry<StatusDef>;
@@ -83,6 +93,11 @@ export interface ContentDB {
   readonly venues: Registry<VenueDef>;
   readonly weeks: Registry<CalendarWeekDef>;
   readonly aiPersonalities: Registry<AiPersonalityDef>;
+  /** M1.1 perk catalog. */
+  readonly perks: Registry<PerkDef>;
+
+  /** M1.1: the rank row of an ability (null for an ability without one). */
+  abilityRanks(abilityId: string): RankRow | null;
 
   /** Tier by level (1 = top). Throws for an unknown level. */
   tierByLevel(level: number): TierDef;
@@ -102,6 +117,7 @@ export function buildContentDB(ref: ContentRef, files: ContentFiles, warnings: r
   const weeksByIndex = new Map(files.leagues.calendar.weeks.map((w) => [w.index, w]));
   const classes = createRegistry(files.classes.classes, 'class');
   const abilities = createRegistry(files.abilities.abilities, 'ability');
+  const rankRows = new Map(files['ability-ranks'].ranks.map((r) => [r.abilityId, r]));
   const need = <T>(value: T | undefined, what: string): T => {
     if (value === undefined) throw new InvariantError(`Unknown ${what}`);
     return value;
@@ -117,6 +133,9 @@ export function buildContentDB(ref: ContentRef, files: ContentFiles, warnings: r
     names: files.names,
     vocabulary: files['tactics-presets'].vocabulary,
     tacticsLimits: files['tactics-presets'].limits,
+    levels: files.levels,
+    perkRules: files.perks.rules,
+    perkAiPreferences: files.perks.aiPreferences,
     stats: createRegistry(files.combat.attributes, 'stat'),
     statuses: createRegistry(files.combat.statuses, 'status'),
     classes,
@@ -130,6 +149,8 @@ export function buildContentDB(ref: ContentRef, files: ContentFiles, warnings: r
     venues: createRegistry(files.leagues.venues, 'venue'),
     weeks,
     aiPersonalities: createRegistry(files.economy.aiPersonalities, 'AI personality'),
+    perks: createRegistry(files.perks.perks, 'perk'),
+    abilityRanks: (abilityId) => rankRows.get(abilityId) ?? null,
     tierByLevel: (level) => need(tiersByLevel.get(level), `tier level ${level}`),
     tierProfile: (level) => need(profiles.get(level), `tier profile ${level}`),
     weekByIndex: (index) => need(weeksByIndex.get(index), `calendar week ${index}`),

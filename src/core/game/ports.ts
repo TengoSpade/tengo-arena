@@ -13,7 +13,8 @@ import * as sim from '../sim';
 import * as tactics from '../tactics';
 
 export interface GamePorts {
-  sim: Pick<typeof sim, 'simulateMatch'> & { engineVersion: number };
+  /** M1.1: simulateRound (WP-A) is what the orchestrator calls; simulateMatch stays for the M1 whole-match path and tests. */
+  sim: Pick<typeof sim, 'simulateMatch' | 'simulateRound'> & { engineVersion: number };
   tactics: Pick<typeof tactics, 'resolveTactics'>;
   fighters: Pick<
     typeof fighters,
@@ -38,6 +39,18 @@ export interface GamePorts {
     | 'offseasonRecovery'
     | 'generateRookies'
     | 'announceFinalSeasons'
+    // ---- M1.1 (WP-B contract; 05 M1.1 addendum) ----
+    | 'freshnessOf'
+    | 'freshnessLabel'
+    | 'effectiveLevelUpMode'
+    | 'autoPickChoice'
+    | 'typicalRoundDrain10'
+    | 'freshnessAfterRound'
+    | 'xpAfterRound'
+    | 'injuriesAfterRound'
+    | 'freshnessBetweenRounds'
+    | 'matchEndProgression'
+    | 'resolveLevelUp'
   >;
   league: Pick<
     typeof league,
@@ -96,7 +109,7 @@ export interface GamePorts {
 }
 
 export const realGamePorts: GamePorts = {
-  sim: { simulateMatch: sim.simulateMatch, engineVersion: sim.ENGINE_VERSION },
+  sim: { simulateMatch: sim.simulateMatch, simulateRound: sim.simulateRound, engineVersion: sim.ENGINE_VERSION },
   tactics: { resolveTactics: tactics.resolveTactics },
   fighters: {
     createFighter: fighters.createFighter,
@@ -120,6 +133,17 @@ export const realGamePorts: GamePorts = {
     offseasonRecovery: fighters.offseasonRecovery,
     generateRookies: fighters.generateRookies,
     announceFinalSeasons: fighters.announceFinalSeasons,
+    freshnessOf: fighters.freshnessOf,
+    freshnessLabel: fighters.freshnessLabel,
+    effectiveLevelUpMode: fighters.effectiveLevelUpMode,
+    autoPickChoice: fighters.autoPickChoice,
+    typicalRoundDrain10: fighters.typicalRoundDrain10,
+    freshnessAfterRound: fighters.freshnessAfterRound,
+    xpAfterRound: fighters.xpAfterRound,
+    injuriesAfterRound: fighters.injuriesAfterRound,
+    freshnessBetweenRounds: fighters.freshnessBetweenRounds,
+    matchEndProgression: fighters.matchEndProgression,
+    resolveLevelUp: fighters.resolveLevelUp,
   },
   league: {
     nextCalendar: league.nextCalendar,

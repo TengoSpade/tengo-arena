@@ -164,13 +164,66 @@ describe('parseSave error codes', () => {
 
 describe('migrations', () => {
   it('MIGRATIONS lead from schema version 1 to the current one', () => {
-    expect(MIGRATIONS.map((m) => [m.from, m.to])).toEqual([[1, 2]]);
-    expect(STATE_SCHEMA_VERSION).toBe(2);
+    expect(MIGRATIONS.map((m) => [m.from, m.to])).toEqual([
+      [1, 2],
+      [2, 3],
+    ]);
+    expect(STATE_SCHEMA_VERSION).toBe(3);
+  });
+
+  /** A v3 state as a v2 save wrote it: the M1.1 fields removed (in place on a clone). */
+  function stripToV2(s: Record<string, any>): Record<string, any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+    delete s.liveMatch;
+    for (const c of Object.values(s.clubs) as any[]) { // eslint-disable-line @typescript-eslint/no-explicit-any
+      delete c.lineup.reserves;
+      for (const k of ['levelUpDefault', 'levelUpPacing', 'autoSwap', 'pauseBetweenRounds']) delete c[k];
+    }
+    for (const f of Object.values(s.fighters) as any[]) { // eslint-disable-line @typescript-eslint/no-explicit-any
+      for (const k of ['train100', 'level', 'xpIntoLevel', 'xpNeeded', 'pendingLevelUps', 'levelUpMode', 'abilityRanks', 'perkIds', 'freshness10']) delete f[k];
+      for (const k of ['roundXp', 'benchXp', 'levelLog', 'tiredRoundStarts', 'spentRoundStarts', 'restWeeks', 'squadReserveMatches']) delete f.season[k];
+      delete f.career.levelsGained;
+      for (const m of ['cap100', 'bloom', 'wear100']) delete f[m].stamina;
+      for (const row of f.history) for (const k of ['levelStart', 'levelEnd', 'stamina', 'benchXp', 'tiredRoundStarts']) delete row[k];
+    }
+    return s;
+  }
+
+  function v2SaveOf(state: GameState): string {
+    const s = stripToV2(cloneJson(state) as unknown as Record<string, any>); // eslint-disable-line @typescript-eslint/no-explicit-any
+    s.schemaVersion = 2;
+    const env = { ...envelopeOf(state), schemaVersion: 2, checksum: checksumState(s as unknown as GameState), state: s };
+    return JSON.stringify(env);
+  }
+
+  it('v2 -> v3: Stamina, train100, levels, Freshness and club defaults; shown stats unchanged; deterministic (mig-001, mig-002)', () => {
+    const state = world();
+    for (const f of Object.values(state.fighters)) f.season.xp = 40;
+    const json = v2SaveOf(state);
+    const r = parseSave(json, content);
+    expect(r.ok ? null : r.error).toBeNull();
+    if (!r.ok) return;
+    const st = r.value.envelope.state;
+    expect(r.value.migratedFrom).toBe(2);
+    expect(st.schemaVersion).toBe(3);
+    expect(validateState(st, content)).toEqual([]);
+    for (const f of Object.values(st.fighters)) {
+      const before = state.fighters[f.id]!;
+      for (const s of content.stats.list) if (s.id !== 'stamina') expect(f.train100[s.id as never]).toBe(before.train100[s.id as never]);
+      expect(f.cap100['stamina' as never]).toBeGreaterThanOrEqual(200);
+      expect(f.xpIntoLevel).toBe(Math.min(40, f.xpNeeded - 1));
+      expect(f.freshness10).toBe(1000);
+      expect(f.pendingLevelUps).toEqual([]);
+      expect(f.season.roundXp).toBe(40);
+    }
+    expect(st.clubs[st.playerClubId!]!.levelUpDefault).toBe('manual');
+    expect(Object.values(st.clubs).filter((c) => c.id !== st.playerClubId).every((c) => c.levelUpDefault === 'auto')).toBe(true);
+    const again = parseSave(json, content);
+    expect(again.ok && JSON.stringify(again.value.envelope.state)).toBe(JSON.stringify(st));
   });
 
   /** A v1 save of the fixture world: one retired fighter still in `fighters`, an agreed renewal as a negotiation. */
   function v1Save(): { json: string; retiredId: FighterId; renewedId: FighterId; injuredId: FighterId } {
-    const s = cloneJson(world()) as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const s = stripToV2(cloneJson(world()) as unknown as Record<string, any>); // eslint-disable-line @typescript-eslint/no-explicit-any
     delete s.alumni;
     s.schemaVersion = 1;
     const fighters = Object.values(s.fighters) as any[]; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -194,7 +247,7 @@ describe('migrations', () => {
     if (!r.ok) return;
     const st = r.value.envelope.state;
     expect(r.value.migratedFrom).toBe(1);
-    expect(st.schemaVersion).toBe(2);
+    expect(st.schemaVersion).toBe(3);
     expect(st.fighters[v1.retiredId]).toBeUndefined();
     expect(st.alumni[v1.retiredId]).toMatchObject({ id: v1.retiredId, cause: 'age' });
     expect(st.fighters[v1.renewedId]!.contract!.next).toEqual({ wagePerWeek: 777, endSeason: st.fighters[v1.renewedId]!.contract!.endSeason });
@@ -215,11 +268,12 @@ describe('migrations', () => {
     expect(r.ok ? null : r.error.code).toBe('save.checksum');
   });
 
+  // The runner itself, one version past the current one.
   const state = world();
-  const v2 = serializeSave(envelopeOf(state));
+  const v3 = serializeSave(envelopeOf(state));
   const renameClub: Migration = {
-    from: 2,
-    to: 3,
+    from: 3,
+    to: 4,
     migrate(s) {
       const st = s as GameState;
       for (const c of Object.values(st.clubs)) c.shortName = `${c.shortName}*`;
@@ -228,22 +282,22 @@ describe('migrations', () => {
   };
 
   it('runs each step in order and reports migratedFrom', () => {
-    const r = parseSaveWith(v2, content, { migrations: [renameClub], currentVersion: 3 });
+    const r = parseSaveWith(v3, content, { migrations: [renameClub], currentVersion: 4 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.migratedFrom).toBe(2);
-    expect(r.value.envelope.schemaVersion).toBe(3);
-    expect(r.value.envelope.state.schemaVersion).toBe(3);
+    expect(r.value.migratedFrom).toBe(3);
+    expect(r.value.envelope.schemaVersion).toBe(4);
+    expect(r.value.envelope.state.schemaVersion).toBe(4);
     expect(Object.values(r.value.envelope.state.clubs).every((c) => c.shortName.endsWith('*'))).toBe(true);
     expect(r.value.envelope.checksum).toBe(checksumState(r.value.envelope.state));
   });
 
   it('save.migration when a step is missing or throws', () => {
-    const missing = parseSaveWith(v2, content, { migrations: [], currentVersion: 3 });
+    const missing = parseSaveWith(v3, content, { migrations: [], currentVersion: 4 });
     expect(missing.ok ? null : missing.error.code).toBe('save.migration');
-    const throwing = parseSaveWith(v2, content, {
-      migrations: [{ from: 2, to: 3, migrate: () => { throw new Error('boom'); } }],
-      currentVersion: 3,
+    const throwing = parseSaveWith(v3, content, {
+      migrations: [{ from: 3, to: 4, migrate: () => { throw new Error('boom'); } }],
+      currentVersion: 4,
     });
     expect(throwing.ok ? null : throwing.error.code).toBe('save.migration');
   });

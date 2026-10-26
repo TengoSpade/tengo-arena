@@ -1,7 +1,8 @@
 import type { Seed } from '../rng';
 import type { StartingRow, TacticsAssignment } from './club';
 import type { FixtureStage } from './competition';
-import type { AbilityId, ClassId, ClubId, CompetitionId, FighterId, FixtureId, RaceId, StatId, TraitId, WeekId } from './ids';
+import type { AbilityId, ClassId, ClubId, CompetitionId, FighterId, FixtureId, PerkId, RaceId, StatId, TraitId, WeekId } from './ids';
+import type { AbilityRanks } from './progression';
 
 // ---- Sim inputs (core/game builds them; core/sim consumes them) ------------------------------
 
@@ -43,6 +44,45 @@ export interface FightFighterInput {
   rating: number;
   /** Optional per-fighter hooks (combat.json combatModsDefaults). */
   combatMods?: { hpMult?: number; armorFlat?: number; wardFlat?: number; moveSpeedMult?: number; tenacityFlat?: number };
+  // ---- M1.1 per-round fields (combat-skills.md sys-fight-freshness, sys-ability-ranks, sys-perks). Absent = the M1 default. ----
+  /** Freshness 0-100 at the start of this round (default 100: no penalty). */
+  freshness?: number;
+  /** Ability ranks (default all 1). */
+  abilityRanks?: AbilityRanks;
+  /** Held perks, 0-4 (default none). */
+  perkIds?: PerkId[];
+  /** Entered from the reserves, or as an emergency entrant, for this round (default false). */
+  enteredThisRound?: boolean;
+}
+
+/** M1.1: one round's sim input (simulateRound). Each side holds exactly the 5 active fighters, with the per-round fields set. */
+export interface RoundInput {
+  round: number;
+  home: SideInput;
+  away: SideInput;
+}
+
+/** M1.1: what one round did to a fighter who started it (sim RoundOutput.aftermath): input to drain, XP and immediate injuries. */
+export interface RoundAftermath {
+  fighterId: FighterId;
+  side: 'home' | 'away';
+  /** Damage taken this round (points) and max HP. */
+  damageTaken: number;
+  maxHp: number;
+  downed: boolean;
+  /** Largest single hit taken this round (points). */
+  largestHit: number;
+  /** The down, if downed. */
+  downCause: DownRecord | null;
+  /** Downs credited to him this round. */
+  downsInflicted: number;
+}
+
+/** M1.1: a played round as the lifecycle hooks see it (core/game passes it to core/fighters). */
+export interface RoundOutcome {
+  /** The completed round (round number, winner, duration). */
+  result: RoundResult;
+  aftermath: RoundAftermath[];
 }
 
 // ---- Committed result ------------------------------------------------------------------------
@@ -74,6 +114,129 @@ export interface MatchResult {
   mvpFighterId: FighterId | null;
   /** Hired blades used by either side (open-006). */
   hiredBladeIds: FighterId[];
+  // ---- M1.1 round-by-round records (absent on results written before state v3: whole-match M1 sims) ----
+  /** The squads fixed at the lineup lock. */
+  squads?: { home: MatchSquad; away: MatchSquad };
+  /** Lock-time fight inputs of reserves and emergency entrants (the round-1 five are in `input`). */
+  reserveInputs?: { home: FightFighterInput[]; away: FightFighterInput[] };
+  /** Who fought each round, with the per-round values: with `input` and `reserveInputs` it rebuilds every RoundInput exactly (replays never re-run decision policies). */
+  roundLineups?: RoundLineups[];
+  /** One record per between-round step that was played. */
+  betweenRounds?: BetweenRoundRecord[];
+  emergencyEntrants?: FighterId[];
+}
+
+// ---- M1.1 squads, swaps and the between-round step (combat-skills.md sys-match) ----------------
+
+/** A club's match squad at the lock: 5 starters (slot order) and 0-2 reserves. */
+export interface MatchSquad {
+  starters: FighterId[];
+  reserves: FighterId[];
+  rows: Record<FighterId, StartingRow>;
+  captainId: FighterId | null;
+  viceCaptainId: FighterId | null;
+}
+
+/** One side's proposed swap at a between-round step (the entering fighter takes the outgoing fighter's slot; row defaults to his). */
+export interface SwapDecision {
+  out: FighterId;
+  in: FighterId;
+  row?: StartingRow;
+}
+
+export type SwapReason = 'player' | 'auto' | 'injury' | 'emergency';
+
+export interface SwapRecord {
+  out: FighterId;
+  in: FighterId;
+  row: StartingRow;
+  reason: SwapReason;
+  /** False only for emergency entrants. */
+  costsSwap: boolean;
+}
+
+/** Why a proposed swap was refused (checked in this order; combat.json match.swaps). */
+export type SwapRejection = 'match_decided' | 'no_swaps_left' | 'not_active' | 'not_a_reserve' | 'reserve_unfit' | 'duplicate';
+
+export interface BetweenRoundRecord {
+  afterRound: number;
+  home: SwapRecord[];
+  away: SwapRecord[];
+  /** Injured in the round just played (they play no later round). */
+  injured: FighterId[];
+  /** Acting captain for the next round. */
+  actingCaptain: { home: FighterId | null; away: FighterId | null };
+  /** Freshness 0-100 of every squad member after the step. */
+  freshness: Record<FighterId, number>;
+}
+
+/** One side of one round: the active five in slot order and the per-round values. */
+export interface RoundSideLineup {
+  fighterIds: FighterId[];
+  rows: StartingRow[];
+  captainIndex: number;
+  viceCaptainIndex: number | null;
+  /** CQ the acting captain fought with (interim penalty applied). */
+  captainQuality: number;
+  /** Freshness 0-100 at the round start, by slot. */
+  freshness: number[];
+  /** Entered for this round, by slot. */
+  entered: boolean[];
+}
+
+export interface RoundLineups {
+  round: number;
+  home: RoundSideLineup;
+  away: RoundSideLineup;
+}
+
+export type MatchPhase = 'round_pending' | 'between_rounds' | 'done';
+
+/** One side's state carried between rounds. */
+export interface MatchSideState {
+  clubId: ClubId;
+  squad: MatchSquad;
+  /** The active five for the next round, by slot, and their rows. */
+  active: FighterId[];
+  rows: StartingRow[];
+  /** Swapped out: they can never return in this match (owner ruling). */
+  withdrawn: FighterId[];
+  unusedReserves: FighterId[];
+  swapsUsed: number;
+  injured: FighterId[];
+  emergencyEntrants: FighterId[];
+  actingCaptainId: FighterId | null;
+  /** Fighters entering for the next round (enteredThisRound). */
+  entering: FighterId[];
+}
+
+/**
+ * A match in progress (persisted in GameState.liveMatch while the player's
+ * match waits at a between-round step; P-05: every completed round and
+ * decision is committed, a reload resumes on the same screen).
+ */
+export interface MatchState {
+  fixtureId: FixtureId;
+  /** Match seed: round seeds are deriveSeed(seed, 'round', n). */
+  seed: Seed;
+  bestOf: number;
+  phase: MatchPhase;
+  score: { home: number; away: number };
+  /** Completed rounds. */
+  rounds: RoundResult[];
+  roundLineups: RoundLineups[];
+  betweenRounds: BetweenRoundRecord[];
+  home: MatchSideState;
+  away: MatchSideState;
+  /** Lock-time MatchInput (sides hold the round-1 five). */
+  input: MatchInput;
+  /** Lock-time fight input of every squad member and entrant, by fighter id. */
+  inputsById: Record<FighterId, FightFighterInput>;
+  /** Accumulated over the rounds played. */
+  fighterStats: Record<FighterId, FighterMatchStats>;
+  hiredBladeIds: FighterId[];
+  /** The player's decisions for the pending between-round step (match.swap); null = accept the auto-swap suggestions. */
+  playerDecisions: SwapDecision[] | null;
 }
 
 export type RoundTiebreakStep = 'fighters_standing' | 'hp_fraction_sum' | 'damage_dealt' | 'first_down' | 'seeded_coin';

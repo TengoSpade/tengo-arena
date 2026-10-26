@@ -18,6 +18,7 @@ export {
   type AppStore,
 } from './create-store';
 export { coreEngine, EngineContext, useEngine, safeView, type GameEngine } from './engine';
+export { matchDayFacade, useMatchDay, type MatchDayFacade, type PendingLevelUps } from './match-day';
 export { errorText, blockerText } from './messages';
 export {
   settings,

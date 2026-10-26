@@ -33,9 +33,23 @@ export type {
   RuleParamSpec,
   ContentFiles,
   ContentFileName,
+  PerkLifecycleEffect,
+  RankChange,
 } from './schema';
 
 export type CombatConstants = ContentFiles['combat'];
+/** M1.1 levels.json (lifecycle: XP, levels, offers, Freshness, AI rotation and auto-swap inputs). */
+export type LevelsConstants = ContentFiles['levels'];
+export type PerkDef = ContentFiles['perks']['perks'][number];
+export type PerkRules = ContentFiles['perks']['rules'];
+export type PerkAiPreferences = ContentFiles['perks']['aiPreferences'];
+export type RankRow = ContentFiles['ability-ranks']['ranks'][number];
+export type FreshnessPenaltyConstants = CombatConstants['freshness'];
+export type MatchSquadConstants = CombatConstants['match'];
+export type AutoSwapDefaults = CombatConstants['match']['autoSwapDefaults'];
+export type FreshnessLevelsConstants = LevelsConstants['freshness'];
+export type FreshnessLabelDef = LevelsConstants['freshness']['labels'][number];
+export type TraitOfferEntry = LevelsConstants['traitOfferPool']['positive'][number];
 export type DevelopmentConstants = ContentFiles['development'];
 export type EconomyConstants = ContentFiles['economy'];
 export type LeaguesConfig = ContentFiles['leagues'];

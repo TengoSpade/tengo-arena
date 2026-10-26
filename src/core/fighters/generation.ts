@@ -11,6 +11,7 @@
  */
 import type { ContentDB, RaceDef } from '../content';
 import {
+  blankProgression,
   putFighter,
   allocateId,
   emptyCareerStats,
@@ -28,6 +29,7 @@ import {
 import { Rng, STREAM } from '../rng';
 import { checkThresholds, gainTrait, pickScar } from './acquired';
 import { BP, bp, roundN, stepLookup, truncN } from './fixed';
+import { initProgression } from './levels';
 import { generateNameWith, livingNames } from './names';
 import { humanAge100Of, potentialOf, ratingOf } from './stats';
 import { tables } from './tables';
@@ -206,6 +208,7 @@ export function createFighterOn(draft: GameState, spec: GenerationSpec, content:
     history: [],
     learnedAbilityIds: [],
     academy: null,
+    ...blankProgression({} as Record<StatId, number>),
   };
 
   // 10. veteran history: pro seasons, career rounds, history scars, acquired thresholds once
@@ -244,6 +247,8 @@ export function createFighterOn(draft: GameState, spec: GenerationSpec, content:
   }
 
   fighter.career.peakRating = ratingOf(fighter, content);
+  // 11. M1.1: trained values, initial level, XP per level, rested.
+  initProgression(fighter, content);
   fighter.name = generateNameWith(Rng.create(root, STREAM.names, season, id), fighter.raceId, content, livingNames(draft));
   putFighter(draft, fighter);
   return id;

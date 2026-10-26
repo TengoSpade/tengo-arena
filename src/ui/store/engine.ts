@@ -79,6 +79,13 @@ export interface GameEngine {
   developmentSummary?: (state: GameState, season: number) => readonly DevelopmentSummaryRow[];
   presetsForClass: typeof tactics.presetsForClass;
   describeRule: typeof tactics.describeRule;
+  // ---- M1.1 (optional so test fakes can omit them; WP-D screens read them through store/match-day.ts) ----
+  /** Continue: advanceWeek, or play on a live match to its next pause (core/game advance). */
+  advance?: typeof game.advance;
+  betweenRoundView?: typeof game.betweenRoundView;
+  levelUpView?: typeof game.levelUpView;
+  freshnessOf?: typeof fighters.freshnessOf;
+  freshnessLabel?: typeof fighters.freshnessLabel;
   // saves (core/save)
   saveMetaFor: typeof save.saveMetaFor;
   createSave: typeof save.createSave;
@@ -115,6 +122,11 @@ export const coreEngine: GameEngine = {
   developmentSummary: game.developmentSummary,
   presetsForClass: tactics.presetsForClass,
   describeRule: tactics.describeRule,
+  advance: game.advance,
+  betweenRoundView: game.betweenRoundView,
+  levelUpView: game.levelUpView,
+  freshnessOf: fighters.freshnessOf,
+  freshnessLabel: fighters.freshnessLabel,
   saveMetaFor: save.saveMetaFor,
   createSave: save.createSave,
   serializeSave: save.serializeSave,

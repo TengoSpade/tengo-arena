@@ -155,6 +155,10 @@ export const TraitsFileSchema = z
         revealOrder: z
           .object({ _doc: note(), byCategory: categoryCounts, negativeTraitsAlwaysTier: int() })
           .strict(),
+        /** M1.1: traits offered on level-up (levels.json offers.traitOffer); held with source 'level'. */
+        learned: z
+          .object({ _doc: note(), source: z.literal('level'), maxRolledAndLearned: int().positive(), neverOffered: z.array(z.string()) })
+          .strict(),
       })
       .strict(),
     categories: z.array(

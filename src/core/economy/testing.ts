@@ -31,7 +31,7 @@ import type {
   VenueId,
   WeekId,
 } from '../model';
-import { allocateId, asId, emptyCareerStats, emptySeasonCounters } from '../model';
+import { allocateId, asId, blankProgression, emptyCareerStats, emptySeasonCounters } from '../model';
 import { Rng } from '../rng';
 
 export interface DoubleValues {
@@ -96,6 +96,7 @@ export function plainFighter(id: FighterId, content: ContentDB, overrides: Parti
     history: [],
     learnedAbilityIds: [],
     academy: null,
+    ...blankProgression(perStat(1200)),
     ...overrides,
   };
 }

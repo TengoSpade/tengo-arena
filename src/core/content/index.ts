@@ -19,6 +19,8 @@ export { formatContentIssues } from './issues';
 export type { ContentIssue } from './issues';
 export { buildContentDB, createRegistry } from './db';
 export { combatRating } from './rating';
+export { autoSwapRulesFor, clubMatchDefaults } from './match-defaults';
+export type { ClubMatchDefaults } from './match-defaults';
 export type { ContentDB, Registry } from './db';
 export * from './types';
 export {
@@ -66,4 +68,17 @@ export {
   TOURNAMENT_ROUNDS,
   STANDINGS_TIEBREAKERS,
   ROUND_TIEBREAKS,
+  // M1.1
+  PERK_TAGS,
+  PERK_ARCHETYPES,
+  PERK_LIFECYCLE_EFFECTS,
+  RANKABLE_SLOTS,
+  RANK_FAMILIES,
+  RANK_CHANGE_KINDS,
+  LEVEL_UP_MODES,
+  LEVEL_UP_PACING,
+  AUTO_SWAP_MODES,
+  PAUSE_BETWEEN_ROUNDS,
+  FRESHNESS_LABELS,
+  SWAP_REJECTIONS,
 } from './schema';

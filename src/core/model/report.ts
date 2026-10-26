@@ -86,6 +86,8 @@ export interface WeekReport {
   /** Ledger entries written: seq in [ledgerSeqFrom, ledgerSeqTo). */
   ledgerSeqFrom: number;
   ledgerSeqTo: number;
+  /** M1.1: player-club level-ups gained this week (fighter, level reached), for the pacing dialog and badges. Absent = none. */
+  levelUps?: { fighterId: FighterId; level: number }[];
 }
 
 /** Returned by runSeasonEnd for the season review screens. */

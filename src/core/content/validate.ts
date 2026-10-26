@@ -12,10 +12,16 @@ import type { ContentIssue } from './issues';
 import {
   AFFINITY_GROUPS,
   ARCHETYPE_IDS,
+  AUTO_SWAP_MODES,
   BANDS,
+  FRESHNESS_LABELS,
   HYBRID_PAIR_IDS,
   INJURY_SEVERITIES,
+  LEVEL_UP_MODES,
   LIFECYCLE_STATUS_IDS,
+  PAUSE_BETWEEN_ROUNDS,
+  PERK_TAGS,
+  RANKABLE_SLOTS,
   RULE_ACTIONS,
   RULE_CONDITIONS,
   RULE_PREDICATES,
@@ -584,5 +590,245 @@ export function validateContentFiles(f: ContentFiles, profile: ValidationProfile
     if (!profileLevels.has(Number(level))) c.error(EF, `ai.replacementRatingByTier.${level}`, `no tier level ${level}`);
   }
 
+  validateM11(c, f, { abilityById, statusById, traitById });
   return c.issues;
+}
+
+// ---- M1.1: levels.json, perks.json, ability-ranks.json, stamina, squads and Freshness -------------------------
+
+interface M11Ctx {
+  abilityById: ReadonlyMap<string, ContentFiles['abilities']['abilities'][number]>;
+  statusById: ReadonlyMap<string, ContentFiles['combat']['statuses'][number]>;
+  traitById: ReadonlyMap<string, ContentFiles['traits']['traits'][number]>;
+}
+
+/** Resolve a JSON pointer (RFC 6901) to its parent container and key; null when a step is missing. */
+function pointerParent(root: unknown, path: string): { parent: Record<string, unknown> | unknown[]; key: string } | null {
+  const steps = path.split('/').slice(1).map((s) => s.replace(/~1/g, '/').replace(/~0/g, '~'));
+  let node: unknown = root;
+  for (let i = 0; i < steps.length - 1; i++) {
+    if (node === null || typeof node !== 'object') return null;
+    node = (node as Record<string, unknown>)[steps[i]!];
+  }
+  if (node === null || typeof node !== 'object') return null;
+  return { parent: node as Record<string, unknown>, key: steps[steps.length - 1]! };
+}
+
+/** The unit key of a pointer: its last non-index step ("/effects/0/durationS" -> "durationS"). */
+function pointerUnitKey(path: string): string {
+  const steps = path.split('/').filter((s) => s !== '' && !/^\d+$/.test(s));
+  return steps[steps.length - 1] ?? '';
+}
+
+type AbilityLike = ContentFiles['abilities']['abilities'][number];
+
+function hardControlDurations(a: AbilityLike, statusById: M11Ctx['statusById']): string {
+  const out: string[] = [];
+  const visit = (e: Effect, p: string): void => {
+    if (e.type === 'status' && statusById.get(e.status)?.category === 'cc_hard') out.push(`${p}=${e.durationS}`);
+  };
+  forEachEffect(a.effects, 'effects', visit);
+  forEachEffect(a.allyEffects, 'allyEffects', visit);
+  forEachEffect(a.selfEffects, 'selfEffects', visit);
+  a.passive?.triggers.forEach((t, ti) => forEachEffect(t.effects, `passive.triggers[${ti}].effects`, visit));
+  return out.join();
+}
+
+function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
+  const { combat, classes, abilities, traits, levels, perks, economy } = f;
+  const ranks = f['ability-ranks'];
+  const { abilityById, statusById, traitById } = ctx;
+
+  // ---- combat.json M1.1 blocks (squad, swaps, auto-swap, Freshness penalty) ----
+  const CF = 'combat.json';
+  const m = combat.match;
+  checkClosedList(c, CF, 'match.autoSwapModes', m.autoSwapModes, AUTO_SWAP_MODES, 'auto-swap modes');
+  checkClosedList(c, CF, 'match.pauseBetweenRounds.options', m.pauseBetweenRounds.options, PAUSE_BETWEEN_ROUNDS, 'pause options');
+  if (m.squad.reservesMin > m.squad.reservesMax) c.error(CF, 'match.squad', 'reservesMin > reservesMax');
+  if (m.swaps.maxPerMatch > m.squad.reservesMax) c.warn(CF, 'match.swaps.maxPerMatch', 'more swaps than reserves (only injuries could use them)');
+  const fz = combat.freshness;
+  if (fz.fullPenaltyAtOrBelow >= fz.thresholdBelow) c.error(CF, 'freshness.fullPenaltyAtOrBelow', 'must be below thresholdBelow');
+  if (fz.resistClamp[0] > fz.resistClamp[1]) c.error(CF, 'freshness.resistClamp', 'min > max');
+  if (fz.default < fz.thresholdBelow) c.error(CF, 'freshness.default', 'the default freshness must carry no penalty');
+
+  // ---- classes.json: 13 weights summing to 1, stamina weight and emphasis ----
+  const KF = 'classes.json';
+  classes.classes.forEach((k, i) => {
+    const p = `classes[${i}]`;
+    const sum = Object.values(k.ratingWeights).reduce((s, w) => s + w, 0);
+    if (Math.abs(sum - 1) > 1e-6) c.error(KF, `${p}.ratingWeights`, `weights sum to ${sum.toFixed(4)}, expected exactly 1 (M1.1)`);
+    if (k.ratingWeights.stamina !== 0.02) c.error(KF, `${p}.ratingWeights.stamina`, 'stamina weighs 0.02 in every class (progression sys-stamina)');
+    const se = k.statEmphasis.stamina;
+    if (se < 0.5 || se > 2) c.error(KF, `${p}.statEmphasis.stamina`, `${se} outside 0.5-2.0`);
+  });
+
+  // ---- ability-ranks.json ----
+  const AR = 'ability-ranks.json';
+  checkClosedList(c, AR, 'eligibility.rankableSlots', ranks.eligibility.rankableSlots, RANKABLE_SLOTS, 'rankable slots');
+  const rowIds = new Set<string>();
+  ranks.ranks.forEach((row, i) => {
+    const p = `ranks[${i}]`;
+    if (rowIds.has(row.abilityId)) c.error(AR, `${p}.abilityId`, `duplicate rank row for "${row.abilityId}"`);
+    rowIds.add(row.abilityId);
+    const ab = abilityById.get(row.abilityId);
+    if (!ab) {
+      c.error(AR, `${p}.abilityId`, `unknown ability "${row.abilityId}"`);
+      return;
+    }
+    if (row.classId !== ab.classId) c.error(AR, `${p}.classId`, `ability "${ab.id}" belongs to class "${ab.classId}"`);
+    if (row.slot !== ab.slot) c.error(AR, `${p}.slot`, `ability "${ab.id}" is a "${ab.slot}" ability`);
+    if (row.rankable !== (ab.kind !== 'basic')) c.error(AR, `${p}.rankable`, 'exactly the non-basic abilities rank');
+    if (!row.rankable) {
+      if (row.ranks.length) c.error(AR, `${p}.ranks`, 'basic attacks have no ranks');
+      return;
+    }
+    if (row.ranks.map((r) => r.rank).join() !== '2,3') {
+      c.error(AR, `${p}.ranks`, 'rankable abilities list rank 2 then rank 3');
+      return;
+    }
+    const hard = hardControlDurations(ab, statusById);
+    const work = structuredClone(ab) as AbilityLike;
+    row.ranks.forEach((r, ri) => {
+      r.changes.forEach((ch, ci) => {
+        const cp = `${p}.ranks[${ri}].changes[${ci}]`;
+        const at = pointerParent(work, ch.path);
+        const cur = at ? (at.parent as Record<string, unknown>)[at.key] : undefined;
+        if (typeof cur !== 'number') {
+          c.error(AR, `${cp}.path`, `"${ch.path}" is not a number in "${ab.id}"`);
+          return;
+        }
+        if (Math.abs(cur - ch.from) > 1e-9) c.error(AR, `${cp}.from`, `${ch.from} but "${ab.id}${ch.path}" is ${cur} at this rank`);
+        (at!.parent as Record<string, unknown>)[at!.key] = ch.to;
+        const rule = unitRuleForKey(pointerUnitKey(ch.path));
+        if (rule && !isExact(ch.to, rule.factor)) c.error(AR, `${cp}.to`, `${ch.to} does not convert exactly to ${rule.unit}`);
+      });
+      const rp = `${p}.ranks[${ri}]`;
+      if (hardControlDurations(work, statusById) !== hard) c.error(AR, rp, 'ranks never change hard-control durations');
+      if (work.kind === 'active') {
+        if (work.cooldownS < 1) c.error(AR, rp, `rank ${r.rank} cooldown ${work.cooldownS} s is below 1 s`);
+        if (work.focusCost < 10) c.error(AR, rp, `rank ${r.rank} focus cost ${work.focusCost} is below 10`);
+      }
+      const capCheck = (e: Effect, ep: string): void => {
+        if (e.type !== 'status' || e.magnitude === undefined) return;
+        const st = statusById.get(e.status);
+        if (st && st.cap !== null && Math.abs(e.magnitude) > st.cap + 1e-9) c.error(AR, rp, `rank ${r.rank} ${ep}.magnitude exceeds the "${st.id}" cap ${st.cap}`);
+      };
+      forEachEffect(work.effects, 'effects', capCheck);
+      forEachEffect(work.allyEffects, 'allyEffects', capCheck);
+      forEachEffect(work.selfEffects, 'selfEffects', capCheck);
+    });
+  });
+  for (const a of abilities.abilities) if (!rowIds.has(a.id)) c.error(AR, 'ranks', `no rank row for ability "${a.id}"`);
+
+  // ---- perks.json ----
+  const PF = 'perks.json';
+  checkClosedList(c, PF, 'tags', perks.tags, PERK_TAGS, 'perk tags');
+  checkUnique(c, PF, 'perks', perks.perks, 'perk id');
+  checkUniqueValues(c, PF, 'perks[].name', perks.perks.map((x) => x.name), 'perk name');
+  const perkById = new Map(perks.perks.map((x) => [x.id, x]));
+  const simEffectTypes = new Set(traits.effectTypes.filter((t) => t.owner === 'sim').map((t) => t.id));
+  perks.perks.forEach((pk, i) => {
+    const p = `perks[${i}]`;
+    const tierRule = perks.rules.tiers[String(pk.tier) as '1' | '2' | '3'];
+    if (tierRule && pk.requires.minPerksHeld < tierRule.minPerksHeld) {
+      c.error(PF, `${p}.requires.minPerksHeld`, `tier ${pk.tier} needs at least ${tierRule.minPerksHeld} perks held`);
+    }
+    if (pk.tier === 3 && pk.requires.anyPerks.length === 0) c.error(PF, `${p}.requires.anyPerks`, 'tier III perks list a lower-tier prerequisite');
+    pk.requires.anyPerks.forEach((q, qi) => {
+      const pre = perkById.get(q);
+      if (!pre) c.error(PF, `${p}.requires.anyPerks[${qi}]`, `unknown perk "${q}"`);
+      else {
+        if (pre.tier >= pk.tier) c.error(PF, `${p}.requires.anyPerks[${qi}]`, `"${q}" is not a lower tier`);
+        if (pre.archetype !== pk.archetype && pre.archetype !== 'general') c.error(PF, `${p}.requires.anyPerks[${qi}]`, `"${q}" is neither ${pk.archetype} nor general`);
+      }
+    });
+    pk.exclusiveWith.forEach((q, qi) => {
+      const other = perkById.get(q);
+      if (!other) c.error(PF, `${p}.exclusiveWith[${qi}]`, `unknown perk "${q}"`);
+      else if (q === pk.id) c.error(PF, `${p}.exclusiveWith[${qi}]`, 'a perk cannot exclude itself');
+      else if (!other.exclusiveWith.includes(pk.id)) c.error(PF, `${p}.exclusiveWith[${qi}]`, `"${q}" does not exclude "${pk.id}" (exclusions are symmetric)`);
+    });
+    pk.tags.forEach((t, ti) => {
+      if (!perks.tags.includes(t)) c.error(PF, `${p}.tags[${ti}]`, `tag "${t}" is not in the file's tags`);
+    });
+    pk.traitEffects.forEach((e, ei) => {
+      if (!simEffectTypes.has(e.type)) c.error(PF, `${p}.traitEffects[${ei}]`, `"${e.type}" is not a sim-owned trait effect (management effects belong in lifecycleEffects)`);
+    });
+    const noHard = (e: Effect, ep: string): void => {
+      if (e.type === 'status' && statusById.get(e.status)?.category === 'cc_hard') c.error(PF, `${p}.${ep}`, `perks never apply hard control ("${e.status}")`);
+      if (e.type === 'status') {
+        const st = statusById.get(e.status);
+        if (st && e.magnitude !== undefined && st.cap !== null && Math.abs(e.magnitude) > st.cap + 1e-9) c.error(PF, `${p}.${ep}.magnitude`, `exceeds the "${st.id}" cap ${st.cap}`);
+      }
+    };
+    pk.passive?.triggers.forEach((t, ti) => forEachEffect(t.effects, `passive.triggers[${ti}].effects`, noHard));
+  });
+  for (const key of Object.keys(perks.aiPreferences.tagWeights)) {
+    if (!(ARCHETYPE_IDS as readonly string[]).includes(key)) c.error(PF, `aiPreferences.tagWeights.${key}`, `unknown archetype "${key}"`);
+  }
+  if (perks.rules.maxTier3 > perks.rules.perkCap) c.error(PF, 'rules.maxTier3', 'exceeds perkCap');
+
+  // ---- levels.json ----
+  const LV = 'levels.json';
+  const x = levels.xpPerLevel;
+  checkCurveAscending(c, LV, 'xpPerLevel.ageFactorPhysical', x.ageFactorPhysical);
+  checkCurveAscending(c, LV, 'xpPerLevel.ageFactorMental', x.ageFactorMental);
+  checkCurveAscending(c, LV, 'xpPerLevel.gapFactor', x.gapFactor);
+  checkCurveAscending(c, LV, 'autoPick.staminaBonusByStamina', levels.autoPick.staminaBonusByStamina);
+  checkCurveAscending(c, LV, 'freshness.recoveryAgeMult', levels.freshness.recoveryAgeMult);
+  if (x.min > x.max) c.error(LV, 'xpPerLevel', 'min > max');
+  checkClosedList(c, LV, 'autoPick.playerModes', levels.autoPick.playerModes.map((p) => p.id), LEVEL_UP_MODES, 'level-up modes');
+  const fr = levels.freshness;
+  checkClosedList(c, LV, 'freshness.labels', fr.labels.map((l) => l.id), FRESHNESS_LABELS, 'freshness labels');
+  const mins = fr.labels.map((l) => l.min);
+  if (mins.some((v, i) => i > 0 && v >= mins[i - 1]!) || mins[mins.length - 1] !== 0) {
+    c.error(LV, 'freshness.labels', 'labels are ordered by descending min and the last starts at 0');
+  }
+  if (fr.threshold !== fz.thresholdBelow) c.error(LV, 'freshness.threshold', `must equal combat.json freshness.thresholdBelow (${fz.thresholdBelow})`);
+  if (fr.start !== fz.default) c.error(LV, 'freshness.start', `must equal combat.json freshness.default (${fz.default})`);
+  if (fr.drainMin > fr.drainMax || fr.intensityMin > fr.intensityMax) c.error(LV, 'freshness', 'drain and intensity clamps need min <= max');
+  // matchSquad repeats combat.json match (combat owns it).
+  const sq = levels.matchSquad;
+  const sameAs = (path: string, mine: unknown, theirs: unknown, theirPath: string): void => {
+    if (mine !== theirs) c.error(LV, path, `${String(mine)} differs from combat.json ${theirPath} (${String(theirs)}); combat owns this value`);
+  };
+  sameAs('matchSquad.starters', sq.starters, m.squad.starters, 'match.squad.starters');
+  sameAs('matchSquad.reserves', sq.reserves, m.squad.reservesMax, 'match.squad.reservesMax');
+  sameAs('matchSquad.maxSwapsPerMatch', sq.maxSwapsPerMatch, m.swaps.maxPerMatch, 'match.swaps.maxPerMatch');
+  sameAs('matchSquad.swappedOutMayReturn', sq.swappedOutMayReturn, m.swaps.returnAllowed, 'match.swaps.returnAllowed');
+  const as = levels.aiSubstitution;
+  const d = m.autoSwapDefaults;
+  sameAs('aiSubstitution.freshnessBelow', as.freshnessBelow, d.freshnessBelow, 'match.autoSwapDefaults.freshnessBelow');
+  sameAs('aiSubstitution.playerAutoDefault', as.playerAutoDefault, d.freshnessBelow, 'match.autoSwapDefaults.freshnessBelow');
+  sameAs('aiSubstitution.reserveMargin', as.reserveMargin, d.reserveMargin, 'match.autoSwapDefaults.reserveMargin');
+  sameAs('aiSubstitution.maxRatingGap', as.maxRatingGap, d.maxRatingGap, 'match.autoSwapDefaults.maxRatingGap');
+  sameAs('aiSubstitution.keepOneForInjury', as.keepOneForInjury, d.keepOneForInjury, 'match.autoSwapDefaults.keepOneForInjury');
+  sameAs('aiSubstitution.sameRoleFamilyFirst', as.sameRoleFamilyFirst, d.sameRoleFamilyFirst, 'match.autoSwapDefaults.sameRoleFamilyFirst');
+  checkClosedList(
+    c,
+    LV,
+    'aiSubstitution.freshnessBelowByPersonality',
+    Object.keys(as.freshnessBelowByPersonality),
+    economy.aiPersonalities.map((p) => p.id),
+    'AI personalities (economy.json)',
+  );
+  // Trait offers: never physique, acquired or flaw; positives are boons or edges, burdens are burdens.
+  const learned = traits.rollRules.learned;
+  sameAs('offers.traitOffer.maxRolledAndLearned', levels.offers.traitOffer.maxRolledAndLearned, learned.maxRolledAndLearned, 'traits.json rollRules.learned');
+  const checkOffer = (list: readonly { id: string }[], path: string, kinds: readonly string[]): void => {
+    const seen = new Set<string>();
+    list.forEach((e, i) => {
+      const t = traitById.get(e.id);
+      if (seen.has(e.id)) c.error(LV, `${path}[${i}].id`, `duplicate trait "${e.id}"`);
+      seen.add(e.id);
+      if (!t) {
+        c.error(LV, `${path}[${i}].id`, `unknown trait "${e.id}"`);
+        return;
+      }
+      if (t.category === 'physique' || t.category === 'acquired') c.error(LV, `${path}[${i}].id`, `"${e.id}" is a ${t.category} trait (never offered)`);
+      if (!kinds.includes(t.kind)) c.error(LV, `${path}[${i}].id`, `"${e.id}" is a ${t.kind}; this list takes ${kinds.join(' or ')}`);
+    });
+  };
+  checkOffer(levels.traitOfferPool.positive, 'traitOfferPool.positive', ['boon', 'edge']);
+  checkOffer(levels.traitOfferPool.burdens, 'traitOfferPool.burdens', ['burden']);
 }

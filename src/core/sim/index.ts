@@ -12,12 +12,15 @@
  */
 import type { ContentDB } from '../content';
 import type {
+  DownRecord,
   FightFighterInput,
   FightLog,
   FighterId,
   FighterMatchStats,
   MatchInput,
   RecordLevel,
+  RoundAftermath,
+  RoundInput,
   RoundResult,
   SideInput,
 } from '../model';
@@ -128,6 +131,56 @@ export function combatProfile(fighter: FightFighterInput, content: ContentDB): C
     reactionTicks: Math.trunc((us * tb.tps) / 1_000_000),
     focusRegenMilliPerTick: Math.trunc((s.focusRegen0 * (BP + m[ST.focusRegen]!)) / BP),
   };
+}
+
+// ---- M1.1 contract (WP-A; docs/design/05 M1.1 addendum §WP-A) --------------------------------------
+
+/** One round's output (combat-skills.md "Operation contract"): the result, per-fighter stats, aftermath for lifecycle, the log. */
+export interface RoundOutput {
+  result: Omit<RoundResult, 'round' | 'seed'>;
+  fighterStats: Record<FighterId, FighterMatchStats>;
+  /** One entry per fighter who started the round (both sides, slot order home then away). */
+  aftermath: RoundAftermath[];
+  log: FightLog | null;
+}
+
+/**
+ * Play one round of a match (simulateFight with the M1.1 per-round inputs).
+ * Round seed: deriveSeed(matchSeed, 'round', input.round).
+ *
+ * CONTRACTS PHASE: the per-round fields (freshness penalty with
+ * fatigueResist, ability ranks, perk passive blocks, the self_is_captain /
+ * self_freshness_below / self_fresh_entry predicates, the self_hp_below and
+ * ability_release triggers, trigger `if`, aura `requires`) are not applied
+ * yet: a round with defaults (freshness 100, ranks 1, no perks) is
+ * bit-identical to simulateFight, and must stay so (WP-A acceptance).
+ */
+export function simulateRound(input: RoundInput, roundSeed: Seed, content: ContentDB, options?: SimOptions): RoundOutput {
+  const run = runFight(content, roundSeed, input.round, input, options?.record ?? 'none');
+  const aftermath: RoundAftermath[] = [];
+  for (const [side, s] of [['home', input.home], ['away', input.away]] as const) {
+    for (const fi of s.fighters) {
+      const st = run.fighterStats[fi.fighterId];
+      if (!st) continue;
+      const down = st.downs.find((d) => d.round === input.round) ?? null;
+      aftermath.push({
+        fighterId: fi.fighterId,
+        side,
+        damageTaken: st.roundDamageTaken?.[0] ?? st.damageTaken,
+        maxHp: st.roundMaxHp?.[0] ?? down?.maxHp ?? 0,
+        downed: down !== null,
+        largestHit: largestHitOf(st, down),
+        downCause: down,
+        downsInflicted: st.downsInflicted,
+      });
+    }
+  }
+  return { result: run.result, fighterStats: run.fighterStats, aftermath, log: run.log };
+}
+
+/** CONTRACTS PHASE: the downing hit when downed, else 0 (WP-A records the largest hit taken per round). */
+function largestHitOf(_st: FighterMatchStats, down: DownRecord | null): number {
+  return down ? down.hit : 0;
 }
 
 /** Additive: fight-input builders (harness, tests, dev tools). */

@@ -15,9 +15,9 @@ export const BP = 10_000;
 
 // ---- Indices --------------------------------------------------------------------------------
 
-/** Attribute indices (combat.json attributes order). */
-export const ATTR = { str: 0, agi: 1, pac: 2, tgh: 3, pre: 4, arc: 5, spi: 6, wil: 7, cmp: 8, ldr: 9, awr: 10, dis: 11 } as const;
-export const ATTR_IDS = ['str', 'agi', 'pac', 'tgh', 'pre', 'arc', 'spi', 'wil', 'cmp', 'ldr', 'awr', 'dis'] as const;
+/** Sim attribute indices (the sim's own order; M1.1 appends stamina, which has no in-fight formula). */
+export const ATTR = { str: 0, agi: 1, pac: 2, tgh: 3, pre: 4, arc: 5, spi: 6, wil: 7, cmp: 8, ldr: 9, awr: 10, dis: 11, stamina: 12 } as const;
+export const ATTR_IDS = ['str', 'agi', 'pac', 'tgh', 'pre', 'arc', 'spi', 'wil', 'cmp', 'ldr', 'awr', 'dis', 'stamina'] as const;
 
 /** Stat-mod indices; must equal the content's closed STAT_MOD_STATS order (checked at build). */
 export const ST = {
@@ -48,8 +48,10 @@ export const ST = {
   cooldownRate: 24,
   windup: 25,
   displaceImmune: 26,
+  /** M1.1: scales the Freshness penalty (combat.json freshness.resistStat); read by simulateRound. */
+  fatigueResist: 27,
 } as const;
-export const STAT_COUNT = 27;
+export const STAT_COUNT = 28;
 
 /** Status codes: index in the closed STATUS_IDS vocabulary (stable, code-owned). */
 export const STATUS_CODE = new Map<string, number>(STATUS_IDS.map((id, i) => [id, i]));

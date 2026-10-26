@@ -9,7 +9,7 @@
  * from tests, and is replaced by core/game createWorld when WP5 lands.
  * Built on core/testkit makeFixtureFighter (allowed in src/ui/debug).
  */
-import type { ContentDB } from '../../core/content';
+import { clubMatchDefaults, type ContentDB } from '../../core/content';
 import {
   DEFAULT_GAME_OPTIONS,
   asId,
@@ -175,9 +175,11 @@ export function buildDevWorld(content: ContentDB, options: DevWorldOptions = {})
       statuses: [],
       lineup: {
         fighters: lineupIds.map((fighterId) => ({ fighterId, row: content.classes.require(state.fighters[fighterId]!.classId).startingRow })),
+        reserves: [],
         matchCaptainId: null,
         tactics,
       },
+      ...clubMatchDefaults(content, { player: false, personalityId: template.aiPersonality }),
       shortlist: [],
       history: [],
     };
@@ -207,6 +209,7 @@ export function buildDevWorld(content: ContentDB, options: DevWorldOptions = {})
   const playerClubId = options.playerClubId === undefined ? null : options.playerClubId;
   state.playerClubId = playerClubId ? asId<ClubId>(playerClubId) : null;
   if (state.playerClubId) {
+    Object.assign(state.clubs[state.playerClubId]!, clubMatchDefaults(content, { player: true }));
     decorateDevCareer(state, content, state.playerClubId);
   }
   return state;

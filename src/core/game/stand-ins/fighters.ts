@@ -11,6 +11,7 @@ import {
   setMembership,
   allocateId,
   asId,
+  blankProgression,
   emptyCareerStats,
   emptySeasonCounters,
   type ClassId,
@@ -25,7 +26,7 @@ import {
   type StatId,
 } from '../../model';
 import { Rng, STREAM } from '../../rng';
-import { clamp } from '../../util';
+import { clamp, notImplemented } from '../../util';
 import type { GamePorts } from '../ports';
 
 type Port = GamePorts['fighters'];
@@ -79,6 +80,8 @@ function createFighter(draft: GameState, spec: FighterSpec, content: ContentDB):
     history: [],
     learnedAbilityIds: [],
     academy: null,
+    // Stand-in stats are cap − wear: the trained value is the cap.
+    ...blankProgression(cap100),
   };
   putFighter(draft, f);
   return id;
@@ -166,6 +169,11 @@ function seasonEndDevelopment(draft: GameState, content: ContentDB): [] {
       injuries: f.season.injuries,
       traitsGained: [],
       traitsLost: [],
+      levelStart: f.level,
+      levelEnd: f.level,
+      stamina: null,
+      benchXp: f.season.benchXp,
+      tiredRoundStarts: 0,
     });
     if (f.clubId !== null) f.career.proSeasons += 1;
     f.career.peakRating = Math.max(f.career.peakRating, r);
@@ -238,5 +246,17 @@ export function standInFighters(): Port {
     },
     generateRookies,
     announceFinalSeasons: () => [],
+    // ---- M1.1: reads as the real module; hooks are stubs until WP-C needs them in stand-in runs ----
+    freshnessOf: (f) => Math.floor((f.freshness10 ?? 1000) / 10),
+    freshnessLabel: (v) => (v >= 80 ? 'fresh' : v >= 60 ? 'ready' : v >= 40 ? 'tired' : 'spent'),
+    effectiveLevelUpMode: () => 'auto',
+    autoPickChoice: (_f, offer) => ({ optionIndex: offer.options.length > 0 ? 0 : null, traitIndex: null }),
+    typicalRoundDrain10: () => 60,
+    freshnessAfterRound: (...a) => notImplemented('stand-in fighters.freshnessAfterRound (M1.1 WP-C)', ...a),
+    xpAfterRound: (...a) => notImplemented('stand-in fighters.xpAfterRound (M1.1 WP-C)', ...a),
+    injuriesAfterRound: (...a) => notImplemented('stand-in fighters.injuriesAfterRound (M1.1 WP-C)', ...a),
+    freshnessBetweenRounds: (...a) => notImplemented('stand-in fighters.freshnessBetweenRounds (M1.1 WP-C)', ...a),
+    matchEndProgression: (...a) => notImplemented('stand-in fighters.matchEndProgression (M1.1 WP-C)', ...a),
+    resolveLevelUp: (...a) => notImplemented('stand-in fighters.resolveLevelUp (M1.1 WP-C)', ...a),
   };
 }

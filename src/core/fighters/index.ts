@@ -30,6 +30,10 @@ import type {
   RegionId,
   RetirementRecord,
   StatId,
+  LevelUpResolution,
+  MatchState,
+  ResolvedLevelUp,
+  RoundOutcome,
 } from '../model';
 import { captaincyAt, chemistryBreakdown, isFitFighter } from './captaincy';
 import { createFighterOn } from './generation';
@@ -48,6 +52,9 @@ import {
 } from './season';
 import { effectiveStatsOf, fighterHumanAge100, potentialOf, ratingOf } from './stats';
 import { lockLineup, weekly } from './weekly';
+import { migrateFightersV3 } from './levels';
+import * as progression from './progression';
+import type { EngineError, Result } from '../util';
 
 /** Run a lifecycle step that can change ratings or fitness: memoized derived values are dropped before and after (./memo.ts). */
 function mutating<T>(step: () => T): T {
@@ -228,3 +235,65 @@ export { rolledPolarity, scarCount } from './traits';
 export { usageBpOf } from './development';
 export { PROVISIONAL_JOURNEYMAN_HUMAN_AGE } from './generation';
 export { lifecycleContentIssues } from './invariants';
+
+// ---- M1.1 contract (WP-B; docs/design/05 M1.1 addendum) -----------------------------------------
+// Implemented in the contracts phase (./levels.ts): levels, XP per level, Freshness reads, the v2 -> v3 migration.
+// Stubs (./progression.ts, NotImplementedError): offers, auto-pick, drain and recovery, match hooks, level-up resolution.
+
+export {
+  freshnessInjuryMultBp,
+  freshnessLabel,
+  freshnessOf,
+  initProgression,
+  initialLevel,
+  levelMentorMult,
+  physicalWeightShare,
+  trainFromClocks,
+  trainedRating,
+  xpNeededFor,
+} from './levels';
+export type { XpNeededContext } from './levels';
+export { autoPickChoice, effectiveLevelUpMode, levelEtaMatches, levelOptionLegal, typicalRoundDrain10, weeklyRest10 } from './progression';
+export type { LevelUpChoice, MatchProgressionOutcome } from './progression';
+
+/** v2 -> v3 save migration of every fighter (core/save migrateV2ToV3; progression.md §6). */
+export function migrateFightersToV3(state: GameState, content: ContentDB): void {
+  mutating(() => migrateFightersV3(state, content));
+}
+
+/** Orchestrator hook after each round: Freshness drain. */
+export function freshnessAfterRound(draft: GameState, ms: MatchState, outcome: RoundOutcome, content: ContentDB): void {
+  mutating(() => progression.freshnessAfterRound(draft, ms, outcome, content));
+}
+
+/** Orchestrator hook after each round: round XP. */
+export function xpAfterRound(draft: GameState, ms: MatchState, outcome: RoundOutcome, content: ContentDB): void {
+  mutating(() => progression.xpAfterRound(draft, ms, outcome, content));
+}
+
+/** Orchestrator hook after each round: immediate injuries; returns the newly injured. */
+export function injuriesAfterRound(draft: GameState, ms: MatchState, outcome: RoundOutcome, content: ContentDB): FighterId[] {
+  return mutating(() => progression.injuriesAfterRound(draft, ms, outcome, content));
+}
+
+/** Orchestrator hook at each between-round step: perk Freshness gains. */
+export function freshnessBetweenRounds(draft: GameState, ms: MatchState, content: ContentDB): void {
+  mutating(() => progression.freshnessBetweenRounds(draft, ms, content));
+}
+
+/** Match end: bench XP, level-ups and offers, auto-resolution. */
+export function matchEndProgression(draft: GameState, result: MatchResult, content: ContentDB): progression.MatchProgressionOutcome {
+  return mutating(() => progression.matchEndProgression(draft, result, content));
+}
+
+/** Resolve one pending level-up (levelup.choose, policies, a full queue, season end). */
+export function resolveLevelUp(
+  draft: GameState,
+  fighterId: FighterId,
+  level: number,
+  choice: progression.LevelUpChoice,
+  how: LevelUpResolution,
+  content: ContentDB,
+): Result<ResolvedLevelUp, EngineError> {
+  return mutating(() => progression.resolveLevelUp(draft, fighterId, level, choice, how, content));
+}

@@ -29,7 +29,7 @@ describe('loadContent: fixture content', () => {
     expect(db.ref.id).toBe('fixture');
     expect(db.ref.hash).toMatch(/^[0-9a-f]{32}$/);
     expect(db.classes.list.length).toBe(6);
-    expect(db.stats.list.map((s) => s.id)).toHaveLength(12);
+    expect(db.stats.list.map((s) => s.id)).toHaveLength(13);
     expect(db.tierByLevel(1).level).toBe(1);
     expect(db.weekByIndex(1).index).toBe(1);
     const k = db.classes.list[0]!;
@@ -164,6 +164,6 @@ describe('units', () => {
   });
 
   it('every content file name has a schema', () => {
-    expect(CONTENT_FILE_NAMES).toHaveLength(11);
+    expect(CONTENT_FILE_NAMES).toHaveLength(14);
   });
 });

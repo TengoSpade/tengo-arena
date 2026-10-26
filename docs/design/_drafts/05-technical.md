@@ -118,7 +118,7 @@ util <- rng <- model <- content <- tactics <- sim
                 content <- fighters <- economy
                 content <- league
 ai      -> tactics, fighters, league, economy (+ foundation)
-save    -> util, rng, model, content
+save    -> util, rng, model, content, fighters (M1.1: the v2 -> v3 migration)
 game    -> everything above except save, harness, testkit
 harness -> everything in core except testkit
 testkit -> util, rng, model, content; importable only from *.test.ts(x) and src/ui/debug/** (dev tooling)
@@ -311,6 +311,7 @@ Reference machine: **OPEN (tech)** until the owner names one; working reference 
 | M1.2 Parallel build | WP1–WP7 in separate worktrees | each package's acceptance criteria (§9.2) with `npm run check` green on a rebase onto `main` |
 | M1.3 Integration | WP5 (integrator) with WP6 | stubs replaced as packages merge; a full season headless (soak) and in the browser |
 | M1.4 Verification and polish | QA tester (browser), WP1 (balance), WP5 (soak), UI designer review | all M1 rows of §10 with recorded evidence |
+| M1.1 Playtest round 1 (after M1) | architect contracts, then WP-A to WP-D | contracts, state v3, migration and work packages: [05-technical-m1.1.md](05-technical-m1.1.md) |
 
 ### 9.2 Work packages for parallel coding agents
 

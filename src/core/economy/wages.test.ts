@@ -152,7 +152,7 @@ describe('renewal situation (le-011)', () => {
   it('low usage +1,000, three seasons at the club −300, loyalty −200 per point', () => {
     const { s, f } = brannoc(world(), BANNER_P50, 360);
     addPlayedFixture(s, content, { weekIndex: 5, home: BANNER_P50, away: asId('keelwick-tarhands'), winner: BANNER_P50 });
-    f.history = [1, 2, 3].map((season) => ({ season, age: 20, clubId: BANNER_P50, rating: 50, potential: 60, stats: {}, xp: 0, usageBp: 0, injuries: 0, traitsGained: [], traitsLost: [] }));
+    f.history = [1, 2, 3].map((season) => ({ season, age: 20, clubId: BANNER_P50, rating: 50, potential: 60, stats: {}, xp: 0, usageBp: 0, injuries: 0, traitsGained: [], traitsLost: [], levelStart: null, levelEnd: null, stamina: null, benchXp: null, tiredRoundStarts: null }));
     f.traits.push(trait('wore_the_armband'));
     setWeek(s, content, 6);
     expect(askDetails(s, f, BANNER_P50, 2, content).situationBp).toBe(1000 - 300 - 200);

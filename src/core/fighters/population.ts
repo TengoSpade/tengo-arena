@@ -11,7 +11,7 @@
  * pipeline (XP, injuries, development) runs on synthetic MatchResults.
  * Randomness of the stand-ins comes from STREAM.soak.
  */
-import type { ContentDB } from '../content';
+import { clubMatchDefaults, type ContentDB } from '../content';
 import {
   setMembership,
   createEmptyGameState,
@@ -124,7 +124,8 @@ function makeClub(content: ContentDB, t: ContentDB['clubs']['list'][number]): Cl
     captainSince: null,
     captainNotFieldedStreak: 0,
     statuses: [],
-    lineup: { fighters: [], matchCaptainId: null, tactics: {} },
+    lineup: { fighters: [], reserves: [], matchCaptainId: null, tactics: {} },
+    ...clubMatchDefaults(content, { player: false, personalityId: t.aiPersonality }),
     shortlist: [],
     history: [],
   };
