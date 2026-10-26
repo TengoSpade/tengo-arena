@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClubId } from '../../core/model';
+import { buildFixtureWorld, fixtureContent } from '../../core/testkit';
 import { createTestStore } from '../debug/test-store';
 import { coreEngine, isTicketSlot, type AppStore } from '../store';
 import { snapshot } from './launcher';
@@ -64,8 +65,8 @@ describe('ticket reproduction', () => {
 describe('career id', () => {
   it('is new for every new career (same seed too), kept in its saves and restored by a load', async () => {
     const { store, clock } = createTestStore();
-    // The dev world has no saved id: a legacy key from seed and club.
-    expect(store.careerId.value).toBe(`seed-${store.game.value!.rng.root}-${store.playerClubId.value}`);
+    // The dev world has no saved id: a short stable key from seed and club.
+    expect(store.careerId.value).toMatch(/^seed-[0-9a-f]{12}$/);
     await store.newGame({ seed: 'same-seed' });
     const first = store.careerId.value;
     expect(first).toMatch(/^c-[0-9a-f]{16}$/);
@@ -82,4 +83,18 @@ describe('career id', () => {
     const state = JSON.parse(serializeCareer(store.engine, snapshot(store))!) as { meta: { careerId?: string } };
     expect(state.meta.careerId).toBe(first);
   }, 20_000);
+
+  it('keeps the fallback key short: a career on a 500-character seed saves and loads with the real core', async () => {
+    const { store } = createTestStore({ world: 'none', engine: coreEngine });
+    const world = structuredClone(buildFixtureWorld());
+    world.rng.root = 's'.repeat(500);
+    store.replaceWorld(world, fixtureContent());
+    const key = store.careerId.value!;
+    expect(key).toMatch(/^seed-[0-9a-f]{12}$/);
+    expect((await store.save('manual-1')).ok).toBe(true);
+    const loaded = await store.load('manual-1');
+    expect(loaded.ok, JSON.stringify(loaded)).toBe(true);
+    expect(store.game.value!.rng.root).toHaveLength(500);
+    expect(store.careerId.value).toBe(key);
+  });
 });

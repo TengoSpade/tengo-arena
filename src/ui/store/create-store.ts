@@ -34,7 +34,7 @@ import {
 } from '../../core/model';
 import { isValidSeed, seedFromEntropy } from '../../core/rng';
 import { ENGINE_VERSION } from '../../core/sim';
-import { deepFreeze, engineError, err, NotImplementedError, ok, type EngineError, type Result } from '../../core/util';
+import { deepFreeze, engineError, err, hashString, NotImplementedError, ok, type EngineError, type Result } from '../../core/util';
 import { AUTOSAVE_SLOTS, MANUAL_SLOT_COUNT } from '../../platform/save-store';
 import { showToast } from '../components/Toast';
 import { configureFormat } from '../format';
@@ -125,7 +125,8 @@ export function createGameStore(platform: StorePlatform): AppStore {
   const ownCareerId = signal<string | null>(null);
   const careerId = computed(() => {
     const g = game.value;
-    return g ? (ownCareerId.value ?? `seed-${g.rng.root}-${g.playerClubId ?? 'none'}`) : null;
+    // Saves from before career ids: a short stable key from seed and club (seeds can be 128 characters).
+    return g ? (ownCareerId.value ?? `seed-${hashString(`${g.rng.root}|${g.playerClubId ?? ''}`).slice(0, 12)}`) : null;
   });
   let commandSeq = 1;
   let playtimeBase = 0;
