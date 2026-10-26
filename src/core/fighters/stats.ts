@@ -1,8 +1,9 @@
 /**
  * Derived values (sys-fighters "Effective stats", sys-combat-stats "Rating").
  *
- *   developed100_i = cap100_i × M_g(D_g + bloom_i)          (interpolated curve, truncated)
- *   base100_i      = max(100, developed100_i − wear100_i)
+ *   train100_i     = the trained value (M1.1, state v3): cap100_i × M_g(D_g + bloom_i) at
+ *                    generation (developed100), then raised only by level-up stat picks
+ *   base100_i      = max(100, train100_i − wear100_i)
  *   eff100_i       = base100_i + 100 × (trait adds + status adds + context + chemistry on cmp)
  *   stat_i         = clamp(floor(eff100_i / 100), 1, 20)    (what combat receives)
  *   rating         = clamp(round(5 × Σ ratingWeight_i × stat_i), 1, 100)   (the combat formula)
@@ -49,8 +50,14 @@ export function developed100(fighter: Fighter, stat: StatId, content: ContentDB)
   return truncN((cap * maturityBp(content, group, d)) / BP);
 }
 
+/** The trained value of a stat (M1.1: train100; the development clocks are frozen after generation). */
+export function trained100(fighter: Fighter, stat: StatId, content: ContentDB): number {
+  const v = fighter.train100?.[stat];
+  return v === undefined ? developed100(fighter, stat, content) : v;
+}
+
 export function base100(fighter: Fighter, stat: StatId, content: ContentDB): number {
-  const v = developed100(fighter, stat, content) - (fighter.wear100[stat] ?? 0);
+  const v = trained100(fighter, stat, content) - (fighter.wear100[stat] ?? 0);
   return v < 100 ? 100 : v;
 }
 
