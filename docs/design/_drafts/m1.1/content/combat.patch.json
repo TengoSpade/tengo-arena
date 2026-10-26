@@ -1,0 +1,109 @@
+{
+  "_doc": "M1.1 PROPOSAL: additions to content/default/combat.json (combat designer, docs/design/_drafts/m1.1/combat-skills.md). Merge: append `attributes`, `statModStats`; add the new top-level blocks; extend the closed vocabularies in core/content.",
+  "schemaVersion": 1,
+  "status": "PROPOSED · TUNABLE (2026-10-26)",
+  "attributesAppend": [
+    {
+      "id": "stamina",
+      "name": "Stamina",
+      "abbr": "STA",
+      "group": "physical",
+      "lifecycleTag": "stamina",
+      "description": "Staying power: how many rounds and matches a fighter can play before tiring. It acts only through Freshness (lifecycle); it has no effect during a fight.",
+      "usedFor": [
+        "freshness drain per round played and recovery between weeks (lifecycle)"
+      ]
+    }
+  ],
+  "freshness": {
+    "_doc": "Per-fighter freshness 0-100 arrives in each round input (lifecycle owns drain per round played, recovery and labels). Severity s = clamp((thresholdBelow - F) / (thresholdBelow - fullPenaltyAtOrBelow), 0, 1) from the freshness at the start of that round; fixed for the whole round. Each penalty = penaltyAtFull x s x (1 - fatigueResist).",
+    "appliedAt": "round_start",
+    "thresholdBelow": 60,
+    "fullPenaltyAtOrBelow": 10,
+    "penaltyAtFull": {
+      "attackSpeed": -0.1,
+      "moveSpeed": -0.06,
+      "power": -0.08,
+      "support": -0.08,
+      "reactionDelay": 0.25
+    },
+    "labelsFrom": "levels.json freshness.labels (fresh >= 80, ready >= 60, tired >= 40, spent < 40); reports tag a fighter Tired or Spent with the penalty applied",
+    "thresholdFrom": "levels.json freshness.threshold (must equal thresholdBelow)",
+    "resistStat": "fatigueResist",
+    "resistClamp": [
+      0,
+      1
+    ],
+    "default": 100
+  },
+  "statModStatsAppend": [
+    {
+      "id": "fatigueResist",
+      "kind": "fraction"
+    }
+  ],
+  "vocabularyAppend": {
+    "effectPredicates": [
+      "self_is_captain",
+      "self_freshness_below",
+      "self_fresh_entry"
+    ],
+    "triggerEvents": [
+      "self_hp_below",
+      "ability_release"
+    ],
+    "triggerFields": [
+      "if",
+      "slot"
+    ],
+    "auraFields": [
+      "requires"
+    ],
+    "statIds": [
+      "stamina"
+    ]
+  },
+  "fightInputAppend": {
+    "freshness": "int 0-100 (default 100)",
+    "abilityRanks": "{ a1: 1-3, a2: 1-3, passive: 1-3 } (default all 1)",
+    "perkIds": "PerkId[] (0-4)",
+    "enteredThisRound": "bool: the fighter entered from the reserves (or as an emergency entrant) for this round"
+  },
+  "match": {
+    "_doc": "sys-match (M1.1): match squads and swaps. Owner rules: squad of 5 starters + 2 reserves; at most 2 swaps per match, between rounds only; a fighter swapped out cannot return in that match (owner ruling 2026-10-26).",
+    "squad": {
+      "starters": 5,
+      "reservesMax": 2,
+      "reservesMin": 0
+    },
+    "swaps": {
+      "maxPerMatch": 2,
+      "between": "rounds only (never before round 1, never after the deciding round)",
+      "returnAllowed": false,
+      "decision": "simultaneous and blind; applied home then away",
+      "injuryReplacement": "forced; an unused reserve enters and uses a swap; with none left an emergency entrant enters without a swap",
+      "emergencyEntrant": "best-fit fit roster fighter outside the match squad (same role family, then rating, then freshness, then fighter id); else a hired blade"
+    },
+    "autoSwapDefaults": {
+      "mode": "threshold",
+      "freshnessBelow": 40,
+      "reserveMargin": 15,
+      "maxRatingGap": 6,
+      "keepOneForInjury": true,
+      "sameRoleFamilyFirst": true
+    },
+    "autoSwapModes": [
+      "off",
+      "injured_only",
+      "threshold"
+    ],
+    "pauseBetweenRounds": {
+      "options": [
+        "always",
+        "when_urgent",
+        "never"
+      ],
+      "defaultM11": "always"
+    }
+  }
+}

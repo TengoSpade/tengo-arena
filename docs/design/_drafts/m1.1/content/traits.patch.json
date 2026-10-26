@@ -1,0 +1,29 @@
+{
+  "_doc": "M1.1 PATCH for content/default/traits.json (fighter-lifecycle designer; spec docs/design/_drafts/m1.1/progression.md). RFC 6902 operations with JSON Pointer paths, applied in order to traits.json version 1; each 'test' guards the array index that follows it. Every key not named stays as it is. Every number is PROPOSED · TUNABLE.",
+  "status": "DRAFT 2026-10-26 (fighter-lifecycle designer), M1.1 playtest round 1 (owner tickets T003, T005).",
+  "appliesTo": "content/default/traits.json version 1",
+  "operations": [
+    { "op": "replace", "path": "/version", "value": 2 },
+    { "op": "replace", "path": "/_doc", "value": "Fighter traits (sys-traits). Crusader-Kings-style personality, physique and history traits; every name and text is original. Spec: docs/design/_drafts/03-fighter-lifecycle.md, M1.1 changes in docs/design/_drafts/m1.1/progression.md. Stat ids are the combat.json attribute ids (str agi pac tgh pre stamina arc spi wil cmp ldr awr dis). Each effect's 'owner' (see effectTypes) says who applies it: 'management' effects are applied by lifecycle/economy code before or outside the fight (stat adds arrive in the fight setup's effective stats and must not be re-applied); 'sim' effects are applied inside the fight by combat (sys-fight-traits, combat.json traitEffectAdapter; docs/design/03 boundary contract 3). Whole-point stat adds are capped at +/-3 per stat per trait (statAddCapPerTrait, TUNABLE). effectText must be updated by whoever changes a number. 'Development xN' in effectText means level-ups come N times as fast (XP per level divided by N). Fractions are decimals; the loader converts them to basis points." },
+
+    { "op": "test", "path": "/effectTypes/2/id", "value": "devClock" },
+    { "op": "replace", "path": "/effectTypes/2/description", "value": "M1.1: divides XP per level (levels.json xpPerLevel traitDev). group physical and mental are blended by the class's physical rating-weight share (wPhys); group all applies to both. Counts while the fighter's humanAge at the start of the level is in range." },
+    { "op": "test", "path": "/effectTypes/5/id", "value": "xp" },
+    { "op": "replace", "path": "/effectTypes/5/description", "value": "Multiplies XP per round and bench XP (floor after all multipliers)." },
+    { "op": "test", "path": "/effectTypes/6/id", "value": "trainingEmphasis" },
+    { "op": "replace", "path": "/effectTypes/6/description", "value": "Multiplies the strength a of training emphasis: how hard level-up offers lean toward the emphasised group (0 = emphasis has no effect)." },
+    { "op": "test", "path": "/effectTypes/12/id", "value": "mentor" },
+    { "op": "replace", "path": "/effectTypes/12/description", "value": "Club-mates with humanAge <= 23 level up faster: their XP per level is divided by the mentoring multiplier (captain grade and at most 2 trait mentors per club; all mentoring capped at x1.15)." },
+
+    { "op": "add", "path": "/rollRules/learned", "value": {
+      "_doc": "M1.1 (owner T005): a level-up can offer a trait (levels.json offers.traitOffer, traitOfferPool). A chosen trait is held with source 'level'. It is checked like a roll (not held; opposites, excludes and exclusiveGroup both ways; maxPerCategory) and never makes a fighter exceed maxRolledAndLearned rolled + learned traits or maxTotalTraits. Learned traits keep their own loss rules (Hot Blood may still mellow). They are not counted by the rolled-trait 80/20 soak band.",
+      "source": "level",
+      "maxRolledAndLearned": 4,
+      "neverOffered": ["physique traits", "acquired (storied) traits", "flaws", "scars"]
+    } },
+
+    { "op": "test", "path": "/traits/19/id", "value": "bellows_chest" },
+    { "op": "replace", "path": "/traits/19/effectText", "value": "+2 stamina. In fights: +8% damage after 30 s of a round." },
+    { "op": "add", "path": "/traits/19/effects/-", "value": { "type": "stat", "stat": "stamina", "add": 2 } }
+  ]
+}
