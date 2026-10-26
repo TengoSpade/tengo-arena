@@ -102,10 +102,21 @@ describe('ticket dialog keyboard', () => {
 });
 
 describe('screenshot clone fixes', () => {
-  it('keeps the chosen <select> option, gives fill cells their 100% back and colours placeholders', () => {
+  it('moves a scrolled full-page screen up by the document scroll, leaving fixed layers alone', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<main style="transform: scale(1)">page</main><div style="position: fixed">toasts</div>';
+    fixClone(root, '#000', { x: 0, y: 600 });
+    const [page, toasts] = [...root.children] as HTMLElement[];
+    expect(page!.style.transform).toBe('translate(0px, -600px) scale(1)');
+    expect(toasts!.style.transform).toBe('');
+  });
+
+  it('keeps the chosen <select> option and ticked boxes, puts stuck sticky elements back, fills cells and colours placeholders', () => {
     const root = document.createElement('div');
     root.innerHTML = `<select data-ticket-sel="2"><option>Balanced</option><option>Body</option><option>Mind</option></select>
-      <table><tr><td style="width: 275px; max-width: 0px">Name</td><td style="width: 54px">48</td></tr></table>`;
+      <table><tr><td style="width: 275px; max-width: 0px">Name</td><td style="width: 54px">48</td></tr></table>
+      <input type="checkbox" data-ticket-checked><input type="checkbox">
+      <aside data-ticket-stuck="0,1484" style="position: sticky; top: 16px">rail</aside>`;
     fixClone(root, '#65615a');
     const options = root.querySelectorAll('option');
     expect([...options].map((o) => o.hasAttribute('selected'))).toEqual([false, false, true]);
@@ -113,6 +124,12 @@ describe('screenshot clone fixes', () => {
     const [fill, num] = root.querySelectorAll('td');
     expect(fill!.style.width).toBe('100%');
     expect(num!.style.width).toBe('54px');
+    const boxes = root.querySelectorAll('input');
+    expect([boxes[0]!.hasAttribute('checked'), boxes[1]!.hasAttribute('checked')]).toEqual([true, false]);
+    // A sticky element stuck while its column scrolled stays where it was on screen.
+    const rail = root.querySelector('aside')!;
+    expect([rail.style.position, rail.style.top, rail.style.left]).toEqual(['relative', '1484px', '0px']);
+    expect(rail.hasAttribute('data-ticket-stuck')).toBe(false);
     expect(root.querySelector('style')!.textContent).toBe('::placeholder{color:#65615a;-webkit-text-fill-color:#65615a}');
   });
 });

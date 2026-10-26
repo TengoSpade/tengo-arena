@@ -11,9 +11,42 @@
   min-width: 0;
 }
 
+/* The rail stays in view while the results scroll, and scrolls on its own when the window is
+   shorter than the rail (1280 × 720). */
 .market-filters {
   position: sticky;
   top: var(--sp-4);
+  max-height: calc(100vh - var(--topbar-h) - 2 * var(--sp-4));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Trials Day (P1): the player's own rookie(s), above every view. */
+.market-trials__explain {
+  max-width: 70rem;
+}
+
+.market-trials__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+}
+
+.market-trials__item {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(9rem, 1fr) auto minmax(14rem, 1.2fr) auto;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-accent-line);
+  border-radius: var(--r-sm);
+  background: var(--c-accent-soft);
+}
+
+.market-trials__terms {
+  color: var(--c-text-muted);
 }
 
 .market-age {

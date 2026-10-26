@@ -7,6 +7,9 @@
  * budget, mean roster rating, club captain, prestige, roster cap, AI
  * personality; the lowest tier is "Recommended for a first career".
  * Keys: arrows move between cards, Enter picks, Ctrl Enter starts.
+ * Roster preview (ticket AL-R001-T001): the left column follows the focused card (else the picked or
+ * suggested club) with its fighters, role coverage and Trials Day rookie; it stays in view while the
+ * cards scroll.
  */
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Club, ClubId } from '../../../core/model';
@@ -17,6 +20,8 @@ import { ConfirmButton, Crest, Empty, Icon, PageHeader, Panel, Rating, Segmented
 import { formatMoney } from '../../format';
 import { useStore } from '../../store';
 import { safeView, useEngine } from '../../store/engine';
+import { useWp7Engine } from '../league/lib/engine';
+import { ClubPreview } from './ClubPreview';
 import { fighterViewOf } from '../../store/views';
 import { format } from '../../text';
 import './club-select.css';
@@ -69,6 +74,8 @@ export default function ClubSelectScreen(_props: ScreenProps) {
   const lowest = tiers.length ? Math.max(...tiers.map((x) => x.level)) : 1;
   const [tierLevel, setTierLevel] = useState<number>(lowest);
   const [picked, setPicked] = useState<ClubId | null>(null);
+  const [focused, setFocused] = useState<ClubId | null>(null);
+  const marketEngine = useWp7Engine();
   const [advanced, setAdvanced] = useState(false);
   const [seed, setSeed] = useState(state?.rng.root ?? '');
   const gridRef = useRef<HTMLDivElement>(null);
@@ -135,6 +142,10 @@ export default function ClubSelectScreen(_props: ScreenProps) {
   const pickedClub = picked ? state.clubs[picked] : null;
   const pickedTier = pickedClub ? content.tiers.get(pickedClub.tierId) : null;
   const pickedInfo = pickedClub ? info(pickedClub) : null;
+  // The preview follows keyboard focus, then the pick, then the suggestion (or the first card).
+  const inTier = (id: ClubId | null) => (id && clubs.some((c) => c.id === id) ? id : null);
+  const previewId = inTier(focused) ?? inTier(picked) ?? suggestedId ?? clubs[0]?.id ?? null;
+  const previewClub = previewId ? state.clubs[previewId] : null;
 
   const onGridKey = (e: KeyboardEvent) => {
     const cards = [...(gridRef.current?.querySelectorAll<HTMLButtonElement>('.club-card') ?? [])];
@@ -162,7 +173,7 @@ export default function ClubSelectScreen(_props: ScreenProps) {
           }
         />
         <div class="l-grid">
-          <div class="span-4 l-stack">
+          <div class="span-4 club-select__side">
             <Panel title={T.tier} icon="league" bodyClass="l-stack">
               <Segmented<string>
                 label={T.tierFilter}
@@ -188,34 +199,16 @@ export default function ClubSelectScreen(_props: ScreenProps) {
                 </Tag>
               )}
             </Panel>
-            <Panel title={T.advanced} icon="settings" actions={<button class="btn btn--sm btn--ghost" type="button" aria-expanded={advanced ? 'true' : 'false'} onClick={() => setAdvanced((a) => !a)}><Icon name={advanced ? 'chevron-up' : 'chevron-down'} /></button>}>
-              {advanced ? (
-                <div class="l-stack l-stack--sm">
-                  <label class="field">
-                    <span class="field__label">{T.seed}</span>
-                    <input class="input" type="text" value={seed} onInput={(e) => setSeed((e.target as HTMLInputElement).value)} />
-                    <span class="field__hint">{T.seedHint}</span>
-                  </label>
-                  <button
-                    class="btn btn--sm"
-                    type="button"
-                    disabled={store.busy.value}
-                    onClick={async () => {
-                      const res = await store.newGame(seed.trim() ? { seed: seed.trim() } : undefined);
-                      if (res.ok) setPicked(null);
-                    }}
-                  >
-                    <Icon name="refresh" />
-                    {T.regenerate}
-                  </button>
-                </div>
-              ) : (
-                <span class="u-sm u-faint">{T.seedHint}</span>
-              )}
-            </Panel>
+            {previewClub && <ClubPreview engine={marketEngine} state={state} content={content} club={previewClub} />}
           </div>
-          <div class="span-8">
-            <div class="l-autogrid club-select__grid" ref={gridRef} role="group" aria-label={format(T.cardsLabel, { tier: tier.name })} onKeyDown={onGridKey}>
+          <div class="span-8 l-stack">
+            <div
+              class="l-autogrid club-select__grid"
+              ref={gridRef}
+              role="group"
+              aria-label={format(T.cardsLabel, { tier: tier.name })}
+              onKeyDown={onGridKey}
+            >
               {clubs.map((club) => {
                 const tpl = content.clubs.get(club.id);
                 const i = info(club);
@@ -228,6 +221,9 @@ export default function ClubSelectScreen(_props: ScreenProps) {
                     class="card card--choice club-card"
                     aria-pressed={picked === club.id ? 'true' : 'false'}
                     data-testid={`club-card-${club.id}`}
+                    aria-controls="club-preview"
+                    data-previewed={club.id === previewId ? 'true' : undefined}
+                    onFocus={() => setFocused(club.id)}
                     onClick={() => setPicked(club.id)}
                   >
                     <span class="club-card__head">
@@ -284,6 +280,31 @@ export default function ClubSelectScreen(_props: ScreenProps) {
                 );
               })}
             </div>
+            <Panel title={T.advanced} icon="settings" actions={<button class="btn btn--sm btn--ghost" type="button" aria-expanded={advanced ? 'true' : 'false'} onClick={() => setAdvanced((a) => !a)}><Icon name={advanced ? 'chevron-up' : 'chevron-down'} /></button>}>
+              {advanced ? (
+                <div class="l-stack l-stack--sm">
+                  <label class="field">
+                    <span class="field__label">{T.seed}</span>
+                    <input class="input" type="text" value={seed} onInput={(e) => setSeed((e.target as HTMLInputElement).value)} />
+                    <span class="field__hint">{T.seedHint}</span>
+                  </label>
+                  <button
+                    class="btn btn--sm"
+                    type="button"
+                    disabled={store.busy.value}
+                    onClick={async () => {
+                      const res = await store.newGame(seed.trim() ? { seed: seed.trim() } : undefined);
+                      if (res.ok) setPicked(null);
+                    }}
+                  >
+                    <Icon name="refresh" />
+                    {T.regenerate}
+                  </button>
+                </div>
+              ) : (
+                <span class="u-sm u-faint">{T.seedHint}</span>
+              )}
+            </Panel>
           </div>
         </div>
       </div>

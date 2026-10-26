@@ -54,7 +54,7 @@ export const FIXTURES_TEXT = {
   'cal.regular': 'Regular season',
   'cal.tournament': 'The Reckoning',
   'cal.now': 'Now',
-  'cal.trials': 'Trials Day: your rookies are exclusive this week',
+  'cal.trials': 'Trials Day (P1): your club has first pick of its trials rookies this week only. Signing is instant, no signing fee, rookie-scale wage, 1–3 seasons; unsigned rookies join the free agents when P1 is processed.',
   'cal.kickoff': 'Kick off at the end of this week',
   'cal.grant': 'Central grant instalment ({share})',
   'cal.cross': 'Cross-wing matchweek',

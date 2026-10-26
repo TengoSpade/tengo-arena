@@ -31,10 +31,15 @@ import './tickets.css';
 /** The visible viewport as a PNG data URL (before the dialog opens, so it is not in the picture). */
 export async function captureViewport(): Promise<string> {
   const body = document.body;
-  // The library copies `value` as an attribute, which a <select> ignores: mark the chosen option
-  // so the clone shows it (removed again below).
+  // The library copies `value` as an attribute, which a <select> ignores and a checkbox does not
+  // use: mark the chosen option and the ticked boxes so the clone shows them (removed again below).
   const selects = [...document.querySelectorAll('select')];
   selects.forEach((s) => (s.dataset['ticketSel'] = String(s.selectedIndex)));
+  const ticked = [...document.querySelectorAll<HTMLInputElement>('input[type=checkbox], input[type=radio]')].filter((i) => i.checked);
+  ticked.forEach((i) => (i.dataset['ticketChecked'] = ''));
+  const stuck = markStuck();
+  // Full-page screens (club select) scroll the document itself, which the library does not restore.
+  const scroll = { x: document.scrollingElement?.scrollLeft ?? 0, y: document.scrollingElement?.scrollTop ?? 0 };
   try {
     return await domToPng(body, {
       width: window.innerWidth,
@@ -47,19 +52,67 @@ export async function captureViewport(): Promise<string> {
       // Nothing of the ticket tool itself, and no scripts.
       filter: (node) => !(node instanceof HTMLElement && (node.dataset['ticketTool'] !== undefined || node.tagName === 'SCRIPT')),
       onCloneNode: (clone) => {
-        if (clone instanceof Element) fixClone(clone, getComputedStyle(document.documentElement).getPropertyValue('--c-text-faint'));
+        if (clone instanceof Element) fixClone(clone, getComputedStyle(document.documentElement).getPropertyValue('--c-text-faint'), scroll);
       },
     });
   } finally {
     selects.forEach((s) => delete s.dataset['ticketSel']);
+    ticked.forEach((i) => delete i.dataset['ticketChecked']);
+    stuck.forEach((el) => delete el.dataset['ticketStuck']);
   }
 }
 
+/**
+ * Sticky elements that are stuck right now (the Market filter rail while the results scroll): the
+ * clone draws its scrolled column with a transform, under which nothing sticks, so each such element
+ * is marked with how far sticking moved it (fixClone puts it back there). Measured against the same
+ * element with `position: static`, which keeps its place in the flow.
+ */
+function markStuck(): HTMLElement[] {
+  const marked: HTMLElement[] = [];
+  for (const el of document.body.querySelectorAll<HTMLElement>('*')) {
+    if (getComputedStyle(el).position !== 'sticky') continue;
+    const live = el.getBoundingClientRect();
+    const inline = el.style.position;
+    el.style.position = 'static';
+    const flow = el.getBoundingClientRect();
+    el.style.position = inline;
+    const dx = Math.round(live.left - flow.left);
+    const dy = Math.round(live.top - flow.top);
+    if (dx || dy) {
+      el.dataset['ticketStuck'] = `${dx},${dy}`;
+      marked.push(el);
+    }
+  }
+  return marked;
+}
+
 /** What the library's clone gets wrong for this UI, put right before it is drawn. */
-export function fixClone(clone: Element, placeholderColor: string): void {
+export function fixClone(clone: Element, placeholderColor: string, scroll: { x: number; y: number } = { x: 0, y: 0 }): void {
+  // A scrolled document: move the page (not fixed layers such as toasts) up by the scroll.
+  if (scroll.x || scroll.y) {
+    for (const child of clone.children) {
+      if (!(child instanceof HTMLElement) || child.style.position === 'fixed') continue;
+      const own = child.style.transform && child.style.transform !== 'none' ? ` ${child.style.transform}` : '';
+      child.style.transform = `translate(${-scroll.x}px, ${-scroll.y}px)${own}`;
+    }
+  }
   for (const s of clone.querySelectorAll<HTMLSelectElement>('select[data-ticket-sel]')) {
     s.options[Number(s.dataset['ticketSel'])]?.setAttribute('selected', '');
     delete s.dataset['ticketSel'];
+  }
+  for (const i of clone.querySelectorAll<HTMLInputElement>('input[data-ticket-checked]')) {
+    i.setAttribute('checked', '');
+    delete i.dataset['ticketChecked'];
+  }
+  // Stuck sticky elements: relative offsets put them where they were on screen (markStuck).
+  for (const el of clone.querySelectorAll<HTMLElement>('[data-ticket-stuck]')) {
+    const [dx, dy] = (el.dataset['ticketStuck'] ?? '0,0').split(',').map(Number);
+    el.style.position = 'relative';
+    el.style.top = `${dy ?? 0}px`;
+    el.style.left = `${dx ?? 0}px`;
+    el.style.bottom = el.style.right = 'auto';
+    delete el.dataset['ticketStuck'];
   }
   // Widths are copied as pixels, which breaks the fill-cell trick (width 100% + max-width 0,
   // `.cell-fill`): give those cells their 100% back so the columns come out as on screen.
