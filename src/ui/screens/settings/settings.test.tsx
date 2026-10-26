@@ -1,17 +1,20 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetToasts, toasts, undoLast } from '../../components';
 import { DEFAULT_SETTINGS, applySettingsToDocument, pacingStops, settings, updateSettings } from '../../store';
 import SettingsScreen from './index';
 
 let dispose: (() => void) | null = null;
 beforeEach(() => {
+  // Settings › Tickets asks the dev-server plugin for its folder; there is no server here.
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
   resetToasts();
   updateSettings({ ...DEFAULT_SETTINGS, pacingCustom: { ...DEFAULT_SETTINGS.pacingCustom } });
   dispose = applySettingsToDocument();
 });
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   dispose?.();
   updateSettings({ ...DEFAULT_SETTINGS, pacingCustom: { ...DEFAULT_SETTINGS.pacingCustom } });
 });
@@ -19,7 +22,7 @@ afterEach(() => {
 describe('Settings screen', () => {
   it('renders every section with Balanced as the default pacing preset', () => {
     render(<SettingsScreen params={{}} />);
-    for (const id of ['settings-gameplay', 'settings-interface', 'settings-a11y', 'settings-audio', 'settings-controls']) expect(screen.getByTestId(id)).toBeTruthy();
+    for (const id of ['settings-gameplay', 'settings-interface', 'settings-a11y', 'settings-audio', 'settings-controls', 'settings-tickets']) expect(screen.getByTestId(id)).toBeTruthy();
     expect((within(screen.getByTestId('preset-balanced')).getByRole('radio') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByTestId('stop-lineup') as HTMLInputElement).disabled).toBe(true);
   });

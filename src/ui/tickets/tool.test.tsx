@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/preact
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installShortcuts } from '../app/shortcuts';
 import { resetToasts } from '../components';
-import { TicketDialog } from './tool';
+import { TicketDialog, fixClone } from './tool';
 
 const draft = {
   careerKey: 'seed-a',
@@ -58,5 +58,21 @@ describe('ticket dialog keyboard', () => {
     fireEvent.keyDown(field, { key: 'Escape' });
     expect(done).toHaveBeenCalledWith(null);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('screenshot clone fixes', () => {
+  it('keeps the chosen <select> option, gives fill cells their 100% back and colours placeholders', () => {
+    const root = document.createElement('div');
+    root.innerHTML = `<select data-ticket-sel="2"><option>Balanced</option><option>Body</option><option>Mind</option></select>
+      <table><tr><td style="width: 275px; max-width: 0px">Name</td><td style="width: 54px">48</td></tr></table>`;
+    fixClone(root, '#65615a');
+    const options = root.querySelectorAll('option');
+    expect([...options].map((o) => o.hasAttribute('selected'))).toEqual([false, false, true]);
+    expect(root.querySelector('select')!.hasAttribute('data-ticket-sel')).toBe(false);
+    const [fill, num] = root.querySelectorAll('td');
+    expect(fill!.style.width).toBe('100%');
+    expect(num!.style.width).toBe('54px');
+    expect(root.querySelector('style')!.textContent).toBe('::placeholder{color:#65615a;-webkit-text-fill-color:#65615a}');
   });
 });

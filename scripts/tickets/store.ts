@@ -6,7 +6,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync, appendFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
-import { TICKET_ID_RE, firstLine, nextTicketNumber, noteTicket, parseTicketId, readTicketIndex, runForCareer } from '../../src/platform/tickets/naming';
+import { TICKET_ID_RE, firstLine, nextTicketNumber, noteTicket, parseTicketId, readTicketIndex, runForCareer } from '../../src/platform/tickets/naming.ts';
 
 export const LIMITS = {
   /** Decoded screenshot bytes. */

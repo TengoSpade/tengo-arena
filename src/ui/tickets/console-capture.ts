@@ -35,13 +35,14 @@ function push(level: ConsoleEntry['level'], message: string): void {
 export function installConsoleCapture(): void {
   if (installed || typeof window === 'undefined') return;
   installed = true;
-  for (const level of ['error', 'warn'] as const) {
-    const original = console[level].bind(console);
-    console[level] = (...args: unknown[]) => {
+  const wrap =
+    (level: ConsoleEntry['level'], original: (...args: unknown[]) => void) =>
+    (...args: unknown[]) => {
       push(level, text(args));
       original(...args);
     };
-  }
+  console.error = wrap('error', console.error.bind(console));
+  console.warn = wrap('warn', console.warn.bind(console));
   window.addEventListener('error', (e) => push('error', text([e.error ?? e.message])));
   window.addEventListener('unhandledrejection', (e) => push('error', `Unhandled rejection: ${text([e.reason])}`));
 }

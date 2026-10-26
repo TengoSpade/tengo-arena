@@ -31,15 +31,45 @@ import './tickets.css';
 export async function captureViewport(): Promise<string> {
   const { domToPng } = await import('modern-screenshot');
   const body = document.body;
-  return domToPng(body, {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    scale: Math.min(2, window.devicePixelRatio || 1),
-    backgroundColor: getComputedStyle(body).backgroundColor || null,
-    features: { restoreScrollPosition: true },
-    // Nothing of the ticket tool itself, and no scripts.
-    filter: (node) => !(node instanceof HTMLElement && (node.dataset['ticketTool'] !== undefined || node.tagName === 'SCRIPT')),
-  });
+  // The library copies `value` as an attribute, which a <select> ignores: mark the chosen option
+  // so the clone shows it (removed again below).
+  const selects = [...document.querySelectorAll('select')];
+  selects.forEach((s) => (s.dataset['ticketSel'] = String(s.selectedIndex)));
+  try {
+    return await domToPng(body, {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      scale: Math.min(2, window.devicePixelRatio || 1),
+      backgroundColor: getComputedStyle(body).backgroundColor || null,
+      // The clone's root is drawn as a fresh <body>, which would get the browser's 8px margin.
+      style: { margin: '0' },
+      features: { restoreScrollPosition: true },
+      // Nothing of the ticket tool itself, and no scripts.
+      filter: (node) => !(node instanceof HTMLElement && (node.dataset['ticketTool'] !== undefined || node.tagName === 'SCRIPT')),
+      onCloneNode: (clone) => {
+        if (clone instanceof Element) fixClone(clone, getComputedStyle(document.documentElement).getPropertyValue('--c-text-faint'));
+      },
+    });
+  } finally {
+    selects.forEach((s) => delete s.dataset['ticketSel']);
+  }
+}
+
+/** What the library's clone gets wrong for this UI, put right before it is drawn. */
+export function fixClone(clone: Element, placeholderColor: string): void {
+  for (const s of clone.querySelectorAll<HTMLSelectElement>('select[data-ticket-sel]')) {
+    s.options[Number(s.dataset['ticketSel'])]?.setAttribute('selected', '');
+    delete s.dataset['ticketSel'];
+  }
+  // Widths are copied as pixels, which breaks the fill-cell trick (width 100% + max-width 0,
+  // `.cell-fill`): give those cells their 100% back so the columns come out as on screen.
+  for (const c of clone.querySelectorAll<HTMLElement>('td, th')) {
+    if (c.style.maxWidth === '0px') c.style.width = c.style.inlineSize = '100%';
+  }
+  // ::placeholder is not copied; the design system draws it in the faint text colour.
+  const style = clone.ownerDocument.createElement('style');
+  style.textContent = `::placeholder{color:${placeholderColor};-webkit-text-fill-color:${placeholderColor}}`;
+  clone.appendChild(style);
 }
 
 /** Everything ticket.json records besides the text (route, week, build, logs). */

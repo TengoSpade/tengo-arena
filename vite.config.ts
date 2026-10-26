@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
-import { ticketsPlugin } from './scripts/tickets/plugin';
+import { ticketsPlugin } from './scripts/tickets/plugin.ts';
 
 // The app is a static, offline-capable bundle. `base: './'` keeps asset URLs
 // relative so the same dist/ works from a file server, a desktop shell (M7)

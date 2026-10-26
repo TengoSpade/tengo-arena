@@ -14,7 +14,7 @@ import { execSync } from 'node:child_process';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import type { Plugin } from 'vite';
-import { LIMITS, TicketError, createTicketsFs, type TicketPayload, type TicketsFs } from './store';
+import { LIMITS, TicketError, createTicketsFs, type TicketPayload, type TicketsFs } from './store.ts';
 
 function gitBuild(cwd: string): { commit: string; dirty: boolean } {
   try {
