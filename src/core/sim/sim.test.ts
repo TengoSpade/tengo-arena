@@ -5,10 +5,10 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { combatRating } from '../content';
-import { SUMMARY_EVENT_TYPES, hashEventStream, type MatchInput } from '../model';
+import { SUMMARY_EVENT_TYPES, asId, hashEventStream, type MatchInput, type PerkId, type RoundInput } from '../model';
 import { deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
-import { ENGINE_VERSION, combatProfile, fighterInput, sideInput, simulateFight, simulateMatch } from './index';
+import { ENGINE_VERSION, combatProfile, fighterInput, sideInput, simulateFight, simulateMatch, simulateRound } from './index';
 
 const content = fixtureContent();
 const HOME = ['oathguard', 'gutterknife', 'longeye', 'rimebinder', 'chirurgeon'];
@@ -16,6 +16,23 @@ const AWAY = ['siegebreaker', 'oathguard', 'longeye', 'chirurgeon', 'rimebinder'
 
 function match(seed = 'a1b2c3d4e5f60718', bestOf = 3): MatchInput {
   return { seed, bestOf, home: sideInput(content, 'home', HOME, 0, 1), away: sideInput(content, 'away', AWAY, 1, 0) };
+}
+
+/** M1.1 round input: ability ranks, perks, Freshness and a fresh entry on the home side. */
+function m11Round(): RoundInput {
+  const home = sideInput(content, 'home', HOME, 0, 1);
+  const kit: [number, 1 | 2 | 3, 1 | 2 | 3, 1 | 2 | 3, string[], boolean][] = [
+    [100, 2, 3, 1, ['g_banner_voice', 't_thick_plating'], false],
+    [45, 3, 1, 2, ['m_keen_edge', 'g_second_breath'], false],
+    [70, 1, 2, 1, ['r_steady_aim'], false],
+    [30, 2, 2, 3, ['c_ready_mind', 'c_overload'], false],
+    [90, 3, 3, 3, ['h_gentle_hands'], true],
+  ];
+  home.fighters = home.fighters.map((f, i) => {
+    const [freshness, a1, a2, passive, perkIds, entered] = kit[i]!;
+    return { ...f, freshness, abilityRanks: { a1, a2, passive }, perkIds: perkIds.map((id) => asId<PerkId>(id)), enteredThisRound: entered };
+  });
+  return { round: 2, home, away: sideInput(content, 'away', AWAY, 1, 0) };
 }
 
 describe('determinism (acc-det-01, acc-det-02)', () => {
@@ -78,6 +95,21 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
           "home": 0,
         },
       }
+    `);
+  });
+
+  // M1.1 round API golden (approved with ENGINE_VERSION 2): ranks, perks and Freshness on the fixture.
+  it('golden: the pinned M1.1 round (ranks, perks, Freshness)', () => {
+    const runs = [0, 1].map(() => simulateRound(m11Round(), 'r-golden', content, { record: 'full' }));
+    expect(runs[1]!.result).toEqual(runs[0]!.result);
+    const out = runs[0]!;
+    expect([out.result.winner, out.result.durationTicks, out.result.checksum, out.log!.hash]).toMatchInlineSnapshot(`
+      [
+        "home",
+        897,
+        "65ef43bb008aa542664f4684f86b3308",
+        "d16a5a14f5091c805c13a7f50b82fba6",
+      ]
     `);
   });
 });
