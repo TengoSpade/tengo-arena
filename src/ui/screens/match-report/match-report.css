@@ -233,3 +233,9 @@
   align-items: center;
   gap: var(--sp-1) var(--sp-2);
 }
+
+.md-xp__fate {
+  flex-basis: 100%;
+  order: 9;
+  margin-top: calc(-1 * var(--sp-1));
+}

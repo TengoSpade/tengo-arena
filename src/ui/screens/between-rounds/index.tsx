@@ -187,16 +187,18 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
       )}
 
       <div class="l-grid">
-        <div class="span-8 l-stack">
+        <div class="span-12 span-8@wide l-stack">
           <Panel title={t('yourFive')} icon="squad" subtitle={t('yourFiveSub')} body="flush" testId="br-five">
+            <div class="table-wrap">
             <table class="data-table br-table">
               <thead>
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">{t('colFighter')}</th>
                   <th scope="col">{t('colFresh')}</th>
-                  <th scope="col" class="cell-num">{t('colChange')}</th>
-                  <th scope="col" class="cell-num">{t('colDamage')}</th>
+                  <th scope="col" class="cell-num" {...tipAttrs(t('colDamageTip'))}>
+                    {t('colDamage')}
+                  </th>
                   <th scope="col" class="cell-num" {...tipAttrs(t('colXpTip'))}>
                     {t('colXp')}
                   </th>
@@ -229,24 +231,32 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
                               <ClassTag content={content} classId={f.classId} /> · {a.row === 'front' ? t('front') : t('back')}
                             </span>
                           </span>
-                          {a.injured && (
-                            <Tag kind="bad" icon="injury" tip={t('injuredTip')}>
-                              {t('injured')}
-                            </Tag>
-                          )}
-                          {a.downed && !a.injured && <Tag kind="outline">{t('downed')}</Tag>}
-                          {levelDue && (
-                            <Tag kind="accent" icon="level-up" tip={t('levelDueTip')}>
-                              {t('levelDue')}
-                            </Tag>
-                          )}
                         </span>
+                        {(a.injured || a.downed || levelDue) && (
+                          <span class="br-tags">
+                            {a.injured && (
+                              <Tag kind="bad" icon="injury" tip={t('injuredTip')}>
+                                {t('injured')}
+                              </Tag>
+                            )}
+                            {a.downed && !a.injured && <Tag kind="outline">{t('downed')}</Tag>}
+                            {levelDue && (
+                              <Tag kind="accent" icon="level-up" tip={t('levelDueTip')}>
+                                {t('levelDue')}
+                              </Tag>
+                            )}
+                          </span>
+                        )}
                       </td>
                       <td>
-                        <FreshMeter info={info} content={content} label testId={`br-fresh-${a.fighterId}`} />
-                      </td>
-                      <td class="cell-num u-num" {...tipAttrs(`${a.freshnessBefore} → ${a.freshness}`)}>
-                        {change === 0 ? '0' : `${change > 0 ? '+' : '−'}${Math.abs(change)}`}
+                        <span class="br-fresh">
+                          <FreshMeter info={info} content={content} label testId={`br-fresh-${a.fighterId}`} />
+                          {change !== 0 && (
+                            <span class="u-xs u-muted u-num" {...tipAttrs(t('changeTip', { from: a.freshnessBefore, to: a.freshness }))} data-testid={`br-change-${a.fighterId}`}>
+                              {`${change > 0 ? '+' : '−'}${Math.abs(change)}`}
+                            </span>
+                          )}
+                        </span>
                       </td>
                       <td class="cell-num u-num">{fmtInt(Math.round(a.damageTaken))}</td>
                       <td class="cell-num u-num">{gained > 0 ? `≈${gained}` : '—'}</td>
@@ -293,11 +303,12 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
                 })}
               </tbody>
             </table>
+            </div>
             <p class="br-keys u-xs u-faint">{t('keys')}</p>
           </Panel>
         </div>
 
-        <div class="span-4 l-stack">
+        <div class="span-12 span-4@wide br-side">
           <Panel title={t('reserves')} icon="refresh" subtitle={t('reservesSub')} testId="br-reserves">
             <div class="l-stack l-stack--sm">
               {mine.reserves.length === 0 && <p class="u-sm u-muted">{t('noReserves')}</p>}

@@ -96,3 +96,32 @@
   justify-content: space-between;
   gap: var(--sp-2);
 }
+
+/* Below 1800 px the five take the full width and the side panels sit in a row underneath. */
+.br-side {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--grid-gap);
+  align-items: start;
+}
+
+@media (min-width: 1800px) {
+  .br-side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.br-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+  padding-left: calc(1.6rem + var(--sp-2));
+}
+
+.br-fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  white-space: nowrap;
+}

@@ -112,7 +112,7 @@ export function MatchDayPanel({ state, content, report, persp }: { state: GameSt
               return (
                 <li key={id} class="md-xp__row">
                   <span class="u-sm">{name(id)}</span>
-                  {fate && <span class="u-xs u-muted">{fate}</span>}
+                  {fate && <span class="u-xs u-muted md-xp__fate">{fate}</span>}
                   <span class="l-push u-num u-sm" {...tipAttrs('XP from this match (rounds started; ⅓ of a slot for a reserve who did not enter)')}>
                     {xp !== undefined ? `+${xp} XP` : '—'}
                   </span>
