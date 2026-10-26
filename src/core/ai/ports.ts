@@ -21,8 +21,7 @@ export const realAiPorts: AiPorts = {
     humanAge100: fighters.humanAge100,
     isFit: fighters.isFit,
     captaincy: fighters.captaincy,
-    // INTERIM until WP-B implements fighters.typicalRoundDrain10 (a stub): a typical drain of 6.0 a round.
-    typicalRoundDrain10: () => 60,
+    typicalRoundDrain10: fighters.typicalRoundDrain10,
   },
   economy: {
     ask: economy.ask,

@@ -65,6 +65,8 @@ export function levelUpViewWith(ports: GamePorts, state: GameState, fighterId: F
   if (!f || f.pendingLevelUps.length === 0) return null;
   const mode = ports.fighters.effectiveLevelUpMode(state, f);
   const pickMode = mode === 'manual' ? 'auto' : mode;
+  // The same context the policy resolution uses (captain or vice, training emphasis, preset), so the pre-selected pick is the one auto-pick would take.
+  const context = ports.fighters.offerContextOf(state, f, content);
   return {
     fighterId,
     mode,
@@ -75,7 +77,7 @@ export function levelUpViewWith(ports: GamePorts, state: GameState, fighterId: F
     pending: f.pendingLevelUps.map((p) => ({
       level: p.level,
       traitOffer: p.traitOffer ? [...p.traitOffer] : null,
-      autoPick: ports.fighters.autoPickChoice(f, p, pickMode, content),
+      autoPick: ports.fighters.autoPickChoice(f, p, pickMode, content, context),
       options: p.options.map((option): LevelUpOptionView => {
         const legal = ports.fighters.levelOptionLegal(f, option, content);
         if (option.kind !== 'stat') return { option, legal, statAfter: null, ratingAfter: null };

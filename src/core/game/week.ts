@@ -29,7 +29,6 @@ import {
 } from '../model';
 import { NotImplementedError, engineError, err, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
-import type { InterimMatchEnd } from './interim-lifecycle';
 import { addMatchNews, eligibleEntries } from './match';
 import { applyBetweenRound, autoDecisions, betweenRounds, finishMatch, playMatchAuto, playRound, playerSideOf, startMatch, type BetweenRoundView, type LockedSquads } from './orchestrator';
 import type { GamePorts } from './ports';
@@ -251,11 +250,9 @@ function runPlayerMatch(ports: GamePorts, draft: GameState, ms: MatchState, cont
   return null;
 }
 
-/** XP and injuries of one match for its news item (M1 outcome from the interim lifecycle; else bench XP and the injuries the round hooks set). */
+/** XP (round XP of the rounds started, or bench XP) and the injuries the round hooks set, for one match's news items. */
 function matchNewsOutcome(draft: GameState, result: MatchResult, outcome: ReturnType<GamePorts['fighters']['matchEndProgression']>) {
-  const m1 = (outcome as Partial<InterimMatchEnd>).m1;
-  if (m1) return { xp: m1.xp, injuries: m1.injuries };
-  const xp: Record<FighterId, number> = { ...((outcome as { xp?: Record<FighterId, number> }).xp ?? {}) };
+  const xp: Record<FighterId, number> = { ...(outcome.xp ?? {}) };
   for (const [id, n] of Object.entries(outcome.benchXp)) if (xp[id as FighterId] === undefined) xp[id as FighterId] = n;
   const injuries: { fighterId: FighterId; severity: string; weeksOut: number }[] = [];
   for (const id of Object.keys(result.fighterStats) as FighterId[]) {
@@ -278,7 +275,8 @@ function autoResolveLevelUps(ports: GamePorts, draft: GameState, result: MatchRe
     const mode = f.clubId === draft.playerClubId ? ports.fighters.effectiveLevelUpMode(draft, f) : 'auto';
     if (mode === 'manual') continue;
     for (const offer of [...f.pendingLevelUps]) {
-      const r = ports.fighters.resolveLevelUp(draft, id, offer.level, ports.fighters.autoPickChoice(f, offer, mode, content), 'auto', content);
+      const choice = ports.fighters.autoPickChoice(f, offer, mode, content, ports.fighters.offerContextOf(draft, f, content));
+      const r = ports.fighters.resolveLevelUp(draft, id, offer.level, choice, 'auto', content);
       if (!r.ok) break;
     }
   }

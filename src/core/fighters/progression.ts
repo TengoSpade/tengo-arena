@@ -240,6 +240,8 @@ export interface MatchProgressionOutcome {
   /** Pending level-ups resolved by policy (auto modes, AI clubs, a full queue). */
   autoResolved: ResolvedLevelUp[];
   newsIds: NewsId[];
+  /** Round XP each fighter earned in this match (what xpAfterRound paid, rebuilt from the result): the match news and report. Integrator addition (WP-C). */
+  xp?: Record<FighterId, number>;
 }
 
 function sortIds(ids: Iterable<string>): FighterId[] {
@@ -442,10 +444,37 @@ function applyChoice(draft: GameState, f: Fighter, offer: PendingLevelUp, choice
   return resolved;
 }
 
+/** Round XP of each fighter's started rounds in a played match, as xpAfterRound computed it (integrator addition, WP-C: the match news). */
+function matchRoundXp(draft: GameState, result: MatchResult, started: Map<string, number[]>, content: ContentDB): Record<FighterId, number> {
+  const tournament = result.stage !== 'league';
+  const credits = new Map<string, number>();
+  const downed = new Set<string>();
+  for (const [id, s] of Object.entries(result.fighterStats)) {
+    for (const d of s.downs) {
+      downed.add(`${id}|${d.round}`);
+      if (d.byFighterId) credits.set(`${d.byFighterId}|${d.round}`, (credits.get(`${d.byFighterId}|${d.round}`) ?? 0) + 1);
+    }
+  }
+  const out: Record<FighterId, number> = {};
+  for (const id of sortIds(started.keys())) {
+    const f = draft.fighters[id];
+    const st = result.fighterStats[id];
+    if (!f || !st) continue;
+    const side = st.clubId === result.homeClubId ? 'home' : 'away';
+    let xp = 0;
+    for (const r of started.get(id) ?? []) {
+      xp += roundXp(f, content, { won: result.rounds[r - 1]?.winner === side, credits: credits.get(`${id}|${r}`) ?? 0, downed: downed.has(`${id}|${r}`) }, tournament);
+    }
+    out[id] = xp;
+  }
+  return out;
+}
+
 /** Match end (levels.json hooks.matchEnd): match counters, bench XP, level-up checks, offers, auto-resolution. */
 export function matchEndProgression(draft: GameState, result: MatchResult, content: ContentDB): MatchProgressionOutcome {
   const out: MatchProgressionOutcome = { benchXp: {}, levelUps: [], autoResolved: [], newsIds: [] };
   const started = roundsStartedBy(result);
+  out.xp = matchRoundXp(draft, result, started, content);
   matchCounters(draft, result, started, content, out);
   benchAndLevels(draft, result, content, out, started);
   return out;
