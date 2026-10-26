@@ -172,7 +172,7 @@ describe('20-season population with synthetic matches', () => {
     for (const [lo, hi] of [[21, 24], [24, 27], [27, 31]] as const) {
       const r = ratio(lo, hi);
       expect(r, `bench/starter ${lo}-${hi - 1}: ${r.toFixed(3)}`).toBeGreaterThanOrEqual(levelTargets.benchLevelsToStarterLevelsRatio[0]);
-      expect(r).toBeLessThanOrEqual(0.5);
+      expect(r).toBeLessThanOrEqual(levelTargets.benchLevelsToStarterLevelsRatio[1]);
     }
   });
   it('dev-007: training emphasis switched off equals everyone Balanced, bit for bit, over 20 seasons', () => {
