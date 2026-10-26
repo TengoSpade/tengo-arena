@@ -53,3 +53,107 @@
 [data-testid="roster-table"] {
   --cell-fill-min: 8rem;
 }
+
+/* ---- M1.1: Freshness on the cards, match reserves, rotation ---------------------------------- */
+.lineup-card__meta .fresh {
+  flex: none;
+}
+
+.lineup-card__proj {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lineup-card__lvl {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.lineup-card__warn {
+  grid-column: 1 / -1;
+}
+
+.lineup__reserves {
+  margin-top: var(--sp-3);
+  flex: none;
+}
+
+.reserves {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--sp-2);
+}
+
+.reserve-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 13rem;
+  padding: var(--sp-2) var(--sp-6) var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: var(--c-surface-1);
+  cursor: pointer;
+}
+
+.reserve-card[aria-selected="true"] {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px var(--c-accent) inset;
+}
+
+.reserve-card__name {
+  font-weight: var(--fw-semibold);
+}
+
+.reserve-card__drop {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+}
+
+.reserve-card--empty {
+  justify-content: center;
+  border-style: dashed;
+  background: transparent;
+  color: var(--c-text-faint);
+  cursor: default;
+}
+
+.reserves__cover {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  align-self: center;
+  margin-left: var(--sp-2);
+}
+
+.rotation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-warn-soft, var(--c-border));
+  border-radius: var(--r-sm);
+  background: var(--c-warn-soft, transparent);
+}
+
+.rotation__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
