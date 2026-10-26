@@ -27,7 +27,7 @@ export interface FightRun {
 export function runFight(content: ContentDB, seed: string, round: number, input: Pick<MatchInput, 'home' | 'away'>, record: RecordLevel): FightRun {
   const f = new Fight(content, { seed, round, home: input.home, away: input.away }, record);
   f.run();
-  if (f.rec) f.rec.emit('round.summary', f.durationTicks - 1, undefined, undefined, { units: f.units.map(recapOf) });
+  if (f.rec) f.rec.emit('round.summary', f.durationTicks - 1, undefined, undefined, { units: f.units.map((u) => recapOf(f, u)) });
   const finalHp = f.units.map((u) => (u.standing ? u.hp : 0));
   let homeUp = 0;
   let awayUp = 0;
@@ -64,9 +64,36 @@ function sortedCasts(m: Map<string, number>): Record<AbilityId, number> {
   return out as Record<AbilityId, number>;
 }
 
-function recapOf(u: Unit): RoundRecap {
+/** M1.1 recap additions: the round's Freshness and penalty (Tired / Spent tag), perk procs, entry flag. */
+export interface RoundRecapM11 extends RoundRecap {
+  freshness: number;
+  /** levels.json freshness label id at the round start (fresh, ready, tired, spent). */
+  freshnessLabel: string;
+  /** 'tired' or 'spent' when the round started below the threshold, else null (report tag "Tired (52)"). */
+  fatigueTag: 'tired' | 'spent' | null;
+  fatigueBp: number;
+  /** Trigger fires per perk this round. */
+  perkProcs: Record<string, number>;
+  enteredThisRound: boolean;
+}
+
+export function freshnessLabelOf(f: Fight, freshness: number): string {
+  for (const l of f.tb.freshness.labels) if (freshness >= l.min) return l.id;
+  return f.tb.freshness.labels[f.tb.freshness.labels.length - 1]?.id ?? 'spent';
+}
+
+function recapOf(f: Fight, u: Unit): RoundRecapM11 {
   const t = u.tally;
+  const label = freshnessLabelOf(f, u.freshness);
+  const procs: Record<string, number> = {};
+  for (const k of [...u.perkProcs.keys()].sort()) procs[k] = u.perkProcs.get(k)!;
   return {
+    freshness: u.freshness,
+    freshnessLabel: label,
+    fatigueTag: u.freshness < f.tb.freshness.thresholdBelow ? (label === 'spent' ? 'spent' : 'tired') : null,
+    fatigueBp: u.fatigueBp,
+    perkProcs: procs,
+    enteredThisRound: u.input.enteredThisRound === true,
     unit: u.index,
     damageDealt: t.damageDealt,
     damageToShields: t.damageToShields,

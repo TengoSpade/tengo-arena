@@ -7,7 +7,7 @@
  * their stat kind (combat.json statModStats): fraction/chance/fraction_per_s
  * -> bp, flat/points/flag -> whole units, hp_per_s -> centipoints.
  */
-import type { AbilityDef, Amount, ClassDef, ContentDB, Effect, EffectPredicate, StatMod, StatusDef, TraitDef, Trigger } from '../content';
+import type { AbilityDef, Amount, ClassDef, ContentDB, Effect, EffectPredicate, PerkDef, StatMod, StatusDef, TraitDef, TraitEffect, Trigger } from '../content';
 import { STATUS_IDS, STAT_MOD_STATS } from '../content';
 import { InvariantError } from '../util';
 
@@ -186,6 +186,12 @@ export interface CArea {
 
 export interface CTrigger {
   on: Trigger['on'];
+  /** M1.1: optional predicate checked when the event happens (target_* read the trigger target). */
+  ifPred: CPred | null;
+  /** M1.1: ability_release only (null = any active). */
+  slot: 'a1' | 'a2' | null;
+  /** M1.1: the perk this trigger belongs to (perk proc counts), or null for class passives. */
+  perkId: string | null;
   n: number;
   hpBp: number;
   radiusMm: number;
@@ -217,7 +223,7 @@ export interface CAbility {
   effects: CEffect[];
   allyEffects: CEffect[];
   selfEffects: CEffect[];
-  passive: { statMods: CStatMod[]; aura: { radiusMm: number; affects: 'allies' | 'allies_incl_self' | 'enemies'; statMods: CStatMod[] } | null; triggers: CTrigger[] } | null;
+  passive: CPassive | null;
   /** A cast of at least castingTelegraphMinS, or a channel: visible to enemy_casting / casting_enemy. */
   telegraph: boolean;
   /** The ability moves its caster (dash or leap): blocked while rooted or anchored. */
@@ -225,6 +231,28 @@ export interface CAbility {
   /** Ranged basic attack (windup fraction). */
   ranged: boolean;
   /** Contains a hard-control status or displacement (for the cc_applied trigger and recaps). */
+}
+
+/** A passive block: a class passive, or (M1.1) a perk. */
+export interface CPassive {
+  statMods: CStatMod[];
+  aura: CAura | null;
+  triggers: CTrigger[];
+}
+
+export interface CAura {
+  radiusMm: number;
+  affects: 'allies' | 'allies_incl_self' | 'enemies';
+  statMods: CStatMod[];
+  /** M1.1: predicate on the aura owner, checked at every aura recalculation. */
+  requires: CPred | null;
+}
+
+/** M1.1 perk (perks.json): an extra passive block plus combat-owned trait effects. */
+export interface CPerk {
+  id: string;
+  passive: CPassive | null;
+  trait: CTrait;
 }
 
 export interface CClass {
@@ -336,6 +364,27 @@ export interface SimTables {
   classes: Map<string, CClass>;
   abilities: Map<string, CAbility>;
   traits: Map<string, CTrait>;
+  /** M1.1 perks. */
+  perks: Map<string, CPerk>;
+  /** M1.1 Freshness penalty (combat.json freshness), bp. */
+  freshness: {
+    thresholdBelow: number;
+    fullAtOrBelow: number;
+    attackSpeedBp: number;
+    moveSpeedBp: number;
+    powerBp: number;
+    supportBp: number;
+    reactionDelayBp: number;
+    resistMinBp: number;
+    resistMaxBp: number;
+    default: number;
+    /** levels.json freshness labels, highest minimum first (report tags). */
+    labels: { id: string; min: number }[];
+  };
+  /** Ranked kits, compiled on first use (key: class + ranks). */
+  kits: Map<string, CClass>;
+  /** Internal: compile context for ranked copies. */
+  buildCtx: BuildCtx;
 }
 
 // ---- Builders -------------------------------------------------------------------------------
@@ -428,6 +477,22 @@ function build(content: ContentDB): SimTables {
 
   const traits = new Map<string, CTrait>();
   for (const t of content.traits.list) traits.set(t.id, compileTrait(t, ctx, content));
+  const perks = new Map<string, CPerk>();
+  for (const p of content.perks.list) perks.set(p.id, compilePerk(p, ctx, content));
+  const fr = c.freshness;
+  const freshness = {
+    thresholdBelow: fr.thresholdBelow,
+    fullAtOrBelow: fr.fullPenaltyAtOrBelow,
+    attackSpeedBp: toBp(fr.penaltyAtFull.attackSpeed),
+    moveSpeedBp: toBp(fr.penaltyAtFull.moveSpeed),
+    powerBp: toBp(fr.penaltyAtFull.power),
+    supportBp: toBp(fr.penaltyAtFull.support),
+    reactionDelayBp: toBp(fr.penaltyAtFull.reactionDelay),
+    resistMinBp: toBp(fr.resistClamp[0]),
+    resistMaxBp: toBp(fr.resistClamp[1]),
+    default: fr.default,
+    labels: [...content.levels.freshness.labels].map((l) => ({ id: l.id, min: l.min })).sort((a, b) => b.min - a.min),
+  };
 
   const d = c.derived;
   const grades = [...content.development.captaincy.grades]
@@ -570,7 +635,61 @@ function build(content: ContentDB): SimTables {
     classes,
     abilities,
     traits,
+    perks,
+    freshness,
+    kits: new Map(),
+    buildCtx: ctx,
   };
+}
+
+// ---- M1.1 ability ranks ----------------------------------------------------------------------------
+
+/** Apply rank 2's changes (and rank 3's for rank 3) to a copy of the ability (ability-ranks.json JSON pointers). */
+export function rankedAbilityDef(content: ContentDB, def: AbilityDef, rank: number): AbilityDef {
+  if (rank <= 1) return def;
+  const row = content.abilityRanks(def.id);
+  if (!row || !row.rankable) throw new InvariantError(`sim: ${def.id} has no ranks`);
+  const copy = JSON.parse(JSON.stringify(def)) as AbilityDef;
+  for (const step of row.ranks) {
+    if (step.rank > rank) continue;
+    for (const ch of step.changes) setPointer(copy, ch.path, ch.from, ch.to, def.id);
+  }
+  return copy;
+}
+
+function setPointer(root: unknown, path: string, from: number, to: number, what: string): void {
+  const parts = path.split('/').slice(1);
+  let node = root as Record<string, unknown> | unknown[];
+  for (let i = 0; i < parts.length - 1; i++) {
+    const next = (node as Record<string, unknown>)[parts[i]!];
+    if (next === null || typeof next !== 'object') throw new InvariantError(`sim: rank path ${path} missing in ${what}`);
+    node = next as Record<string, unknown>;
+  }
+  const key = parts[parts.length - 1]!;
+  const cur = (node as Record<string, unknown>)[key];
+  if (typeof cur !== 'number' || Math.abs(cur - from) > 1e-9) throw new InvariantError(`sim: rank path ${path} of ${what} is ${String(cur)}, expected ${from}`);
+  (node as Record<string, unknown>)[key] = to;
+}
+
+/** The class kit with ability ranks applied (rank 1 everywhere = the class's own kit). Cached per class and ranks. */
+export function kitFor(tb: SimTables, classId: string, ranks: { a1: number; a2: number; passive: number } | undefined): CClass {
+  const cls = tb.classes.get(classId);
+  if (!cls) throw new InvariantError(`sim: unknown class "${classId}"`);
+  const r1 = clampRank(ranks?.a1);
+  const r2 = clampRank(ranks?.a2);
+  const rp = clampRank(ranks?.passive);
+  if (r1 === 1 && r2 === 1 && rp === 1) return cls;
+  const key = `${classId}:${r1}${r2}${rp}`;
+  const hit = tb.kits.get(key);
+  if (hit) return hit;
+  const ranked = (ab: CAbility, r: number): CAbility => (r === 1 ? ab : compileAbility(rankedAbilityDef(tb.content, ab.def, r), tb.buildCtx, tb.content));
+  const kit: CClass = { ...cls, a1: ranked(cls.a1, r1), a2: ranked(cls.a2, r2), passive: ranked(cls.passive, rp) };
+  tb.kits.set(key, kit);
+  return kit;
+}
+
+function clampRank(r: number | undefined): number {
+  return r === 2 || r === 3 ? r : 1;
 }
 
 function weights(w: Partial<Record<string, number>>): [number, number][] {
@@ -582,7 +701,7 @@ function weights(w: Partial<Record<string, number>>): [number, number][] {
   return out;
 }
 
-interface BuildCtx {
+export interface BuildCtx {
   ticks: (s: number) => number;
   statusOf: (id: string) => CStatus;
   statKindFactor: number[];
@@ -594,7 +713,17 @@ export function compileAmount(a: Amount): CAmount {
   return { baseCenti: Math.round((a.base ?? 0) * 100), scale: a.scale.map((s) => ({ stat: s.stat, coefBp: toBp(s.coef) })) };
 }
 
-const SELF_PREDS = new Set(['self_hp_below', 'self_targeted_by', 'fight_time_below', 'fight_time_at_least', 'ally_downed_within']);
+const SELF_PREDS = new Set([
+  'self_hp_below',
+  'self_targeted_by',
+  'fight_time_below',
+  'fight_time_at_least',
+  'ally_downed_within',
+  // M1.1
+  'self_is_captain',
+  'self_freshness_below',
+  'self_fresh_entry',
+]);
 
 export function compilePred(p: EffectPredicate, tps: number): CPred {
   const base: CPred = { p: p.p, hpBp: 0, statuses: [], gapMm: 0, ticks: 0, count: 0, of: [], kind: 'target' };
@@ -603,6 +732,9 @@ export function compilePred(p: EffectPredicate, tps: number): CPred {
     case 'target_hp_above':
     case 'self_hp_below':
       base.hpBp = Math.round(p.pct * 100);
+      break;
+    case 'self_freshness_below':
+      base.count = p.pct;
       break;
     case 'target_has_status':
       base.statuses = Array.isArray(p.status) ? [...p.status] : [p.status];
@@ -742,10 +874,13 @@ function compileEffect(e: Effect, ctx: BuildCtx): CEffect {
   }
 }
 
-function compileTrigger(t: Trigger, ctx: BuildCtx): CTrigger {
+function compileTrigger(t: Trigger, ctx: BuildCtx, perkId: string | null = null): CTrigger {
   const target = typeof t.target === 'string' ? t.target : { withinMm: toMm(t.target.withinM), includeSelf: t.target.includeSelf };
   return {
     on: t.on,
+    ifPred: t.if ? compilePred(t.if, ctx.tps) : null,
+    slot: t.slot ?? null,
+    perkId,
     n: t.n ?? 1,
     hpBp: t.pct === undefined ? 0 : Math.round(t.pct * 100),
     radiusMm: t.radiusM === undefined ? 0 : toMm(t.radiusM),
@@ -758,11 +893,34 @@ function compileTrigger(t: Trigger, ctx: BuildCtx): CTrigger {
   };
 }
 
+function compilePassive(p: NonNullable<AbilityDef['passive']>, ctx: BuildCtx, perkId: string | null): CPassive {
+  return {
+    statMods: p.statMods.map((m) => compileStatMod(m, ctx, false)),
+    aura: p.aura
+      ? {
+          radiusMm: toMm(p.aura.radiusM),
+          affects: p.aura.affects,
+          statMods: p.aura.statMods.map((m) => compileStatMod(m, ctx, false)),
+          requires: p.aura.requires ? compilePred(p.aura.requires, ctx.tps) : null,
+        }
+      : null,
+    triggers: p.triggers.map((t) => compileTrigger(t, ctx, perkId)),
+  };
+}
+
+function compilePerk(p: PerkDef, ctx: BuildCtx, content: ContentDB): CPerk {
+  return {
+    id: p.id,
+    passive: p.passive ? compilePassive(p.passive, ctx, p.id) : null,
+    trait: compileTraitEffects(p.id, p.traitEffects, ctx, content),
+  };
+}
+
 function hasMover(list: readonly Effect[]): boolean {
   return list.some((e) => e.type === 'dash');
 }
 
-function compileAbility(a: AbilityDef, ctx: BuildCtx, content: ContentDB): CAbility {
+export function compileAbility(a: AbilityDef, ctx: BuildCtx, content: ContentDB): CAbility {
   const castTicks = a.castTimeS === null ? 0 : ctx.ticks(a.castTimeS);
   const channel = a.channel
     ? { durationTicks: ctx.ticks(a.channel.durationS), intervalTicks: ctx.ticks(a.channel.tickIntervalS), mobile: a.channel.mobile, speedMultBp: toBp(a.channel.moveSpeedMult) }
@@ -799,15 +957,7 @@ function compileAbility(a: AbilityDef, ctx: BuildCtx, content: ContentDB): CAbil
     effects: compileEffects(a.effects, ctx),
     allyEffects: compileEffects(a.allyEffects, ctx),
     selfEffects: compileEffects(a.selfEffects, ctx),
-    passive: a.passive
-      ? {
-          statMods: a.passive.statMods.map((m) => compileStatMod(m, ctx, false)),
-          aura: a.passive.aura
-            ? { radiusMm: toMm(a.passive.aura.radiusM), affects: a.passive.aura.affects, statMods: a.passive.aura.statMods.map((m) => compileStatMod(m, ctx, false)) }
-            : null,
-          triggers: a.passive.triggers.map((t) => compileTrigger(t, ctx)),
-        }
-      : null,
+    passive: a.passive ? compilePassive(a.passive, ctx, null) : null,
     telegraph: (a.kind === 'active' && castTicks >= telegraphMin) || channel !== null,
     movesCaster: a.delivery.type === 'dash' || a.delivery.type === 'leap' || hasMover(a.selfEffects),
     ranged: a.delivery.type === 'projectile',
@@ -815,9 +965,13 @@ function compileAbility(a: AbilityDef, ctx: BuildCtx, content: ContentDB): CAbil
 }
 
 function compileTrait(t: TraitDef, ctx: BuildCtx, content: ContentDB): CTrait {
-  const out: CTrait = { id: t.id, mods: [], enemyAura: null, shakenMultBp: null, rallyMultBp: null };
+  return compileTraitEffects(t.id, t.effects, ctx, content);
+}
+
+function compileTraitEffects(id: string, effects: readonly TraitEffect[], ctx: BuildCtx, content: ContentDB): CTrait {
+  const out: CTrait = { id, mods: [], enemyAura: null, shakenMultBp: null, rallyMultBp: null };
   const adapter = content.combat.traitEffectAdapter;
-  for (const e of t.effects) {
+  for (const e of effects) {
     if (e.type === 'combat') {
       let pred: EffectPredicate | undefined;
       switch (e.when) {
