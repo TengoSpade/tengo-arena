@@ -6,7 +6,7 @@
 import type { FightFighterInput } from '../model';
 import type { Rng } from '../rng';
 import type { CompiledTactics, Decision, TraceEntry } from '../tactics';
-import type { CAbility, CClass, CEffect, CStatMod, CStatus, CTrigger } from './tables';
+import type { CAbility, CAura, CClass, CEffect, CStatMod, CStatus, CTrigger } from './tables';
 import { STAT_COUNT } from './tables';
 
 export const ACT_NONE = 0;
@@ -195,6 +195,18 @@ export class Unit {
   shakenMultBp = 10_000;
   rallyMultBp = 10_000;
   triggers: CTrigger[] = [];
+  /** M1.1: class passive aura and perk auras (key = the strongest-only identity). */
+  auras: { key: string; aura: CAura }[] = [];
+  /** M1.1: Freshness at round start and the applied penalty severity (bp). */
+  freshness = 100;
+  fatigueBp = 0;
+  /** M1.1: once-per-target masks per trigger (ally_hp_below), once-per-round flags (self_hp_below). */
+  oncePerTarget: number[] = [];
+  hpBelowFired: Uint8Array = new Uint8Array(0);
+  /** M1.1: trigger fires per perk this round (report: perk procs). */
+  perkProcs = new Map<string, number>();
+  /** M1.1: largest single hit taken this round (points, HP + shield). */
+  largestHit = 0;
 
   // ---- Dynamic state ------------------------------------------------------
   hp = 1;
@@ -258,7 +270,6 @@ export class Unit {
   momentumReset = false;
   healsCast = 0;
   triggerReadyAt: number[] = [];
-  lamplightDone = 0;
   /** Post-mitigation damage taken per tick, ring buffer over the recent-damage window. */
   dmgRing: Int32Array;
   dmgRingTick: Int32Array;

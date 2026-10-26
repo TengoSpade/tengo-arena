@@ -56,7 +56,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
   // re-pinned 2026-10 when the fixture content gained the D-P/D-T keys; checksums unchanged, no engine change.
   it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
     const out = simulateMatch(match(), content, { record: 'full' });
-    expect(ENGINE_VERSION).toBe(1);
+    expect(ENGINE_VERSION).toBe(2);
     expect({ score: out.score, rounds: out.rounds.map((r) => [r.winner, r.durationTicks, r.checksum, r.eventHash]) }).toMatchInlineSnapshot(`
       {
         "rounds": [
@@ -64,13 +64,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "c2ac7d119f06c267a452c57af1c5dfae",
+            "1c5d8e2e6d9a5c953d9e0dbb1c33cec8",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "cda8cb1d631a749f2ed47bae0832768c",
+            "049e8c97cd5b96099304baff5d075420",
           ],
         ],
         "score": {

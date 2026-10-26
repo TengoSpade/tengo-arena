@@ -28,7 +28,7 @@ import type { Seed } from '../rng';
 import { SIM_ENGINE_VERSION } from './fight';
 import { runFight, runMatch } from './match';
 import { staticValues } from './profile';
-import { BP, ST, simTables } from './tables';
+import { BP, ST, kitFor, simTables } from './tables';
 import { InvariantError } from '../util';
 
 /**
@@ -104,9 +104,9 @@ export function simulateFight(input: FightInput, content: ContentDB, options?: S
 /** Derived combat values (no randomness) for one fighter input: attributes, class, race combatMods and unconditional passive mods. */
 export function combatProfile(fighter: FightFighterInput, content: ContentDB): CombatProfile {
   const tb = simTables(content);
-  const cls = tb.classes.get(fighter.classId);
-  if (!cls) throw new InvariantError(`sim: unknown class "${fighter.classId}"`);
-  const s = staticValues(fighter, cls, tb);
+  if (!tb.classes.has(fighter.classId)) throw new InvariantError(`sim: unknown class "${fighter.classId}"`);
+  // Ranked kit, perks and the round's Freshness penalty are all static for a round (M1.1).
+  const s = staticValues(fighter, kitFor(tb, fighter.classId, fighter.abilityRanks), tb);
   const d = tb.derived;
   const m = s.staticMods;
   const atk = Math.min(s.atkSpeedMax, Math.max(4000, s.atkSpeed0 + m[ST.attackSpeed]!));
@@ -158,29 +158,22 @@ export interface RoundOutput {
 export function simulateRound(input: RoundInput, roundSeed: Seed, content: ContentDB, options?: SimOptions): RoundOutput {
   const run = runFight(content, roundSeed, input.round, input, options?.record ?? 'none');
   const aftermath: RoundAftermath[] = [];
-  for (const [side, s] of [['home', input.home], ['away', input.away]] as const) {
-    for (const fi of s.fighters) {
-      const st = run.fighterStats[fi.fighterId];
-      if (!st) continue;
-      const down = st.downs.find((d) => d.round === input.round) ?? null;
-      aftermath.push({
-        fighterId: fi.fighterId,
-        side,
-        damageTaken: st.roundDamageTaken?.[0] ?? st.damageTaken,
-        maxHp: st.roundMaxHp?.[0] ?? down?.maxHp ?? 0,
-        downed: down !== null,
-        largestHit: largestHitOf(st, down),
-        downCause: down,
-        downsInflicted: st.downsInflicted,
-      });
-    }
+  for (const u of run.fight.units) {
+    const st = run.fighterStats[u.input.fighterId]!;
+    const down: DownRecord | null = st.downs.find((d) => d.round === input.round) ?? null;
+    aftermath.push({
+      fighterId: u.input.fighterId,
+      side: u.side === 0 ? 'home' : 'away',
+      damageTaken: st.damageTaken,
+      maxHp: u.maxHp,
+      downed: down !== null,
+      // Largest single hit taken this round (HP + shield, points).
+      largestHit: u.largestHit,
+      downCause: down,
+      downsInflicted: st.downsInflicted,
+    });
   }
   return { result: run.result, fighterStats: run.fighterStats, aftermath, log: run.log };
-}
-
-/** CONTRACTS PHASE: the downing hit when downed, else 0 (WP-A records the largest hit taken per round). */
-function largestHitOf(_st: FighterMatchStats, down: DownRecord | null): number {
-  return down ? down.hit : 0;
 }
 
 /** Additive: fight-input builders (harness, tests, dev tools). */

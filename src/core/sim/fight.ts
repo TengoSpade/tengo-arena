@@ -7,7 +7,7 @@
  * then home on odd ticks, slot order within a side.
  */
 import type { ContentDB } from '../content';
-import type { FightHeader, FightFighterInput, RecordLevel, RoundTiebreakStep, SideInput } from '../model';
+import type { FightHeader, FightFighterInput, RecordLevel, RoundTiebreakStep, SideInput, UnitSpawn } from '../model';
 import { FIGHT_LOG_FORMAT } from '../model';
 import { Rng, type Seed } from '../rng';
 import { compileTactics, resolveTactics, type CompiledTactics } from '../tactics';
@@ -38,7 +38,7 @@ import {
   type Snap,
   type Zone,
 } from './state';
-import { BP, SC_RALLIED, SC_ROOT, SC_SILENCE, SC_SLEEP, SC_STUN, ST, STAT_COUNT, simTables, type CClass, type CEffect, type CPred, type CStatMod, type CStatus, type SimTables } from './tables';
+import { BP, SC_RALLIED, SC_ROOT, SC_SILENCE, SC_SLEEP, SC_STUN, ST, STAT_COUNT, kitFor, simTables, type CAura, type CClass, type CEffect, type CPred, type CStatMod, type CStatus, type SimTables } from './tables';
 
 export interface SideState {
   /** Acting captain unit index, or -1 while vacant (Shaken window) or gone. */
@@ -140,6 +140,7 @@ export class Fight {
     this.spawn();
     this.initCaptains(setup);
     this.hasAllyHpTrigger = this.units.some((u) => u.triggers.some((tr) => tr.on === 'ally_hp_below'));
+    this.hasHpBelowTrigger = this.units.some((u) => u.triggers.some((tr) => tr.on === 'self_hp_below'));
     this.header = {
       format: FIGHT_LOG_FORMAT,
       engineVersion: SIM_ENGINE_VERSION,
@@ -171,8 +172,7 @@ export class Fight {
     const ringSize = this.tb.damage.recentMaxTicks + 1;
     s.fighters.forEach((f: FightFighterInput, slot) => {
       const index = side * 5 + slot;
-      const cls = this.tb.classes.get(f.classId);
-      if (!cls) throw new InvariantError(`sim: unknown class "${f.classId}"`);
+      const cls = kitFor(this.tb, f.classId, f.abilityRanks);
       const tactics = compiledFor(this.content, f, cls);
       const attrs = clampAttrs(f);
       const u = new Unit(
@@ -381,6 +381,12 @@ export class Fight {
         const last = this.sides[holder.side].lastAllyDownTick;
         return this.tick - last <= p.ticks;
       }
+      case 'self_is_captain':
+        return holder.standing && this.sides[holder.side].captain === holder.index;
+      case 'self_freshness_below':
+        return holder.freshness < p.count;
+      case 'self_fresh_entry':
+        return holder.input.enteredThisRound === true;
       case 'any':
         return p.of.some((x) => this.predSelf(x, holder));
       default:
@@ -457,26 +463,26 @@ export class Fight {
 
   // ---- Auras and modifier blocks ---------------------------------------------------------------
   /** Units projecting an aura, with a per-fight slot per distinct aura ability (strongest-of-same-aura rule). */
-  private auraOwners: { u: Unit; slot: number }[] | null = null;
-  private auraBest = new Int32Array(10 * 10 * 4);
-  private auraSeen = new Uint8Array(10 * 10 * 4);
+  private auraOwners: { u: Unit; slot: number; aura: CAura }[] | null = null;
+  private auraBest = new Int32Array(10 * AURA_SLOTS * 4);
+  private auraSeen = new Uint8Array(10 * AURA_SLOTS * 4);
   private enemyAuraOwners: Unit[] = [];
 
   private initAuras(): void {
     const slots = new Map<string, number>();
     this.auraOwners = [];
     for (const u of this.units) {
-      const aura = u.cls.passive.passive?.aura;
-      if (aura) {
-        let slot = slots.get(u.cls.passive.id);
+      for (const a of u.auras) {
+        let slot = slots.get(a.key);
         if (slot === undefined) {
           slot = slots.size;
-          slots.set(u.cls.passive.id, slot);
+          slots.set(a.key, slot);
         }
-        this.auraOwners.push({ u, slot });
+        this.auraOwners.push({ u, slot, aura: a.aura });
       }
       if (u.enemyAura) this.enemyAuraOwners.push(u);
     }
+    if (slots.size > AURA_SLOTS) throw new InvariantError(`sim: ${slots.size} distinct auras exceed ${AURA_SLOTS}`);
   }
 
   recomputeAuras(): void {
@@ -491,9 +497,9 @@ export class Fight {
     }
     if (this.auraOwners!.length > 0) {
       this.auraSeen.fill(0);
-      for (const { u: owner, slot } of this.auraOwners!) {
+      for (const { u: owner, slot, aura } of this.auraOwners!) {
         if (!owner.standing) continue;
-        const aura = owner.cls.passive.passive!.aura!;
+        if (aura.requires && !this.predSelf(aura.requires, owner)) continue;
         for (const r of this.units) {
           if (!r.standing) continue;
           const ally = r.side === owner.side;
@@ -509,7 +515,7 @@ export class Fight {
             const v = this.statModValue(m, r, owner);
             r.hasAura = true;
             // Several fighters projecting the same aura: only the strongest counts.
-            const key = (r.index * 10 + slot) * 4 + k;
+            const key = (r.index * AURA_SLOTS + slot) * 4 + k;
             if (this.auraSeen[key] === 0) {
               this.auraSeen[key] = 1;
               this.auraBest[key] = v;
@@ -651,9 +657,7 @@ export class Fight {
   }
 
   emitStart(): void {
-    this.rec!.emit('fight.start', 0, undefined, undefined, {
-      units: this.units.map((u) => ({ unit: u.index, x: cm(u.x), y: cm(u.y), hp: u.hp, maxHp: u.maxHp, focus: Math.trunc(u.focus / 1000) })),
-    });
+    this.rec!.emit('fight.start', 0, undefined, undefined, { units: this.units.map((u) => spawnOf(u)) });
   }
 
   private emitFrame(): void {
@@ -841,6 +845,21 @@ export class Fight {
     }
     if (downed.length > 0) this.processDowns(downed);
 
+    // M1.1 self_hp_below triggers: once per round, at the commit where HP first drops below pct (after Deathward).
+    if (this.hasHpBelowTrigger) {
+      for (const u of this.units) {
+        if (!u.standing) continue;
+        for (let k = 0; k < u.triggers.length; k++) {
+          const tr = u.triggers[k]!;
+          if (tr.on !== 'self_hp_below' || u.hpBelowFired[k] === 1) continue;
+          if (this.hpBp(u) < tr.hpBp) {
+            u.hpBelowFired[k] = 1;
+            fireTrigger(this, u, k, u.index, u.index, 0);
+          }
+        }
+      }
+    }
+
     // Sleep breaks on a tick with >= breakOnDamagePct of max HP taken.
     for (const u of this.units) {
       if (!u.standing || this.dmgTotal[u.index] === 0) continue;
@@ -866,12 +885,12 @@ export class Fight {
         if (trig.on !== 'ally_hp_below') continue;
         for (const a of this.units) {
           if (a === holder || !a.standing || a.side !== holder.side) continue;
-          if (trig.oncePerTarget && (holder.lamplightDone & (1 << a.index)) !== 0) continue;
+          if (trig.oncePerTarget && (holder.oncePerTarget[k]! & (1 << a.index)) !== 0) continue;
           if (trig.radiusMm > 0 && this.gap(holder.index, a.index) > trig.radiusMm) continue;
           const before = prevHpBp[a.index]!;
           const now = this.hpBp(a);
           if (before >= trig.hpBp && now < trig.hpBp) {
-            if (trig.oncePerTarget) holder.lamplightDone |= 1 << a.index;
+            if (trig.oncePerTarget) holder.oncePerTarget[k] = holder.oncePerTarget[k]! | (1 << a.index);
             fireTrigger(this, holder, k, a.index, -1, 0);
           }
         }
@@ -880,6 +899,7 @@ export class Fight {
   }
   private prevHpBp = new Int32Array(10);
   private hasAllyHpTrigger = false;
+  private hasHpBelowTrigger = false;
   /** Per-tick accumulators need a reset at the next timers phase. */
   touchedDamage = true;
   touchedHeals = true;
@@ -1129,13 +1149,44 @@ export class Fight {
   }
 }
 
-export const SIM_ENGINE_VERSION = 1;
+/** 2: M1.1 (ability ranks, perks, Freshness penalty, round API). */
+export const SIM_ENGINE_VERSION = 2;
+
+/** Distinct aura identities in one fight (class passives and perks). */
+const AURA_SLOTS = 48;
+
+/** M1.1 fight-start unit data: the M1 spawn plus the round's Freshness, penalty, ranks, perks and entry flag. */
+export interface UnitSpawnM11 extends UnitSpawn {
+  freshness: number;
+  fatigueBp: number;
+  abilityRanks: { a1: number; a2: number; passive: number };
+  perkIds: string[];
+  enteredThisRound: boolean;
+}
+
+function spawnOf(u: Unit): UnitSpawnM11 {
+  const r = u.input.abilityRanks;
+  return {
+    unit: u.index,
+    x: cm(u.x),
+    y: cm(u.y),
+    hp: u.hp,
+    maxHp: u.maxHp,
+    focus: Math.trunc(u.focus / 1000),
+    freshness: u.freshness,
+    fatigueBp: u.fatigueBp,
+    abilityRanks: { a1: r?.a1 ?? 1, a2: r?.a2 ?? 1, passive: r?.passive ?? 1 },
+    perkIds: [...(u.input.perkIds ?? [])],
+    enteredThisRound: u.input.enteredThisRound === true,
+  };
+}
 
 /** Compiled presets are immutable: cache them per content and (class, preset). Custom lists compile per fight. */
 const compiledCache = new WeakMap<ContentDB, Map<string, CompiledTactics>>();
 
 function compiledFor(content: ContentDB, f: FightFighterInput, cls: CClass): CompiledTactics {
-  const key = f.tactics.kind === 'preset' ? `${f.classId}|${f.tactics.presetId}` : null;
+  // Ranks change a1 / a2 focus costs and ranges, which the compiled rules read.
+  const key = f.tactics.kind === 'preset' ? `${f.classId}|${f.tactics.presetId}|${f.abilityRanks?.a1 ?? 1}${f.abilityRanks?.a2 ?? 1}` : null;
   let cache = compiledCache.get(content);
   if (!cache) {
     cache = new Map();

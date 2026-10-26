@@ -5,7 +5,7 @@
  */
 import { decideTactics, evaluateTactics, type Decision, type TraceEntry } from '../tactics';
 import type { Fight } from './fight';
-import { canEvaluate, has, isImmobile, nearestEnemyInRange, retreatGap, sameDecision } from './resolve';
+import { canEvaluate, fireTrigger, has, isImmobile, nearestEnemyInRange, retreatGap, sameDecision } from './resolve';
 import { ACT_CAST, ACT_CHANNEL, ACT_NONE, ACT_WINDUP, type Unit } from './state';
 import { BP, SC_ANCHORED, SC_ROOT, SC_SILENCE, SC_SLEEP, SC_STUN, SC_TAUNT } from './tables';
 import { SimView } from './view';
@@ -356,6 +356,11 @@ function releaseAbility(f: Fight, u: Unit): void {
   if (f.rec) f.rec.emit('cast.release', f.tick, u.index, target, { ability: ab.id, focusSpent: Math.trunc(ab.focusMilli / 1000), cooldownTicks: ab.cooldownTicks }, true);
   ruleReleased(f, u);
   u.nextEval = Math.min(u.nextEval, f.tick + 1);
+  // M1.1 ability_release triggers (optionally only one slot).
+  for (let k = 0; k < u.triggers.length; k++) {
+    const tr = u.triggers[k]!;
+    if (tr.on === 'ability_release' && (tr.slot === null || tr.slot === ab.slot)) fireTrigger(f, u, k, u.index, u.index, 0);
+  }
   if (ab.channel) {
     u.act = ACT_CHANNEL;
     u.actTarget = target;

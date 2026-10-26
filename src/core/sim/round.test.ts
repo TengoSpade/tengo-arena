@@ -45,7 +45,9 @@ describe('simulateRound (M1.1 contract)', () => {
       expect(a.maxHp).toBeGreaterThan(0);
       expect(a.damageTaken).toBe(out.fighterStats[a.fighterId]!.damageTaken);
       expect(a.downed).toBe(out.fighterStats[a.fighterId]!.downsSuffered > 0);
-      if (a.downed) expect(a.largestHit).toBe(a.downCause!.hit);
+      // Largest single hit taken this round (HP + shield): at least the downing hit's HP damage.
+      if (a.downed) expect(a.largestHit).toBeGreaterThanOrEqual(a.downCause!.hit);
+      if (a.damageTaken > 0) expect(a.largestHit).toBeGreaterThan(0);
     }
     const downs = out.aftermath.filter((a) => a.downed).length;
     expect(downs).toBe(out.result.downs.home + out.result.downs.away);
