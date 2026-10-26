@@ -20,6 +20,7 @@ import { errorText } from '../store/messages';
 import { applySettingsToDocument } from '../store/settings';
 import { t } from '../text';
 import { Frame } from './Frame';
+import { installTicketKey } from '../tickets/launcher';
 import { navigate, useRoute } from './router';
 import { ROUTES, type RouteId } from './routes';
 import { ContentErrorScreen, ScreenHost } from './ScreenHost';
@@ -51,6 +52,8 @@ export function App({ store }: AppProps) {
   }, [debug, debugAllowed, DebugOverlay]);
 
   useEffect(() => applySettingsToDocument(), []);
+  // F8 files a playtest ticket from any screen (the tool itself is a lazy chunk).
+  useEffect(() => installTicketKey(store), [store]);
   useEffect(
     () =>
       effect(() => {

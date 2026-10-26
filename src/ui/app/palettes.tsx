@@ -16,6 +16,7 @@ export function ShortcutSheet({ open, onClose }: { open: boolean; onClose: () =>
     [t('shortcuts.screens1'), ['1', '2', '3']],
     [t('shortcuts.screens2'), ['4', '5', '6', '7']],
     [t('shortcuts.saves'), ['S']],
+    [t('shortcuts.ticket'), ['F8']],
     [t('shortcuts.search'), ['Ctrl', 'K']],
     [t('shortcuts.back'), ['Esc']],
     [t('shortcuts.save'), ['Ctrl', 'S']],

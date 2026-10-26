@@ -7,10 +7,11 @@
  * unfinished core functions), `?dev-world=<weekIndex>&club=<clubId>`
  * to open straight into a dev career, and `?dev-state=<name>` to open a
  * real career snapshot from /reports/states/<name>.json (`{ state,
- * seasonEndReport? }`, written by a headless script; screenshots, reviews).
+ * seasonEndReport? }`, written by a headless script; screenshots, reviews), and `?ticket=<id>` to
+ * reproduce a playtest ticket (F8) from tickets/<id>/ in its own save slot.
  */
 import { h, render } from 'preact';
-import pkg from '../package.json';
+import { version as gameVersion } from '../package.json';
 import { browserClock, browserEntropy, browserFileIO } from './platform/browser';
 import { loadThemeFiles } from './platform/content-loader';
 import { createIdbSaveStore } from './platform/save-store.idb';
@@ -18,11 +19,15 @@ import { createMemorySaveStore } from './platform/save-store.memory';
 import { App } from './ui/app/App';
 import type { GameState, SeasonEndReport } from './core/model';
 import { createGameStore, settings, type GameEngine } from './ui/store';
+import { installConsoleCapture } from './ui/tickets/console-capture';
 
 import './ui/styles/tokens.css';
 import './ui/styles/base.css';
 import './ui/styles/components.css';
 import './ui/app/shell.css';
+
+// First: playtest tickets record the last console errors and warnings from here on.
+installConsoleCapture();
 
 const root = document.getElementById('app');
 if (!root) throw new Error('index.html is missing <div id="app">');
@@ -35,13 +40,14 @@ if (themeParam === 'light' || themeParam === 'dark') settings.value = { ...setti
 let engine: GameEngine | undefined;
 if (dev) engine = (await import('./ui/debug/dev-engine')).createDevEngine();
 
+const saves = typeof indexedDB !== 'undefined' ? createIdbSaveStore() : createMemorySaveStore();
 const store = createGameStore({
-  saves: typeof indexedDB !== 'undefined' ? createIdbSaveStore() : createMemorySaveStore(),
+  saves,
   clock: browserClock,
   files: browserFileIO,
   entropy: browserEntropy,
   loadTheme: (themeId) => loadThemeFiles(themeId).raw,
-  gameVersion: pkg.version,
+  gameVersion,
   dev,
   engine,
   userAgent: navigator.userAgent,
@@ -71,6 +77,15 @@ if (dev) {
     } catch (e) {
       console.error('dev-state could not be loaded', e);
     }
+  }
+}
+
+if (dev) {
+  // ?ticket=<id>: load a playtest ticket's save (served by the dev-server plugin) into its own slot.
+  const ticket = query.get('ticket');
+  if (ticket) {
+    const { reproduceTicket } = await import('./ui/tickets/repro');
+    await reproduceTicket(store, saves, ticket);
   }
 }
 
