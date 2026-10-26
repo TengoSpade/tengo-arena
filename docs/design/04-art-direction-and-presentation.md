@@ -1,13 +1,13 @@
 # Arena League — art direction and presentation
 
-> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.4 · 2026-10-25. Merged from the UI/UX designer's phase-2 draft (`_drafts/04-presentation.md`), reconciled with documents 01, 02 and 03 by the lead designer, synced in v0.3 to the M1 build and to D-N to D-T, and in v0.4 to the QA polish round (m1/polish-ui @ c35d12a; main tagged `m1-season-mvp` @ 3e682d5). Reviewed by the requirements reviewer and the independent reviewer (01 §8.6); not approved by the owner. M1 was built at risk on these working assumptions.
+> ARENA LEAGUE DESIGN PACKAGE · DRAFT v0.5 · 2026-10-26. v0.5 adds the M1.1 "Playtest round 1" screens (O15–O22): the level-up card, the between-round screen, the 5 + 2 squad and the Freshness displays. Merged from the UI/UX designer's phase-2 draft (`_drafts/04-presentation.md`), reconciled with documents 01, 02 and 03 by the lead designer, synced in v0.3 to the M1 build and to D-N to D-T, and in v0.4 to the QA polish round (m1/polish-ui @ c35d12a; main tagged `m1-season-mvp` @ 3e682d5). Reviewed by the requirements reviewer and the independent reviewer (01 §8.6); not approved by the owner. M1 was built at risk on these working assumptions.
 > Follow the labels, scope, glossary, and authority rules in [document 01](01-game-vision-and-design-principles.md). REQUIRED appears only where an owner ID is cited (O12 match reports, O13 good UI design, T1 PixiJS from M2, T3 HTML/CSS UI, T5 theme data). **DELEGATED** marks D-J to D-M (the UI designer's OC-3 to OC-6) and the orchestrator decisions D-O, D-R and D-S where this document presents them, all adopted under the owner's goal instruction and pending confirmation (01 §8.2). **PERMITTED-CHOICE** (01) marks behaviour the implementation chose within stated bounds. Everything else the UI designer decided is PROPOSED, with PROPOSED · TUNABLE values in `src/ui/styles/tokens.css`. The owner questions are in 01 §8.5 (Q4, Q23–Q27, Q29, Q32, Q33).
 > This document owns how the game looks, sounds, and communicates. It must faithfully present the rules in [document 03](03-gameplay-systems-and-content.md) and the journey in [document 02](02-player-experience-and-game-flow.md). Vocabulary follows 01 §7; the content key `archetypes` holds the five role ids.
 
 | Field | Value |
 | --- | --- |
-| Game / version / updated | Arena League / v0.4 / 2026-10-25 |
-| Status / design owner | Draft v0.4, synced to the M1 build and reviewed (01 §8.6), not approved / the project owner |
+| Game / version / updated | Arena League / v0.5 / 2026-10-26 |
+| Status / design owner | Draft v0.5, synced to the M1 build and reviewed (01 §8.6), not approved / the project owner |
 | Milestone covered | **M1 "Season MVP"** (O14): management screens and match reports (O12). The M2 arena-viewer direction is given at brief level and tagged M2; M4 and M5 screens are placeholders (§6.3) |
 | Visual references | **Approved EXAMPLE visual references and primary visual anchor** (§2 ref-001): the static mockups in [`mockups/`](mockups/index.html) (index, home, squad, fighter, match-report, league, market, components) and the design system in [`src/ui/styles/`](../../src/ui/styles/) (`tokens.css`, `base.css`, `components.css`). Sample names and numbers in the mockups are EXAMPLE data. Where a mockup's wording differs from this document, this document governs (§6.3, reconciliation notes) |
 
@@ -97,6 +97,8 @@ Hybrids show both glyphs side by side (e.g. Paladin = shield + cross). Hues deri
 ## 5. Characters, objects, and environments
 
 **Status:** PROPOSED. M1 uses CSS placeholders only. M2 adds arena tokens and class icons.
+
+**Asset sources (O22, REQUIRED):** fighter assets must not use the existing 3D asset pipeline (asset-gen) or the Synty packs. The sprite pipeline is open-032: `docs/art/sprite-pipeline-research.md` recommends a new AI 3D → 2D render pipeline with direct 2D generation as the fallback, decided by a bake-off, and lists the owner's open questions (§12 there).
 
 ### Reusable asset briefs
 
@@ -192,6 +194,8 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 | ui-fighter, ui-codex, ui-league, ui-fixtures, ui-market, ui-finances | flow-state-003 (hub screens) | fighter card, tables, market, finance screen |
 | ui-match | flow-state-005 | the match (M1: headless simulation) |
 | ui-report | flow-state-006 | match report |
+| ui-between (M1.1) | flow-state-010 | between-round screen |
+| ui-levelup (M1.1) | flow-state-011 | level-up card |
 | ui-season-end | flow-state-007 | season-end review |
 | ui-save, ui-settings | flow-state-009 | menu, save/load, settings |
 | Job offers (M6, not yet designed) | flow-state-008 | job-offers |
@@ -234,6 +238,7 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
   2. *Roster table:* the **roster cap meter** (one cell per place, 11 / 12), filter chips (All, Lineup, Reserves, Injured, Contract ends), name filter, Sign. Columns at 1440: fighter (portrait, name, C/VC, rookie tag), class (role glyphs), race · age, rating, potential (stars, number on hover), lineup state (Front / Back / Reserve / injured weeks), preset, training emphasis (Balanced, Body, Mind; D-A), trend, traits (polarity dots with tooltips), wage, contract (ends, seasons left, warning tag in the final season). Wide-screen extras: apps, downs, rating sparkline S1–S3.
   3. *View switch* (page header): Overview, Attributes (12 attribute columns), Contracts, Season stats.
 - **Actions:** drag between rows and the roster; keyboard F / B / R (front, back, reserve), C captain, V vice-captain, P cycle preset, E cycle training emphasis, Enter profile; "Last lineup" restores the previous five; **Auto-pick** applies the AI's lineup rule (03 sys-ai-manager step 8); Play match (Continue). **Pre-fill** (PERMITTED-CHOICE, as built): a new career's first lineup is the AI rule's pick; each later week starts from the last locked lineup without departed fighters and hired blades, and an unfit starter gets a one-click Bring in from the reserves.
+- **M1.1 squad (O20) and Freshness (O19):** the lineup board gains a **Reserves** zone with 2 places next to the Back and Front rows; rows and presets are set for all seven; the validation strip adds "✓ 2 reserves" (0 or 1 is allowed when nobody else is fit). Every card and roster row shows a **Freshness bar** (0–100, with a tick at 60) in the label's colour and shape (Fresh ≥ 80 full, Ready 60–79, Tired 40–59 striped, Spent < 40 hollow; never colour alone), the value, and on hover the forecast "after a typical match ≈ 71", "Ready for ≈ 3 more rounds" and "Drains 4.2 a round · recovers +46 a week". The injury estimate adds the Freshness multiplier ("× 1.06 (Tired)"). The roster table gains Level and Freshness columns; the M1 trend is replaced by "next level in ≈ N matches". Match-day settings (auto-swap rule, between-round pause) are one click away from the board.
 - **Selection and focus:** the selected fighter is outlined in brass on the board and highlighted in the table.
 - **Captain changes:** C or V previews the consequence before it applies ("Rook Saltmere will be Snubbed: −2 chemistry for 6 weeks") and applies at once with Undo. Costs are evaluated only at the next lineup lock, so changing back before it is free (03 sys-captaincy).
 - **Validation (inline, never a dialog):** fewer than 5 fit fighters → strip reads "4 of 5 · a hired blade will fill the last place" (open-006); no captain → the strip says one will be named at kickoff (the vice-captain if fit, else the best-CQ fit starter) and Play match stays enabled; the digest then reports the interim captain and why (`captain.interim`, D-S); roster over cap after relegation → Continue becomes `Decide first · Release N fighters` (flow-005).
@@ -247,6 +252,7 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
   1. *Header:* large portrait; name and captain mark; facts line (role badge, class, race and age, row, preset, tenure); **trait badges** (CK-style, rich tooltips: category, polarity, effect text from `traits.json`, flavour, opposite, source); rating (large pill) and potential (stars and number); actions Renew (enabled only in the final contract season), Compare, Release.
   2. *Tabs:* Overview, Tactics (read-only preset rules in M1 with fire counts from the last match, plus the class kit), Match log, Contract.
   3. *Overview grid:* **Attributes** grouped Physical (5) and Mental (7) as in `combat.json`, each a bar on the absolute 1–20 scale with band ticks at 5/10/15, the attribute's **ceiling** as a tick and **age wear** as a hatched segment (03 sys-fighters), the value and the change this season; **Age curve** for the fighter's race (physical and mental curves from `development.json`, growth / peak / wear zones, a "you are here" marker; elves and other races show their own age axis and the human-age equivalent); **Development** (season XP against the typical season, rating by season with potential as a dashed line, trend word); **Traits** with effect lines; **Fitness and contract** (wage, end, release payout, captaincy 1–100 with its grade, injury status and history, "At risk" and "Still tender", the retirement chance from human-age 31 and the final-season status; 03 sys-injury, sys-development); **Career** table by season.
+- **M1.1 additions:** the header shows the **level** with the XP bar (xpIntoLevel / xpNeeded), levels this season and "next level in ≈ N matches" (replacing the trend), and a "Level-up" badge when one is pending; the attributes list gains **Stamina** among the physical stats; a **Freshness** tile (bar, label, drain per round and weekly rest); the Tactics tab shows **rank pips** on each ability with the next rank's delta, and a **Perks** list (up to 4, tier and effect); the level-up mode for this fighter.
 - **Actions:** previous / next fighter ( [ ] ), set preset, set training emphasis, set captain / vice-captain, compare, renew, release (commit dialog).
 - **Empty / error:** a rookie has an empty career table ("First season · no matches yet"); an injured fighter shows the injury callout above the attributes; retired fighters open read-only with a "Retired after S5" ribbon.
 - **Shortcuts:** [ ] cycle fighters, T tactics tab, Esc back to Squad.
@@ -255,7 +261,8 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 
 - **Purpose:** learn the 42 classes (O8) and their presets without leaving the game.
 - **Layout:** left filter rail (role toggles with glyphs; "hybrids" toggle; search by name, ability or role tag such as "taunter"); main grid of class cards (role frame and icon, name, role(s), preferred row, complexity, one-line description); a detail pane on selection: flavour, abilities (basic, two actives, passive, each with cooldown, focus cost, range and description from `abilities.json`), stat emphasis bars from `ratingWeights`, the presets with their summaries and rules as sentences, and two lists: "Your fighters of this class" and "Free agents of this class".
-- **Data:** `classes.json`, `abilities.json`, `tactics-presets.json`, roster, market.
+- **M1.1 additions:** each ability shows its ranks 1–3 with each rank's change (`ability-ranks.json`); a **Perks** tab lists the 72 perks by archetype and tier with tags, requirements and exclusions (`perks.json`); starter classes carry the ★ starter chip (O21).
+- **Data:** `classes.json`, `abilities.json`, `tactics-presets.json`, `ability-ranks.json`, `perks.json`, roster, market.
 - **Empty:** a filter with no match shows "No class matches · Reset filters".
 - **Shortcuts:** 7 opens; arrows move in the grid; Enter opens the detail; / focuses search.
 
@@ -280,6 +287,14 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 
 - **Purpose:** flow-state-005. In M1, Play match runs the whole week processing (every fixture of the week, the player's included) and writes the autosave before the report opens (D-O); the week takes about 0.2 s (median on the development machine, 05 §8). Show a 600 ms (TUNABLE; 0 with reduced motion) panel "Simulating · Round 1 · Round 2 · Round 3" filling in as rounds resolve, then open the report. Input is ignored except Esc, which does nothing but is not an error. M2: this becomes Watch or Simulate (open-020).
 
+#### ui-between · Between-round screen (M1.1)
+
+- **Purpose:** flow-state-010 (02 §3): after each round of the player's match that does not decide it, show what the round did to the squad and let the manager swap (O20; D-U, D-V). It is where Freshness matters (O19): nothing about it changes during a round.
+- **Layout:** (1) a header strip with the round result, the score and the next round's number, plus "Swaps left: n of 2"; (2) **our active five** as cards in their rows: Freshness bar, value and label with this round's change ("Ready → Tired (53)", −10.9), damage taken, downs, an injury callout (an injured fighter is marked "must be replaced"); (3) **our reserves** (Freshness, label, rating, class and role glyph); (4) the **planned swaps** list, pre-filled with the auto-swap suggestions and their reason ("auto: below 40", "forced: injured"), each with Undo; (5) a note "Withdrawn fighters cannot return this match" and, when relevant, "No reserve left: an emergency entrant will replace him" (the best-suited fit fighter outside the squad); (6) the opponent's round summary without his swap plans (decisions are blind).
+- **Actions:** drag a reserve onto an active card, or select both and press Swap; choose the entering fighter's row (front or back; default the outgoing fighter's); Continue plays the next round with the planned swaps (no change accepts the suggestions). Keyboard: 1–5 select an active fighter, R1 / R2 (Shift+1, Shift+2) select a reserve, S swap, Space Continue.
+- **States:** no swaps left → reserves are dimmed with "No swaps left"; a withdrawn fighter appears greyed under "Withdrawn" with no action; pacing `when_urgent` opens the screen only for a forced choice, a fighter below the auto threshold or a missing captain; `never` skips it (the suggestions apply). Quitting here resumes here (P-05).
+- **Not here:** level-up picks (they wait until after the report, D-X) and tactics edits (M3).
+
 #### ui-report · Match report ([match-report.html](mockups/match-report.html))
 
 - **Purpose:** make the result explain itself (C1.2, pillar 2, P-22); vis-001 asks playtesters to name a concrete cause from this screen.
@@ -294,10 +309,17 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
      A round decided at the time cap adds a line naming the tiebreak step. Not built in M1: traces for rules skipped for a reason (cooldown, out of reach, controlled) and a "blocked" verdict.
   4. *Box score:* both sides (ours first, theirs dimmed), columns downs, downed, damage, taken, healed, control seconds, rules fired, XP; sortable; every number has a breakdown tooltip (per round, per ability).
   5. *Key moments* (side): a timeline grouped by round; markers by side colour and by event shape (diamond = down, ring = rule or save, square = injury, bar = round end or overtime); each item names the actor, the rule or ability and the cause (an interrupt is listed only when another fighter caused it, never for a cast the caster dropped). Clicking an item highlights the related trace and box-score row; from M2 it jumps the replay to that tick.
-  6. *Injuries and XP:* injury callouts with cause and weeks out; XP gains and attribute changes.
+  6. *Injuries and XP:* injury callouts with cause and weeks out; XP gains and attribute changes. **M1.1:** each round tab shows both sides' active five with Fresh, Tired or Spent tags; the timeline adds swap lines between rounds ("After round 1 — Home: Druid (Tired 48) → Bard (Fresh 92), auto"); recaps say "entered after round n", "swapped out after round n" or "injured in round n"; ranked abilities read "Shield Bash II"; bench XP is listed for the fighters who did not play; fighters who levelled get a "Level up" chip that opens ui-levelup.
 - **Actions:** Continue (to the next week's hub; the week was already processed and autosaved at Play match, D-O); open any fighter; copy the event log; Replay (M2, shown disabled with a tooltip).
 - **Empty / error:** a report missing its event log (an old save) shows score and rounds and "Details unavailable for this match"; a hired blade in the lineup is labelled in every table.
 - **Shortcuts:** Alt+1–5 and [ ] round tabs, ← → previous/next report, Space Continue.
+
+#### ui-levelup · Level-up card (M1.1)
+
+- **Purpose:** flow-state-011 (02 §3): let the manager pick 1 of 3 options when a fighter levels (O18). It opens after the match report per level-up pacing (`detailed` default in M1.1; `balanced`; `fast`), or from a **"Level-ups (n)"** badge on Home, Squad and the fighter page.
+- **Layout:** the fighter (portrait, name, class, new level, XP bar reset with the carried-over XP); **three option cards**: a *stat* card shows the stat, its value before → after and the rating change (+0 or +1); a *rank* card shows the ability with its rank pips and the next rank's one-line delta ("Shield Bash II: cooldown 9 → 8 s"); a *perk* card shows its name, tier, tags and one-line effect from `perks.json`; options made illegal by an earlier pick are greyed out with the reason. A separate **trait offer** row, when present: two trait chips with their kind and effect, and "Neither".
+- **Actions:** pick a card (click, 1–3, Enter); **Auto-pick** highlights and takes the option the fighter's policy would take; **Later** keeps it in the queue (at most 3; the digest says when the oldest auto-resolves); a mode selector for this fighter ("Ask me", Auto, Auto favouring stats, Auto favouring skills). With several fighters, a stepper ("2 of 4") moves through them.
+- **States:** no pick is possible while a match is in progress; a level that resolved empty (nothing left to offer) shows a short note instead of cards.
 
 #### ui-market · Market: free agents, offers, renewals, releases ([market.html](mockups/market.html))
 
@@ -341,6 +363,7 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 - **Interface:** theme (Dark, Light, System), interface scale 85–150% (TUNABLE, default 100%), table density (Comfortable, Compact), tooltip delay, number format.
 - **Accessibility:** reduce motion (also follows the OS), status colours (Green/red, Blue/orange), flash limit (M2), larger focus ring.
 - **Audio:** master, music, effects, interface; mute when the window is unfocused.
+- **Match day (M1.1, per club):** level-up default ("Ask me", Auto, Auto favouring stats, Auto favouring skills) and level-up pacing (Detailed, the M1.1 default; Balanced; Fast); the between-round pause (Always, the M1.1 default; When urgent; Never); the auto-swap rule (Off, Injured only, Threshold) with its threshold (default 40), the lost-round bonus (+10) and "keep one swap for injuries" (D-V).
 - **Controls:** every shortcut remappable, with conflict warnings and "Reset to defaults".
 
 #### ui-knowledge · Fuzzy-stat display (M4 placeholder, not designed)
