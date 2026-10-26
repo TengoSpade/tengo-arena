@@ -280,7 +280,8 @@ export function optionText(content: ContentDB, fighter: Fighter, stats: Record<s
     const gain = Math.max(1, Math.round(option.gain100 / 100));
     const klass = content.classes.get(fighter.classId);
     const weight = (klass?.ratingWeights as Record<string, number> | undefined)?.[option.stat] ?? 0;
-    const cap = Math.floor((fighter.cap100[option.stat] ?? 0) / 100);
+    // On the shown scale (traits and race included): the shown value plus the trainable room left.
+    const cap = now + Math.max(0, Math.round(((fighter.cap100[option.stat] ?? 0) - (fighter.train100[option.stat] ?? 0)) / 100));
     const group = content.stats.get(option.stat)?.group;
     const emphasis = fighter.trainingEmphasis;
     const why = [

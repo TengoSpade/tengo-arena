@@ -4,6 +4,7 @@ import type { GameState } from '../../../core/model';
 import { installShortcuts } from '../../app/shortcuts';
 import { resetToasts } from '../../components';
 import { TestProviders, createTestStore } from '../../debug/test-store';
+import { coreEngine } from '../../store';
 import SquadScreen, { squadSelection } from './index';
 
 let dispose: (() => void) | null = null;
@@ -78,4 +79,24 @@ describe('Squad: match squad of 5 + 2 and Freshness (M1.1)', () => {
     expect(lineup).toContain(sub.id);
     expect(lineup).not.toContain(starter);
   });
+  it('Auto-pick takes the core squad suggestion: an injured starter is replaced and the reserve places are filled', async () => {
+    const { store } = createTestStore({ engine: coreEngine });
+    const next = structuredClone(store.game.value!) as GameState;
+    const club = next.clubs[next.playerClubId!]!;
+    const hurt = club.lineup.fighters[0]!.fighterId;
+    next.fighters[hurt]!.injury = { ...(next.fighters[hurt]!.injury ?? {}), severity: 'moderate', weeksOut: 3, fixtureId: null, round: null, causeFighterId: null } as never;
+    club.lineup.reserves = [];
+    store.replaceWorld(next);
+    expect(store.blockers.value.map((b) => b.code)).toContain('lineup.unavailable');
+    mount(store);
+    await act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /Auto-pick/ }));
+    });
+    const after = store.game.value!.clubs[club.id]!.lineup;
+    expect(store.blockers.value).toEqual([]);
+    expect(after.fighters.map((e) => e.fighterId)).not.toContain(hurt);
+    expect(after.reserves.length).toBeGreaterThan(0);
+    expect(store.recentCommands.value.at(-1)?.command.type).toBe('squad.set');
+  });
 });
+

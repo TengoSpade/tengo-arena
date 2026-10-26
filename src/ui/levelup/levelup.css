@@ -160,3 +160,12 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.lu-card__rating.is-same {
+  font-weight: var(--fw-regular, 400);
+  color: var(--c-text-muted);
+}
+
+.lu-mode > span {
+  white-space: nowrap;
+}

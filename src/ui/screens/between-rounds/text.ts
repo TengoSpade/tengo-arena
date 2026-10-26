@@ -50,6 +50,8 @@ const T = {
   themSub: 'Their decisions are blind: you see them when the round starts.',
   continue: 'Play round {n}',
   continueTip: 'Plays the next round with these five.',
+  continueAutoTip: 'Plays round {round} with the {n} suggested {n?swap|swaps} from your rules, as an unpaused match would. A fighter swapped out cannot return.',
+  suggestedNote: '{n} suggested {n?swap|swaps} · cannot return',
   confirmTitle: 'Make {n} {n?swap|swaps} and play round {round}?',
   confirmText: 'A fighter swapped out cannot return in this match.',
   confirmOk: 'Swap and play',

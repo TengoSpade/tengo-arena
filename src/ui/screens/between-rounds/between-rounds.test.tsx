@@ -111,22 +111,34 @@ describe('Between-round screen', () => {
     expect(store.game.value!.liveMatch).toBeNull();
   });
 
-  it('pre-fills the auto-swap suggestion for a Spent starter and asks once before swapping (cannot return)', async () => {
-    const { ms, advance } = setup({ spentFirst: true });
+  it('pre-fills the auto-swap suggestion for a Spent starter: accepting it is one click; a swap of your own asks once (cannot return)', async () => {
+    const { ms, advance, store } = setup({ spentFirst: true });
     const out = ms.home.active[0]!;
     const select = screen.getByTestId(`br-swap-${out}`) as HTMLSelectElement;
     expect(select.value).not.toBe('');
     expect(within(screen.getByTestId(`br-row-${out}`)).getByText('suggested')).toBeTruthy();
+    expect(screen.getByTestId('br-suggested').textContent).toContain('cannot return');
+    // Changing the plan (no swaps, then a swap of your own) needs the confirmation…
+    await act(() => {
+      fireEvent.keyDown(document.body, { key: 'n' });
+    });
+    await act(() => {
+      fireEvent.keyDown(document.body, { key: '2' });
+    });
     await act(async () => {
       fireEvent.click(screen.getByTestId('br-continue'));
     });
-    const dialog = screen.getByTestId('br-continue-dialog');
-    expect(dialog.textContent).toContain('cannot return');
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('br-continue-confirm'));
+    expect(screen.getByTestId('br-continue-dialog').textContent).toContain('cannot return');
+    fireEvent.click(within(screen.getByTestId('br-continue-dialog')).getByText(/Cancel/));
+    // …accepting the rules' suggestion as it stands does not: one click plays on.
+    await act(() => {
+      fireEvent.keyDown(document.body, { key: 'a' });
     });
-    // Accepting the suggestions records them as the decisions for this step.
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('br-continue'));
+    });
     await vi.waitFor(() => expect(advance).toHaveBeenCalledTimes(1));
+    expect(store.recentCommands.value.find((c) => c.command.type === 'match.swap')?.command).toMatchObject({ swaps: [{ out }] });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });

@@ -26,6 +26,7 @@ const T = {
   confirm: 'Confirm',
   pickFirst: 'Pick one of the options first (1–3).',
   keys: '1–3 option · 4/5 trait · 6 neither · A auto-pick · Enter confirm',
+  keysNoTrait: '1–3 option · A auto-pick · Enter confirm',
   mode: 'Level-ups',
   modeTip: 'Ask me opens this dialog; the auto modes pick for him (stats, skills or balanced). "Club default" follows Settings › Match day.',
   modeInherit: 'Club default',

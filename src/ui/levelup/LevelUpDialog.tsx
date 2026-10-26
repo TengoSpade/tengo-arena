@@ -123,7 +123,7 @@ function Dialog({
       title={t('title', { name, level: offer.level })}
       icon="level-up"
       testId="levelup-dialog"
-      footerNote={<span class="u-xs u-faint">{t('keys')}</span>}
+      footerNote={<span class="u-xs u-faint">{t(offer.traitOffer ? 'keys' : 'keysNoTrait')}</span>}
       footer={
         <>
           <ModeSelect value={fighter.levelUpMode} onChange={(m) => md.setLevelUpPolicy(fighter.id, m)} />
@@ -191,7 +191,7 @@ function Dialog({
                 {o.option.kind === 'rank' && <RankPips rank={o.option.toRank} label={t('rankPips', { n: o.option.toRank })} />}
                 <span class="lu-card__detail">{o.option.kind === 'perk' ? playerText(text.detail) : text.detail}</span>
                 {o.option.kind === 'stat' && rating !== null && ratingAfter !== null && (
-                  <span class="lu-card__rating u-xs">{ratingAfter > rating ? t('ratingUp', { from: rating, to: ratingAfter }) : t('ratingSame', { n: rating })}</span>
+                  <span class={`lu-card__rating u-xs${ratingAfter > rating ? '' : ' is-same'}`}>{ratingAfter > rating ? t('ratingUp', { from: rating, to: ratingAfter }) : t('ratingSame', { n: rating })}</span>
                 )}
                 <span class="lu-card__why u-xs u-muted">{text.why}</span>
               </button>

@@ -25,7 +25,7 @@ import { useMatchDay } from '../../store/match-day';
 import { Crest, clubName } from '../league/lib/club';
 import { fmtInt, fmtTicks } from '../league/lib/format';
 import { ClassTag, Portrait, RatingPill } from '../league/lib/ui';
-import { cycleSwap, matchXpSoFar, reserveCoverage, setSwap } from './model';
+import { cycleSwap, matchXpSoFar, reserveCoverage, sameDecisions, setSwap } from './model';
 import { t } from './text';
 import './between-rounds.css';
 
@@ -77,19 +77,18 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
     }
   };
 
+  // Your own swaps are confirmed once (cannot return); the rules' suggestions as they stand play on
+  // in one click, the same as an unpaused round (WP-C: pausing and accepting = not pausing).
+  const ownSwaps = plan.length > 0 && !sameDecisions(plan, mine?.suggestions ?? []);
+  const go = () => {
+    if (!mine) return false;
+    if (ownSwaps) document.querySelector<HTMLButtonElement>('[data-testid="br-continue"]')?.click();
+    else void playOn();
+    return true;
+  };
   useShortcuts({
-    Enter: () => {
-      if (!mine) return false;
-      if (plan.length > 0) document.querySelector<HTMLButtonElement>('[data-testid="br-continue"]')?.click();
-      else void playOn();
-      return true;
-    },
-    Space: () => {
-      if (!mine) return false;
-      if (plan.length > 0) document.querySelector<HTMLButtonElement>('[data-testid="br-continue"]')?.click();
-      else void playOn();
-      return true;
-    },
+    Enter: go,
+    Space: go,
     a: () => (mine ? setPlan([...mine.suggestions]) : false),
     n: () => (mine ? setPlan([]) : false),
     ...Object.fromEntries(
@@ -144,9 +143,16 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
           <span {...tipAttrs(t('withdrawnTip'))}>
             <Pips value={mine.swapsLeft} max={2} label={t('swapsLeft', { n: mine.swapsLeft })} /> {t('swapsLeft', { n: mine.swapsLeft })}
           </span>,
+          ...(plan.length > 0 && !ownSwaps
+            ? [
+                <span class="u-warn" data-testid="br-suggested" {...tipAttrs(t('suggestedTip'))}>
+                  {t('suggestedNote', { n: plan.length })}
+                </span>,
+              ]
+            : []),
         ]}
         actions={
-          plan.length > 0 ? (
+          ownSwaps ? (
             <ConfirmButton
               variant="primary"
               size="lg"
@@ -161,7 +167,7 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
               {continueLabel}
             </ConfirmButton>
           ) : (
-            <button class="btn btn--primary btn--lg" type="button" onClick={() => void playOn()} aria-disabled={busy ? 'true' : undefined} data-testid="br-continue" {...tipAttrs(t('continueTip'))}>
+            <button class="btn btn--primary btn--lg" type="button" onClick={() => void playOn()} aria-disabled={busy ? 'true' : undefined} data-testid="br-continue" {...tipAttrs(plan.length > 0 ? t('continueAutoTip', { n: plan.length, round: view.nextRound }) : t('continueTip'))}>
               {continueLabel}
             </button>
           )

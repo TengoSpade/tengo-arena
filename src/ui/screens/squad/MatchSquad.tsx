@@ -35,6 +35,22 @@ export function toggleReserve(store: GameStore, state: GameState, club: Club, id
   return runUndoable(store, squadCommand(club, fighters, next), squadCommand(club, fighters, [...now]), title);
 }
 
+/**
+ * Auto-pick (M1.1): core suggests a squad.set (the five, reserves, captain). When it names no
+ * reserves, keep the current ones still on the bench and fit, then top up from suggestReserves.
+ */
+export function applySuggestedSquad(store: GameStore, state: GameState, content: ContentDB, engine: GameEngine, club: Club, cmd: Extract<Command, { type: 'squad.set' }>, title: string): boolean {
+  const five = new Set(cmd.fighters.map((e) => e.fighterId as string));
+  let reserves = [...cmd.reserves];
+  if (reserves.length === 0) {
+    reserves = (club.lineup.reserves ?? []).filter((id) => !five.has(id) && state.fighters[id] && fit(engine, state.fighters[id]!));
+    const draft: Club = { ...club, lineup: { ...club.lineup, fighters: cmd.fighters, reserves } };
+    for (const id of suggestReserves(state, content, engine, draft)) if (reserves.length < RESERVES_MAX && !reserves.includes(id)) reserves.push(id);
+  }
+  const before = squadCommand(club, club.lineup.fighters.map((e) => ({ ...e })), [...(club.lineup.reserves ?? [])]);
+  return runUndoable(store, { ...cmd, reserves }, before, title);
+}
+
 const rolesOf = (content: ContentDB, f: Fighter | undefined) => [...(content.classes.get(f?.classId ?? '')?.archetypes ?? [])] as string[];
 const fit = (engine: GameEngine, f: Fighter) => {
   try {
@@ -62,6 +78,7 @@ export function rotationTips(state: GameState, content: ContentDB, engine: GameE
   const used = new Set<string>();
   const roster = Object.values(state.fighters).filter((f) => f.clubId === club.id && f.status === 'active');
   const starters = new Set(club.lineup.fighters.map((e) => e.fighterId as string));
+  const reserves = new Set((club.lineup.reserves ?? []).map((id) => id as string));
   const rating = (f: Fighter) => fighterViewOf(engine, state, content, f.id)?.rating ?? 0;
   for (const e of club.lineup.fighters) {
     const f = state.fighters[e.fighterId];
@@ -71,9 +88,10 @@ export function rotationTips(state: GameState, content: ContentDB, engine: GameE
     const roles = rolesOf(content, f);
     const pick = roster
       .filter((c) => !starters.has(c.id) && !used.has(c.id) && fit(engine, c) && rolesOf(content, c).some((r) => roles.includes(r)))
-      .map((c) => ({ c, fresh: freshInfo(engine, state, content, c), r: rating(c) }))
+      .map((c) => ({ c, fresh: freshInfo(engine, state, content, c), r: rating(c), reserve: reserves.has(c.id) ? 1 : 0 }))
       .filter((x) => x.fresh.value >= 80 && x.r >= rating(f) - MAX_RATING_GAP)
-      .sort((a, b) => b.r - a.r || b.fresh.value - a.fresh.value)[0];
+      // Bench fighters first: taking a match reserve into the five leaves his reserve place empty.
+      .sort((a, b) => a.reserve - b.reserve || b.r - a.r || b.fresh.value - a.fresh.value)[0];
     if (!pick) continue;
     used.add(pick.c.id);
     out.push({ out: f.id, in: pick.c.id, outFresh: info, inFresh: pick.fresh, row: e.row });

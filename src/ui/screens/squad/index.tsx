@@ -70,7 +70,7 @@ import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from
 import { format, t } from '../../text';
 import { freshInfo, levelInfo } from '../../m11/model';
 import { FreshMeter, LevelChip, freshTip } from '../../m11/parts';
-import { ReservesZone, RotationStrip, rotationTips, toggleReserve } from './MatchSquad';
+import { ReservesZone, RotationStrip, applySuggestedSquad, rotationTips, toggleReserve } from './MatchSquad';
 import { T } from './text';
 import './squad.css';
 
@@ -218,7 +218,8 @@ export default function SquadScreen(_props: ScreenProps) {
           opponent={opponent ?? null}
           onAuto={() => {
             const cmd = safeView(() => engine.suggestLineup(state, club.id, content), null);
-            if (cmd && cmd.type === 'lineup.set') actions.setLineup(cmd.fighters, T.toastAuto);
+            if (cmd?.type === 'lineup.set') actions.setLineup(cmd.fighters, T.toastAuto);
+            else if (cmd?.type === 'squad.set') applySuggestedSquad(store, state, content, engine, club, cmd, T.toastAuto);
           }}
           onLast={(entries) => actions.setLineup(entries, T.toastLast)}
         />
