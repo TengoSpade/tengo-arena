@@ -38,6 +38,7 @@ import {
 import { OUTCLASSED_GAP, formatInt, formatMoney, formatPercent, formatSigned, ordinal } from '../../format';
 import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
 import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
+import { TRIALS, trialsRookiesOf } from '../league/lib/trials';
 import { useStore, type AppStore } from '../../store';
 import { settings } from '../../store/settings';
 import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
@@ -372,6 +373,20 @@ function lineupReadiness(ctx: ClubContext): { problem: string | null } {
   return { problem: null };
 }
 
+/** Trials Day line (P1): links to the rookies in the Market; the info mark explains the rule. */
+function TrialsCheck({ n }: { n: number }) {
+  return (
+    <li data-state={n > 0 ? 'warn' : undefined} data-testid="check-trials">
+      <span>
+        <a href="#/market?view=rookies">{n === 0 ? T.checkTrialsNone : n === 1 ? T.checkTrials : format(T.checkTrialsMany, { n })}</a>{' '}
+        <span class="check-info" tabIndex={0} role="img" aria-label={`${T.checkTrialsTip} ${TRIALS.explain}`} {...tipAttrs({ title: T.checkTrialsTip, body: TRIALS.explain })}>
+          <Icon name="info" size="sm" />
+        </span>
+      </span>
+    </li>
+  );
+}
+
 function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
   const { state, content, tier, roster } = ctx;
   // Integrator (WP5): during the season-end step weekIndex is W + 1 (core/model calendar), which has no week def.
@@ -419,7 +434,7 @@ function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
               ? format(T.checkRosterShort, { n: roster.length, cap: ctx.rosterCap, need: 5 - roster.length })
               : format(T.checkRoster, { n: roster.length, cap: ctx.rosterCap })}
         </li>
-        {week.index === 1 && <li data-state="warn">{T.checkTrials}</li>}
+        {week.index === 1 && state.calendar.phase === 'preseason' && <TrialsCheck n={trialsRookiesOf(state, ctx.club.id).length} />}
         <li data-state={ending > 0 ? 'warn' : undefined}>{format(T.checkContracts, { n: ending })}</li>
         <li data-state={lineupOk ? undefined : 'warn'}>{lineupOk ? T.checkLineup : (lineup.problem ?? T.checkLineupMissing)}</li>
       </ul>

@@ -129,9 +129,18 @@ describe('Market screen', () => {
   it('closes trials-day rookies outside P1 and signs them in P1', () => {
     renderMarket('mid');
     fireEvent.click(screen.getByRole('button', { name: /^Rookies/ }));
-    expect(screen.getByText('Trials-day rookies are available in week P1 only')).toBeTruthy();
+    expect(screen.getByText('Trials Day rookies can be signed in week P1 only')).toBeTruthy();
+    expect(screen.queryByTestId('market-trials')).toBeNull(); // no Trials Day card after P1
     cleanup();
     const { store } = renderMarket('trials');
+    // P1: the card above the free agents names the rookies, explains the rule and signs from there too.
+    const card = screen.getByTestId('market-trials');
+    expect(card.textContent).toContain('Trials Day (preseason week P1)');
+    expect(card.textContent).toContain('no signing cost');
+    expect(card.querySelectorAll('[data-testid^="trials-rookie-"]')).toHaveLength(3);
+    fireEvent.click(card.querySelector<HTMLButtonElement>('[data-testid^="trials-sign-"]')!);
+    expect(within(screen.getByTestId('offer-dialog')).getByText(/from Trials Day/)).toBeTruthy();
+    fireEvent.keyDown(screen.getByTestId('offer-dialog'), { key: 'Escape' });
     fireEvent.click(screen.getByRole('button', { name: /^Rookies/ }));
     const table = screen.getByTestId('market-rookies');
     expect(within(table).getAllByRole('row').slice(1)).toHaveLength(3);

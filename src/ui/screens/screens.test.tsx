@@ -185,6 +185,26 @@ describe('Home', () => {
     expect(texts.find((x) => x[0]!.startsWith('Lineup'))![1]).toBe('warn');
   });
 
+  it('says what Trials Day is on P1 and links to the rookies in the Market', () => {
+    const { store } = createTestStore({ weekIndex: 1 });
+    const state = structuredClone(store.game.value!);
+    const rookie = Object.values(state.fighters).find((f) => f.status === 'free-agent')!;
+    state.market.trialsRookies = { [club(state).id]: [rookie.id] };
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const line = screen.getByTestId('check-trials');
+    expect(line.getAttribute('data-state')).toBe('warn');
+    expect(line.querySelector('a')!.getAttribute('href')).toBe('#/market?view=rookies');
+    expect(line.textContent).toContain('Trials Day: your rookie is waiting in the Market');
+    expect(line.querySelector('.check-info')!.getAttribute('aria-label')).toContain('no signing fee');
+    cleanup();
+    const signed = structuredClone(store.game.value!);
+    signed.market.trialsRookies = {};
+    store.replaceWorld(signed);
+    mount(<HomeScreen params={{}} />, store);
+    expect(screen.getByTestId('check-trials').getAttribute('data-state')).toBeNull();
+  });
+
   it('never shows an opponent lineup before their first match (D-R, KI-9)', () => {
     const { store } = createTestStore({ weekIndex: 5 });
     const state = store.game.value!;
@@ -337,6 +357,34 @@ describe('New career and club select', () => {
     });
     expect(store.game.value).not.toBeNull();
     expect(location.hash).toBe('#/club-select');
+  });
+
+  it('previews the focused club: role coverage, Trials Day rookie and every fighter, following the arrow keys', async () => {
+    const { store, content } = createTestStore({ playerClubId: null });
+    mount(<ClubSelectScreen params={{}} />, store);
+    const state = store.game.value!;
+    const preview = screen.getByTestId('club-preview');
+    const cards = [...document.querySelectorAll<HTMLButtonElement>('.club-card')];
+    await act(() => {
+      cards[0]!.focus();
+    });
+    const first = state.clubs[cards[0]!.dataset['testid']!.replace('club-card-', '') as ClubId]!;
+    expect(preview.textContent).toContain(first.name);
+    const roster = Object.values(state.fighters).filter((f) => f.clubId === first.id && f.status === 'active');
+    expect(screen.getByTestId('club-preview-roster').querySelectorAll('li')).toHaveLength(roster.length);
+    for (const f of roster) expect(preview.textContent).toContain(f.name.full);
+    if (first.captainId) expect(preview.textContent).toMatch(/C/);
+    expect(screen.getByTestId('club-preview-roles').textContent).toContain(content.vocabulary.roles[0]!.name);
+    const rookieId = state.market.trialsRookies[first.id]?.[0];
+    if (rookieId) expect(screen.getByTestId('club-preview-rookie').textContent).toContain(state.fighters[rookieId]!.name.full);
+    // Arrow keys move between the cards and the preview follows.
+    await act(() => {
+      fireEvent.keyDown(cards[0]!, { key: 'ArrowRight' });
+    });
+    const second = state.clubs[cards[1]!.dataset['testid']!.replace('club-card-', '') as ClubId]!;
+    expect(document.activeElement).toBe(cards[1]);
+    expect(preview.querySelector('.panel__subtitle')!.textContent).toContain(second.name);
+    expect(cards[1]!.getAttribute('data-previewed')).toBe('true');
   });
 
   it('picks a club and starts the career through the commit dialog', async () => {

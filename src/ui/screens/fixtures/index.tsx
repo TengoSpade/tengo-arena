@@ -12,6 +12,7 @@ import type { ContentDB } from '../../../core/content';
 import type { ClubId, Fixture, GameState, TierId } from '../../../core/model';
 import { DataTable, Icon, PageHeader, Panel, TabPanel, type Column } from '../../components';
 import { weekDefAt, weekLong, weekShort, weekTitle } from '../league/lib/calendar';
+import { TRIALS } from '../league/lib/trials';
 import { ClubEntity, clubName, clubShort, clubVenue } from '../league/lib/club';
 import { useWp7Engine } from '../league/lib/engine';
 import { fmtPctBp, ordinal } from '../league/lib/format';
@@ -384,7 +385,7 @@ function CalendarStrip({ game, content, clubId, fixtures }: { game: GameState; c
                     class={w.index < now ? 'cal-week is-past' : 'cal-week'}
                     aria-current={w.index === now ? 'date' : undefined}
                     data-result={result}
-                    data-tip={weekLong(content, w.index, tierId)}
+                    data-tip={w.label && w.index === 1 ? TRIALS.explain : weekLong(content, w.index, tierId)}
                     data-testid={`cal-${w.id}`}
                   >
                     <div class="cal-week__head">

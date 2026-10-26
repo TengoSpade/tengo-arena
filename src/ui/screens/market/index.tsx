@@ -19,6 +19,7 @@ import { formatInt } from '../../format';
 import { rosterOf } from '../league/lib/season';
 import { useCareer, type Career } from '../league/lib/store';
 import { Callout, ClassTag, Empty, FighterLink, NoCareer, Portrait, RatingPill, Segmented, Stars, TraitDots, classRoles, roleNames } from '../league/lib/ui';
+import { TRIALS, isTrialsWeek, trialsRookiesOf } from '../league/lib/trials';
 import { tryView } from '../league/lib/views';
 import { CompareDialog } from './CompareDialog';
 import { clubMarket, marketRow, termsCheck, willingLevel, type ClubMarket, type MarketRow } from './model';
@@ -108,7 +109,8 @@ function Market({ career, renewId, viewParam }: { career: Career; renewId: strin
   const pending = game.market.offers.filter((o) => o.clubId === club.id);
   const season = game.calendar.season;
   const renewals = rosterOf(game, club.id).filter((f) => f.contract && f.contract.endSeason === season);
-  const isP1 = game.calendar.weekIndex === 1 && game.calendar.phase === 'preseason';
+  const isP1 = isTrialsWeek(game);
+  const myRookies = isP1 ? trialsRookiesOf(game, club.id) : [];
 
   // 04 ui-market: / search, O offer on the selected row, C compare it.
   useShortcuts({
@@ -177,6 +179,10 @@ function Market({ career, renewId, viewParam }: { career: Career; renewId: strin
             {t('noRoom.text')}
           </Callout>
         </div>
+      )}
+
+      {myRookies.length > 0 && view !== 'rookies' && (
+        <TrialsCard game={game} content={content} engine={engine} market={market} rookies={myRookies} onSign={(id) => setOffer({ fighterId: id, kind: 'trials' })} />
       )}
 
       {view === 'agents' && (
@@ -257,7 +263,12 @@ function Market({ career, renewId, viewParam }: { career: Career; renewId: strin
 
       {view === 'rookies' &&
         (isP1 ? (
-          <RookiesTable game={game} content={content} engine={engine} market={market} ids={trials} onSign={(id) => setOffer({ fighterId: id, kind: 'trials' })} />
+          <div class="l-stack">
+            <Callout kind="info" title={TRIALS.name}>
+              {TRIALS.explain}
+            </Callout>
+            <RookiesTable game={game} content={content} engine={engine} market={market} ids={trials} onSign={(id) => setOffer({ fighterId: id, kind: 'trials' })} />
+          </div>
         ) : (
           <Panel title={t('rookies.title')} icon="user-plus" testId="market-rookies">
             <Empty icon="user-plus" title={t('rookies.closed')} text={t('rookies.closedText')} />
@@ -743,6 +754,76 @@ function CompareTray({
         rows={compare.map((id) => rows.find((r) => r.fighter.id === id)).filter((r): r is MarketRow => Boolean(r))}
       />
     </>
+  );
+}
+
+// ---- Trials Day ------------------------------------------------------------------------------------------
+
+/** P1: the player's own trials rookie(s), with the rule in plain words and the terms (ticket AL-R001-T002). */
+function TrialsCard({
+  game,
+  content,
+  engine,
+  market,
+  rookies,
+  onSign,
+}: {
+  game: GameState;
+  content: ContentDB;
+  engine: Wp7Engine;
+  market: ClubMarket;
+  rookies: Fighter[];
+  onSign: (id: FighterId) => void;
+}) {
+  return (
+    <Panel
+      hero
+      class="panel--accent market-banner market-trials"
+      title={rookies.length > 1 ? t('trials.titleMany') : t('trials.title')}
+      icon="user-plus"
+      subtitle={t('trials.subtitle')}
+      testId="market-trials"
+    >
+      <div class="l-stack l-stack--sm">
+        <p class="u-sm u-muted market-trials__explain">{TRIALS.explain}</p>
+        <ul class="market-trials__list" role="list">
+          {rookies.map((f) => {
+            const r = marketRow(engine, game, content, market, f, 'trials');
+            return (
+              <li key={f.id} class="market-trials__item" data-testid={`trials-rookie-${f.id}`}>
+                <span class="entity">
+                  <Portrait content={content} fighter={f} size="sm" />
+                  <span class="entity__stack">
+                    <FighterLink state={game} id={f.id} />
+                    <span class="entity__sub">
+                      {content.races.get(f.raceId)?.name ?? ''} · {f.age}
+                    </span>
+                  </span>
+                </span>
+                <ClassTag content={content} classId={f.classId} />
+                <span class="l-cluster l-cluster--xs">
+                  <RatingPill value={r.rating} />
+                  <Stars potential={r.potential} />
+                  <TraitDots content={content} traitIds={f.traits.map((x) => x.id)} />
+                </span>
+                <span class="u-sm market-trials__terms">{t('trials.terms', { wage: fmtMoney(r.ask, content) })}</span>
+                <button
+                  class="btn btn--primary btn--sm"
+                  type="button"
+                  onClick={() => onSign(f.id)}
+                  aria-disabled={market.embargo ? 'true' : undefined}
+                  {...tipAttrs(market.embargo ? t('err.embargo.trials') : t('trials.signTip'))}
+                  data-testid={`trials-sign-${f.id}`}
+                >
+                  {t('trials.sign')}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <p class="u-xs u-faint">{t('trials.agentsNote')}</p>
+      </div>
+    </Panel>
   );
 }
 
