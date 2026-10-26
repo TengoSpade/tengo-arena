@@ -11,6 +11,7 @@ import * as fighters from '../fighters';
 import * as league from '../league';
 import * as sim from '../sim';
 import * as tactics from '../tactics';
+import { interimLifecycleHooks } from './interim-lifecycle';
 
 export interface GamePorts {
   /** M1.1: simulateRound (WP-A) is what the orchestrator calls; simulateMatch stays for the M1 whole-match path and tests. */
@@ -51,6 +52,9 @@ export interface GamePorts {
     | 'freshnessBetweenRounds'
     | 'matchEndProgression'
     | 'resolveLevelUp'
+    // M1.1 reads for levelUpView (WP-B)
+    | 'levelOptionLegal'
+    | 'levelEtaMatches'
   >;
   league: Pick<
     typeof league,
@@ -136,14 +140,9 @@ export const realGamePorts: GamePorts = {
     freshnessOf: fighters.freshnessOf,
     freshnessLabel: fighters.freshnessLabel,
     effectiveLevelUpMode: fighters.effectiveLevelUpMode,
-    autoPickChoice: fighters.autoPickChoice,
-    typicalRoundDrain10: fighters.typicalRoundDrain10,
-    freshnessAfterRound: fighters.freshnessAfterRound,
-    xpAfterRound: fighters.xpAfterRound,
-    injuriesAfterRound: fighters.injuriesAfterRound,
-    freshnessBetweenRounds: fighters.freshnessBetweenRounds,
-    matchEndProgression: fighters.matchEndProgression,
-    resolveLevelUp: fighters.resolveLevelUp,
+    // INTERIM until WP-B lands (./interim-lifecycle.ts): autoPickChoice, typicalRoundDrain10, the round hooks,
+    // matchEndProgression and resolveLevelUp are core/fighters stubs; bind fighters.* here when they are implemented.
+    ...interimLifecycleHooks,
   },
   league: {
     nextCalendar: league.nextCalendar,
@@ -208,6 +207,7 @@ export function aiPortsOf(ports: GamePorts): AiPorts {
       humanAge100: ports.fighters.humanAge100,
       isFit: ports.fighters.isFit,
       captaincy: ports.fighters.captaincy,
+      typicalRoundDrain10: ports.fighters.typicalRoundDrain10,
     },
     economy: {
       ask: ports.economy.ask,

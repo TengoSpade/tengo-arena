@@ -93,6 +93,8 @@ export function tidyClub(ports: GamePorts, draft: GameState, clubId: ClubId, con
   const keep = (id: FighterId | null): boolean => id !== null && onRoster(draft, clubId, id) !== null;
   const entries: LineupEntry[] = club.lineup.fighters.filter((e) => keep(e.fighterId));
   if (entries.length !== club.lineup.fighters.length) club.lineup.fighters = entries;
+  const reserves = club.lineup.reserves.filter((id) => keep(id) && !entries.some((e) => e.fighterId === id));
+  if (reserves.length !== club.lineup.reserves.length) club.lineup.reserves = reserves;
   if (club.lineup.matchCaptainId !== null && !entries.some((e) => e.fighterId === club.lineup.matchCaptainId)) club.lineup.matchCaptainId = null;
   for (const fid of Object.keys(club.lineup.tactics) as FighterId[]) if (!keep(fid)) delete club.lineup.tactics[fid];
   const captainLeft = club.captainId !== null && !keep(club.captainId);

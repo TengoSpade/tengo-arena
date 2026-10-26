@@ -26,6 +26,7 @@ import type {
 import { STREAM, deriveSeed } from '../rng';
 import { clamp, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
+import { roundInputOf } from './rounds';
 import { GAME_NEWS_KEYS, addNews, defaultTactics, fail, onRoster } from './shared';
 
 export function matchSeed(state: GameState, fixtureId: FixtureId): string {
@@ -42,6 +43,48 @@ export function eligibleEntries(ports: GamePorts, state: GameState, club: Club):
   });
 }
 
+export function matchTypeOf(fixture: Pick<Fixture, 'stage'>): 'league' | 'tournament' {
+  return fixture.stage === 'league' ? 'league' : 'tournament';
+}
+
+/**
+ * One fighter's fight input at the lineup lock (starters, squad reserves, and
+ * emergency entrants when they enter): effective stats with the side's lock
+ * chemistry (03 sys-chemistry: entering fighters get the same composure
+ * modifier), CQ (`cq`: the lead's cqForFight, else his own), rating, tactics,
+ * and the M1.1 ability ranks and perks (only when not the defaults, so M1
+ * inputs keep their shape).
+ */
+export function fightInputOf(
+  ports: GamePorts,
+  state: GameState,
+  club: Club,
+  fighterId: FighterId,
+  row: LineupEntry['row'],
+  slot: number,
+  ctx: { matchType: 'league' | 'tournament'; chemistry: number; acting: boolean; cq: number | null },
+  content: ContentDB,
+): FightFighterInput {
+  const f = state.fighters[fighterId]!;
+  const cq = ctx.cq ?? ports.fighters.captaincy(state, f.id, club.id, content).cq;
+  const input: FightFighterInput = {
+    fighterId: f.id,
+    classId: f.classId,
+    raceId: f.raceId,
+    row,
+    slot,
+    stats: ports.fighters.effectiveStats(f, content, { matchType: ctx.matchType, chemistry: ctx.chemistry, actingCaptain: ctx.acting }),
+    captainQuality: clamp(cq, 0, 100),
+    traitIds: f.traits.map((t) => t.id),
+    tactics: club.lineup.tactics[f.id] ?? defaultTactics(content, f),
+    rating: ports.fighters.rating(f, content),
+  };
+  const ranks = f.abilityRanks;
+  if (ranks && (ranks.a1 !== 1 || ranks.a2 !== 1 || ranks.passive !== 1)) input.abilityRanks = { ...ranks };
+  if (f.perkIds && f.perkIds.length > 0) input.perkIds = [...f.perkIds];
+  return input;
+}
+
 function sideInput(
   ports: GamePorts,
   state: GameState,
@@ -56,24 +99,10 @@ function sideInput(
   if (lead === null) throw new RangeError(`${club.id}: empty lineup`);
   // Chemistry: trait terms (the club captain's count double) and the club captain's grade (03 sys-chemistry).
   const chemistry = ports.fighters.lineupChemistry(state, club.id, ids, club.captainId, content);
-  const matchType = fixture.stage === 'league' ? 'league' : 'tournament';
+  const matchType = matchTypeOf(fixture);
   const fighters: FightFighterInput[] = entries.map((e, slot) => {
-    const f = state.fighters[e.fighterId]!;
     const isLead = slot === lead.index;
-    const acting = isLead && !lead.isClubCaptain;
-    const cq = isLead ? lead.cqForFight : ports.fighters.captaincy(state, f.id, club.id, content).cq;
-    return {
-      fighterId: f.id,
-      classId: f.classId,
-      raceId: f.raceId,
-      row: e.row,
-      slot,
-      stats: ports.fighters.effectiveStats(f, content, { matchType, chemistry, actingCaptain: acting }),
-      captainQuality: clamp(cq, 0, 100),
-      traitIds: f.traits.map((t) => t.id),
-      tactics: club.lineup.tactics[f.id] ?? defaultTactics(content, f),
-      rating: ports.fighters.rating(f, content),
-    };
+    return fightInputOf(ports, state, club, e.fighterId, e.row, slot, { matchType, chemistry, acting: isLead && !lead.isClubCaptain, cq: isLead ? lead.cqForFight : null }, content);
   });
   return { clubId: club.id, fighters, captainIndex: lead.index, viceCaptainIndex: lead.viceIndex, chemistry };
 }
@@ -275,13 +304,19 @@ function ruleDetails(logs: readonly FightLog[]): FighterRuleDetail[] {
 export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: FixtureId, content: ContentDB): Result<DetailedMatchReport, EngineError> {
   const result = state.results[fixtureId];
   if (!result) return fail('report.not-played', `Fixture "${fixtureId}" has not been played`);
-  // Re-simulate at 'summary' only when the build matches the one that played it (05 §6).
+  // Re-simulate at 'summary' only when the build matches the one that played it (05 §6). M1.1 results
+  // replay round by round from the record (roundInputOf: no decision policy runs); M1 results as a whole match.
   let logs: FightLog[] | null = null;
   if (result.engineVersion === ports.sim.engineVersion && result.contentHash === content.ref.hash && !ports.league.isCompactedResult(result)) {
     try {
-      const out = ports.sim.simulateMatch(result.input, content, { record: 'summary' });
-      const same = out.rounds.length === result.rounds.length && out.rounds.every((r, i) => r.checksum === result.rounds[i]!.checksum);
-      logs = same && out.logs ? out.logs : null;
+      if (result.roundLineups) {
+        const out = result.rounds.map((r) => ({ r, o: ports.sim.simulateRound(roundInputOf(result, r.round), r.seed, content, { record: 'summary' }) }));
+        logs = out.every(({ r, o }) => o.result.checksum === r.checksum && o.log !== null) ? out.map(({ o }) => o.log!) : null;
+      } else {
+        const out = ports.sim.simulateMatch(result.input, content, { record: 'summary' });
+        const same = out.rounds.length === result.rounds.length && out.rounds.every((r, i) => r.checksum === result.rounds[i]!.checksum);
+        logs = same && out.logs ? out.logs : null;
+      }
     } catch {
       logs = null;
     }

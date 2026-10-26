@@ -9,7 +9,7 @@ const content: ContentDB = fixtureContent();
 const fid = (n: number): FighterId => asId<FighterId>(`f-${n}`);
 
 /** Test doubles for the read-only module functions the AI uses. */
-function fakePorts(opts: { ratings?: Map<string, number>; cqs?: Map<string, number>; ask?: (id: FighterId) => number; checks?: Command[] } = {}): AiPorts {
+function fakePorts(opts: { ratings?: Map<string, number>; cqs?: Map<string, number>; ask?: (id: FighterId) => number; checks?: Command[]; drain10?: number } = {}): AiPorts {
   const grade = content.development.captaincy.grades[2]!;
   return {
     fighters: {
@@ -18,6 +18,7 @@ function fakePorts(opts: { ratings?: Map<string, number>; cqs?: Map<string, numb
       humanAge100: (f) => Math.trunc((f.age * 8000) / content.races.require(f.raceId).lifespan),
       isFit: (f) => f.injury === null || f.injury.weeksOut === 0,
       captaincy: (_s, id) => ({ cq: opts.cqs?.get(id) ?? 50, grade }),
+      typicalRoundDrain10: () => opts.drain10 ?? 42,
     },
     economy: {
       ask: (_s, id) => opts.ask?.(id) ?? 100,

@@ -10,10 +10,28 @@
  * The UI store autosaves after success. The input state is never mutated.
  */
 import type { ContentDB } from '../content';
-import { beginTransition, putResult, type Club, type ClubId, type Fighter, type FighterId, type Fixture, type GameState, type LineupEntry, type MatchResult, type WeekReport } from '../model';
+import {
+  beginTransition,
+  idNumber,
+  putResult,
+  type Club,
+  type ClubId,
+  type Fighter,
+  type FighterId,
+  type Fixture,
+  type FixtureId,
+  type GameState,
+  type MatchResult,
+  type MatchSquad,
+  type MatchState,
+  type StartingRow,
+  type WeekReport,
+} from '../model';
 import { NotImplementedError, engineError, err, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
-import { addMatchNews, buildMatchInput, eligibleEntries, toResult } from './match';
+import type { InterimMatchEnd } from './interim-lifecycle';
+import { addMatchNews, eligibleEntries } from './match';
+import { applyBetweenRound, autoDecisions, betweenRounds, finishMatch, playMatchAuto, playRound, playerSideOf, startMatch, type BetweenRoundView, type LockedSquads } from './orchestrator';
 import type { GamePorts } from './ports';
 import { GAME_NEWS_KEYS, addNews, clubsInOrder, compareIds, defaultTactics, newsSince, onRoster, rosterOf, tidyAll } from './shared';
 import { getBlockers } from './views';
@@ -97,48 +115,70 @@ function remindExpiringContracts(draft: GameState, weekIndex: number, content: C
   }
 }
 
-/** Lock the lineups of the clubs playing this week; hired blades fill short-handed sides (open-006). */
-function lockLineups(
-  ports: GamePorts,
-  draft: GameState,
-  fixtures: readonly Fixture[],
-  content: ContentDB,
-): { lineups: Map<ClubId, LineupEntry[]>; blades: Map<ClubId, FighterId[]> } {
+/**
+ * Lock the match squads of the clubs playing this week: 5 starters (hired
+ * blades fill short-handed sides, open-006) and 0-2 fit reserves who are not
+ * starting. The locked squad is written back to Club.lineup, so a week that
+ * waits at the player's between-round step plays the other matches from the
+ * same squads when it resumes.
+ */
+function lockSquads(ports: GamePorts, draft: GameState, fixtures: readonly Fixture[], content: ContentDB): void {
   const playing: ClubId[] = [];
   for (const fx of fixtures) for (const c of [fx.homeClubId, fx.awayClubId]) if (!playing.includes(c)) playing.push(c);
   const ordered = clubsInOrder(draft, content).filter((c) => playing.includes(c.id));
   for (const club of ordered) autoCaptain(ports, draft, club, content);
   for (const club of ordered) ports.fighters.lineupLock(draft, club.id, content);
   const assigned = ports.economy.assignHiredBlades(draft, content);
+  const reservesMax = content.combat.match.squad.reservesMax;
+  const rowOf = (id: FighterId) => content.classes.require(draft.fighters[id]!.classId).startingRow;
 
-  const lineups = new Map<ClubId, LineupEntry[]>();
-  const blades = new Map<ClubId, FighterId[]>();
   for (const club of ordered) {
     const entries = eligibleEntries(ports, draft, club).filter((e) => draft.fighters[e.fighterId]?.status !== 'hired-blade');
-    const used: FighterId[] = [];
+    const fitReserve = (id: FighterId): boolean => {
+      const f = onRoster(draft, club.id, id);
+      return f !== null && ports.fighters.isFit(f) && !entries.some((e) => e.fighterId === id);
+    };
     for (const id of assigned[club.id] ?? []) {
       if (entries.length >= 5) break;
       const f = draft.fighters[id];
       if (!f || entries.some((e) => e.fighterId === id)) continue;
-      entries.push({ fighterId: id, row: content.classes.require(f.classId).startingRow });
-      used.push(id);
+      entries.push({ fighterId: id, row: rowOf(id) });
     }
     if (entries.length < 5) {
-      // Safety net: fit roster fighters left out of an AI lineup (the player is held by getBlockers).
+      // Safety net: named reserves first, then fit roster fighters left out (the player is held by getBlockers).
+      for (const id of club.lineup.reserves) if (entries.length < 5 && fitReserve(id)) entries.push({ fighterId: id, row: rowOf(id) });
       for (const f of rosterOf(draft, club.id).sort((a, b) => ports.fighters.rating(b, content) - ports.fighters.rating(a, content))) {
         if (entries.length >= 5) break;
         if (!ports.fighters.isFit(f) || entries.some((e) => e.fighterId === f.id)) continue;
-        entries.push({ fighterId: f.id, row: content.classes.require(f.classId).startingRow });
+        entries.push({ fighterId: f.id, row: rowOf(f.id) });
       }
     }
     if (entries.length < 5) throw new LineupError(club.id, entries.length);
-    lineups.set(club.id, entries);
-    blades.set(club.id, used);
-    // The locked lineup (hired blades labelled in it) is what the club fields; blades leave after the match.
+    // The locked squad (hired blades labelled in it) is what the club fields; blades leave after the match.
     club.lineup.fighters = entries.map((e) => ({ fighterId: e.fighterId, row: e.row }));
-    for (const e of entries) if (!club.lineup.tactics[e.fighterId]) club.lineup.tactics[e.fighterId] = defaultTactics(content, draft.fighters[e.fighterId]!);
+    club.lineup.reserves = club.lineup.reserves.filter(fitReserve).slice(0, reservesMax);
+    for (const id of [...entries.map((e) => e.fighterId), ...club.lineup.reserves]) {
+      if (!club.lineup.tactics[id]) club.lineup.tactics[id] = defaultTactics(content, draft.fighters[id]!);
+    }
   }
-  return { lineups, blades };
+}
+
+/** A club's locked match squad (Club.lineup after lockSquads). */
+export function squadOf(draft: GameState, club: Club, content: ContentDB): MatchSquad {
+  const rows = {} as Record<FighterId, StartingRow>;
+  for (const e of club.lineup.fighters) rows[e.fighterId] = e.row;
+  for (const id of club.lineup.reserves) rows[id] = content.classes.require(draft.fighters[id]!.classId).startingRow;
+  return {
+    starters: club.lineup.fighters.map((e) => e.fighterId),
+    reserves: [...club.lineup.reserves],
+    rows,
+    captainId: club.captainId,
+    viceCaptainId: club.viceCaptainId,
+  };
+}
+
+function squadsOf(draft: GameState, fx: Fixture, content: ContentDB): LockedSquads {
+  return { home: squadOf(draft, draft.clubs[fx.homeClubId]!, content), away: squadOf(draft, draft.clubs[fx.awayClubId]!, content) };
 }
 
 class LineupError extends Error {
@@ -156,69 +196,147 @@ export interface WeekOutcome {
   log: PhaseLog;
 }
 
-export function processWeek(ports: GamePorts, state: GameState, content: ContentDB): Result<WeekOutcome, EngineError> {
-  const cal = state.calendar;
-  if (cal.phase === 'season-end') return err(engineError('phase.season-end', 'The season is over: run the season-end step'));
-  if (state.playerClubId !== null) {
-    const blockers = getBlockers(ports, state, content);
-    if (blockers.length > 0) return err(engineError('advance.blocked', `Decide first: ${blockers.map((b) => b.code).join(', ')}`, { blockers }));
-  }
-  const draft = beginTransition(state);
-  const newsFrom = draft.ids.news;
-  const ledgerFrom = draft.ledger.nextSeq;
-  const log: PhaseLog = { rejections: [] };
-  const results: MatchResult[] = [];
-  try {
-    // Season 1 has no preceding season end. World creation already ran the AI season-start
-    // setup for every club except trials signings (D-P); AI clubs sign their trials rookie here,
-    // before the first processing (P1) releases unsigned ones to the pool.
-    if (cal.season === 1 && cal.weekIndex === 1) {
-      runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content).filter((cmd) => cmd.type === 'trials.sign'), log);
-    }
+/** advance(): the week's report once it is processed, or the between-round screen of the player's match (state.liveMatch set). */
+export interface LiveWeekOutcome {
+  state: GameState;
+  report: WeekReport | null;
+  pause: BetweenRoundView | null;
+  log: PhaseLog;
+}
 
-    // 1. Simulate every fixture of the week (all fixtures are simulated here in M1).
-    const fixtures = ports.league.fixturesForWeek(draft, cal.weekIndex, content).filter((f) => f.status === 'scheduled');
-    if (fixtures.length > 0) {
-      const { lineups, blades } = lockLineups(ports, draft, fixtures, content);
-      for (const fx of fixtures) {
-        const input = buildMatchInput(ports, draft, fx, { home: lineups.get(fx.homeClubId)!, away: lineups.get(fx.awayClubId)! }, content);
-        const out = ports.sim.simulateMatch(input, content, { record: 'none' });
-        const used = [...(blades.get(fx.homeClubId) ?? []), ...(blades.get(fx.awayClubId) ?? [])];
-        const result = toResult(ports, fx, input, out, used, content);
-        putResult(draft, result);
-        results.push(result);
-      }
-    }
-    // 2. Results, standings and brackets.
-    for (const r of results) ports.league.recordResult(draft, r, content);
-    // 3. Lifecycle: per match (XP, injuries), then the weekly step.
-    for (const r of results) addMatchNews(draft, r, ports.fighters.applyMatchLifecycle(draft, r, content));
-    ports.fighters.weeklyLifecycle(draft, content);
-    // 4-6. Money.
-    ports.economy.weeklyIncome(draft, content);
-    ports.economy.weeklyCosts(draft, content);
-    ports.economy.financialStatus(draft, content);
-    // 7. Trials day only.
-    if (cal.weekIndex === 1) ports.economy.releaseTrialsRookies(draft, content);
-    // 8. Free agents decide.
-    ports.economy.resolveFreeAgentOffers(draft, content);
-    // Hired blades leave after their match (open-006); lineups drop fighters who left.
-    tidyAll(ports, draft, content);
-    // 9. AI action phase.
-    runAiPhase(ports, draft, content, (s, c) => ports.ai.planWeek(s, c, content), log);
-    // 10. Pool floors.
-    ports.economy.topUpFreeAgentPool(draft, content);
-    remindExpiringContracts(draft, cal.weekIndex, content);
-    // 11. The Reckoning is seeded after the last regular week, then the calendar moves on.
-    if (cal.weekIndex === ports.league.lastRegularWeekIndex(content)) ports.league.seedReckonings(draft, content);
-    draft.calendar = ports.league.nextCalendar(cal, content);
-    tidyAll(ports, draft, content);
-  } catch (e) {
-    if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
-    if (e instanceof LineupError) return err(engineError('lineup.unfillable', e.message, { clubId: e.clubId, have: e.have }));
-    return err(engineError('engine.failure', `Week processing failed: ${e instanceof Error ? e.message : String(e)}`, { name: e instanceof Error ? e.name : 'unknown' }));
+interface WeekRun {
+  draft: GameState;
+  newsFrom: number;
+  ledgerFrom: number;
+  log: PhaseLog;
+}
+
+/** Whether the player's match pauses at this step (combat sys-match pacing; AI-vs-AI matches never pause). */
+function pauseHere(draft: GameState, ms: MatchState, view: BetweenRoundView): boolean {
+  if (view.playerSide === null) return false;
+  switch (draft.clubs[ms[view.playerSide].clubId]?.pauseBetweenRounds) {
+    case 'always':
+      return true;
+    case 'when_urgent':
+      return view.urgent;
+    default:
+      return false;
   }
-  const playerClubId = state.playerClubId;
+}
+
+/**
+ * Play the player's started match on: each between-round step either pauses
+ * (`canPause` and the club's pacing) and returns the screen, or takes the
+ * decisions (the player's match.swap decisions at the first step if he made
+ * them, else the auto-swap suggestions; the other side always decides by its
+ * own auto rules, blind) and plays the next round.
+ */
+function runPlayerMatch(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB, canPause: boolean): BetweenRoundView | null {
+  while (ms.phase !== 'done') {
+    if (ms.phase === 'between_rounds') {
+      if (canPause && ms.playerDecisions === null) {
+        const view = betweenRounds(ports, draft, ms, content);
+        if (pauseHere(draft, ms, view)) return view;
+      }
+      const auto = autoDecisions(ports, draft, ms, content);
+      const side = playerSideOf(draft, ms);
+      if (side !== null && ms.playerDecisions !== null) auto[side] = ms.playerDecisions;
+      applyBetweenRound(ports, draft, ms, auto, content);
+    }
+    playRound(ports, draft, ms, content);
+  }
+  return null;
+}
+
+/** XP and injuries of one match for its news item (M1 outcome from the interim lifecycle; else bench XP and the injuries the round hooks set). */
+function matchNewsOutcome(draft: GameState, result: MatchResult, outcome: ReturnType<GamePorts['fighters']['matchEndProgression']>) {
+  const m1 = (outcome as Partial<InterimMatchEnd>).m1;
+  if (m1) return { xp: m1.xp, injuries: m1.injuries };
+  const xp: Record<FighterId, number> = { ...((outcome as { xp?: Record<FighterId, number> }).xp ?? {}) };
+  for (const [id, n] of Object.entries(outcome.benchXp)) if (xp[id as FighterId] === undefined) xp[id as FighterId] = n;
+  const injuries: { fighterId: FighterId; severity: string; weeksOut: number }[] = [];
+  for (const id of Object.keys(result.fighterStats) as FighterId[]) {
+    const inj = draft.fighters[id]?.injury;
+    if (inj && inj.fixtureId === result.fixtureId) injuries.push({ fighterId: id, severity: inj.severity, weeksOut: inj.weeksOut });
+  }
+  return { xp, injuries };
+}
+
+/**
+ * Policy level-ups still pending after match end: AI clubs resolve every
+ * offer by auto-pick ('auto', P-04: the same resolveLevelUp as the player's
+ * levelup.choose), player fighters whose effective mode is not manual by
+ * their mode. A no-op when core/fighters' matchEndProgression already did it.
+ */
+function autoResolveLevelUps(ports: GamePorts, draft: GameState, result: MatchResult, content: ContentDB): void {
+  for (const id of clubFighterIds(draft, [result.homeClubId, result.awayClubId])) {
+    const f = draft.fighters[id]!;
+    if (f.pendingLevelUps.length === 0) continue;
+    const mode = f.clubId === draft.playerClubId ? ports.fighters.effectiveLevelUpMode(draft, f) : 'auto';
+    if (mode === 'manual') continue;
+    for (const offer of [...f.pendingLevelUps]) {
+      const r = ports.fighters.resolveLevelUp(draft, id, offer.level, ports.fighters.autoPickChoice(f, offer, mode, content), 'auto', content);
+      if (!r.ok) break;
+    }
+  }
+}
+
+function clubFighterIds(draft: GameState, clubIds: readonly ClubId[]): FighterId[] {
+  const out: FighterId[] = [];
+  for (const c of clubIds) for (const f of rosterOf(draft, c)) out.push(f.id);
+  return out;
+}
+
+/** Steps 1 (the matches not yet played) to 11, once the player's match is over. */
+function finishWeek(ports: GamePorts, run: WeekRun, playerResult: MatchResult | null, content: ContentDB): WeekReport {
+  const { draft, log } = run;
+  const cal = draft.calendar;
+  const fixtures = ports.league.fixturesForWeek(draft, cal.weekIndex, content).filter((f) => f.status === 'scheduled');
+  // 1. Simulate every other fixture of the week from the locked squads (auto decisions on both sides).
+  const byId = new Map<FixtureId, MatchResult>();
+  if (playerResult) {
+    putResult(draft, playerResult);
+    byId.set(playerResult.fixtureId, playerResult);
+  }
+  for (const fx of fixtures) {
+    if (byId.has(fx.id)) continue;
+    const result = playMatchAuto(ports, draft, fx, squadsOf(draft, fx, content), content);
+    putResult(draft, result);
+    byId.set(fx.id, result);
+  }
+  const results = fixtures.map((fx) => byId.get(fx.id)!).filter((r) => r !== undefined);
+  // 2. Results, standings and brackets.
+  for (const r of results) ports.league.recordResult(draft, r, content);
+  // 3. Lifecycle: match end per match (round XP committed, bench XP, level-ups), then the weekly step.
+  const levelUps: { fighterId: FighterId; level: number }[] = [];
+  for (const r of results) {
+    const outcome = ports.fighters.matchEndProgression(draft, r, content);
+    autoResolveLevelUps(ports, draft, r, content);
+    addMatchNews(draft, r, matchNewsOutcome(draft, r, outcome));
+    for (const u of outcome.levelUps) if (draft.fighters[u.fighterId]?.clubId === draft.playerClubId && draft.playerClubId !== null) levelUps.push(u);
+  }
+  ports.fighters.weeklyLifecycle(draft, content);
+  // 4-6. Money.
+  ports.economy.weeklyIncome(draft, content);
+  ports.economy.weeklyCosts(draft, content);
+  ports.economy.financialStatus(draft, content);
+  // 7. Trials day only.
+  if (cal.weekIndex === 1) ports.economy.releaseTrialsRookies(draft, content);
+  // 8. Free agents decide.
+  ports.economy.resolveFreeAgentOffers(draft, content);
+  // Hired blades leave after their match (open-006); lineups drop fighters who left.
+  tidyAll(ports, draft, content);
+  // 9. AI action phase.
+  runAiPhase(ports, draft, content, (s, c) => ports.ai.planWeek(s, c, content), log);
+  // 10. Pool floors.
+  ports.economy.topUpFreeAgentPool(draft, content);
+  remindExpiringContracts(draft, cal.weekIndex, content);
+  // 11. The Reckoning is seeded after the last regular week, then the calendar moves on.
+  if (cal.weekIndex === ports.league.lastRegularWeekIndex(content)) ports.league.seedReckonings(draft, content);
+  draft.calendar = ports.league.nextCalendar(cal, content);
+  tidyAll(ports, draft, content);
+
+  const playerClubId = draft.playerClubId;
   const playerFixture = playerClubId === null ? undefined : results.find((r) => r.homeClubId === playerClubId || r.awayClubId === playerClubId);
   const report: WeekReport = {
     season: cal.season,
@@ -227,9 +345,90 @@ export function processWeek(ports: GamePorts, state: GameState, content: Content
     phaseAfter: draft.calendar.phase,
     fixtureIds: results.map((r) => r.fixtureId),
     playerFixtureId: playerFixture?.fixtureId ?? null,
-    newsIds: newsSince(draft, newsFrom),
-    ledgerSeqFrom: ledgerFrom,
+    newsIds: newsSince(draft, run.newsFrom),
+    ledgerSeqFrom: run.ledgerFrom,
     ledgerSeqTo: draft.ledger.nextSeq,
   };
-  return ok({ state: draft, report, log });
+  if (levelUps.length > 0) report.levelUps = levelUps;
+  return report;
+}
+
+function guarded(run: () => LiveWeekOutcome): Result<LiveWeekOutcome, EngineError> {
+  try {
+    return ok(run());
+  } catch (e) {
+    if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
+    if (e instanceof LineupError) return err(engineError('lineup.unfillable', e.message, { clubId: e.clubId, have: e.have }));
+    return err(engineError('engine.failure', `Week processing failed: ${e instanceof Error ? e.message : String(e)}`, { name: e instanceof Error ? e.name : 'unknown' }));
+  }
+}
+
+/** First news counter of this processing on resume: the oldest item stamped with the processing week (commands that write news are refused while a match is live). */
+function newsFromOnResume(draft: GameState): number {
+  const { season, weekIndex } = draft.calendar;
+  const first = draft.news.find((n) => n.at.season === season && n.at.weekIndex === weekIndex);
+  return first ? idNumber(first.id) : draft.ids.news;
+}
+
+/**
+ * Week processing with the player's match played round by round (05 M1.1
+ * addendum). `canPause` false (advanceWeek, the soak) plays the whole week
+ * at once with the auto rules for the player's between-round steps; true
+ * (advance) stops at a step per the club's pauseBetweenRounds with
+ * GameState.liveMatch set: every completed round is committed (P-05), and the
+ * next call resumes from there. The rest of the week runs when the player's
+ * match is over. The input state is never mutated.
+ */
+export function processWeekLive(ports: GamePorts, state: GameState, content: ContentDB, canPause: boolean): Result<LiveWeekOutcome, EngineError> {
+  if (state.liveMatch !== null) {
+    const draft = beginTransition(state);
+    const run: WeekRun = { draft, newsFrom: newsFromOnResume(draft), ledgerFrom: draft.ledger.nextSeq, log: { rejections: [] } };
+    return guarded(() => {
+      const ms = draft.liveMatch!;
+      const pause = runPlayerMatch(ports, draft, ms, content, canPause);
+      if (pause) return { state: draft, report: null, pause, log: run.log };
+      draft.liveMatch = null;
+      const result = finishMatch(ports, draft, ms, content);
+      return { state: draft, report: finishWeek(ports, run, result, content), pause: null, log: run.log };
+    });
+  }
+  const cal = state.calendar;
+  if (cal.phase === 'season-end') return err(engineError('phase.season-end', 'The season is over: run the season-end step'));
+  if (state.playerClubId !== null) {
+    const blockers = getBlockers(ports, state, content);
+    if (blockers.length > 0) return err(engineError('advance.blocked', `Decide first: ${blockers.map((b) => b.code).join(', ')}`, { blockers }));
+  }
+  const draft = beginTransition(state);
+  const run: WeekRun = { draft, newsFrom: draft.ids.news, ledgerFrom: draft.ledger.nextSeq, log: { rejections: [] } };
+  return guarded(() => {
+    // Season 1 has no preceding season end. World creation already ran the AI season-start
+    // setup for every club except trials signings (D-P); AI clubs sign their trials rookie here,
+    // before the first processing (P1) releases unsigned ones to the pool.
+    if (cal.season === 1 && cal.weekIndex === 1) {
+      runAiPhase(ports, draft, content, (s, c) => ports.ai.planSeasonEnd(s, c, content).filter((cmd) => cmd.type === 'trials.sign'), run.log);
+    }
+    // 1. Lock every playing club's squad, then play the player's match first, round by round.
+    const fixtures = ports.league.fixturesForWeek(draft, cal.weekIndex, content).filter((f) => f.status === 'scheduled');
+    if (fixtures.length > 0) lockSquads(ports, draft, fixtures, content);
+    const player = draft.playerClubId;
+    const mine = player === null ? undefined : fixtures.find((f) => f.homeClubId === player || f.awayClubId === player);
+    let result: MatchResult | null = null;
+    if (mine) {
+      const ms = startMatch(ports, draft, mine, squadsOf(draft, mine, content), content);
+      playRound(ports, draft, ms, content);
+      const pause = runPlayerMatch(ports, draft, ms, content, canPause);
+      if (pause) {
+        draft.liveMatch = ms;
+        return { state: draft, report: null, pause, log: run.log };
+      }
+      result = finishMatch(ports, draft, ms, content);
+    }
+    return { state: draft, report: finishWeek(ports, run, result, content), pause: null, log: run.log };
+  });
+}
+
+export function processWeek(ports: GamePorts, state: GameState, content: ContentDB): Result<WeekOutcome, EngineError> {
+  const r = processWeekLive(ports, state, content, false);
+  if (!r.ok) return r;
+  return ok({ state: r.value.state, report: r.value.report!, log: r.value.log });
 }

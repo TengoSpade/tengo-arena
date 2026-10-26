@@ -29,6 +29,8 @@ export interface FighterView {
 export function getBlockers(ports: GamePorts, state: GameState, content: ContentDB): Blocker[] {
   if (state.playerClubId === null) return [{ code: 'club.not-chosen' }];
   if (state.calendar.phase === 'season-end') return [{ code: 'phase.season-end' }];
+  // M1.1: a match waiting between rounds can always continue (its squads are locked).
+  if (state.liveMatch !== null) return [];
   const clubId = state.playerClubId;
   const club = getOwn(state.clubs, clubId);
   if (!club) return [{ code: 'club.not-chosen' }];
@@ -119,10 +121,10 @@ export function fighterView(ports: GamePorts, state: GameState, fighterId: Fight
   };
 }
 
-/** The lineup the AI would pick for a club (player "auto-pick" button) as a ready command. */
+/** The squad the AI would pick for a club (player "auto-pick" button) as a ready command: squad.set with 5 starters and up to 2 reserves (M1.1). */
 export function suggestLineup(ports: GamePorts, state: GameState, clubId: ClubId, content: ContentDB): Command {
   const choice = ports.ai.chooseLineup(state, clubId, content);
-  return { type: 'lineup.set', clubId, fighters: choice.fighters, matchCaptainId: choice.matchCaptainId };
+  return { type: 'squad.set', clubId, fighters: choice.fighters, reserves: [...choice.reserves], matchCaptainId: choice.matchCaptainId };
 }
 
 /** Release preview for the confirmation dialog (D-M): payout now, balance after, and whether it is a cap-relief release. */

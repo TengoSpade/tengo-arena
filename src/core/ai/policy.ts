@@ -29,7 +29,10 @@ import type { AiPorts } from './ports';
 
 export interface LineupChoice {
   fighters: LineupEntry[];
+  /** M1.1: 0-2 squad reserves (levels.json aiRotation: one front-line, one back-line, Freshness at least the threshold). */
+  reserves: FighterId[];
   matchCaptainId: FighterId | null;
+  /** Presets of the starters and reserves. */
   tactics: Record<FighterId, TacticsAssignment>;
 }
 
@@ -262,6 +265,11 @@ class Ctx {
     return f.status === 'active' && this.ports.fighters.isFit(f);
   }
 
+  /** Freshness in tenths (0-1000), as stored. */
+  fresh10(f: Fighter): number {
+    return f.freshness10 ?? 1000;
+  }
+
   families(f: Fighter): RoleFamily[] {
     let v = this.familyCache.get(f.classId);
     if (v === undefined) this.familyCache.set(f.classId, (v = roleFamilies(this.content.classes.require(f.classId))));
@@ -463,12 +471,66 @@ function lineupFrom(ctx: Ctx, roster: readonly Fighter[]): LineupChoice {
     }
   }
 
+  rotate(ctx, pool, chosen);
+  const reserves = reservesFor(ctx, pool, chosen);
+
   // Slot order: front row first, then by rating (stable keys).
   const rowOf = (f: Fighter): 'front' | 'back' => ctx.content.classes.require(f.classId).startingRow;
   chosen.sort((a, b) => (rowOf(a) === rowOf(b) ? ctx.byRating(a, b) : rowOf(a) === 'front' ? -1 : 1));
   const tactics: Record<FighterId, TacticsAssignment> = {};
-  for (const f of chosen) tactics[f.id] = stylePreset(ctx.content.classes.require(f.classId), ctx.club.tacticsStyle, ctx.content);
-  return { fighters: chosen.map((f) => ({ fighterId: f.id, row: rowOf(f) })), matchCaptainId: null, tactics };
+  for (const f of [...chosen, ...reserves]) tactics[f.id] = stylePreset(ctx.content.classes.require(f.classId), ctx.club.tacticsStyle, ctx.content);
+  return { fighters: chosen.map((f) => ({ fighterId: f.id, row: rowOf(f) })), reserves: reserves.map((f) => f.id), matchCaptainId: null, tactics };
+}
+
+/**
+ * M1.1 rotation at the lock (progression.md §5, levels.json aiRotation), after the best five by rating
+ * and role: (1) projected rest: each starter who would start round 2 Tired (Freshness < threshold +
+ * his typical round drain; the Reckoning: < tournamentRestBelow) is replaced by the best fit fighter
+ * of his role family with Freshness >= threshold and rating >= his - (gap + extra per point below the
+ * threshold), most tired first, at most maxRestsPerMatch; (2) spent floor: a starter below
+ * spentFloorAtLock is replaced by the best fit fighter with Freshness >= spentFloorAltMin, rating aside.
+ * Freshness in tenths, ratings in tenths of a point (integer math).
+ */
+function rotate(ctx: Ctx, pool: readonly Fighter[], chosen: Fighter[]): void {
+  const rot = ctx.content.levels.aiRotation;
+  const t10 = ctx.content.levels.freshness.threshold * 10;
+  const league = ctx.nextIsLeagueMatch();
+  const extraBp = Math.round(rot.extraGapPerPointBelow * BP);
+  const bench = (f: Fighter): boolean => !chosen.includes(f);
+  const best = (ok: (o: Fighter) => boolean): Fighter | undefined => pool.filter((o) => bench(o) && ok(o)).sort((a, b) => ctx.byRating(a, b) || ctx.fresh10(b) - ctx.fresh10(a))[0];
+  let rests = 0;
+  for (const f of [...chosen].sort((a, b) => ctx.fresh10(a) - ctx.fresh10(b) || byIdNumber(a, b))) {
+    if (rests >= rot.maxRestsPerMatch) break;
+    const f10 = ctx.fresh10(f);
+    const restBelow = league ? t10 + (rot.projectOneRound ? ctx.ports.fighters.typicalRoundDrain10(f, ctx.content) : 0) : rot.tournamentRestBelow * 10;
+    if (f10 >= restBelow) continue;
+    const gap10 = league ? rot.leagueMaxRatingGap * 10 + Math.trunc((extraBp * Math.max(0, t10 - f10)) / BP) : rot.tournamentMaxRatingGap * 10;
+    const fam = ctx.families(f);
+    const sub = best((o) => ctx.fresh10(o) >= t10 && ctx.families(o).some((x) => fam.includes(x)) && ctx.rating(o) * 10 >= ctx.rating(f) * 10 - gap10);
+    if (!sub) continue;
+    chosen[chosen.indexOf(f)] = sub;
+    rests++;
+  }
+  for (const f of [...chosen]) {
+    if (ctx.fresh10(f) >= rot.spentFloorAtLock * 10) continue;
+    const sub = best((o) => ctx.fresh10(o) >= rot.spentFloorAltMin * 10);
+    if (sub) chosen[chosen.indexOf(f)] = sub;
+  }
+}
+
+/** The 2 squad reserves: the best remaining fit fighters with Freshness >= threshold, one front-line and one back-line when available, then by rating. */
+function reservesFor(ctx: Ctx, pool: readonly Fighter[], chosen: readonly Fighter[]): Fighter[] {
+  const max = ctx.content.combat.match.squad.reservesMax;
+  const t10 = ctx.content.levels.freshness.threshold * 10;
+  const left = pool.filter((o) => !chosen.includes(o) && ctx.fresh10(o) >= t10);
+  const rowOf = (f: Fighter): 'front' | 'back' => ctx.content.classes.require(f.classId).startingRow;
+  const out: Fighter[] = [];
+  for (const row of ['front', 'back'] as const) {
+    const f = left.find((o) => rowOf(o) === row && !out.includes(o));
+    if (f && out.length < max) out.push(f);
+  }
+  for (const f of left) if (out.length < max && !out.includes(f)) out.push(f);
+  return out.sort(ctx.byRating);
 }
 
 function captainsFrom(ctx: Ctx, roster: readonly Fighter[], starters: readonly FighterId[], mode: 'season-end' | 'week'): CaptainChoice {
@@ -495,9 +557,12 @@ function captainsFrom(ctx: Ctx, roster: readonly Fighter[], starters: readonly F
 function sameLineup(club: Club, choice: LineupChoice): boolean {
   const a = club.lineup.fighters;
   const b = choice.fighters;
+  const r = club.lineup.reserves;
   return (
     a.length === b.length &&
     a.every((e, i) => e.fighterId === b[i]!.fighterId && e.row === b[i]!.row) &&
+    r.length === choice.reserves.length &&
+    r.every((id, i) => id === choice.reserves[i]) &&
     club.lineup.matchCaptainId === choice.matchCaptainId
   );
 }
@@ -521,11 +586,11 @@ function rosterCommands(ctx: Ctx, roster: readonly Fighter[], mode: 'season-end'
       if (e !== f.trainingEmphasis) cmds.push({ type: 'training.set', clubId, fighterId: f.id, emphasis: e });
     }
   }
-  for (const e of choice.fighters) {
-    const t = choice.tactics[e.fighterId]!;
-    if (!sameTactics(ctx.club.lineup.tactics[e.fighterId], t)) cmds.push({ type: 'tactics.assign', clubId, fighterId: e.fighterId, tactics: t });
+  for (const id of [...choice.fighters.map((e) => e.fighterId), ...choice.reserves]) {
+    const t = choice.tactics[id]!;
+    if (!sameTactics(ctx.club.lineup.tactics[id], t)) cmds.push({ type: 'tactics.assign', clubId, fighterId: id, tactics: t });
   }
-  if (!sameLineup(ctx.club, choice)) cmds.push({ type: 'lineup.set', clubId, fighters: choice.fighters, matchCaptainId: choice.matchCaptainId });
+  if (!sameLineup(ctx.club, choice)) cmds.push({ type: 'squad.set', clubId, fighters: choice.fighters, reserves: [...choice.reserves], matchCaptainId: choice.matchCaptainId });
   return cmds;
 }
 
