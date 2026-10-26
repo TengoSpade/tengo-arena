@@ -84,13 +84,13 @@ describe('balance harness', () => {
     expect(runBalance({ seed: 'b1', fights: 4, content }).profile).toBeUndefined();
   });
 
-  it('perk-impact: every perk on paired sides, with procs for triggered perks and dominance ordering', () => {
+  it('perk-impact: every perk in counterfactual pairs, with procs for triggered perks and dominance ordering', () => {
     const r = runBalance({ seed: 'pi', fights: 0, content, mode: 'perk-impact', perItem: 2 });
-    expect(r.fights).toBe(2 * content.perks.list.length);
+    expect(r.fights).toBe(4 * content.perks.list.length);
     expect(r.perks).toHaveLength(content.perks.list.length);
     for (const p of r.perks!) {
       expect(p.rounds).toBe(2);
-      expect(p.liftPts).toBeCloseTo((p.winRate - 0.5) * 100, 1);
+      expect(p.liftPts).toBeCloseTo((p.winRate - p.baselineWinRate) * 100, 1);
       const triggered = (content.perks.require(p.perkId).passive?.triggers.length ?? 0) > 0;
       expect(p.procsPerRound === null).toBe(!triggered);
     }
@@ -107,19 +107,22 @@ describe('balance harness', () => {
     const r = runBalance({ seed: 'ri', fights: 0, content, mode: 'rank-impact', perItem: 2 });
     const rankable = content.classes.list.flatMap((k) => (['a1', 'a2', 'passive'] as const).filter((s) => content.abilityRanks(k.abilities[s])?.rankable));
     expect(r.ranks).toHaveLength(rankable.length);
-    expect(r.fights).toBe(2 * rankable.length);
+    expect(r.fights).toBe(4 * rankable.length);
     for (const row of r.ranks!) {
       expect(row.rounds).toBe(2);
+      expect(row.liftPts).toBeCloseTo((row.winRate - row.baselineWinRate) * 100, 1);
       expect(row.flags.length > 0).toBe(row.liftPts > M11_TARGETS.rankLiftMaxPts || row.liftPts < M11_TARGETS.rankLiftMinPts);
     }
   });
 
-  it('fatigue: the four Freshness profiles; a tired side never does better than chance by much', () => {
-    const r = runBalance({ seed: 'fa', fights: 40, content, mode: 'fatigue' });
+  it('fatigue: the four Freshness profiles against the same sides fresh', () => {
+    const r = runBalance({ seed: 'fa', fights: 160, content, mode: 'fatigue' });
     expect(r.profile).toBe('none');
+    expect(r.fights).toBe(160);
     expect(r.fatigue!.map((x) => x.id)).toEqual(FATIGUE_PROFILES.map((x) => x.id));
     for (const row of r.fatigue!) {
-      expect(row.rounds).toBe(10);
+      expect(row.rounds).toBe(20);
+      expect(row.winRate).toBeCloseTo(0.5 + row.rawWinRate - row.freshWinRate, 4);
       expect(row.inTarget).toBe(row.winRate >= row.target.min && row.winRate <= row.target.max);
     }
     // All five at F 10 against fresh twins.

@@ -13,7 +13,9 @@ import { byNumber, byString, chain } from '../util';
  * Pure: no clock of its own (the CLI may pass one for timings), no IO.
  * Every "fight" is one round. Lineups are drawn from the `balance` stream;
  * each pair of lineups plays twice with the same round seed and sides swapped
- * (mirroring), so side advantage cancels out.
+ * (mirroring), so side advantage cancels out. perk-impact, rank-impact and
+ * fatigue use counterfactual pairs (see `versus`): the same matchup and seeds
+ * with and without the change.
  */
 export type BalanceMode =
   /** Random 5v5 drafts from all classes; win rate per class appearance. */
@@ -24,11 +26,11 @@ export type BalanceMode =
   | 'preset-vs-default'
   /** M1.1: random drafts with ability ranks and perks per skill profile. */
   | 'progression'
-  /** M1.1: per perk, the pick rate under auto-pick and the paired win-rate lift. */
+  /** M1.1: per perk, the pick rate under auto-pick and the win-rate lift with and without the perk. */
   | 'perk-impact'
-  /** M1.1: per rankable ability, rank 3 against rank 1 on otherwise identical sides. */
+  /** M1.1: per rankable ability, rank 3 against rank 1 in the same matchups. */
   | 'rank-impact'
-  /** M1.1: identical lineups, one side at a fixed Freshness profile. */
+  /** M1.1: one side at a fixed Freshness profile against the same side fresh, in the same matchups. */
   | 'fatigue'
   /** M1.1: full matches with 7-fighter squads and swaps (runs game.playMatchAuto; needs WP-C). */
   | 'squad-match';
@@ -57,7 +59,7 @@ export interface BalanceOptions {
   profile?: SkillProfile;
   /** Additive (M1.1): skill choice (default auto). */
   pick?: SkillPick;
-  /** Additive (M1.1): fights per perk (perk-impact) or per ability (rank-impact); default fights / items, even. */
+  /** Additive (M1.1): measured rounds per perk (perk-impact) or per ability (rank-impact), each also played without the change; default fights / items / 2, even. */
   perItem?: number;
 }
 
@@ -105,11 +107,13 @@ export interface PerkImpactRow {
   /** Share of fighters (whose pool holds the perk) that hold it under auto-pick: season3 / veteran profile. */
   pickRate: number;
   pickRateVeteran: number;
-  /** Fighter-rounds of the measured side holding the perk. */
+  /** Rounds with the perk (perk-impact: side A with the perk; progression: the holders' fighter-rounds). */
   rounds: number;
   wins: number;
   winRate: number;
-  /** Win rate minus the baseline (perk-impact: 50% on paired sides; progression: the holders' class win rates), in points. */
+  /** perk-impact: side A's win rate without the perk (same matchups and seeds); progression: the holders' class win rates. */
+  baselineWinRate: number;
+  /** Win rate minus the baseline, in points (perk-impact: paired, 95% CI from the per-matchup differences). */
   liftPts: number;
   ciLowPts: number;
   ciHighPts: number;
@@ -133,6 +137,8 @@ export interface RankImpactRow {
   rounds: number;
   wins: number;
   winRate: number;
+  /** Side A's win rate with the ability at rank 1 (same matchups and seeds). */
+  baselineWinRate: number;
   liftPts: number;
   ciLowPts: number;
   ciHighPts: number;
@@ -145,9 +151,13 @@ export interface FatigueRow {
   label: string;
   rounds: number;
   wins: number;
+  /** 50% plus the paired change against the same side fresh (the estimate compared with the target). */
   winRate: number;
   ciLow: number;
   ciHigh: number;
+  /** The tired side's raw win rate, and the same side's win rate fresh, in the same matchups and seeds. */
+  rawWinRate: number;
+  freshWinRate: number;
   target: { min: number; max: number };
   inTarget: boolean;
 }
@@ -745,11 +755,17 @@ interface PerkTally {
   heldVet: number;
   rounds: number;
   wins: number;
+  /** progression: the holders' class win rates, summed. */
   expected: number;
   procs: number;
+  /** perk-impact: counterfactual pairs. */
+  baseWins: number;
+  matchups: number;
+  dSum: number;
+  dSq: number;
 }
 
-const newPerkTally = (): PerkTally => ({ eligible: 0, held: 0, eligibleVet: 0, heldVet: 0, rounds: 0, wins: 0, expected: 0, procs: 0 });
+const newPerkTally = (): PerkTally => ({ eligible: 0, held: 0, eligibleVet: 0, heldVet: 0, rounds: 0, wins: 0, expected: 0, procs: 0, baseWins: 0, matchups: 0, dSum: 0, dSq: 0 });
 
 /** Pick rates under auto-pick at season3 and veteran, from pure draws (no fights). */
 function samplePickRates(seed: Seed, content: ContentDB, samplesPerClass: number, tallies: Map<string, PerkTally>): void {
@@ -776,11 +792,12 @@ function perkRows(content: ContentDB, tallies: Map<string, PerkTally>, paired: b
   for (const p of content.perks.list) {
     const t = tallies.get(p.id)!;
     const winRate = t.rounds ? t.wins / t.rounds : 0;
-    const base = t.rounds ? t.expected / t.rounds : 0.5;
+    const base = paired ? (t.rounds ? t.baseWins / t.rounds : 0.5) : t.rounds ? t.expected / t.rounds : 0.5;
     const ci = wilson(t.wins, t.rounds);
+    const lift = paired ? pairedLift(t.dSum, t.dSq, t.matchups) : { liftPts: (winRate - base) * 100, ciLowPts: (ci.low - base) * 100, ciHighPts: (ci.high - base) * 100 };
     const pickRate = t.eligible ? t.held / t.eligible : 0;
     const pickRateVeteran = t.eligibleVet ? t.heldVet / t.eligibleVet : 0;
-    const liftPts = (winRate - base) * 100;
+    const liftPts = lift.liftPts;
     const triggered = (p.passive?.triggers.length ?? 0) > 0;
     rows.push({
       perkId: p.id,
@@ -791,9 +808,10 @@ function perkRows(content: ContentDB, tallies: Map<string, PerkTally>, paired: b
       rounds: t.rounds,
       wins: t.wins,
       winRate: round4(winRate),
+      baselineWinRate: round4(base),
       liftPts: round2(liftPts),
-      ciLowPts: round2((ci.low - base) * 100),
-      ciHighPts: round2((ci.high - base) * 100),
+      ciLowPts: round2(lift.ciLowPts),
+      ciHighPts: round2(lift.ciHighPts),
       dominance: round4(pickRateVeteran * liftPts),
       procsPerRound: paired && triggered && t.rounds ? round4(t.procs / t.rounds) : null,
       lifecycleOnly: !p.passive && p.traitEffects.length === 0,
@@ -860,13 +878,13 @@ function progression(options: BalanceOptions, profile: SkillProfile, pick: Skill
   return perkRows(content, tallies, false);
 }
 
-/** Fights per item: options.perItem, else fights / items; always even (mirrored pairs). */
+/** Fights per item: options.perItem (measured rounds), else fights / items; always even (both orientations). */
 function perItemOf(options: BalanceOptions, items: number): number {
-  const n = options.perItem ?? Math.floor(options.fights / Math.max(1, items));
+  const n = options.perItem ?? Math.floor(options.fights / Math.max(1, items) / 2);
   return Math.max(2, n - (n % 2));
 }
 
-/** A mirror lineup with `classId` at a random slot (keeps the front-row rule when it can). */
+/** A random lineup with one of `classIds` at a random slot (keeps the front-row rule when it can). */
 function lineupWith(rng: Rng, content: ContentDB, classIds: readonly string[]): { lineup: string[]; slot: number } {
   for (let tries = 0; tries < 20; tries++) {
     const lineup = drawLineup(rng, content);
@@ -879,13 +897,67 @@ function lineupWith(rng: Rng, content: ContentDB, classIds: readonly string[]): 
   return { lineup, slot };
 }
 
+/** One side of a counterfactual matchup. */
+interface Arm {
+  specs: FighterSpec[];
+  cap: number;
+  skills: Skills[];
+  freshness?: number[];
+  entered?: boolean[];
+}
+
+/**
+ * Counterfactual pairs: a matchup A vs B (different random lineups) is played
+ * in both orientations with one round seed, once as is and once with A
+ * changed (a perk, a rank, Freshness). The lift is the change in A's wins.
+ * Mirror lineups are avoided on purpose: between identical sides any edge,
+ * however small (one tick of swing timing, one point of Power), decides most
+ * fights, so a 0.2% penalty measured 33% instead of ~49% (WP-A, 2026-10-26).
+ */
+function versus(col: Collector, content: ContentDB, a: Arm, b: Arm, roundSeed: Seed, record?: RecordLevel): { winsA: number; procsA: Record<string, number>[] } {
+  let winsA = 0;
+  const procsA: Record<string, number>[] = [];
+  for (let swap = 0; swap < 2; swap++) {
+    const aHome = swap === 0;
+    const [h, w] = aHome ? [a, b] : [b, a];
+    const r = col.play({
+      home: withRoundFields(sideInput(content, 'home', h.specs, h.cap, (h.cap + 1) % 5), h.skills, h.freshness, h.entered),
+      away: withRoundFields(sideInput(content, 'away', w.specs, w.cap, (w.cap + 1) % 5), w.skills, w.freshness, w.entered),
+      homeSpecs: h.specs,
+      awaySpecs: w.specs,
+      roundSeed,
+      roundApi: true,
+      styleOf: defaultStyle(content),
+      ...(record ? { record } : {}),
+    });
+    if (r.winner === (aHome ? 'home' : 'away')) winsA++;
+    if (r.procs) procsA.push(...(aHome ? r.procs.slice(0, 5) : r.procs.slice(5, 10)));
+  }
+  return { winsA, procsA };
+}
+
+/** Paired lift: per matchup d = (wins changed - wins as is) / 2; mean and 95% CI (normal), in points. */
+function pairedLift(dSum: number, dSq: number, n: number): { liftPts: number; ciLowPts: number; ciHighPts: number } {
+  if (n === 0) return { liftPts: 0, ciLowPts: 0, ciHighPts: 0 };
+  const m = dSum / n;
+  const variance = n > 1 ? Math.max(0, (dSq - n * m * m) / (n - 1)) : 0.25;
+  const half = 1.96 * Math.sqrt(variance / n);
+  return { liftPts: m * 100, ciLowPts: (m - half) * 100, ciHighPts: (m + half) * 100 };
+}
+
+function randomArm(rng: Rng, content: ContentDB, lineup: string[], profile: SkillProfile, pick: SkillPick): Arm {
+  const specs: FighterSpec[] = lineup.map((classId) => ({ classId }));
+  const cap = rng.int(0, 4);
+  return { specs, cap, skills: lineupSkills(rng, content, specs, cap, profile, pick) };
+}
+
 /** Fatigue level for perks measured Tired (fatigueResist, self_freshness_below). */
 const PERK_CONTEXT_FRESHNESS = 40;
 
 /**
- * The situation a perk is measured in, the same on both sides: captain perks
- * on the acting captain, fresh-entry perks on a fighter entering from the
- * reserves, Freshness perks on a Tired fighter (F 40).
+ * The situation a perk is measured in, with and without the perk: captain
+ * perks on the acting captain, fresh-entry perks on a fighter entering from
+ * the reserves, Freshness perks on a Tired fighter (F 40).
  */
 function perkContext(perk: PerkDef): { captain: boolean; entered: boolean; freshness: number | null; label: string | null } {
   const passive = JSON.stringify(perk.passive ?? {});
@@ -896,7 +968,7 @@ function perkContext(perk: PerkDef): { captain: boolean; entered: boolean; fresh
   return { captain, entered, freshness: tired ? PERK_CONTEXT_FRESHNESS : null, label };
 }
 
-/** perk-impact: per perk, identical sides except that one fighter on the measured side also holds the perk. */
+/** perk-impact: per perk, counterfactual pairs with and without the perk on one fighter of side A. */
 function perkImpact(options: BalanceOptions, profile: SkillProfile, pick: SkillPick, col: Collector): PerkImpactRow[] {
   const { seed, content } = options;
   const tallies = new Map<string, PerkTally>(content.perks.list.map((p) => [p.id, newPerkTally()]));
@@ -906,51 +978,45 @@ function perkImpact(options: BalanceOptions, profile: SkillProfile, pick: SkillP
   for (const perk of content.perks.list) {
     const classIds = content.classes.list.filter((k) => perk.archetype === 'general' || (k.archetypes as readonly string[]).includes(perk.archetype)).map((k) => k.id);
     const t = tallies.get(perk.id)!;
+    const cx = perkContext(perk);
     for (let i = 0; i < per / 2; i++) {
       const rng = Rng.create(seed, STREAM.balance, 'perk-impact', perk.id, i);
       const { lineup, slot } = lineupWith(rng, content, classIds);
-      const specs: FighterSpec[] = lineup.map((classId) => ({ classId }));
-      const cap = rng.int(0, 4);
-      const skills = lineupSkills(rng, content, specs, cap, profile, pick);
+      const a = randomArm(rng, content, lineup, profile, pick);
+      const b = randomArm(rng, content, drawLineup(rng, content), profile, pick);
       // The focus fighter's base perks: the drawn ones without the perk and its partners, or the minimal prerequisites.
-      const focus = skills[slot]!;
-      let basePerks = focus.perkIds.filter((id) => id !== perk.id && !perk.exclusiveWith.includes(id) && !content.perks.require(id).exclusiveWith.includes(perk.id));
+      let basePerks = a.skills[slot]!.perkIds.filter((id) => id !== perk.id && !perk.exclusiveWith.includes(id) && !content.perks.require(id).exclusiveWith.includes(perk.id));
       if (basePerks.length >= content.perkRules.perkCap) basePerks = basePerks.slice(0, content.perkRules.perkCap - 1);
       if (!perkEligible(content, lineup[slot]!, perk, basePerks)) {
         basePerks = perk.tier === 1 ? [] : perk.tier === 2 ? [fillerOf(perk)] : [fillerOf(perk), perk.requires.anyPerks[0]!];
       }
       if (!perkEligible(content, lineup[slot]!, perk, basePerks)) throw new Error(`balance: cannot make ${perk.id} eligible for ${lineup[slot]}`);
-      const twin = skills.map((s, j) => (j === slot ? { abilityRanks: s.abilityRanks, perkIds: basePerks } : s));
-      const measured = twin.map((s, j) => (j === slot ? { abilityRanks: s.abilityRanks, perkIds: [...basePerks, perk.id] } : s));
+      const ctxA: Arm = {
+        ...a,
+        cap: cx.captain ? slot : a.cap,
+        ...(cx.freshness === null ? {} : { freshness: a.specs.map((_, j) => (j === slot ? cx.freshness! : 100)) }),
+        entered: a.specs.map((_, j) => cx.entered && j === slot),
+      };
+      const without: Arm = { ...ctxA, skills: a.skills.map((s, j) => (j === slot ? { abilityRanks: s.abilityRanks, perkIds: basePerks } : s)) };
+      const withPerk: Arm = { ...ctxA, skills: a.skills.map((s, j) => (j === slot ? { abilityRanks: s.abilityRanks, perkIds: [...basePerks, perk.id] } : s)) };
       const roundSeed = deriveSeed(seed, STREAM.balance, 'perk-impact', perk.id, i);
-      const cx = perkContext(perk);
-      const captain = cx.captain ? slot : cap;
-      const freshness = cx.freshness === null ? [] : specs.map((_, j) => (j === slot ? cx.freshness! : 100));
-      const entered = specs.map((_, j) => cx.entered && j === slot);
-      for (let swap = 0; swap < 2; swap++) {
-        const measuredHome = swap === 0;
-        const r = col.play({
-          home: withRoundFields(sideInput(content, 'home', specs, captain, (captain + 1) % 5), measuredHome ? measured : twin, freshness, entered),
-          away: withRoundFields(sideInput(content, 'away', specs, captain, (captain + 1) % 5), measuredHome ? twin : measured, freshness, entered),
-          homeSpecs: specs,
-          awaySpecs: specs,
-          roundSeed,
-          roundApi: true,
-          styleOf: defaultStyle(content),
-          record: 'summary',
-        });
-        t.rounds++;
-        t.expected += 0.5;
-        if (r.winner === (measuredHome ? 'home' : 'away')) t.wins++;
-        if (r.procs) t.procs += r.procs[(measuredHome ? 0 : 5) + slot]![perk.id] ?? 0;
-      }
+      const base = versus(col, content, without, b, roundSeed);
+      const alt = versus(col, content, withPerk, b, roundSeed, 'summary');
+      const d = (alt.winsA - base.winsA) / 2;
+      t.rounds += 2;
+      t.wins += alt.winsA;
+      t.baseWins += base.winsA;
+      t.matchups++;
+      t.dSum += d;
+      t.dSq += d * d;
+      for (let k = 0; k < alt.procsA.length; k += 5) t.procs += alt.procsA[k + slot]![perk.id] ?? 0;
     }
   }
   samplePickRates(seed, content, 80, tallies);
   return perkRows(content, tallies, true);
 }
 
-/** rank-impact: per rankable ability, the measured side's fighter at rank 3, its twin at rank 1. */
+/** rank-impact: per rankable ability, counterfactual pairs with one fighter of side A at rank 3 instead of rank 1. */
 function rankImpact(options: BalanceOptions, profile: SkillProfile, pick: SkillPick, col: Collector): RankImpactRow[] {
   const { seed, content } = options;
   const rows: RankImpactRow[] = [];
@@ -964,46 +1030,42 @@ function rankImpact(options: BalanceOptions, profile: SkillProfile, pick: SkillP
   const per = perItemOf(options, items.length);
   for (const it of items) {
     let wins = 0;
-    let rounds = 0;
+    let baseWins = 0;
+    let dSum = 0;
+    let dSq = 0;
+    let n = 0;
     for (let i = 0; i < per / 2; i++) {
       const rng = Rng.create(seed, STREAM.balance, 'rank-impact', it.abilityId, i);
       const { lineup, slot } = lineupWith(rng, content, [it.classId]);
-      const specs: FighterSpec[] = lineup.map((classId) => ({ classId }));
-      const cap = rng.int(0, 4);
-      const skills = lineupSkills(rng, content, specs, cap, profile, pick);
-      const at = (rank: 1 | 3): Skills[] => skills.map((s, j) => (j === slot ? { abilityRanks: { ...s.abilityRanks, [it.slot]: rank }, perkIds: s.perkIds } : s));
+      const a = randomArm(rng, content, lineup, profile, pick);
+      const b = randomArm(rng, content, drawLineup(rng, content), profile, pick);
+      const at = (rank: 1 | 3): Arm => ({ ...a, skills: a.skills.map((s, j) => (j === slot ? { abilityRanks: { ...s.abilityRanks, [it.slot]: rank }, perkIds: s.perkIds } : s)) });
       const roundSeed = deriveSeed(seed, STREAM.balance, 'rank-impact', it.abilityId, i);
-      for (let swap = 0; swap < 2; swap++) {
-        const measuredHome = swap === 0;
-        const r = col.play({
-          home: withRoundFields(sideInput(content, 'home', specs, cap, (cap + 1) % 5), at(measuredHome ? 3 : 1)),
-          away: withRoundFields(sideInput(content, 'away', specs, cap, (cap + 1) % 5), at(measuredHome ? 1 : 3)),
-          homeSpecs: specs,
-          awaySpecs: specs,
-          roundSeed,
-          roundApi: true,
-          styleOf: defaultStyle(content),
-        });
-        rounds++;
-        if (r.winner === (measuredHome ? 'home' : 'away')) wins++;
-      }
+      const base = versus(col, content, at(1), b, roundSeed);
+      const alt = versus(col, content, at(3), b, roundSeed);
+      const d = (alt.winsA - base.winsA) / 2;
+      wins += alt.winsA;
+      baseWins += base.winsA;
+      dSum += d;
+      dSq += d * d;
+      n++;
     }
-    const ci = wilson(wins, rounds);
-    const liftPts = (wins / Math.max(1, rounds) - 0.5) * 100;
+    const lift = pairedLift(dSum, dSq, n);
     const flags: string[] = [];
-    if (liftPts > M11_TARGETS.rankLiftMaxPts) flags.push(`lift +${liftPts.toFixed(1)} points > +6`);
-    if (liftPts < M11_TARGETS.rankLiftMinPts) flags.push(`lift ${liftPts >= 0 ? '+' : ''}${liftPts.toFixed(1)} points < +0.5`);
+    if (lift.liftPts > M11_TARGETS.rankLiftMaxPts) flags.push(`lift +${lift.liftPts.toFixed(1)} points > +6`);
+    if (lift.liftPts < M11_TARGETS.rankLiftMinPts) flags.push(`lift ${lift.liftPts >= 0 ? '+' : ''}${lift.liftPts.toFixed(1)} points < +0.5`);
     rows.push({
       abilityId: it.abilityId,
       classId: it.classId,
       slot: it.slot,
       family: it.family,
-      rounds,
+      rounds: 2 * n,
       wins,
-      winRate: round4(wins / Math.max(1, rounds)),
-      liftPts: round2(liftPts),
-      ciLowPts: round2((ci.low - 0.5) * 100),
-      ciHighPts: round2((ci.high - 0.5) * 100),
+      winRate: round4(wins / Math.max(1, 2 * n)),
+      baselineWinRate: round4(baseWins / Math.max(1, 2 * n)),
+      liftPts: round2(lift.liftPts),
+      ciLowPts: round2(lift.ciLowPts),
+      ciHighPts: round2(lift.ciHighPts),
       flags,
     });
   }
@@ -1011,47 +1073,51 @@ function rankImpact(options: BalanceOptions, profile: SkillProfile, pick: SkillP
   return rows;
 }
 
-/** fatigue: identical lineups and skills; the tired side starts at a fixed Freshness profile. */
+/**
+ * fatigue: counterfactual pairs; side A starts at a Freshness profile, then
+ * fresh, against the same side B. The tired side's win rate is 50% plus the
+ * paired change (A and B are exchangeable random lineups, so A fresh wins 50%
+ * in expectation); the raw rates are reported beside it.
+ */
 function fatigue(options: BalanceOptions, profile: SkillProfile, pick: SkillPick, col: Collector): FatigueRow[] {
   const { seed, fights, content } = options;
-  const per = Math.max(2, Math.floor(fights / FATIGUE_PROFILES.length) - (Math.floor(fights / FATIGUE_PROFILES.length) % 2));
+  const perProfile = Math.floor(fights / FATIGUE_PROFILES.length / 2);
+  const per = Math.max(2, perProfile - (perProfile % 2));
   const rows: FatigueRow[] = [];
   for (const fp of FATIGUE_PROFILES) {
     let wins = 0;
-    let rounds = 0;
+    let baseWins = 0;
+    let dSum = 0;
+    let dSq = 0;
+    let n = 0;
     for (let i = 0; i < per / 2; i++) {
       const rng = Rng.create(seed, STREAM.balance, 'fatigue', fp.id, i);
-      const specs: FighterSpec[] = drawLineup(rng, content).map((classId) => ({ classId }));
-      const cap = rng.int(0, 4);
-      const skills = lineupSkills(rng, content, specs, cap, profile, pick);
+      const a = randomArm(rng, content, drawLineup(rng, content), profile, pick);
+      const b = randomArm(rng, content, drawLineup(rng, content), profile, pick);
       const one = rng.int(0, 4);
-      const tired = specs.map((_, j) => (fp.count === 5 || j === one ? fp.freshness : 100));
+      const tired: Arm = { ...a, freshness: a.specs.map((_, j) => (fp.count === 5 || j === one ? fp.freshness : 100)) };
       const roundSeed = deriveSeed(seed, STREAM.balance, 'fatigue', fp.id, i);
-      for (let swap = 0; swap < 2; swap++) {
-        const tiredHome = swap === 0;
-        const r = col.play({
-          home: withRoundFields(sideInput(content, 'home', specs, cap, (cap + 1) % 5), skills, tiredHome ? tired : []),
-          away: withRoundFields(sideInput(content, 'away', specs, cap, (cap + 1) % 5), skills, tiredHome ? [] : tired),
-          homeSpecs: specs,
-          awaySpecs: specs,
-          roundSeed,
-          roundApi: true,
-          styleOf: defaultStyle(content),
-        });
-        rounds++;
-        if (r.winner === (tiredHome ? 'home' : 'away')) wins++;
-      }
+      const base = versus(col, content, a, b, roundSeed);
+      const alt = versus(col, content, tired, b, roundSeed);
+      const d = (alt.winsA - base.winsA) / 2;
+      wins += alt.winsA;
+      baseWins += base.winsA;
+      dSum += d;
+      dSq += d * d;
+      n++;
     }
-    const ci = wilson(wins, rounds);
-    const winRate = wins / Math.max(1, rounds);
+    const lift = pairedLift(dSum, dSq, n);
+    const winRate = 0.5 + lift.liftPts / 100;
     rows.push({
       id: fp.id,
       label: fp.label,
-      rounds,
+      rounds: 2 * n,
       wins,
       winRate: round4(winRate),
-      ciLow: round4(ci.low),
-      ciHigh: round4(ci.high),
+      ciLow: round4(0.5 + lift.ciLowPts / 100),
+      ciHigh: round4(0.5 + lift.ciHighPts / 100),
+      rawWinRate: round4(wins / Math.max(1, 2 * n)),
+      freshWinRate: round4(baseWins / Math.max(1, 2 * n)),
       target: { ...fp.target },
       inTarget: winRate >= fp.target.min && winRate <= fp.target.max,
     });

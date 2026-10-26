@@ -63,7 +63,7 @@ const ab = report.archetypeBand ?? report.targetBand;
 console.log(`  archetype outliers (outside ${Math.round(ab.min * 100)}-${Math.round(ab.max * 100)}%): ${(report.archetypeOutliers ?? []).join(', ') || 'none'}`);
 const pts = (x: number): string => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`;
 if (report.perks) {
-  console.log('  perks (by dominance = veteran pick rate x lift):    pick s3  pick vet  rounds   win%   lift pts (95% CI)      procs/round');
+  console.log('  perks (by dominance = veteran pick rate x lift):    pick s3  pick vet  rounds   win%   lift pts vs without (95% CI)   procs/round');
   for (const p of report.perks) {
     const procs = p.procsPerRound === null ? '' : p.procsPerRound.toFixed(2);
     const tag = `${p.lifecycleOnly ? '  (lifecycle only)' : ''}${p.context ? `  [${p.context}]` : ''}`;
@@ -79,9 +79,11 @@ if (report.ranks) {
   }
 }
 if (report.fatigue) {
-  console.log('  fatigue (tired side win rate):  rounds   win%   95% CI          target');
+  console.log('  fatigue (tired side: 50% + change vs the same side fresh):  rounds   win%   95% CI          raw    fresh   target');
   for (const r of report.fatigue) {
-    console.log(`    ${r.label.padEnd(22)} ${String(r.rounds).padStart(6)} ${pct(r.winRate).padStart(6)}   ${`${pct(r.ciLow)}-${pct(r.ciHigh)}`.padEnd(13)}   ${pct(r.target.min)}-${pct(r.target.max)}${r.inTarget ? '' : '  <-- off target'}`);
+    console.log(
+      `    ${r.label.padEnd(22)} ${String(r.rounds).padStart(6)} ${pct(r.winRate).padStart(6)}   ${`${pct(r.ciLow)}-${pct(r.ciHigh)}`.padEnd(13)} ${pct(r.rawWinRate).padStart(6)} ${pct(r.freshWinRate).padStart(6)}   ${pct(r.target.min)}-${pct(r.target.max)}${r.inTarget ? '' : '  <-- off target'}`,
+    );
   }
 }
 console.log(`  abilities never cast in >50% of rounds: ${(report.rarelyCastAbilities ?? []).length}; preset rules never fired in >80%: ${(report.idleRules ?? []).length}`);
