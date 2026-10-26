@@ -72,11 +72,25 @@ export interface SoakSeasonSummary {
   starterStaminaMedian: number | null;
 }
 
+/** Fighters counted and the levels they gained over the season. */
+export interface LevelTally {
+  fighters: number;
+  levels: number;
+}
+
+/** Starters and bench of one human-age band (see levelAgeBands). */
+export interface AgeBandLevels {
+  starters: LevelTally;
+  bench: LevelTally;
+}
+
 export interface SoakLevelSummary {
   cohorts: Record<string, { fighters: number; levels: number; matches: number }>;
-  starters: { fighters: number; levels: number };
-  bench: { fighters: number; levels: number };
+  starters: LevelTally;
+  bench: LevelTally;
   total: number;
+  /** Regular starters and the bench proper by human-age band at the start of the season (PROVISIONAL_RATIO_* groups): the age-matched bench ratio compares within a band. */
+  ageBands: Record<string, AgeBandLevels>;
 }
 
 export interface SoakReport {
@@ -110,7 +124,7 @@ export const SOAK_CHECKS: readonly { id: string; description: string }[] = [
   { id: 'save-roundtrip', description: 'serialize -> parse -> deep-equal after every season' },
   // M1.1 (levels.json soakTargets; combat sys-match)
   { id: 'freshness-rotation', description: 'AI round starts Tired / Spent within levels.json soakTargets' },
-  { id: 'level-ups', description: 'Starter levels per season by human-age, matches per level, bench ratio, starter Stamina within levels.json soakTargets' },
+  { id: 'level-ups', description: 'Starter levels per season by human-age, matches per level, bench ratio (age-matched), starter Stamina within levels.json soakTargets' },
   { id: 'match-squads', description: 'Squad records legal (5 a side every round, <= 2 swaps, no return); swaps per match within the PROVISIONAL band' },
 ];
 
@@ -120,6 +134,14 @@ export const PROVISIONAL_SWAPS_PER_MATCH: readonly [number, number] = [0.1, 1.5]
 export const PROVISIONAL_STARTER_MIN_MATCHES = 8;
 /** Bench for the bench ratio: rostered all season, started at most this many matches (PROVISIONAL). */
 export const PROVISIONAL_BENCH_MAX_MATCHES = 3;
+/**
+ * The age-matched bench ratio compares the bench proper with regular starters, the groups of the fighters population
+ * test (T004): started >= 10 matches of the season, against started <= 2. The groups above are wider (a fighter who
+ * started 8 matches, or 3, still earned full match XP in those and the bench rate in the rest), which blurs the
+ * comparison: at the same age they read about 0.03 higher (PROVISIONAL).
+ */
+export const PROVISIONAL_RATIO_STARTER_MIN_MATCHES = 10;
+export const PROVISIONAL_RATIO_BENCH_MAX_MATCHES = 2;
 /** Cohorts with fewer fighters than this are reported but not checked. */
 const MIN_COHORT = 8;
 
@@ -365,6 +387,52 @@ export function parseCohort(key: string): LevelCohort {
   };
 }
 
+/** A human-age band for the age-matched bench ratio. The first band also takes every age below its lower edge. */
+export interface LevelAgeBand {
+  key: string;
+  minAge: number;
+  maxAge: number;
+}
+
+/**
+ * Human-age bands for the age-matched bench ratio: one band per distinct lower age edge among the levels.json
+ * soakTargets cohort keys ("18-20 potential>=70", "21-23", ..., "35+" give 18-20, 21-23, 24-26, 27-30, 31-34, 35+),
+ * the potential part of a key ignored. The first band starts at age 0 and the last is open-ended, so every
+ * fighter falls in exactly one band.
+ */
+export function levelAgeBands(content: ContentDB): LevelAgeBand[] {
+  const edges = [...new Set(Object.keys(content.levels.soakTargets.starterLevelsPerSeasonByHumanAge).map((k) => parseCohort(k).minAge))].sort((a, b) => a - b);
+  if (edges.length === 0) return [{ key: 'all', minAge: 0, maxAge: 999 }];
+  return edges.map((lo, i) => {
+    const next = edges[i + 1];
+    return { key: next === undefined ? `${lo}+` : `${lo}-${next - 1}`, minAge: i === 0 ? 0 : lo, maxAge: next === undefined ? 999 : next - 1 };
+  });
+}
+
+/**
+ * Bench levels against what the same bench fighters would have gained at their own age's starter rate.
+ *
+ * The bench skews younger than the starters and the young level faster, so pooling every bench fighter against
+ * every starter inflates the ratio. Here each band's bench fighters are compared with the starters of that band
+ * only: ratio = sum(bench levels) / sum(bench fighters x starter mean levels of the band), i.e. the band ratios
+ * weighted by bench count (x the band's starter rate). A band with fewer than MIN_COHORT starters, no bench
+ * fighters or no starter levels has no reliable reference and is left out of both sides. null when no band is left.
+ */
+export function ageMatchedBenchRatio(bands: Iterable<AgeBandLevels>): { ratio: number; benchFighters: number; bands: number } | null {
+  let benchLevels = 0;
+  let expected = 0;
+  let benchFighters = 0;
+  let used = 0;
+  for (const b of bands) {
+    if (b.starters.fighters < MIN_COHORT || b.starters.levels <= 0 || b.bench.fighters === 0) continue;
+    benchLevels += b.bench.levels;
+    expected += b.bench.fighters * (b.starters.levels / b.starters.fighters);
+    benchFighters += b.bench.fighters;
+    used++;
+  }
+  return expected > 0 ? { ratio: benchLevels / expected, benchFighters, bands: used } : null;
+}
+
 interface LevelStart {
   level: number;
   humanAge: number;
@@ -384,8 +452,10 @@ function levelSnapshot(state: GameState, ports: GamePorts, content: ContentDB): 
 /** Levels gained over the season (state at phase 'season-end', before the season-end step) by fighters rostered at its start. */
 function levelSummary(state: GameState, start: Map<FighterId, LevelStart>, ports: GamePorts, content: ContentDB): { levels: SoakLevelSummary; stamina: number | null } {
   const cohorts = Object.keys(content.levels.soakTargets.starterLevelsPerSeasonByHumanAge).map(parseCohort);
-  const levels: SoakLevelSummary = { cohorts: {}, starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 }, total: 0 };
+  const ageBands = levelAgeBands(content);
+  const levels: SoakLevelSummary = { cohorts: {}, starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 }, total: 0, ageBands: {} };
   for (const c of cohorts) levels.cohorts[c.key] = { fighters: 0, levels: 0, matches: 0 };
+  for (const b of ageBands) levels.ageBands[b.key] = { starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 } };
   const stamina: number[] = [];
   const hasStamina = content.stats.list.some((s) => s.id === 'stamina');
   for (const [id, s0] of start) {
@@ -394,6 +464,7 @@ function levelSummary(state: GameState, start: Map<FighterId, LevelStart>, ports
     const gained = Math.max(0, f.level - s0.level);
     levels.total += gained;
     const matches = f.season.matchesStarted;
+    const ageBand = levels.ageBands[(ageBands.find((b) => s0.humanAge >= b.minAge && s0.humanAge <= b.maxAge) ?? ageBands[0]!).key]!;
     if (matches >= PROVISIONAL_STARTER_MIN_MATCHES) {
       levels.starters.fighters++;
       levels.starters.levels += gained;
@@ -408,6 +479,14 @@ function levelSummary(state: GameState, start: Map<FighterId, LevelStart>, ports
     } else if (matches <= PROVISIONAL_BENCH_MAX_MATCHES) {
       levels.bench.fighters++;
       levels.bench.levels += gained;
+    }
+    // The age-matched bench ratio's groups: regular starters against the bench proper (see the constants).
+    if (matches >= PROVISIONAL_RATIO_STARTER_MIN_MATCHES) {
+      ageBand.starters.fighters++;
+      ageBand.starters.levels += gained;
+    } else if (matches <= PROVISIONAL_RATIO_BENCH_MAX_MATCHES) {
+      ageBand.bench.fighters++;
+      ageBand.bench.levels += gained;
     }
   }
   return { levels, stamina: stamina.length > 0 ? median(stamina) : null };
@@ -552,7 +631,7 @@ function runOnceUnsafe(options: SoakOptions, seasons: number, observe: boolean):
       swaps: swaps.swaps,
       forcedSwaps: swaps.forced,
       emergencyEntrants: swaps.emergency,
-      levels: progression?.levels ?? { cohorts: {}, starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 }, total: 0 },
+      levels: progression?.levels ?? { cohorts: {}, starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 }, total: 0, ageBands: {} },
       starterStaminaMedian: progression?.stamina ?? null,
     };
     if (observe) {
@@ -629,7 +708,12 @@ function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | nul
     }
     const last = obs.ages[obs.ages.length - 1]?.stats;
     const retire = main.summaries.map((s) => s.retirements).join('/');
-    set('age-distribution', bad.length === 0, bad.length ? bad.slice(0, 4).join('; ') : `median ${last?.medianHumanAge.toFixed(1)} (band ${st.medianHumanAge.join('-')}); retirements per season ${retire}`);
+    const inMeasured = obs.ages.filter((x) => measured.some((m) => m.season === x.season));
+    const range = (xs: number[], bandOf: readonly number[]): string => (xs.length ? `${Math.min(...xs).toFixed(2)}-${Math.max(...xs).toFixed(2)} (band ${bandOf.join('-')})` : 'n/a');
+    const share31 = inMeasured.length
+      ? `; share <=22 ${range(inMeasured.map((x) => x.stats.shareAtMost22), st.shareHumanAgeAtMost22)}, share >=31 ${range(inMeasured.map((x) => x.stats.shareAtLeast31), st.shareHumanAgeAtLeast31)}`
+      : '';
+    set('age-distribution', bad.length === 0, bad.length ? bad.slice(0, 4).join('; ') : `median ${last?.medianHumanAge.toFixed(1)} (band ${st.medianHumanAge.join('-')})${share31}; retirements per season ${retire}`);
   }
   // fighter-population
   if (needSeasons('fighter-population')) {
@@ -700,8 +784,21 @@ function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | nul
       if (mid.l > 0 && !inBand(perLevel, lt.matchesPerLevelMidCohort)) bad.push(`matches per level (mid) ${perLevel.toFixed(2)} (band ${lt.matchesPerLevelMidCohort.join('-')})`);
       const st = measured.reduce((a, s) => ({ f: a.f + s.levels.starters.fighters, l: a.l + s.levels.starters.levels }), { f: 0, l: 0 });
       const be = measured.reduce((a, s) => ({ f: a.f + s.levels.bench.fighters, l: a.l + s.levels.bench.levels }), { f: 0, l: 0 });
-      const ratio = st.l && be.f ? be.l / be.f / (st.l / st.f) : 0;
-      if (be.f >= MIN_COHORT && st.l > 0 && !inBand(ratio, lt.benchLevelsToStarterLevelsRatio)) bad.push(`bench/starter levels ${ratio.toFixed(2)} (band ${lt.benchLevelsToStarterLevelsRatio.join('-')})`);
+      // Pooled over all ages the bench reads high (it skews young); the check compares within human-age bands.
+      const pooled = st.l && be.f ? be.l / be.f / (st.l / st.f) : 0;
+      const bands: Record<string, AgeBandLevels> = {};
+      for (const s of measured) {
+        for (const [key, b] of Object.entries(s.levels.ageBands)) {
+          const t = (bands[key] ??= { starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 } });
+          t.starters.fighters += b.starters.fighters;
+          t.starters.levels += b.starters.levels;
+          t.bench.fighters += b.bench.fighters;
+          t.bench.levels += b.bench.levels;
+        }
+      }
+      const matched = ageMatchedBenchRatio(Object.values(bands));
+      const ratio = matched?.ratio ?? 0;
+      if (matched && matched.benchFighters >= MIN_COHORT && !inBand(ratio, lt.benchLevelsToStarterLevelsRatio)) bad.push(`bench/starter levels, age-matched ${ratio.toFixed(2)} (band ${lt.benchLevelsToStarterLevelsRatio.join('-')}; pooled ${pooled.toFixed(2)})`);
       const sta = measured.map((s) => s.starterStaminaMedian).filter((x): x is number => x !== null);
       const staMed = sta.length ? median(sta) : null;
       if (staMed !== null && !inBand(staMed, lt.starterStaminaMedian)) bad.push(`starter Stamina median ${staMed} (band ${lt.starterStaminaMedian.join('-')})`);
@@ -710,7 +807,7 @@ function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | nul
         bad.length === 0,
         bad.length
           ? bad.slice(0, 4).join('; ')
-          : `starter levels/season ${parts.join(', ')}; matches per level (mid) ${perLevel.toFixed(2)}; bench/starter ${ratio.toFixed(2)}; starter Stamina median ${staMed ?? 'n/a'}`,
+          : `starter levels/season ${parts.join(', ')}; matches per level (mid) ${perLevel.toFixed(2)}; bench/starter ${matched ? ratio.toFixed(2) : 'n/a'} age-matched (${pooled.toFixed(2)} pooled); starter Stamina median ${staMed ?? 'n/a'}`,
       );
     }
   }

@@ -4,7 +4,7 @@
  *
  *   base      = clamp(drainAt0 + drainPerStaminaPoint × STA, drainMin, drainMax)
  *   intensity = clamp(0.55 + 0.25 × min(2, duration ÷ 30 s) + 0.20 × min(2, damage ÷ maxHp) + 0.12 × [downed], 0.6, 1.5)
- *   drain     = round(base × intensity × (1.1 under human-age 21) × perk freshnessDrainMult × 10)   tenths per round played
+ *   drain     = round(base × intensity × (1.1 under human-age 21) × perk freshnessDrainMult × tiredDrainShare at the round's start × 10)   tenths per round played
  *   rest      = round((restAt0 + restPerStaminaPoint × STA) × recoveryAgeMult(human-age) × (0.8 unused squad reserve) × 10)
  *
  * STA is the effective Stamina at that moment. Every formula rounds once at
@@ -83,10 +83,29 @@ function drainMults(fighter: Fighter, content: ContentDB): number {
   return young * perkDrainMult(fighter, content);
 }
 
-/** Drain of one round played, tenths (frs-001: STA 16, 30 s, 60%, not downed -> 39). */
+/**
+ * Share of a round's drain a fighter pays when the round starts at `freshness10` (tenths): levels.json
+ * freshness.tiredDrainShare below the threshold (a Tired fighter paces himself), 1 from the threshold up
+ * (so the rounds-until-Tired calibration is untouched) and when the constant is absent.
+ */
+export function drainShareAt(freshness10: number, content: ContentDB): number {
+  const fr = content.levels.freshness;
+  return freshness10 < fr.threshold * fr.storageUnitsPerPoint ? (fr.tiredDrainShare ?? 1) : 1;
+}
+
+/**
+ * Drain of one round played, tenths (frs-001: STA 16, 30 s, 60%, not downed -> 39). Reads the fighter's Freshness
+ * as the round's start value, so call it before the drain is applied (freshnessAfterRound does).
+ */
 export function roundDrain10(fighter: Fighter, load: RoundLoad, content: ContentDB): number {
   const fr = content.levels.freshness;
-  return roundN(drainBase(staminaOf(fighter, content), content) * roundIntensity(load, content) * drainMults(fighter, content) * fr.storageUnitsPerPoint);
+  return roundN(
+    drainBase(staminaOf(fighter, content), content) *
+      roundIntensity(load, content) *
+      drainMults(fighter, content) *
+      drainShareAt(freshness10Of(fighter), content) *
+      fr.storageUnitsPerPoint,
+  );
 }
 
 /** Drain of a typical round (intensity 1.0), tenths: UI forecasts and the AI rotation. */

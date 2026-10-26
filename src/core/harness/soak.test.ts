@@ -4,7 +4,7 @@ import { asId, type ClubId, type GameState, type SeasonRecord, type TierId } fro
 import { checksumState, createSave, parseSave, saveMetaFor, serializeSave } from '../save';
 import { fixtureContent } from '../testkit';
 import { NotImplementedError, cloneJson } from '../util';
-import { SOAK_CHECKS, dynastyFlags, freshnessStarts, ledgerMismatches, lineupProblems, overCap, parseCohort, runSoak, scheduleProblems, squadRecordProblems, swapCounts } from './soak';
+import { SOAK_CHECKS, ageMatchedBenchRatio, dynastyFlags, freshnessStarts, ledgerMismatches, levelAgeBands, lineupProblems, overCap, parseCohort, runSoak, scheduleProblems, squadRecordProblems, swapCounts, type AgeBandLevels } from './soak';
 
 const content = fixtureContent();
 
@@ -21,6 +21,8 @@ describe('runSoak on stand-ins', () => {
     for (const c of report.checks) expect(c.status).not.toBe('pending');
     expect(report.seasons).toHaveLength(2);
     expect(report.finalChecksum).toMatch(/^[0-9a-f]{32}$/);
+    // The age-matched bench ratio's tallies: one entry per human-age band, every season.
+    for (const season of report.seasons) expect(Object.keys(season.levels.ageBands)).toEqual(levelAgeBands(content).map((b) => b.key));
   });
 
   it('reports blocked checks as pending when a module is a stub', () => {
@@ -184,5 +186,48 @@ describe('M1.1: a match saved between rounds (sw-009) and the squad checks', () 
     expect(parseCohort('24-26 potential 50-65')).toMatchObject({ minAge: 24, maxAge: 26, potMin: 50, potMax: 65 });
     expect(parseCohort('35+')).toMatchObject({ minAge: 35, maxAge: 999, potMin: 0 });
     expect(() => parseCohort('young')).toThrow();
+  });
+});
+
+describe('level-ups: the age-matched bench ratio', () => {
+  const band = (starters: [number, number], bench: [number, number]): AgeBandLevels => ({
+    starters: { fighters: starters[0], levels: starters[1] },
+    bench: { fighters: bench[0], levels: bench[1] },
+  });
+
+  it('levelAgeBands: one band per distinct lower age edge of the cohort keys, potential ignored, covering every age', () => {
+    const bands = levelAgeBands(content);
+    // "18-20 potential>=70", "21-23", "24-26 potential 50-65", "27-30", "31-34", "35+"
+    expect(bands.map((b) => b.key)).toEqual(['18-20', '21-23', '24-26', '27-30', '31-34', '35+']);
+    expect(bands[0]!.minAge).toBe(0); // fighters below 18 count in the first band
+    expect(bands[bands.length - 1]!.maxAge).toBe(999);
+    for (let i = 1; i < bands.length; i++) expect(bands[i]!.minAge).toBe(bands[i - 1]!.maxAge + 1);
+  });
+
+  it('removes the age skew: a bench half as young as it is old reads 0.40 in every band, not the pooled 0.64', () => {
+    // Young band: starters average 500 / 100 = 5.0 levels, bench 200 / 100 = 2.0 (0.4 of a starter).
+    // Old band:   starters average 80 / 100 = 0.8 levels, bench 3.2 / 10 = 0.32 (also 0.4 of a starter).
+    const young = band([100, 500], [100, 200]);
+    const old = band([100, 80], [10, 3.2]);
+    const matched = ageMatchedBenchRatio([young, old])!;
+    // sum(bench levels) / sum(bench fighters x starter mean) = (200 + 3.2) / (100 x 5.0 + 10 x 0.8)
+    expect(matched.ratio).toBeCloseTo((200 + 3.2) / (100 * 5 + 10 * 0.8), 12);
+    expect(matched.ratio).toBeCloseTo(0.4, 12);
+    expect(matched.benchFighters).toBe(110);
+    expect(matched.bands).toBe(2);
+    // The pooled ratio the check used before: bench mean over starter mean across all ages.
+    const pooled = (203.2 / 110) / ((500 + 80) / 200);
+    expect(pooled).toBeGreaterThan(0.6);
+    expect(pooled).toBeGreaterThan(matched.ratio + 0.2);
+  });
+
+  it('leaves out a band without a reliable starter reference (fewer than 8 starters, or no starter levels) or without bench fighters', () => {
+    const good = band([100, 500], [100, 200]);
+    const base = ageMatchedBenchRatio([good])!.ratio;
+    expect(ageMatchedBenchRatio([good, band([3, 30], [50, 500])])!.ratio).toBe(base);
+    expect(ageMatchedBenchRatio([good, band([50, 0], [20, 20])])!.ratio).toBe(base);
+    expect(ageMatchedBenchRatio([good, band([50, 100], [0, 0])])!.ratio).toBe(base);
+    expect(ageMatchedBenchRatio([band([3, 30], [50, 500])])).toBeNull();
+    expect(ageMatchedBenchRatio([])).toBeNull();
   });
 });

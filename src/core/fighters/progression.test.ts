@@ -5,6 +5,7 @@
  * Stamina generation and aging (sta-001, sta-002).
  */
 import { describe, expect, it } from 'vitest';
+import type { ContentDB } from '../content';
 import { buildFixtureWorld, fixtureContent, fixtureMatchState, makeFixtureFighter, withFreshness } from '../testkit';
 import { cloneJson } from '../util';
 import { putResult } from '../model';
@@ -501,6 +502,59 @@ describe('Freshness', () => {
     expect(lo.next).toBeCloseTo(55, 5);
     expect(hi.n / 2.5).toBeCloseTo(4, 5);
     expect(lo.n / 2.5).toBeCloseTo(2, 5);
+  });
+
+  // M1.1 tuning (content/default levels.json freshness.tiredDrainShare 0.5): a Tired fighter pays half a round's drain.
+  describe('frs-011: Tired fighters pace themselves (tiredDrainShare)', () => {
+    const tiredContent: ContentDB = { ...content, levels: { ...content.levels, freshness: { ...content.levels.freshness, tiredDrainShare: 0.5 } } };
+    const typical = load(30, 1000, false); // intensity 0.55 + 0.25 + 0.2 = 1.0
+
+    it('the share applies to rounds that START below the threshold (599 tenths), not at it (600); absent it is 1', () => {
+      const f = plain({ stamina: 11 }); // base 11.88 - 0.48 × 11 = 6.6; this load: 0.55 + 0.25 + 0.2 × 0.6 = 0.92
+      const full = Math.round(6.6 * 0.92 * 10); // 60.72 -> 61
+      const half = Math.round(6.6 * 0.92 * 0.5 * 10); // 30.36 -> 30
+      expect(roundDrain10({ ...f, freshness10: 600 }, load(30, 600, false), tiredContent)).toBe(full);
+      expect(roundDrain10({ ...f, freshness10: 599 }, load(30, 600, false), tiredContent)).toBe(half);
+      expect(roundDrain10({ ...f, freshness10: 1000 }, load(30, 600, false), tiredContent)).toBe(full);
+      // Without the constant (the frozen fixture content) nothing is tapered.
+      expect(roundDrain10({ ...f, freshness10: 100 }, load(30, 600, false), content)).toBe(full);
+    });
+
+    // An unrotated starter plays typical rounds back to back. Stamina 6: 9.0 a round (5 starts at >= 60: 100, 91, 82, 73, 64),
+    // so round 6 starts at 55 (Tired, as in the T003 calibration); then 4.5 a round instead of 9.0.
+    const unrotated = (stamina: number, contentUsed: ContentDB, rounds: number): number[] => {
+      let f: Fighter = { ...plain({ stamina }), freshness10: 1000 };
+      const starts: number[] = [];
+      for (let i = 0; i < rounds; i++) {
+        starts.push(f.freshness10! / 10);
+        f = { ...f, freshness10: Math.max(0, f.freshness10! - roundDrain10(f, typical, contentUsed)) };
+      }
+      return starts;
+    };
+
+    it('the onset is untouched: the first round started below 60 is the same round, and every earlier start is identical', () => {
+      for (const [sta, firstTired] of [[6, 6], [11, 8], [16, 11]] as const) {
+        const old = unrotated(sta, content, 30);
+        const now = unrotated(sta, tiredContent, 30);
+        expect(old.findIndex((v) => v < 60) + 1, `STA ${sta} without`).toBe(firstTired);
+        expect(now.findIndex((v) => v < 60) + 1, `STA ${sta} with`).toBe(firstTired);
+        expect(now.slice(0, firstTired)).toEqual(old.slice(0, firstTired));
+      }
+    });
+
+    it('after the threshold an unrotated Stamina 6 declines at half the pace: first Spent start in round 10 (was 8), still above 0 in round 18 (was 0 from round 13)', () => {
+      const old = unrotated(6, content, 18);
+      const now = unrotated(6, tiredContent, 18);
+      // Old: 9.0 a round -> 100 - 9r: round 8 starts at 37 (Spent), round 12 at 1.0, round 13 at 0.
+      expect(old.findIndex((v) => v === 0) + 1).toBe(13);
+      expect(old.findIndex((v) => v < 40) + 1).toBe(8);
+      // New: 100, 91, 82, 73, 64, 55, then 4.5 a round: 50.5, 46, 41.5, 37 (round 10 starts Spent), ... 0 at 55 / 4.5 = 12.2 rounds after round 6.
+      expect(now[5]).toBe(55);
+      expect(now[9]).toBeCloseTo(37, 5);
+      expect(now.findIndex((v) => v < 40) + 1).toBe(10);
+      expect(now.findIndex((v) => v === 0)).toBe(-1);
+      expect(now[17]).toBeCloseTo(55 - 4.5 * 12, 5); // 1.0
+    });
   });
 
   it('frs-005: a week of rest: +46.0 (STA 16, 26) / +30.6 (STA 6, 34) / +24.5 as an unused squad reserve', () => {

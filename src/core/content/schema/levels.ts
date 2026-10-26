@@ -123,6 +123,8 @@ export const LevelsFileSchema = z
         intensityMax: z.number(),
         youngHumanAgeBelow: z.number(),
         youngDrainMult: z.number().positive(),
+        /** Share of a round's drain paid by a fighter who starts it below `threshold` (a Tired fighter paces himself). Absent = 1: no taper. */
+        tiredDrainShare: z.number().min(0).max(1).optional(),
         restAt0: z.number(),
         restPerStaminaPoint: z.number(),
         squadReserveRestShare: z.number().min(0).max(1),
