@@ -821,7 +821,7 @@ function TrialsCard({
             );
           })}
         </ul>
-        <p class="u-xs u-faint">{t('trials.agentsNote')}</p>
+        <p class="u-xs u-faint">{t(rookies.length > 1 ? 'trials.agentsNoteMany' : 'trials.agentsNote')}</p>
       </div>
     </Panel>
   );

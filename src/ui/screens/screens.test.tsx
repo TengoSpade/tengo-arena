@@ -385,6 +385,20 @@ describe('New career and club select', () => {
     expect(document.activeElement).toBe(cards[1]);
     expect(preview.querySelector('.panel__subtitle')!.textContent).toContain(second.name);
     expect(cards[1]!.getAttribute('data-previewed')).toBe('true');
+    // Pick the first club, then leave the cards: the preview shows the picked club again.
+    await act(() => {
+      fireEvent.click(cards[0]!);
+      cards[0]!.focus();
+    });
+    await act(() => {
+      fireEvent.blur(cards[0]!, { relatedTarget: screen.getByTestId('start-career') });
+    });
+    expect(preview.querySelector('.panel__subtitle')!.textContent).toContain(first.name);
+    await act(() => {
+      cards[2]!.focus();
+      fireEvent.blur(cards[2]!, { relatedTarget: null });
+    });
+    expect(preview.querySelector('.panel__subtitle')!.textContent).toContain(first.name);
   });
 
   it('picks a club and starts the career through the commit dialog', async () => {

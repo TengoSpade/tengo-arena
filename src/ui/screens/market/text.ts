@@ -143,6 +143,7 @@ export const MARKET_TEXT = {
   'trials.sign': 'Sign…',
   'trials.signTip': 'Signing is answered at once and is binding. He can play from Matchweek 1.',
   'trials.agentsNote': 'The list below is free agents. Your Trials Day rookie is above: only your club can sign him this week.',
+  'trials.agentsNoteMany': 'The list below is free agents. Your Trials Day rookies are above: only your club can sign them this week.',
   'rookies.none': 'No rookies in your trials share',
   'shortlist.title': 'Shortlist',
   'shortlist.subtitle': 'Free agents you are watching',
