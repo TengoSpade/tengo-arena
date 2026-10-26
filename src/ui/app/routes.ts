@@ -26,7 +26,8 @@ export type RouteId =
   | 'finances'
   | 'season-review'
   | 'saves'
-  | 'settings';
+  | 'settings'
+  | 'between-rounds';
 
 export interface RouteDef {
   id: RouteId;
@@ -53,6 +54,7 @@ export const ROUTES: readonly RouteDef[] = [
   { id: 'season-review', path: 'season-review', owner: 'WP7', nav: false, load: () => import('../screens/season-review') },
   { id: 'saves', path: 'saves', owner: 'WP7', nav: true, load: () => import('../screens/saves') },
   { id: 'settings', path: 'settings', owner: 'WP7', nav: true, load: () => import('../screens/settings') },
+  { id: 'between-rounds', path: 'between-rounds', owner: 'WP7', nav: false, load: () => import('../screens/between-rounds') },
 ];
 
 /**

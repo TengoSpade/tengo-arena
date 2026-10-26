@@ -138,6 +138,7 @@ describe('Market screen', () => {
     expect(card.textContent).toContain('Trials Day (preseason week P1)');
     expect(card.textContent).toContain('no signing cost');
     expect(card.querySelectorAll('[data-testid^="trials-rookie-"]')).toHaveLength(3);
+    expect(card.textContent).toContain('Your Trials Day rookies are above: only your club can sign them this week.');
     fireEvent.click(card.querySelector<HTMLButtonElement>('[data-testid^="trials-sign-"]')!);
     expect(within(screen.getByTestId('offer-dialog')).getByText(/from Trials Day/)).toBeTruthy();
     fireEvent.keyDown(screen.getByTestId('offer-dialog'), { key: 'Escape' });

@@ -121,7 +121,7 @@ describe('store: advance', () => {
   });
 
   it('does not commit when the engine refuses, and maps the error', async () => {
-    const engine: GameEngine = { ...createDevEngine(), advanceWeek: () => err(engineError('lineup.incomplete', 'no')) };
+    const engine: GameEngine = { ...createDevEngine(), advanceWeek: () => err(engineError('lineup.incomplete', 'no')), advance: () => err(engineError('lineup.incomplete', 'no')) };
     const { store } = createTestStore({ engine });
     const before = store.game.value;
     const res = await store.advance();

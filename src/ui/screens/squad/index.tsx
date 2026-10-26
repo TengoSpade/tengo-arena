@@ -19,12 +19,12 @@ import type { FighterView } from '../../../core/game';
 import type { Club, Fighter, FighterId, GameState, LineupEntry, StatId } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
+import { levelUpRequest } from '../../app/intents';
 import { useShortcuts } from '../../app/shortcuts';
 import {
   CapMeter,
   ClassTag,
   DataTable,
-  Delta,
   Empty,
   FighterName,
   Icon,
@@ -32,7 +32,6 @@ import {
   Panel,
   PageHeader,
   Portrait,
-  Progress,
   Rating,
   RowMark,
   Segmented,
@@ -62,14 +61,16 @@ import {
   roleNames,
   rolesOf,
   trainingOptions,
-  trendInfo,
   wageTip,
 } from '../../format/fighter';
-import { useStore } from '../../store';
+import { useStore, type GameStore } from '../../store';
 import { clubActions } from '../../store/actions';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from '../../store/views';
 import { format, t } from '../../text';
+import { freshInfo, levelInfo } from '../../m11/model';
+import { FreshMeter, LevelChip, freshTip } from '../../m11/parts';
+import { ReservesZone, RotationStrip, applySuggestedSquad, rotationTips, toggleReserve } from './MatchSquad';
 import { T } from './text';
 import './squad.css';
 
@@ -131,6 +132,7 @@ export default function SquadScreen(_props: ScreenProps) {
     f: () => (selected && actions ? void actions.moveTo(selected, 'front') : false),
     b: () => (selected && actions ? void actions.moveTo(selected, 'back') : false),
     r: () => (selected && actions ? void actions.moveTo(selected, 'reserve') : false),
+    m: () => (selected && ctx ? void toggleReserve(store, ctx.state, ctx.club, selected) : false),
     c: () => (selected && actions ? void actions.setCaptain(selected) : false),
     v: () => (selected && actions ? void actions.setVice(selected) : false),
     p: () => (selected && actions ? void actions.cyclePreset(selected) : false),
@@ -204,6 +206,7 @@ export default function SquadScreen(_props: ScreenProps) {
       <div class="l-grid">
         <LineupBoard
           ctx={ctx}
+          store={store}
           rows={rows}
           engine={engine}
           selected={selected}
@@ -215,7 +218,8 @@ export default function SquadScreen(_props: ScreenProps) {
           opponent={opponent ?? null}
           onAuto={() => {
             const cmd = safeView(() => engine.suggestLineup(state, club.id, content), null);
-            if (cmd && cmd.type === 'lineup.set') actions.setLineup(cmd.fighters, T.toastAuto);
+            if (cmd?.type === 'lineup.set') actions.setLineup(cmd.fighters, T.toastAuto);
+            else if (cmd?.type === 'squad.set') applySuggestedSquad(store, state, content, engine, club, cmd, T.toastAuto);
           }}
           onLast={(entries) => actions.setLineup(entries, T.toastLast)}
         />
@@ -297,7 +301,7 @@ export default function SquadScreen(_props: ScreenProps) {
               label={T.roster}
               testId="roster-table"
               variant={['dense']}
-              columns={columnsFor(squadView.value, ctx, actions)}
+              columns={columnsFor(squadView.value, ctx, actions, engine)}
               rows={visible}
               rowKey={(r) => r.f.id}
               sortKey={`squad.${squadView.value}`}
@@ -345,6 +349,7 @@ export default function SquadScreen(_props: ScreenProps) {
 
 interface BoardProps {
   ctx: ClubContext;
+  store: GameStore;
   rows: Row[];
   engine: GameEngine;
   selected: FighterId | null;
@@ -434,7 +439,7 @@ function LineupBoard(props: BoardProps) {
       testId="lineup-board"
       subtitle={
         <>
-          {T.lineupHint} <Kbd>F</Kbd> front, <Kbd>B</Kbd> back, <Kbd>R</Kbd> reserve, <Kbd>C</Kbd> captain, <Kbd>V</Kbd> vice
+          {T.lineupHint} <Kbd>F</Kbd> front, <Kbd>B</Kbd> back, <Kbd>R</Kbd> bench, <Kbd>M</Kbd> match reserve, <Kbd>C</Kbd> captain, <Kbd>V</Kbd> vice
         </>
       }
       actions={
@@ -543,6 +548,8 @@ function LineupBoard(props: BoardProps) {
           {T.enemySide}
         </div>
       </div>
+      <ReservesZone state={state} content={content} engine={engine} club={club} store={props.store} selected={selected} onSelect={props.onSelect} dragId={props.dragId} setDragId={props.setDragId} />
+      <RotationStrip tips={rotationTips(state, content, engine, club)} state={state} onRotate={(tip) => props.actions.moveTo(tip.in, tip.row, tip.out)} />
     </Panel>
   );
 }
@@ -557,10 +564,10 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
   const race = raceName(r.f, content);
   const captain = club.captainId === r.f.id ? 'captain' : club.viceCaptainId === r.f.id ? 'vice' : null;
   const risk = r.view ? injuryRiskText(r.view, content) : null;
-  const target = content.development.xp.seasonTarget;
-  const trend = r.view ? trendInfo(r.view.trend, content) : null;
   const injured = r.f.injury && r.f.injury.weeksOut > 0;
-  void state;
+  const fresh = freshInfo(props.engine, state, content, r.f);
+  const level = levelInfo(props.engine, state, content, r.f);
+  const willTire = fresh.readyRounds < 3;
   return (
     <article
       class="lineup-card"
@@ -633,15 +640,27 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
             <Icon name="injury" size="sm" /> <span class={risk.notable ? undefined : 'u-sr-only'}>{risk.word}</span>
           </span>
         )}
-        <span class="lineup-card__xp" {...tipAttrs(format(T.xpTip, { xp: r.f.season.xp, target }))}>
-          <Progress value={r.f.season.xp / Math.max(1, target)} />
+        <FreshMeter info={fresh} content={content} testId={`fresh-${r.f.id}`} />
+        <span
+          class={`lineup-card__proj u-xs${willTire ? ' u-warn' : ' u-muted'}`}
+          {...tipAttrs(format(T.freshProjectionTip, { drain: fresh.drain.toFixed(1), n: fresh.afterMatch, tired: willTire ? T.freshWillTire : T.freshFine }))}
+        >
+          {format(T.freshProjection, { n: fresh.afterMatch })}
         </span>
-        {trend && (
-          <span class="lineup-card__trend" {...tipAttrs(format(T.trendTip, { label: trend.label }))}>
-            {trend.dir !== 0 && <Delta value={trend.dir} />} <span class="lineup-card__trend-label">{trend.label}</span>
-          </span>
-        )}
+        <button class="lineup-card__lvl" type="button" onClick={(e) => {
+          e.stopPropagation();
+          if (level.pending > 0) levelUpRequest.value = r.f.id;
+        }} {...tipAttrs(format(T.levelTip, { n: level.level }))}>
+          <LevelChip info={level} />
+        </button>
       </div>
+      {(fresh.label === 'tired' || fresh.label === 'spent') && (
+        <div class="lineup-card__warn">
+          <Tag kind={fresh.label === 'spent' ? 'bad' : 'warn'} icon="warning" tip={freshTip(fresh, content)}>
+            {format(T.tiredTag, { label: fresh.labelText, n: fresh.value })}
+          </Tag>
+        </div>
+      )}
     </article>
   );
 }
@@ -669,7 +688,7 @@ function lastLineup(state: GameState, club: Club): LineupEntry[] | null {
 
 // ---- Roster table columns --------------------------------------------------------------------------------
 
-function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clubActions>): Column<Row>[] {
+function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clubActions>, engine: GameEngine): Column<Row>[] {
   const { state, content, club, tier } = ctx;
   const season = state.calendar.season;
   const fighter: Column<Row> = {
@@ -767,20 +786,25 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       </span>
     ),
   };
-  const trend: Column<Row> = {
-    id: 'trend',
-    header: T.colTrend,
-    class: 'col-mid',
-    sortValue: (r) => (r.view ? trendInfo(r.view.trend, content).dir : 0),
+  const level: Column<Row> = {
+    id: 'level',
+    header: T.colLevel,
+    align: 'num',
+    sortValue: (r) => r.f.level ?? 0,
     cell: (r) => {
-      if (!r.view) return '—';
-      const tr = trendInfo(r.view.trend, content);
+      const info = levelInfo(engine, state, content, r.f);
       return (
-        <span {...tipAttrs(`Trend: ${tr.label}. Projected rating change at season end if this season's XP rate continues.`)}>
-          {tr.dir !== 0 && <Delta value={tr.dir} />} {tr.label}
-        </span>
+        <button class="lineup-card__lvl" type="button" onClick={() => info.pending > 0 && (levelUpRequest.value = r.f.id)} data-testid={`lvl-${r.f.id}`}>
+          <LevelChip info={info} />
+        </button>
       );
     },
+  };
+  const freshness: Column<Row> = {
+    id: 'freshness',
+    header: T.colFresh,
+    sortValue: (r) => r.f.freshness10 ?? 1000,
+    cell: (r) => <FreshMeter info={freshInfo(engine, state, content, r.f)} content={content} />,
   };
   // Below 1400 px the traits give way to the names (they stay on the profile and Attributes view).
   const traits: Column<Row> = {
@@ -877,7 +901,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       num('cdowns', T.colCareerDowns, (r) => r.f.career.downsInflicted, (r) => `Career downs inflicted: ${r.f.career.downsInflicted}`),
     ];
   }
-  return [slot, fighter, klass, raceAge, rating, potential, lineup, preset, training, trend, traits, apps, downs, wage, contract];
+  return [slot, fighter, klass, raceAge, rating, potential, level, freshness, lineup, preset, training, traits, apps, downs, wage, contract];
 }
 
 function presetName(r: Row, club: Club, content: ContentDB): string {

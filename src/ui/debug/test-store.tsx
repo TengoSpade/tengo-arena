@@ -10,7 +10,7 @@
  */
 import type { ComponentChildren } from 'preact';
 import type { ContentDB } from '../../core/content';
-import type { GameState } from '../../core/model';
+import type { GameState, PauseBetweenRounds } from '../../core/model';
 import { FIXTURE_CONTENT_RAW, buildFixtureWorld, fixtureContent } from '../../core/testkit';
 import type { Clock, FileIO } from '../../platform/save-store';
 import { createMemorySaveStore, type MemorySaveStore } from '../../platform/save-store.memory';
@@ -43,6 +43,11 @@ export interface TestStoreOptions {
   playerClubId?: string | null;
   engine?: GameEngine;
   dev?: boolean;
+  /**
+   * M1.1: the player club's between-round pause. Default 'never' so a test that advances weeks gets
+   * whole weeks (as in M1); the between-round tests ask for 'always'.
+   */
+  pauseBetweenRounds?: PauseBetweenRounds;
 }
 
 export interface TestStore {
@@ -83,6 +88,8 @@ export function createTestStore(options: TestStoreOptions = {}): TestStore {
       world === 'fixture'
         ? buildFixtureWorld()
         : buildDevWorld(content, { playerClubId: options.playerClubId === undefined ? firstClub : options.playerClubId, weekIndex: options.weekIndex ?? 11 });
+    const player = state.playerClubId ? state.clubs[state.playerClubId] : undefined;
+    if (player) player.pauseBetweenRounds = options.pauseBetweenRounds ?? 'never';
     store.replaceWorld(state, content);
   }
   return { store, saves, clock, downloads, content, engine };

@@ -187,3 +187,55 @@
   max-height: 46rem;
   overflow-y: auto;
 }
+
+/* M1.1: squads and swaps. */
+.md-five {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  padding: var(--sp-1) 0;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.md-five.is-us {
+  color: var(--c-text);
+}
+
+.md-fighter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.md-in {
+  color: var(--c-good);
+  font-weight: var(--fw-bold);
+}
+
+.md-swaps,
+.md-xp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+
+.md-swaps > li.is-us {
+  font-weight: var(--fw-semibold);
+}
+
+.md-xp__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+
+.md-xp__fate {
+  flex-basis: 100%;
+  order: 9;
+  margin-top: calc(-1 * var(--sp-1));
+}

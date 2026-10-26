@@ -42,6 +42,9 @@ import { t } from '../text';
 import type { GameStore, StorePlatform } from './contract';
 import { coreEngine, type GameEngine } from './engine';
 
+/** store.advance() result while the player's match waits between rounds (state.liveMatch): open the between-round screen. */
+export const MATCH_PAUSED = 'match.paused';
+
 /** Manual slot ids "manual-1" .. "manual-10" (TUNABLE (tech): 10). */
 export const MANUAL_SLOT_IDS: readonly string[] = Array.from({ length: MANUAL_SLOT_COUNT }, (_, i) => `manual-${i + 1}`);
 export { AUTOSAVE_SLOTS };
@@ -260,22 +263,31 @@ export function createGameStore(platform: StorePlatform): AppStore {
     try {
       await yieldToUi();
       const t0 = platform.clock.nowMs();
+      // M1.1: Continue is engine.advance (core/game AdvanceOutcome): the week, or the player's match
+      // pausing between rounds (state.liveMatch). Engines without it (test fakes) advance whole weeks.
       let result;
       try {
-        result = engine.advanceWeek(g, c);
+        if (engine.advance) result = engine.advance(g, c);
+        else {
+          const r = engine.advanceWeek(g, c);
+          result = r.ok ? ok({ state: r.value.state, week: r.value.report, pause: null }) : r;
+        }
       } catch (e) {
         return fail(engineErrorFrom(e));
       }
       if (!result.ok) return fail(result.error);
-      const { state, report } = result.value;
+      const { state, week } = result.value;
       batch(() => {
         commit(state);
-        lastWeekReport.value = report;
+        if (week) lastWeekReport.value = week;
         lastAdvanceMs.value = platform.clock.nowMs() - t0;
         dirty.value = true;
       });
+      // Every round is committed (P-05): a reload resumes on the between-round screen.
       await autosave();
-      return ok(report);
+      // Paused between rounds: not an error to show; the frame opens the between-round screen.
+      if (!week) return err(engineError(MATCH_PAUSED, 'The match waits between rounds'));
+      return ok(week);
     } finally {
       busy.value = false;
     }
