@@ -15,6 +15,7 @@ import {
   checkSwaps,
   createGameEngine,
   createStandInPorts,
+  developmentSummary,
   finishMatch,
   playMatchAuto,
   playRound,
@@ -554,5 +555,38 @@ describe('levelUpView and levelup.choose', () => {
     if (!r.ok) throw new Error(r.error.message);
     expect(r.value.state.fighters[id]!.pendingLevelUps.map((p) => p.level)).toEqual([f.level]);
     expect(r.value.state.fighters[id]!.season.levelLog.at(-1)).toMatchObject({ level: first.level, how: 'player', picked: first.options[1]!.option });
+  });
+});
+
+describe('season summary picks and report perk procs (M1.1 integration)', () => {
+  it('the development summary lists each fighter\'s level-up picks of the season (season-end resolutions included); the report carries perk procs', { timeout: 120_000 }, () => {
+    const engine = createGameEngine(createStandInPorts());
+    let s = careerAt(engine, 'picks-1', 'MW1');
+    for (let guard = 0; guard < 30 && s.calendar.phase !== 'season-end'; guard++) {
+      if (engine.getBlockers(s, content).length > 0) {
+        const fixed = engine.applyCommand(s, engine.suggestLineup(s, s.playerClubId!, content), content);
+        if (!fixed.ok) throw new Error(fixed.error.message);
+        s = fixed.value.state;
+      }
+      const r = engine.advanceWeek(s, content);
+      if (!r.ok) throw new Error(r.error.message);
+      s = r.value.state;
+    }
+    const played = Object.values(s.results).find((r) => r.roundLineups !== undefined)!;
+    const report = engine.buildMatchReport(s, played.fixtureId, content);
+    if (!report.ok) throw new Error(report.error.message);
+    if (report.value.timelineAvailable) for (const f of report.value.fighters) expect(f.perkProcs).toBeDefined();
+    const pending = Object.values(s.fighters).filter((f) => f.pendingLevelUps.length > 0).map((f) => f.id);
+    const season = s.calendar.season;
+    const end = engine.runSeasonEnd(s, content);
+    if (!end.ok) throw new Error(end.error.message);
+    const rows = developmentSummary(end.value.state, season);
+    const withPicks = rows.filter((r) => (r.picks ?? []).length > 0);
+    expect(withPicks.length).toBeGreaterThan(0);
+    for (const r of withPicks) for (const p of r.picks!) expect(p.season).toBe(season);
+    for (const id of pending) {
+      const row = rows.find((r) => r.fighterId === id);
+      if (row) expect(row.picks!.some((p) => p.how === 'season_end')).toBe(true);
+    }
   });
 });
