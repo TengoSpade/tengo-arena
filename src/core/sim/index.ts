@@ -148,12 +148,13 @@ export interface RoundOutput {
  * Play one round of a match (simulateFight with the M1.1 per-round inputs).
  * Round seed: deriveSeed(matchSeed, 'round', input.round).
  *
- * CONTRACTS PHASE: the per-round fields (freshness penalty with
- * fatigueResist, ability ranks, perk passive blocks, the self_is_captain /
+ * Applies the per-round fields (combat-skills.md): the Freshness penalty
+ * (fixed at round start, scaled by fatigueResist), ability ranks, up to 4 perk
+ * passive blocks with trait effects, the self_is_captain /
  * self_freshness_below / self_fresh_entry predicates, the self_hp_below and
- * ability_release triggers, trigger `if`, aura `requires`) are not applied
- * yet: a round with defaults (freshness 100, ranks 1, no perks) is
- * bit-identical to simulateFight, and must stay so (WP-A acceptance).
+ * ability_release triggers, trigger `if` and aura `requires`. A round with
+ * defaults (freshness 100, ranks 1, no perks) is bit-identical to
+ * simulateFight (sim/round.test.ts, sim/m11.test.ts).
  */
 export function simulateRound(input: RoundInput, roundSeed: Seed, content: ContentDB, options?: SimOptions): RoundOutput {
   const run = runFight(content, roundSeed, input.round, input, options?.record ?? 'none');
