@@ -9,7 +9,7 @@ export const REVIEW_TEXT = {
   'step.standings': 'Final standings',
   'step.reckoning': 'Reckoning',
   'step.money': 'Money and prestige',
-  'step.development': 'Aging and development',
+  'step.development': 'Aging and levels',
   'step.contracts': 'Retirements and contracts',
   'step.next': 'Next season',
   'back': 'Back',

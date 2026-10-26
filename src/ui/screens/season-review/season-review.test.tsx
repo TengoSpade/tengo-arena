@@ -79,37 +79,33 @@ describe('Season review screen', () => {
     expect(window.location.hash).toBe('#/home');
   });
 
-  it('shows core development (rating and age change, notable attributes) and promotion wage raises', () => {
+  it('M1.1: the levels step (levels start → end, picks, round + bench XP, Tired starts) and promotion wage raises', () => {
     const world = makeSampleWorld(kit, 'review');
     const state = world.state;
     const clubId = state.playerClubId!;
     const mine = Object.values(state.fighters).filter((f) => f.clubId === clubId);
-    const statIds = world.content.stats.list.map((x) => x.id);
-    const rows = mine.map((f, i) => ({
-      fighterId: f.id,
-      ageBefore: f.age - 1,
-      ageAfter: f.age,
-      ratingBefore: 40,
-      ratingAfter: i === 0 ? 43 : 40,
-      attributeDeltas: Object.fromEntries(statIds.map((id, k) => [id, i === 0 && k === 0 ? 2 : i === 0 && k === 1 ? -1 : 0])),
-    }));
     const record = state.history[state.history.length - 1]!;
+    const row = mine[0]!.history.find((h) => h.season === record.season)!;
+    Object.assign(row, { levelStart: 21, levelEnd: 24, benchXp: 12, tiredRoundStarts: 4 });
+    const stat = world.content.stats.list[0]!.id;
+    const rows = [{ fighterId: mine[0]!.id, picks: [{ level: 22, season: record.season, weekIndex: 5, picked: { kind: 'stat', stat, gain100: 100 }, trait: null, how: 'player' }] }];
     (record as { wageRaises?: unknown[] }).wageRaises = [{ clubId, fighterId: mine[1]!.id, from: 60, to: 120 }];
     const engine = { ...fakeEngine(), developmentSummary: () => rows };
     render(
       <StoreContext.Provider value={world.store}>
-        <EngineContext.Provider value={engine}>
+        <EngineContext.Provider value={engine as never}>
           <SeasonReviewScreen params={{}} />
         </EngineContext.Provider>
       </StoreContext.Provider>,
     );
     for (let i = 0; i < 3; i++) fireEvent.click(screen.getByTestId('review-next'));
     const dev = screen.getByTestId('review-development');
+    expect(dev.textContent).toContain('Levels this season');
     const first = within(dev).getAllByRole('row').find((r) => r.textContent!.includes(mine[0]!.name.full))!;
-    const stat = (k: number) => world.content.stats.require(statIds[k]!).name;
-    expect(first.textContent).toContain(`${mine[0]!.age - 1} → ${mine[0]!.age}`);
-    expect(first.textContent).toContain('3');
-    expect(first.textContent).toContain(`${stat(0)} +2 · ${stat(1)} −1`);
+    expect(first.textContent).toContain('21 → 24 (+3)');
+    expect(first.textContent).toContain(`+1 ${world.content.stats.require(stat).name}`);
+    expect(first.textContent).toContain(`${row.xp - 12} + 12`);
+    expect(first.textContent).toContain('4');
     fireEvent.click(screen.getByTestId('review-next'));
     expect(screen.getByTestId('review-raises').textContent).toContain('60 ts → 120 ts per week');
   });
