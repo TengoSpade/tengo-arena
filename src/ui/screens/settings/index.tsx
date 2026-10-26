@@ -9,6 +9,7 @@ import type { ScreenProps } from '../../app/routes';
 import { Kbd, PageHeader, Panel, showToast } from '../../components';
 import { AUTOSAVE_SLOTS, DEFAULT_SETTINGS, pacingStops, settings, updateSettings, type PacingPreset, type PacingStops, type UiSettings } from '../../store';
 import { Segmented } from '../league/lib/ui';
+import { MatchDayPanel, applyPresetToClub, useOptionalMatchDay } from './MatchDayPanel';
 import { TicketsPanel } from './TicketsPanel';
 import { t } from './text';
 import './settings.css';
@@ -27,6 +28,7 @@ function change(patch: Partial<UiSettings>, what: string): void {
 export default function SettingsScreen(_props: ScreenProps) {
   const s = settings.value;
   const stops = pacingStops(s);
+  const { md } = useOptionalMatchDay();
   return (
     <section class="page" data-testid="screen-settings">
       <PageHeader
@@ -55,7 +57,10 @@ export default function SettingsScreen(_props: ScreenProps) {
               <legend class="field__label">{t('pacing.label')}</legend>
               {PRESETS.map((p) => (
                 <label key={p} class="option-card" data-testid={`preset-${p}`}>
-                  <input type="radio" name="pacing" value={p} checked={s.pacing === p} onChange={() => change({ pacing: p }, `${t('pacing.label')}: ${t(`pacing.${p}`)}`)} />
+                  <input type="radio" name="pacing" value={p} checked={s.pacing === p} onChange={() => {
+                      change({ pacing: p }, `${t('pacing.label')}: ${t(`pacing.${p}`)}`);
+                      applyPresetToClub(md, p);
+                    }} />
                   <span class="option-card__body">
                     <span class="option-card__name">
                       {t(`pacing.${p}`)}
@@ -279,6 +284,7 @@ export default function SettingsScreen(_props: ScreenProps) {
           </dl>
         </Panel>
 
+        <MatchDayPanel />
         <TicketsPanel />
       </div>
     </section>
