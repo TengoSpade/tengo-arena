@@ -11,6 +11,7 @@ export {
   createGameStore,
   engineErrorFrom,
   isAutosaveSlot,
+  MATCH_PAUSED,
   isTicketSlot,
   slotName,
   MANUAL_SLOT_IDS,

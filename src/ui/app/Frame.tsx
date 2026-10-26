@@ -7,7 +7,6 @@
  */
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import type { ClubId, WeekReport } from '../../core/model';
 // Direct module imports (not the components barrel) keep screen-only components out of the main bundle.
 import { Icon } from '../components/Icon';
 import { Crest, crestLetters } from '../components/basic-marks';
@@ -15,7 +14,7 @@ import { ToastRegion, clearUndos, showToast, undoLast } from '../components/Toas
 import { TooltipLayer, tipAttrs, type Tip } from '../components/Tooltip';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
-import { isTicketSlot, useStore, type AppStore } from '../store';
+import { MATCH_PAUSED, isTicketSlot, useStore, type AppStore } from '../store';
 import { digestNews, needsActionNow, newsNeedsAction } from '../store/digest-flags';
 import { useEngine } from '../store/engine';
 import { effectiveTheme, pacingStops, reducedMotion, settings, updateSettings } from '../store/settings';
@@ -25,6 +24,7 @@ import { continueModel, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
 import type * as ContinueDialogs from './continue-dialogs';
 import type { ConfirmVariant } from './continue-dialogs';
+import { afterMatch } from './after-match';
 import { expiringUnrenewed } from './expiring';
 import { skipToKickOffRequest } from './intents';
 import { openTicketTool, playtestToolsOn, ticketBusy } from '../tickets/launcher';
@@ -110,42 +110,17 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
 
   const needsAction = ctx ? needsActionNow(ctx.state, ctx.club.id, store.blockers.value) : 0;
 
-  const afterMatch = (report: WeekReport) => {
-    const state = store.game.value;
-    const clubId = state?.playerClubId;
-    const fixtureId = report.playerFixtureId;
-    if (!state || !clubId || !fixtureId) return;
-    const result = state.results[fixtureId];
-    const stops = pacingStops(settings.value);
-    const won = result?.winnerClubId === clubId;
-    const injured = Object.values(state.fighters).some(
-      (f) => f.clubId === clubId && f.injury && f.injury.since.season === report.season && f.injury.since.weekIndex === report.weekIndex,
-    );
-    const open = stops.reportAlways || (!won && stops.reportOnLoss) || (injured && stops.reportOnInjury);
-    if (open) {
-      navigate(`#/match/${encodeURIComponent(fixtureId)}`);
-      return;
-    }
-    navigate('#/home');
-    if (result) {
-      const home = result.homeClubId === clubId;
-      const other = state.clubs[(home ? result.awayClubId : result.homeClubId) as ClubId];
-      const score = home ? `${result.score.home}–${result.score.away}` : `${result.score.away}–${result.score.home}`;
-      showToast({
-        title: t(won ? 'continue.resultWon' : 'continue.resultLost', { score, where: home ? t('continue.vs') : t('continue.at'), club: other?.name ?? '' }),
-        kind: won ? 'good' : 'info',
-        action: { label: t('continue.openReport'), onClick: () => navigate(`#/match/${encodeURIComponent(fixtureId)}`) },
-      });
-    }
-  };
-
   const advance = async (playsMatch: boolean) => {
     const delay = playsMatch && !reducedMotion(settings.value) ? SIMULATING_MS : 0;
     if (playsMatch) setSimulating(ctx?.fixture?.bestOf ?? 3);
     const [res] = await Promise.all([store.advance(), new Promise((r) => setTimeout(r, delay))]);
     setSimulating(null);
-    if (!res.ok) return;
-    if (res.value.playerFixtureId) afterMatch(res.value);
+    if (!res.ok) {
+      // The player's match waits between rounds (M1.1): its screen takes over.
+      if (res.error.code === MATCH_PAUSED) navigate('#/between-rounds');
+      return;
+    }
+    if (res.value.playerFixtureId) afterMatch(store.game.value, res.value);
     else if (routeId !== 'home') navigate('#/home');
   };
 
@@ -154,7 +129,13 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       const g = store.game.value;
       if (!g || g.calendar.phase === 'season-end') break;
       const res = await store.advance();
-      if (!res.ok) break;
+      if (!res.ok) {
+        if (res.error.code === MATCH_PAUSED) {
+          navigate('#/between-rounds');
+          return;
+        }
+        break;
+      }
     }
     navigate('#/home');
   };

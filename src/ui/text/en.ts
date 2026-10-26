@@ -143,6 +143,10 @@ export const en = {
 
   // ---- Continue (04 §6.1) --------------------------------------------------------------------------
   'continue.main': 'Continue',
+  'continue.toMatch': 'Back to the match',
+  'continue.playRound': 'Round {n}',
+  'continue.betweenSub': 'Between rounds · Enter plays on',
+  'continue.tipRound': 'Your match waits between rounds: check Freshness and swaps, then play the next round.',
   'continue.toLineup': 'Lineup {where} {club}',
   'continue.at': 'at',
   'continue.vs': 'vs',

@@ -34,6 +34,7 @@ import { checksumState } from '../../core/save';
 import { ENGINE_VERSION } from '../../core/sim';
 import { NotImplementedError, cloneJson, engineError, err, ok, type Result } from '../../core/util';
 import { coreEngine, type GameEngine } from '../store/engine';
+import { betweenRoundViewDev, finishLiveMatchDev, levelUpViewDev, resolveLevelUpDev } from './dev-m11';
 import { buildDevWorld, devResult } from './dev-world';
 
 type AnyFn = (...args: never[]) => unknown;
@@ -250,6 +251,12 @@ function applyCommandDev(state: GameState, command: Command, content: ContentDB)
       for (const n of next.news) if (command.newsIds.includes(n.id)) n.read = true;
       break;
     }
+    case 'levelup.choose': {
+      // M1.1 stand-in until WP-B's resolveLevelUp (dev-m11.ts).
+      if (state.liveMatch) return err(engineError('levelup.match-in-progress', 'Level-up picks wait until the match is over'));
+      const r = resolveLevelUpDev(state, command.fighterId, command.level, command.optionIndex, command.traitIndex);
+      return r.ok ? ok({ state: r.value, newsIds: [], response: null }) : r;
+    }
     default:
       throw new NotImplementedError(`game.applyCommand(${command.type})`);
   }
@@ -322,6 +329,20 @@ function pendingWagesDev(state: GameState, clubId: ClubId): number {
 }
 
 const provisional: Partial<GameEngine> = {
+  // ---- M1.1 stand-ins (dev-m11.ts) until WP-B / WP-C merge ----
+  levelUpView: levelUpViewDev,
+  betweenRoundView: betweenRoundViewDev,
+  advance: (state, content) => {
+    const base = state.liveMatch ? finishLiveMatchDev(state, content) : state;
+    let r;
+    try {
+      r = coreEngine.advanceWeek(base, content);
+    } catch (e) {
+      if (!(e instanceof NotImplementedError)) throw e;
+      r = advanceWeekDev(base, content);
+    }
+    return r.ok ? ok({ state: r.value.state, week: r.value.report, pause: null }) : r;
+  },
   createWorld: (content, params) => ok(buildDevWorld(content, { rootSeed: params.rootSeed, playerClubId: null, weekIndex: 1 })),
   applyCommand: applyCommandDev as GameEngine['applyCommand'],
   getBlockers: blockersDev,
