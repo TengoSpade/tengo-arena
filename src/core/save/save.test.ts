@@ -55,6 +55,16 @@ describe('save envelope', () => {
     expect(parsed.value.warnings).toEqual([]);
   });
 
+  it('keeps the optional career id in the meta; saves without one still load', () => {
+    const state = world();
+    const env = envelopeOf(state);
+    const withId = parseSave(serializeSave({ ...env, meta: { ...env.meta, careerId: 'c-0123456789abcdef' } }), content);
+    expect(withId.ok && withId.value.envelope.meta.careerId).toBe('c-0123456789abcdef');
+    const without = parseSave(serializeSave(env), content);
+    expect(without.ok && without.value.envelope.meta.careerId).toBeUndefined();
+    expect(parseSave(serializeSave({ ...env, meta: { ...env.meta, careerId: '' } }), content).ok).toBe(false);
+  });
+
   it('checksum v2 covers the state as written: a JSON round trip keeps it, an edit changes it', () => {
     const state = world();
     const parsed = JSON.parse(JSON.stringify(state)) as GameState;

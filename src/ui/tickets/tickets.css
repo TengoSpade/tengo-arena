@@ -29,3 +29,7 @@
   line-height: var(--lh-snug);
   font: inherit;
 }
+
+.ticket__warn {
+  color: var(--c-warn);
+}

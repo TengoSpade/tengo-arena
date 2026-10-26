@@ -54,6 +54,20 @@ describe('Saves screen', () => {
     expect(autos[0]!.textContent).toContain('Autosave 1');
   });
 
+  it('lists ticket reproductions apart: not counted as manual slots, deletable', async () => {
+    const ticket = meta('ticket-AL-R001-T001_20261025-193412', { label: 'Ticket AL-R001-T001_20261025-193412' });
+    const store = renderSaves({ saves: [...SAVES, ticket] });
+    const tickets = await screen.findByTestId('saves-tickets');
+    expect(within(tickets).getAllByRole('row').slice(1)).toHaveLength(1);
+    expect(within(screen.getByTestId('saves-manual')).getAllByRole('row').slice(1)).toHaveLength(2);
+    expect(screen.getByTestId('saves-manual').textContent).toContain('2 of 10 slots');
+    // No overwrite for a reproduction; delete removes it.
+    expect(within(tickets).queryByTestId(`overwrite-${ticket.slotId}`)).toBeNull();
+    fireEvent.click(within(tickets).getByTestId(`delete-${ticket.slotId}`));
+    fireEvent.click(await screen.findByTestId(`delete-${ticket.slotId}-confirm`));
+    await waitFor(() => expect(store.calls.some((c) => c.method === 'deleteSave' && c.args[0] === ticket.slotId)).toBe(true));
+  });
+
   it('asks for a slot (Save as, first free slot preselected) when the career has none, then saves there', async () => {
     const store = renderSaves();
     await screen.findByText('Before the derby');

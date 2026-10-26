@@ -12,7 +12,7 @@ import { useShortcuts } from '../../app/shortcuts';
 import { STATE_SCHEMA_VERSION, type SaveError, type SaveMeta } from '../../../core/model';
 import { ConfirmButton, DataTable, Icon, Modal, PageHeader, Panel, showToast, type Column } from '../../components';
 import { formatDateTime, formatPlaytime } from '../../format';
-import { AUTOSAVE_SLOTS, MANUAL_SLOT_IDS, isAutosaveSlot, settings, type AppStore, type GameStore } from '../../store';
+import { AUTOSAVE_SLOTS, MANUAL_SLOT_IDS, isAutosaveSlot, isTicketSlot, settings, type AppStore, type GameStore } from '../../store';
 import { go, useOptionalStore } from '../league/lib/store';
 import { Callout, Empty } from '../league/lib/ui';
 import { t } from './text';
@@ -63,11 +63,14 @@ function Saves({ store }: { store: GameStore }) {
     void refresh();
   }, [store]);
 
-  const manual = (list ?? []).filter((m) => !isAutosaveSlot(m.slotId)).sort((a, b) => MANUAL_SLOT_IDS.indexOf(a.slotId) - MANUAL_SLOT_IDS.indexOf(b.slotId));
-  const autos = (list ?? []).filter((m) => isAutosaveSlot(m.slotId)).sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
+  // Ticket reproductions ("ticket-<id>") are listed apart and never count as manual slots.
+  const manual = (list ?? []).filter((m) => !isAutosaveSlot(m.slotId) && !isTicketSlot(m.slotId)).sort((a, b) => MANUAL_SLOT_IDS.indexOf(a.slotId) - MANUAL_SLOT_IDS.indexOf(b.slotId));
+  const newestFirst = (a: SaveMeta, b: SaveMeta) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0);
+  const autos = (list ?? []).filter((m) => isAutosaveSlot(m.slotId)).sort(newestFirst);
+  const tickets = (list ?? []).filter((m) => isTicketSlot(m.slotId)).sort(newestFirst);
   const freeSlot = MANUAL_SLOT_IDS.find((id) => !manual.some((m) => m.slotId === id)) ?? null;
   // Save (and Ctrl S) writes only to this career's own manual slot; otherwise Save as asks for one.
-  const target = current && !isAutosaveSlot(current) ? current : null;
+  const target = current && !isAutosaveSlot(current) && !isTicketSlot(current) ? current : null;
   useEffect(() => {
     if (saveAsRequested.value) {
       saveAsRequested.value = false;
@@ -116,7 +119,9 @@ function Saves({ store }: { store: GameStore }) {
   useShortcuts({ 'ctrl+s': () => (game && !busy ? (target ? void doSave(target) : setSaveAsOpen(true)) : false) });
 
   const saveBlocked = !game ? t('noCareer') : busy ? t('busy') : null;
-  const columns = (auto: boolean): Column<SaveMeta>[] => [
+  const columns = (kind: 'manual' | 'auto' | 'ticket'): Column<SaveMeta>[] => {
+    const auto = kind === 'auto';
+    return [
     {
       id: 'name',
       header: t('col.name'),
@@ -127,7 +132,7 @@ function Saves({ store }: { store: GameStore }) {
         <span class="entity saves-name">
           <span class="entity__stack">
             <span class="entity__name">{auto ? slotName(m.slotId) : m.label}</span>
-            <span class="entity__sub">{auto ? (/^autosave$/i.test(m.label) ? m.playerClubName : m.label) : slotName(m.slotId)}</span>
+            <span class="entity__sub">{auto ? (/^autosave$/i.test(m.label) ? m.playerClubName : m.label) : kind === 'ticket' ? m.playerClubName : slotName(m.slotId)}</span>
           </span>
           {m.slotId === current && <span class="tag tag--accent">{t('current')}</span>}
         </span>
@@ -169,7 +174,7 @@ function Saves({ store }: { store: GameStore }) {
             >
               {t('load')}
             </ConfirmButton>
-            {!auto && (
+            {kind === 'manual' && (
               <ConfirmButton
                 size="sm"
                 variant="ghost"
@@ -208,6 +213,7 @@ function Saves({ store }: { store: GameStore }) {
       },
     },
   ];
+  };
 
   const lines = error ? saveErrorLines(error.error, error.kind) : null;
   return (
@@ -270,7 +276,7 @@ function Saves({ store }: { store: GameStore }) {
         <Panel title={t('manual.title')} icon="save" subtitle={t('manual.subtitle', { used: manual.length, max: MANUAL_SLOT_IDS.length })} body="flush" testId="saves-manual">
           <DataTable
             label={t('manual.title')}
-            columns={columns(false)}
+            columns={columns('manual')}
             rows={manual}
             rowKey={(m) => m.slotId}
             variant={[]}
@@ -282,13 +288,18 @@ function Saves({ store }: { store: GameStore }) {
         <Panel title={t('auto.title')} icon="refresh" subtitle={t('auto.subtitle')} body="flush" testId="saves-auto">
           <DataTable
             label={t('auto.title')}
-            columns={columns(true)}
+            columns={columns('auto')}
             rows={autos}
             rowKey={(m) => m.slotId}
             variant={[]}
             empty={<Empty compact icon="refresh" title={t('auto.empty')} text={t('auto.emptyText')} />}
           />
         </Panel>
+        {tickets.length > 0 && (
+          <Panel title={t('tickets.title')} icon="bug" subtitle={t('tickets.subtitle')} body="flush" testId="saves-tickets">
+            <DataTable label={t('tickets.title')} columns={columns('ticket')} rows={tickets} rowKey={(m) => m.slotId} variant={[]} rowClass={(m) => (m.slotId === app.loadedSlot?.value ? 'is-us' : undefined)} testId="tickets-table" />
+          </Panel>
+        )}
       </div>
       <SaveAsDialog
         open={saveAsOpen}

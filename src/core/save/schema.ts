@@ -534,6 +534,7 @@ export const SaveMetaSchema = z.strictObject({
   playerClubId: nullableId,
   playerClubName: str.nullable(),
   playtimeSec: nonNegInt,
+  careerId: id.max(100).optional(),
 });
 
 /** Envelope without the state (the state is checked after checksum and migrations). */

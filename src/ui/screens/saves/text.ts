@@ -24,6 +24,8 @@ export const SAVES_TEXT = {
   'auto.subtitle': 'Newest first · the oldest is replaced',
   'auto.empty': 'No autosaves yet',
   'auto.emptyText': 'An autosave is written after every week processing and after the season-end step.',
+  'tickets.title': 'Ticket reproductions',
+  'tickets.subtitle': 'Saves opened from playtest tickets (?ticket=). They never autosave and do not use manual slots.',
   'col.name': 'Name',
   'col.club': 'Club',
   'col.when': 'Season · week',

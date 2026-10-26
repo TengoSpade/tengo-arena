@@ -12,6 +12,9 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // DevTools skips these frames: console messages link to their caller, not the ticket tool's
+    // console wrapper (src/ui/tickets/console-capture.ts).
+    sourcemapIgnoreList: (sourcePath) => sourcePath.includes('node_modules') || sourcePath.endsWith('console-capture.ts'),
   },
   preview: {
     port: 4173,

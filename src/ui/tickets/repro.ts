@@ -1,16 +1,16 @@
 /**
  * Reproduce a playtest ticket in dev (`?ticket=<id>`): fetch its save and metadata from the
  * dev-server plugin, write the save to its own slot `ticket-<id>`, load it and open the same
- * route. The original save is never touched; the frame shows a banner while it is loaded.
+ * route. The original career's saves are never touched: while a ticket-* slot is loaded the store
+ * writes no autosaves, and the frame shows a banner (until another save or a new career is loaded).
  */
 import type { SaveStore } from '../../platform/save-store';
-import { TICKET_ID_RE } from '../../platform/tickets/naming';
+import { isTicketId } from '../../platform/tickets/naming';
 import { showToast } from '../components/Toast';
 import type { AppStore } from '../store';
-import { reproducingTicket } from './launcher';
 
 export async function reproduceTicket(store: AppStore, saves: SaveStore, id: string): Promise<boolean> {
-  if (!TICKET_ID_RE.test(id)) {
+  if (!isTicketId(id)) {
     console.error(`?ticket=${id}: not a ticket id`);
     return false;
   }
@@ -29,7 +29,6 @@ export async function reproduceTicket(store: AppStore, saves: SaveStore, id: str
     await saves.write(slotId, store.engine.serializeSave(envelope), envelope.meta);
     const loaded = await store.load(slotId);
     if (!loaded.ok) throw new Error(`ticket ${id}: ${loaded.error.code}`);
-    reproducingTicket.value = id;
     const hash = meta.route?.hash;
     location.hash = hash && hash.startsWith('#/') ? hash : '#/home';
     return true;

@@ -1,12 +1,13 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installShortcuts } from '../app/shortcuts';
-import { resetToasts } from '../components';
-import { TicketDialog, fixClone } from './tool';
+import { resetToasts, toasts } from '../components';
+import { TicketDialog, fixClone, type Draft } from './tool';
+import { T } from './tool-text';
 
-const draft = {
-  careerKey: 'seed-a',
-  numbers: { run: 4, ticket: 12 },
+const draft: Draft = {
+  careerKey: 'c-career-a',
+  preview: { run: 4, ticket: 12 },
   server: true,
   at: new Date(2026, 9, 25, 19, 34, 12),
   screenshot: 'data:image/png;base64,AAAA',
@@ -17,7 +18,8 @@ const draft = {
 let uninstall: (() => void) | null = null;
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
-  fetchMock = vi.fn(async () => new Response('{}', { status: 201 }));
+  // The server assigns the final number (here one more than the preview).
+  fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'AL-R004-T013_20261025-193412', run: 4, ticket: 13 }), { status: 201 }));
   vi.stubGlobal('fetch', fetchMock);
 });
 afterEach(() => {
@@ -29,12 +31,12 @@ afterEach(() => {
 });
 
 describe('ticket dialog keyboard', () => {
-  it('focuses the text, keeps Shift+Enter as a new line and files on Enter', async () => {
+  it('focuses the text, keeps Shift+Enter as a new line and files on Enter with the id the server assigns', async () => {
     const done = vi.fn();
     render(<TicketDialog draft={draft} onDone={done} />);
     const field = screen.getByTestId('ticket-text') as HTMLTextAreaElement;
     expect(document.activeElement).toBe(field);
-    expect(screen.getByTestId('ticket-id').textContent).toBe('AL-R004-T012_20261025-193412');
+    expect(screen.getByTestId('ticket-id').textContent).toContain('AL-R004-T012');
     fireEvent.input(field, { target: { value: 'Captain vanished' } });
     fireEvent.keyDown(field, { key: 'Enter', shiftKey: true });
     expect(done).not.toHaveBeenCalled();
@@ -42,9 +44,27 @@ describe('ticket dialog keyboard', () => {
     await act(async () => {
       fireEvent.keyDown(field, { key: 'Enter' });
     });
-    await vi.waitFor(() => expect(done).toHaveBeenCalledWith({ id: 'AL-R004-T012_20261025-193412', where: 'server' }));
+    await vi.waitFor(() => expect(done).toHaveBeenCalledWith({ id: 'AL-R004-T013_20261025-193412', where: 'server' }));
     const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as Record<string, unknown>;
-    expect(body).toMatchObject({ id: 'AL-R004-T012_20261025-193412', run: 4, ticket: 12, text: 'Captain vanished', careerKey: 'seed-a' });
+    // The client sends its timestamp, never numbers.
+    expect(body).toMatchObject({ careerKey: 'c-career-a', stamp: '20261025-193412', text: 'Captain vanished' });
+    expect(body).not.toHaveProperty('id');
+    expect(body).not.toHaveProperty('run');
+  });
+
+  it('asks once on an empty note, then files without one on the second Enter', async () => {
+    const done = vi.fn();
+    render(<TicketDialog draft={draft} onDone={done} />);
+    const field = screen.getByTestId('ticket-text');
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(screen.getByTestId('ticket-empty').textContent).toBe('Add a note, or press Enter again to file without one.');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(done).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.keyDown(field, { key: 'Enter' });
+    });
+    await vi.waitFor(() => expect(done).toHaveBeenCalled());
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toMatchObject({ text: '' });
   });
 
   it('cancels with Esc and never lets keys reach the game shortcuts', () => {
@@ -58,6 +78,26 @@ describe('ticket dialog keyboard', () => {
     fireEvent.keyDown(field, { key: 'Escape' });
     expect(done).toHaveBeenCalledWith(null);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('shows an error toast when neither the server nor the browser can store the ticket', async () => {
+    fetchMock.mockImplementation(async () => new Response('down', { status: 500 }));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const done = vi.fn();
+    render(<TicketDialog draft={draft} onDone={done} />);
+    fireEvent.input(screen.getByTestId('ticket-text'), { target: { value: 'x' } });
+    await act(async () => {
+      fireEvent.keyDown(screen.getByTestId('ticket-text'), { key: 'Enter' });
+    });
+    // happy-dom has no IndexedDB: the fallback fails visibly.
+    await vi.waitFor(() => expect(toasts.value.at(-1)?.title).toBe('Ticket not saved'));
+    expect(toasts.value.at(-1)?.kind).toBe('bad');
+    expect(screen.getByRole('alert').textContent).toContain('IndexedDB');
+    expect(done).not.toHaveBeenCalled();
+  });
+
+  it('names the ticket in the toast by its short id', () => {
+    expect(T.saved('AL-R001-T001_20261025-193412')).toBe('Ticket AL-R001-T001 saved');
   });
 });
 
