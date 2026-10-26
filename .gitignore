@@ -7,6 +7,9 @@ dist-ssr/
 *.tsbuildinfo
 coverage/
 
+# playtest tickets filed with F8 under `npm run dev` (screenshots, saves)
+/tickets/
+
 # headless harness output (balance / soak reports, state dumps)
 reports/
 *.state-dump.json

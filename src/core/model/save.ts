@@ -43,6 +43,11 @@ export interface SaveMeta {
   playerClubName: string | null;
   /** Accumulated play time in seconds, supplied by the platform layer. */
   playtimeSec: number;
+  /**
+   * Optional (additive): one id per career, made by the platform layer when a new career starts and
+   * kept in every save of it (playtest tickets number runs by it). Older saves have none.
+   */
+  careerId?: string;
 }
 
 export type SaveKind = 'manual' | 'auto';

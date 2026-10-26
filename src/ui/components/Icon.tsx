@@ -1,6 +1,6 @@
 /** Icon from the designer's set (components.css section 1): a currentColor mask. */
 export type IconName =
-  | 'arrow-down' | 'arrow-right' | 'arrow-up' | 'bell' | 'bolt' | 'calendar-check' | 'check'
+  | 'arrow-down' | 'arrow-right' | 'arrow-up' | 'bell' | 'bolt' | 'bug' | 'calendar-check' | 'check'
   | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'chevron-up' | 'clock' | 'close' | 'codex'
   | 'coins' | 'compare' | 'contract' | 'crown' | 'eye' | 'fighter' | 'filter' | 'finances'
   | 'fixtures' | 'gem' | 'heart' | 'home' | 'info' | 'injury' | 'keyboard' | 'ko' | 'league'

@@ -372,6 +372,9 @@ Each screen lists purpose, flow state (02 §3), layout regions in order of impor
 | Undo a reversible change | Ctrl Z, toast Undo | Previous state restored | Only reversible settings | — |
 | Save | Ctrl S, nav footer | Toast "Saved to slot 1" | Overwrite asks once | — |
 | Shortcut help | ? | Shortcut sheet dialog | Esc | — |
+| Report an issue (playtest ticket) | F8 on any screen, also over dialogs; top-bar bug button "Report an issue (F8)" | Screenshot first, then a dialog with its thumbnail and one note field; toast "Ticket AL-R001-T001 saved" with Copy ID | Enter files (an empty note asks once), Shift+Enter new line, Esc cancels; game shortcuts are off while typing | Dev builds always; other builds behind Settings › Playtest tools |
+
+**Playtest tickets.** The id `AL-R###-T###_YYYYMMDD-HHMMSS` (run per career, R000 with no career; ticket number within the run; local time) is shown in full in files and Copy ID, short (`AL-R001-T001`) in the toast. Tickets land in `tickets/<id>/` under `npm run dev` (screenshot, save, metadata; `tickets/tickets.md` lists them) and in the browser otherwise (Settings › Tickets). `?ticket=<id>` in dev reopens a ticket's save on the same screen with an info banner "Reproducing ticket …"; Save / Load lists such saves under Ticket reproductions. The writing plugin runs in the dev server only and accepts same-origin requests only (05 §8).
 
 ## 7. Feedback, animation, and effects
 

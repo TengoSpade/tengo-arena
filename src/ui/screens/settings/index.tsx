@@ -9,6 +9,7 @@ import type { ScreenProps } from '../../app/routes';
 import { Kbd, PageHeader, Panel, showToast } from '../../components';
 import { AUTOSAVE_SLOTS, DEFAULT_SETTINGS, pacingStops, settings, updateSettings, type PacingPreset, type PacingStops, type UiSettings } from '../../store';
 import { Segmented } from '../league/lib/ui';
+import { TicketsPanel } from './TicketsPanel';
 import { t } from './text';
 import './settings.css';
 
@@ -277,6 +278,8 @@ export default function SettingsScreen(_props: ScreenProps) {
             </div>
           </dl>
         </Panel>
+
+        <TicketsPanel />
       </div>
     </section>
   );

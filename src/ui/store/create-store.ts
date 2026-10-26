@@ -34,7 +34,7 @@ import {
 } from '../../core/model';
 import { isValidSeed, seedFromEntropy } from '../../core/rng';
 import { ENGINE_VERSION } from '../../core/sim';
-import { deepFreeze, engineError, err, NotImplementedError, ok, type EngineError, type Result } from '../../core/util';
+import { deepFreeze, engineError, err, hashString, NotImplementedError, ok, type EngineError, type Result } from '../../core/util';
 import { AUTOSAVE_SLOTS, MANUAL_SLOT_COUNT } from '../../platform/save-store';
 import { showToast } from '../components/Toast';
 import { configureFormat } from '../format';
@@ -52,6 +52,11 @@ export function slotName(slotId: string): string {
   if (slotId.startsWith('auto-')) return t('save.slotAuto', { n });
   if (slotId.startsWith('manual-')) return t('save.slotManual', { n });
   return slotId;
+}
+
+/** Slots written by `?ticket=<id>` reproductions ("ticket-<id>"): never autosaved over, listed apart. */
+export function isTicketSlot(slotId: string | null | undefined): boolean {
+  return typeof slotId === 'string' && slotId.startsWith('ticket-');
 }
 
 export function isAutosaveSlot(slotId: string): boolean {
@@ -87,6 +92,10 @@ export interface AppStore extends GameStore {
   readonly dirty: ReadonlySignal<boolean>;
   /** Slot of the last manual save or load (Ctrl S saves there). */
   readonly currentSlot: ReadonlySignal<string | null>;
+  /** Slot the running career was loaded from (null after a new career); a ticket-* slot means a reproduction. */
+  readonly loadedSlot: ReadonlySignal<string | null>;
+  /** This career's id (kept in its saves; legacy saves get one derived from seed and club). */
+  readonly careerId: ReadonlySignal<string | null>;
   readonly platform: StorePlatform;
   /** Ctrl S: save to the current manual slot, or the first free one. */
   quickSave(): Promise<Result<SaveMeta, SaveError>>;
@@ -112,6 +121,13 @@ export function createGameStore(platform: StorePlatform): AppStore {
   const lastAdvanceMs = signal<number | null>(null);
   const dirty = signal(false);
   const currentSlot = signal<string | null>(null);
+  const loadedSlot = signal<string | null>(null);
+  const ownCareerId = signal<string | null>(null);
+  const careerId = computed(() => {
+    const g = game.value;
+    // Saves from before career ids: a short stable key from seed and club (seeds can be 128 characters).
+    return g ? (ownCareerId.value ?? `seed-${hashString(`${g.rng.root}|${g.playerClubId ?? ''}`).slice(0, 12)}`) : null;
+  });
   let commandSeq = 1;
   let playtimeBase = 0;
   let sessionStartMs = platform.clock.nowMs();
@@ -202,6 +218,8 @@ export function createGameStore(platform: StorePlatform): AppStore {
         commandLog.value = [];
         recentCommands.value = [];
         currentSlot.value = null;
+        loadedSlot.value = null;
+        ownCareerId.value = `c-${seedFromEntropy([...platform.entropy(), platform.clock.nowMs()])}`;
         dirty.value = true;
       });
       playtimeBase = 0;
@@ -319,6 +337,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
         playtimeSec: playtimeSec(),
         gameVersion: platform.gameVersion,
       });
+      if (careerId.value) meta = { ...meta, careerId: careerId.value };
       const envelope = engine.createSave(g, meta, { engineVersion: ENGINE_VERSION }, commandLog.value);
       json = engine.serializeSave(envelope);
     } catch (e) {
@@ -358,7 +377,8 @@ export function createGameStore(platform: StorePlatform): AppStore {
 
   /** Rotate over auto-1..3: first empty slot, else the oldest. Never during a running write. */
   const autosave = async (): Promise<void> => {
-    if (!game.value) return;
+    // A ticket reproduction never writes the shared autosave slots (they hold real careers).
+    if (!game.value || isTicketSlot(loadedSlot.value)) return;
     let metas: SaveMeta[];
     try {
       metas = await platform.saves.list();
@@ -401,8 +421,11 @@ export function createGameStore(platform: StorePlatform): AppStore {
         recentCommands.value = [];
         dirty.value = false;
         // Only a manual slot becomes the Ctrl S target. Loading an autosave (possibly another career)
-        // clears it, so a quick save can never overwrite a different career's manual slot.
-        currentSlot.value = envelope.meta.kind === 'manual' ? slotId : null;
+        // clears it, so a quick save can never overwrite a different career's manual slot; a ticket
+        // reproduction is not a target either (it stays as filed).
+        currentSlot.value = envelope.meta.kind === 'manual' && !isTicketSlot(slotId) ? slotId : null;
+        loadedSlot.value = slotId;
+        ownCareerId.value = envelope.meta.careerId ?? null;
       });
       playtimeBase = envelope.meta.playtimeSec;
       sessionStartMs = platform.clock.nowMs();
@@ -524,6 +547,8 @@ export function createGameStore(platform: StorePlatform): AppStore {
       recentCommands.value = [];
       dirty.value = false;
       currentSlot.value = null;
+      loadedSlot.value = null;
+      ownCareerId.value = null;
     });
   };
 
@@ -556,6 +581,8 @@ export function createGameStore(platform: StorePlatform): AppStore {
     lastAdvanceMs,
     dirty,
     currentSlot,
+    loadedSlot,
+    careerId,
     platform,
     quickSave,
     clearError: () => {

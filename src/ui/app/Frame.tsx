@@ -15,7 +15,7 @@ import { ToastRegion, clearUndos, showToast, undoLast } from '../components/Toas
 import { TooltipLayer, tipAttrs, type Tip } from '../components/Tooltip';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
-import { useStore, type AppStore } from '../store';
+import { isTicketSlot, useStore, type AppStore } from '../store';
 import { digestNews, needsActionNow, newsNeedsAction } from '../store/digest-flags';
 import { useEngine } from '../store/engine';
 import { effectiveTheme, pacingStops, reducedMotion, settings, updateSettings } from '../store/settings';
@@ -27,6 +27,7 @@ import type * as ContinueDialogs from './continue-dialogs';
 import type { ConfirmVariant } from './continue-dialogs';
 import { expiringUnrenewed } from './expiring';
 import { skipToKickOffRequest } from './intents';
+import { openTicketTool, playtestToolsOn, ticketBusy } from '../tickets/launcher';
 import { SimulatingPanel } from './overlays';
 import { quickSaveOrAsk } from './save-intent';
 import type * as Palettes from './palettes';
@@ -284,6 +285,12 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
         </div>
       </nav>
       <main class="main" id="main">
+        {isTicketSlot(store.loadedSlot.value) && (
+          <div class="banner banner--info" role="status" data-testid="ticket-repro">
+            <Icon name="bug" />
+            <span>{t('tickets.repro', { id: store.loadedSlot.value!.slice(7) })}</span>
+          </div>
+        )}
         {ctx?.finance?.status === 'embargo' && (
           <div class="banner" role="alert">
             <Icon name="warning" />
@@ -342,6 +349,7 @@ function Topbar({
   onSheet: () => void;
 }) {
   const theme = effectiveTheme(settings.value);
+  const store = useStore() as AppStore;
   return (
     <header class="topbar">
       {ctx ? (
@@ -391,6 +399,19 @@ function Topbar({
         <button class="icon-btn" type="button" aria-label={t('topbar.shortcuts')} {...tipAttrs(t('topbar.shortcutsTip'))} onClick={onSheet}>
           <Icon name="keyboard" />
         </button>
+        {playtestToolsOn() && (
+          <button
+            class="icon-btn"
+            type="button"
+            aria-label={t('tickets.report')}
+            aria-disabled={ticketBusy.value ? 'true' : undefined}
+            {...tipAttrs(t('tickets.report'))}
+            onClick={() => void openTicketTool(store)}
+            data-testid="ticket-button"
+          >
+            <Icon name="bug" />
+          </button>
+        )}
         <button
           class="continue"
           type="button"

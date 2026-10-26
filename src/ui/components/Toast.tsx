@@ -39,8 +39,13 @@ const timers = new Map<number, ReturnType<typeof setTimeout>>();
 /** Pending undos, newest last. */
 const undoStack: { toastId: number; undo: () => void }[] = [];
 
+/** The last 10 toasts shown (playtest tickets record them). */
+export const toastHistory: { title: string; sub?: string; kind?: ToastKind; at: string }[] = [];
+
 export function showToast(options: ToastOptions): number {
   const id = nextId++;
+  toastHistory.push({ title: options.title, sub: options.sub, kind: options.kind, at: new Date().toISOString() });
+  if (toastHistory.length > 10) toastHistory.shift();
   const item: ToastItem = { ...options, id, leaving: false };
   let list = [...toasts.value, item];
   while (list.length > TOAST_LIMIT) {

@@ -1,9 +1,14 @@
 import { cleanup, render } from '@testing-library/preact';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders, createTestStore } from '../debug/test-store';
 import { ROUTES, hrefFor, matchRoute } from './routes';
 
-afterEach(cleanup);
+// Settings › Tickets asks the dev-server plugin for its folder; there is no server here.
+beforeEach(() => vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 }))));
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('routes', () => {
   it('match hash paths with params and queries', () => {

@@ -37,6 +37,8 @@ export interface UiSettings {
   pacingCustom: PacingStops;
   navCollapsed: boolean;
   autosave: boolean;
+  /** Playtest ticket tool (F8, top-bar button) in non-dev builds; dev builds always have it. */
+  playtestTools: boolean;
 }
 
 export const DEFAULT_SETTINGS: Readonly<UiSettings> = {
@@ -50,6 +52,7 @@ export const DEFAULT_SETTINGS: Readonly<UiSettings> = {
   pacingCustom: { lineup: true, reportAlways: false, reportOnLoss: true, reportOnInjury: true },
   navCollapsed: false,
   autosave: true,
+  playtestTools: true,
 };
 
 function merge(record: Record<string, unknown> | null): UiSettings {
@@ -67,6 +70,7 @@ function merge(record: Record<string, unknown> | null): UiSettings {
   pick('pacing', (v) => v === 'thorough' || v === 'balanced' || v === 'streamlined' || v === 'custom');
   pick('navCollapsed', (v) => typeof v === 'boolean');
   pick('autosave', (v) => typeof v === 'boolean');
+  pick('playtestTools', (v) => typeof v === 'boolean');
   const pc = record['pacingCustom'];
   if (pc && typeof pc === 'object') {
     for (const k of Object.keys(s.pacingCustom) as (keyof PacingStops)[]) {
