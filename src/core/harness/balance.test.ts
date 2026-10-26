@@ -94,6 +94,9 @@ describe('balance harness', () => {
       const triggered = (content.perks.require(p.perkId).passive?.triggers.length ?? 0) > 0;
       expect(p.procsPerRound === null).toBe(!triggered);
     }
+    // Context perks are measured in their situation, the same on both sides.
+    const ctx = (id: string) => r.perks!.find((p) => p.perkId === id)!.context;
+    expect([ctx('g_fresh_legs'), ctx('g_long_wind'), ctx('g_banner_voice'), ctx('m_keen_edge')]).toEqual(['fresh entry', 'F 40', 'captain', null]);
     const dom = r.perks!.map((p) => p.dominance);
     expect(dom).toEqual([...dom].sort((x, y) => y - x));
     expect(r.outliers).toEqual([]);

@@ -66,7 +66,7 @@ if (report.perks) {
   console.log('  perks (by dominance = veteran pick rate x lift):    pick s3  pick vet  rounds   win%   lift pts (95% CI)      procs/round');
   for (const p of report.perks) {
     const procs = p.procsPerRound === null ? '' : p.procsPerRound.toFixed(2);
-    const tag = p.lifecycleOnly ? '  (lifecycle only)' : '';
+    const tag = `${p.lifecycleOnly ? '  (lifecycle only)' : ''}${p.context ? `  [${p.context}]` : ''}`;
     console.log(
       `    ${p.perkId.padEnd(24)} ${p.archetype.padEnd(10)} T${p.tier}  ${pct(p.pickRate).padStart(7)}  ${pct(p.pickRateVeteran).padStart(8)}  ${String(p.rounds).padStart(6)} ${pct(p.winRate).padStart(6)}   ${pts(p.liftPts).padStart(5)} (${pts(p.ciLowPts)} to ${pts(p.ciHighPts)})   ${procs.padStart(6)}${tag}${p.flags.length ? `  <-- ${p.flags.join('; ')}` : ''}`,
     );

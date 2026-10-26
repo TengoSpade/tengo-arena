@@ -119,6 +119,8 @@ export interface PerkImpactRow {
   procsPerRound: number | null;
   /** The perk has no combat effect (lifecycle-only effects). */
   lifecycleOnly: boolean;
+  /** perk-impact: the situation the perk was measured in ('captain', 'fresh entry', 'F 40'), or null. */
+  context: string | null;
   flags: string[];
 }
 
@@ -795,6 +797,7 @@ function perkRows(content: ContentDB, tallies: Map<string, PerkTally>, paired: b
       dominance: round4(pickRateVeteran * liftPts),
       procsPerRound: paired && triggered && t.rounds ? round4(t.procs / t.rounds) : null,
       lifecycleOnly: !p.passive && p.traitEffects.length === 0,
+      context: paired ? perkContext(p).label : null,
       flags: [],
     });
   }
@@ -876,6 +879,23 @@ function lineupWith(rng: Rng, content: ContentDB, classIds: readonly string[]): 
   return { lineup, slot };
 }
 
+/** Fatigue level for perks measured Tired (fatigueResist, self_freshness_below). */
+const PERK_CONTEXT_FRESHNESS = 40;
+
+/**
+ * The situation a perk is measured in, the same on both sides: captain perks
+ * on the acting captain, fresh-entry perks on a fighter entering from the
+ * reserves, Freshness perks on a Tired fighter (F 40).
+ */
+function perkContext(perk: PerkDef): { captain: boolean; entered: boolean; freshness: number | null; label: string | null } {
+  const passive = JSON.stringify(perk.passive ?? {});
+  const captain = (perk.tags as readonly string[]).includes('captain');
+  const entered = passive.includes('self_fresh_entry');
+  const tired = passive.includes('fatigueResist') || passive.includes('self_freshness_below');
+  const label = captain ? 'captain' : entered ? 'fresh entry' : tired ? `F ${PERK_CONTEXT_FRESHNESS}` : null;
+  return { captain, entered, freshness: tired ? PERK_CONTEXT_FRESHNESS : null, label };
+}
+
 /** perk-impact: per perk, identical sides except that one fighter on the measured side also holds the perk. */
 function perkImpact(options: BalanceOptions, profile: SkillProfile, pick: SkillPick, col: Collector): PerkImpactRow[] {
   const { seed, content } = options;
@@ -903,11 +923,15 @@ function perkImpact(options: BalanceOptions, profile: SkillProfile, pick: SkillP
       const twin = skills.map((s, j) => (j === slot ? { abilityRanks: s.abilityRanks, perkIds: basePerks } : s));
       const measured = twin.map((s, j) => (j === slot ? { abilityRanks: s.abilityRanks, perkIds: [...basePerks, perk.id] } : s));
       const roundSeed = deriveSeed(seed, STREAM.balance, 'perk-impact', perk.id, i);
+      const cx = perkContext(perk);
+      const captain = cx.captain ? slot : cap;
+      const freshness = cx.freshness === null ? [] : specs.map((_, j) => (j === slot ? cx.freshness! : 100));
+      const entered = specs.map((_, j) => cx.entered && j === slot);
       for (let swap = 0; swap < 2; swap++) {
         const measuredHome = swap === 0;
         const r = col.play({
-          home: withRoundFields(sideInput(content, 'home', specs, cap, (cap + 1) % 5), measuredHome ? measured : twin),
-          away: withRoundFields(sideInput(content, 'away', specs, cap, (cap + 1) % 5), measuredHome ? twin : measured),
+          home: withRoundFields(sideInput(content, 'home', specs, captain, (captain + 1) % 5), measuredHome ? measured : twin, freshness, entered),
+          away: withRoundFields(sideInput(content, 'away', specs, captain, (captain + 1) % 5), measuredHome ? twin : measured, freshness, entered),
           homeSpecs: specs,
           awaySpecs: specs,
           roundSeed,
