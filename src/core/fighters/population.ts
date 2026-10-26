@@ -16,6 +16,8 @@
 import { clubMatchDefaults, type ContentDB } from '../content';
 import {
   setMembership,
+  putResult,
+  removeResult,
   createEmptyGameState,
   idNumber,
   type Club,
@@ -336,7 +338,7 @@ export function runPopulation(options: PopulationOptions): PopulationReport {
       state.calendar = { season, weekIndex: w, weekId: week.id as WeekId, phase: week.phase };
       if (w === 1) announceFinalSeasonsOn(state, content);
       // Results of this week only (weekly rest reads them); older ones are dropped to keep the harness light.
-      state.results = {};
+      for (const id of Object.keys(state.results)) removeResult(state, id as FixtureId);
       if (options.matches && week.phase === 'regular') {
         setAiCaptains(state, content, false);
         for (const tier of content.tiers.list) {
@@ -348,7 +350,7 @@ export function runPopulation(options: PopulationOptions): PopulationReport {
             if (rosterOf(state, home.id).filter(isFitFighter).length < 5 || rosterOf(state, away.id).filter(isFitFighter).length < 5) continue;
             const fixtureId = `lg:${season}:${tier.id}:${week.id}:${home.id}:${away.id}` as FixtureId;
             const m = playSquadMatch(state, home, away, fixtureId, content);
-            state.results[fixtureId] = m.result;
+            putResult(state, m.result);
             report.matches += 1;
             report.swaps += m.swaps;
             for (const [fid, n] of m.roundStarts) {

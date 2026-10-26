@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixtureWorld, fixtureContent, fixtureMatchState, makeFixtureFighter, withFreshness } from '../testkit';
 import { cloneJson } from '../util';
+import { putResult } from '../model';
 import type {
   ClassId,
   ClubId,
@@ -146,7 +147,7 @@ describe('bench XP (T004)', () => {
     expect(s.fighters[res]!.season.benchXp).toBe(expected);
     expect(s.fighters[res]!.season.squadReserveMatches).toBe(1);
     // bxp-002: at this week's processing the unused reserve rests 80%, the outside fighter 100%.
-    s.results[r.fixtureId] = r;
+    putResult(s, r);
     for (const id of [res, outside.id]) s.fighters[id] = withFreshness(s.fighters[id]!, 50);
     const restReserve = weeklyRest10(s.fighters[res]!, content, true);
     const restOutside = weeklyRest10(s.fighters[outside.id]!, content, false);
