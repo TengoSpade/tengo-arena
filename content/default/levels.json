@@ -15,10 +15,10 @@
   },
 
   "xpPerLevel": {
-    "_doc": "xpNeeded = clamp(round5(B x A x G x lifeScale / (pace x raceGrowth x traitDev x mentor)), min, max). B = base + perLevel x level. A = wPhys x ageFactorPhysical(humanAge) + (1 - wPhys) x ageFactorMental(humanAge); wPhys = the class's rating-weight share on physical stats, stamina included. G = gapFactor(devGap); devGap = potential - trainedRating, where trainedRating is the rating of the trained values with no wear (so decline does not speed leveling). lifeScale = lifespan / 80 (one clock, D-B; humans 1.0). raceGrowth = wPhys x race.growthMult.physical + (1 - wPhys) x race.growthMult.mental. traitDev = the same blend of the fighter's devClock trait multipliers active at his human-age. mentor = the mentoring multiplier (captain grade x trait mentors, cap 1.15) for humanAge <= 23. Frozen when the level starts; recomputed at each level-up and at season end after age +1.",
-    "base": 115,
+    "_doc": "xpNeeded = clamp(round5(B x A x G x lifeScale / (pace x raceGrowth x traitDev x mentor)), min, max). B = base + perLevel x level. A = wPhys x ageFactorPhysical(humanAge) + (1 - wPhys) x ageFactorMental(humanAge); wPhys = the class's rating-weight share on physical stats, stamina included. G = gapFactor(devGap); devGap = potential - trainedRating, where trainedRating is the rating of the trained values with no wear (so decline does not speed leveling). lifeScale = lifespan / 80 (one clock, D-B; humans 1.0). raceGrowth = wPhys x race.growthMult.physical + (1 - wPhys) x race.growthMult.mental. traitDev = the same blend of the fighter's devClock trait multipliers active at his human-age. mentor = the mentoring multiplier (captain grade x trait mentors, cap 1.15) for humanAge <= 23. Frozen when the level starts; recomputed at each level-up and at season end after age +1. M1.1 soak tuning (from the draft 115 / 0.72 / 1.25): base 102, ageFactorPhysical[0] 0.68, ageFactorPhysical[24] 1.10, so a human-age 24-26 mid-potential starter gains about 2.5-2.8 levels a season (a level every 4.3-4.8 matches played; starters play about 11-12 matches a season once Freshness rotation and injuries are counted), young prospects about 4.5-5 and veterans 35+ about 1.",
+    "base": 102,
     "perLevel": 0.6,
-    "ageFactorPhysical": [[0, 0.72], [20, 0.8], [22, 0.95], [24, 1.25], [28, 1.45], [31, 1.9], [34, 2.6], [37, 3.6]],
+    "ageFactorPhysical": [[0, 0.68], [20, 0.8], [22, 0.95], [24, 1.1], [28, 1.45], [31, 1.9], [34, 2.6], [37, 3.6]],
     "ageFactorMental": [[0, 0.85], [22, 1.1], [30, 1.2], [36, 1.45], [42, 1.9], [48, 2.6]],
     "gapFactor": [[-99, 4.0], [1, 2.6], [2, 1.8], [4, 1.3], [6, 1.0], [15, 0.9], [22, 0.82], [30, 0.72]],
     "lifespanScaling": true,
@@ -138,7 +138,7 @@
   },
 
   "freshness": {
-    "_doc": "T003 plus the owner's round rule. Per-fighter meter 0-100 (100 = fully rested), stored in tenths (0-1000); the sim and the UI receive floor(value / 10). It never changes during combat. When a round ends, each fighter who started it loses roundDrain; the new value applies from the start of the next round of the same match (combat reads freshness per round) and carries into later weeks. At each week processing of a matchweek or tournament week in which he started no round: += rest (x squadReserveRestShare if he was a match-squad reserve who never entered). Each preseason week: += preseason. Season-end step: = seasonEndReset. Clamp 0-100.",
+    "_doc": "T003 plus the owner's round rule. Per-fighter meter 0-100 (100 = fully rested), stored in tenths (0-1000); the sim and the UI receive floor(value / 10). It never changes during combat. When a round ends, each fighter who started it loses roundDrain (times tiredDrainShare if the round started below the threshold: M1.1 tuning, an unrotated starter now tires at the designed pace but then declines slowly instead of reaching 0 within a few weeks); the new value applies from the start of the next round of the same match (combat reads freshness per round) and carries into later weeks. At each week processing of a matchweek or tournament week in which he started no round: += rest (x squadReserveRestShare if he was a match-squad reserve who never entered). Each preseason week: += preseason. Season-end step: = seasonEndReset. Clamp 0-100.",
     "start": 100,
     "storageUnitsPerPoint": 10,
     "drainAt0": 11.88,
@@ -154,6 +154,7 @@
     "intensityMax": 1.5,
     "youngHumanAgeBelow": 21,
     "youngDrainMult": 1.1,
+    "tiredDrainShare": 0.5,
     "restAt0": 30,
     "restPerStaminaPoint": 1.0,
     "squadReserveRestShare": 0.8,
@@ -171,7 +172,7 @@
     "withdrawn": "A fighter swapped out (withdrawn) cannot return in that match (owner ruling); his freshness reflects only the rounds he played: no drain and no between-round gain after he leaves. He started a round that week, so he gets no weekly rest that week.",
     "injuryMultPerPointBelow": 0.006,
     "injuryMultMax": 1.4,
-    "_formulas": "base = clamp(drainAt0 + drainPerStaminaPoint x stamina, drainMin, drainMax). intensity = clamp(intensityBase + intensityPerDuration x min(2, roundDurationS / intensityDurationRefS) + intensityPerDamage x min(2, damageTaken / maxHp) + intensityDowned x [downed], intensityMin, intensityMax). roundDrain = round(base x intensity x (youngDrainMult if humanAge < youngHumanAgeBelow) x freshnessDrainMult (perk Campaign Legs 0.85) x 10) tenths. rest = round((restAt0 + restPerStaminaPoint x stamina) x recoveryAgeMult(humanAge) x 10) tenths. preseason = round(preseasonWeekRecovery x recoveryAgeMult x 10) tenths. Injury chance in a round x min(injuryMultMax, 1 + injuryMultPerPointBelow x (threshold - freshness)) when freshness at that round's start < threshold. stamina = effective stamina (1-20) at the time of the step. A typical round (30 s, 60% of max HP taken, downed 55% of the time) has intensity about 1.0."
+    "_formulas": "base = clamp(drainAt0 + drainPerStaminaPoint x stamina, drainMin, drainMax). intensity = clamp(intensityBase + intensityPerDuration x min(2, roundDurationS / intensityDurationRefS) + intensityPerDamage x min(2, damageTaken / maxHp) + intensityDowned x [downed], intensityMin, intensityMax). roundDrain = round(base x intensity x (youngDrainMult if humanAge < youngHumanAgeBelow) x freshnessDrainMult (perk Campaign Legs 0.85) x tiredDrainShare (0.5 when the round starts below threshold, else 1) x 10) tenths. rest = round((restAt0 + restPerStaminaPoint x stamina) x recoveryAgeMult(humanAge) x 10) tenths. preseason = round(preseasonWeekRecovery x recoveryAgeMult x 10) tenths. Injury chance in a round x min(injuryMultMax, 1 + injuryMultPerPointBelow x (threshold - freshness)) when freshness at that round's start < threshold. stamina = effective stamina (1-20) at the time of the step. A typical round (30 s, 60% of max HP taken, downed 55% of the time) has intensity about 1.0."
   },
 
   "matchSquad": {
@@ -186,7 +187,7 @@
   "aiRotation": {
     "_doc": "Lifecycle-side rules the AI applies when it picks its match squad each week (sys-ai-manager owns the lineup; it applies these after choosing its five by rating and role). 1) Rest: each starter whose freshness at the coming lock is < threshold + his typical round drain (Reckoning: < tournamentRestBelow) is replaced by the best fit fighter with freshness >= threshold in the same role family whose rating >= starter rating - (leagueMaxRatingGap + extraGapPerPointBelow x max(0, threshold - starter freshness)); most tired first; at most maxRestsPerMatch. 2) Spent floor: a starter below spentFloorAtLock is replaced by any fit fighter with freshness >= spentFloorAltMin even without a rating match. 3) Reserves: the 2 match-squad reserves are the best remaining fit fighters with freshness >= threshold, one front-line (tank or melee family) and one back-line (ranged, controller or healer family) when available, then by rating.",
     "leagueMaxRatingGap": 6,
-    "extraGapPerPointBelow": 0.25,
+    "extraGapPerPointBelow": 0.45,
     "projectOneRound": true,
     "tournamentRestBelow": 40,
     "tournamentMaxRatingGap": 3,

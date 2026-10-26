@@ -164,8 +164,8 @@
     "modifierOrder": "multiply (usage, contract, trait mults), then add (scars, heavy wear), then clamp",
     "finalSeasonAnnounceAtLeast": 0.6,
     "_finalSeasonNote": "At preseason week P1, a fighter whose chance (computed with usage 1.0) is >= 60% announces a final season: status final_season, retirement certain at season end.",
-    "unsignedSeasonEndsBeforeLeaving": 2,
-    "_leavingNote": "A free agent unsigned at two consecutive season ends leaves the league (removed like a retirement but not counted as one for intake).",
+    "unsignedSeasonEndsBeforeLeaving": 3,
+    "_leavingNote": "A free agent unsigned at three consecutive season ends leaves the league (removed like a retirement but not counted as one for intake). M1.1 soak tuning: 2 -> 3 so the preseason pool stays inside the 100-300 band.",
     "_usageDoc": "M1.1: usage for the retirement modifiers (usageHighAtLeast, usageLowAtMost) = min(1, season round XP / xp.seasonTarget). Round XP only: bench XP (levels.json benchXp) does not count, so a fighter who mostly sits out still reads as low usage."
   },
 
@@ -288,7 +288,7 @@
     },
     "intake": {
       "_doc": "TUNABLE; coordinate with the league/economy designer (trials day, P-18). rookies = clamp(round(clubs * basePerClub) + retirementsThisSeason, round(clubs * minPerClub), round(clubs * maxPerClub)). retirementsThisSeason counts retirements and career-ending injuries, not unsigned fighters who left the league (that would feed back into itself). Race by race.intakeWeight; age uniform in race.debutAge.",
-      "basePerClub": 0.75,
+      "basePerClub": 0.8,
       "minPerClub": 0.5,
       "maxPerClub": 1.6
     },
