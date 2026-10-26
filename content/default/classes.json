@@ -5,8 +5,8 @@
   "classes": [
     {
       "id": "oathguard",
-      "name": "Oathguard",
-      "flavor": "Sworn to one paymaster at a time, and that paymaster never bleeds first.",
+      "name": "Knight",
+      "flavor": "The contract rolls call them Oathguards: sworn to one paymaster at a time, and that paymaster never bleeds first.",
       "description": "Bodyguard tank. Dashes to threatened allies, takes part of their damage, and bashes casters out of their spells.",
       "iconId": "class_oathguard",
       "archetypes": [
@@ -15,7 +15,8 @@
       "hybridPair": null,
       "roleTags": [
         "interceptor",
-        "bodyguard"
+        "bodyguard",
+        "starter"
       ],
       "affinityGroup": "frontline",
       "complexity": 2,
@@ -390,8 +391,8 @@
     },
     {
       "id": "phalanx_sergeant",
-      "name": "Phalanx Sergeant",
-      "flavor": "Drilled a hundred recruits to lock shields; now drills whoever its employer hires.",
+      "name": "Guardian",
+      "flavor": "Once a phalanx sergeant who drilled a hundred recruits to lock shields; now drills whoever its employer hires.",
       "description": "Shield-wall tank. Shields the whole formation, pikes attackers back, and grows sturdier with allies beside it.",
       "iconId": "class_phalanx_sergeant",
       "archetypes": [
@@ -400,7 +401,8 @@
       "hybridPair": null,
       "roleTags": [
         "shield-wall",
-        "formation"
+        "formation",
+        "starter"
       ],
       "affinityGroup": "frontline",
       "complexity": 2,
@@ -467,8 +469,8 @@
     },
     {
       "id": "gutterknife",
-      "name": "Gutterknife",
-      "flavor": "Learned to fight where the lamplight didn't reach, and still prefers it there.",
+      "name": "Assassin",
+      "flavor": "A gutterknife from the old quarter: learned to fight where the lamplight didn't reach, and still prefers it there.",
       "description": "Back-line diver. Shadowsteps behind distant targets, hamstrings them, and hits hardest when unseen.",
       "iconId": "class_gutterknife",
       "archetypes": [
@@ -477,7 +479,8 @@
       "hybridPair": null,
       "roleTags": [
         "diver",
-        "assassin"
+        "backstab",
+        "starter"
       ],
       "affinityGroup": "skirmisher",
       "complexity": 2,
@@ -545,8 +548,8 @@
     },
     {
       "id": "bloodhowler",
-      "name": "Bloodhowler",
-      "flavor": "Howls when wounded, and is always wounded.",
+      "name": "Berserker",
+      "flavor": "Old hands call them bloodhowlers: they howl when wounded, and they are always wounded.",
       "description": "Berserker. Grows deadlier as it loses HP, frenzies for attack speed and lifesteal, and opens bleeding wounds.",
       "iconId": "class_bloodhowler",
       "archetypes": [
@@ -554,8 +557,9 @@
       ],
       "hybridPair": null,
       "roleTags": [
-        "berserker",
-        "lifesteal"
+        "frenzy",
+        "lifesteal",
+        "starter"
       ],
       "affinityGroup": "skirmisher",
       "complexity": 1,
@@ -851,8 +855,8 @@
     },
     {
       "id": "runecleaver",
-      "name": "Runecleaver",
-      "flavor": "Etched its blade with runes it only half understands, which is why it hits so hard.",
+      "name": "Spellblade",
+      "flavor": "A runecleaver by trade: etched its blade with runes it only half understands, which is why it hits so hard.",
       "description": "Arcane blade. Its weapon deals arcane damage that armor won't stop; bursts runes in a cone and lunges at casters to silence them.",
       "iconId": "class_runecleaver",
       "archetypes": [
@@ -927,8 +931,8 @@
     },
     {
       "id": "longeye",
-      "name": "Longeye",
-      "flavor": "Never met a target it couldn't outwait.",
+      "name": "Archer",
+      "flavor": "The scouts call this one a longeye: it has never met a target it couldn't outwait.",
       "description": "Sniper. Longest range in the league; aimed shots punish distant targets, and it leaps back when caught.",
       "iconId": "class_longeye",
       "archetypes": [
@@ -937,7 +941,8 @@
       "hybridPair": null,
       "roleTags": [
         "sniper",
-        "burst"
+        "burst",
+        "starter"
       ],
       "affinityGroup": "ranged",
       "complexity": 1,
@@ -1004,8 +1009,8 @@
     },
     {
       "id": "boltrunner",
-      "name": "Boltrunner",
-      "flavor": "Fires, runs, reloads, fires again; has never stood still long enough to be paid in person.",
+      "name": "Ranger",
+      "flavor": "A boltrunner in the old cant: fires, runs, reloads, fires again, and never stands still long enough to be paid in person.",
       "description": "Kiting crossbow. Moves fast and shoots quickly, pins chasers with a rooting bolt and tumbles away from melee.",
       "iconId": "class_boltrunner",
       "archetypes": [
@@ -1081,8 +1086,8 @@
     },
     {
       "id": "emberwright",
-      "name": "Emberwright",
-      "flavor": "Apprenticed to a forge, graduated to setting the whole arena alight.",
+      "name": "Wizard",
+      "flavor": "An emberwright, apprenticed to a forge and graduated to setting the whole arena alight.",
       "description": "Pyromancer. Arcane fire: blooms of flame that burn groups and a lance that pierces a whole line.",
       "iconId": "class_emberwright",
       "archetypes": [
@@ -1091,7 +1096,8 @@
       "hybridPair": null,
       "roleTags": [
         "pyromancer",
-        "area"
+        "area",
+        "starter"
       ],
       "affinityGroup": "caster",
       "complexity": 1,
@@ -1462,8 +1468,8 @@
     },
     {
       "id": "hexmonger",
-      "name": "Hexmonger",
-      "flavor": "Sells curses by the ounce and always throws in a free sample.",
+      "name": "Warlock",
+      "flavor": "Hexmongers sell curses by the ounce and always throw in a free sample.",
       "description": "Hexer. Withers the enemy's top damage dealer and curses groups to take extra damage; its debuffs linger.",
       "iconId": "class_hexmonger",
       "archetypes": [
@@ -1472,7 +1478,8 @@
       "hybridPair": null,
       "roleTags": [
         "hexer",
-        "debuffer"
+        "debuffer",
+        "starter"
       ],
       "affinityGroup": "caster",
       "complexity": 2,
@@ -1692,8 +1699,8 @@
     },
     {
       "id": "dreamthief",
-      "name": "Dreamthief",
-      "flavor": "Steals a few seconds of sleep from everyone it meets and sells them back at a markup.",
+      "name": "Enchanter",
+      "flavor": "Nicknamed the dreamthief: steals a few seconds of sleep from everyone it meets and sells them back at a markup.",
       "description": "Sleep controller. Puts one enemy to sleep for a long time (enough damage wakes it) and dazes small groups.",
       "iconId": "class_dreamthief",
       "archetypes": [
@@ -1924,8 +1931,8 @@
     },
     {
       "id": "cantor",
-      "name": "Cantor",
-      "flavor": "Sings the same hymn every fight; the crowd now sings it back.",
+      "name": "Cleric",
+      "flavor": "Cantor of a fighting chapel: sings the same hymn every fight, and the crowd now sings it back.",
       "description": "Area healer. Choruses that heal everyone nearby and a sanctuary that keeps healing; allies close to it regenerate.",
       "iconId": "class_cantor",
       "archetypes": [
@@ -1934,7 +1941,8 @@
       "hybridPair": null,
       "roleTags": [
         "choir",
-        "area-heal"
+        "area-heal",
+        "starter"
       ],
       "affinityGroup": "support",
       "complexity": 1,
@@ -2080,8 +2088,8 @@
     },
     {
       "id": "grovetender",
-      "name": "Grovetender",
-      "flavor": "Talks to the arena moss between rounds; the moss, apparently, talks back.",
+      "name": "Druid",
+      "flavor": "A grovetender who talks to the arena moss between rounds; the moss, apparently, talks back.",
       "description": "Heal-over-time healer. Keeps rejuvenation running on several allies at once and blooms when the group is hurt.",
       "iconId": "class_grovetender",
       "archetypes": [
@@ -2090,7 +2098,8 @@
       "hybridPair": null,
       "roleTags": [
         "regrowth",
-        "heal-over-time"
+        "heal-over-time",
+        "starter"
       ],
       "affinityGroup": "support",
       "complexity": 1,
@@ -2235,8 +2244,8 @@
     },
     {
       "id": "war_drummer",
-      "name": "War Drummer",
-      "flavor": "Beats time for the whole line; the line has never once been out of step.",
+      "name": "Bard",
+      "flavor": "Once the war drummer of a free company: beats time for the whole line, and the line has never once been out of step.",
       "description": "Tempo healer. Drums that quicken allies' attacks and steps, and a rally beat that heals and frees allies from slows and roots.",
       "iconId": "class_war_drummer",
       "archetypes": [
@@ -2314,8 +2323,8 @@
     },
     {
       "id": "siegebreaker",
-      "name": "Siegebreaker",
-      "flavor": "Hired to knock down gates; finds people much easier.",
+      "name": "Warrior",
+      "flavor": "A siegebreaker by trade: hired to knock down gates, and finds people much easier.",
       "description": "Battering bruiser. Its blows scale with its own max HP; charges into the back line and shrugs off punishment.",
       "iconId": "class_siegebreaker",
       "archetypes": [
@@ -2625,8 +2634,8 @@
     },
     {
       "id": "vowknight",
-      "name": "Vowknight",
-      "flavor": "Swore a vow to bleed for others, and keeps it with alarming enthusiasm.",
+      "name": "Paladin",
+      "flavor": "A vowknight: swore a vow to bleed for others, and keeps it with alarming enthusiasm.",
       "description": "Pain-sharing knight. Part of the damage it takes heals its weakest ally; it lays on hands and consecrates the ground.",
       "iconId": "class_vowknight",
       "archetypes": [
@@ -3102,8 +3111,8 @@
     },
     {
       "id": "undertow_mystic",
-      "name": "Undertow Mystic",
-      "flavor": "Reads the tides in the arena sand, and sometimes drowns people in them.",
+      "name": "Shaman",
+      "flavor": "An undertow mystic: reads the tides in the arena sand, and sometimes drowns people in them.",
       "description": "Tide mystic. Floods an undertow that slows enemies and heals allies standing in it, and washes allies clean.",
       "iconId": "class_undertow_mystic",
       "archetypes": [

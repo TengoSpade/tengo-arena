@@ -55,7 +55,7 @@
       "slot": "a1",
       "kind": "active",
       "name": "Interpose",
-      "description": "Dashes to an ally within 7 m and guards it for 4 s: 30% of its damage is redirected to the Oathguard, which gains 15% Fortified.",
+      "description": "Dashes to an ally within 7 m and guards it for 4 s: 30% of its damage is redirected to the Knight, which gains 15% Fortified.",
       "tags": [
         "dash",
         "protect",
