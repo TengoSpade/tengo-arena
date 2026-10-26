@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentDB } from '../content';
 import { asId, type ClubId, type Fighter, type FighterId, type Fixture, type GameState, type MatchState, type RoundInput, type SwapDecision } from '../model';
-import { buildFixtureWorld, fixtureContent, withFreshness } from '../testkit';
+import { buildFixtureWorld, fixtureContent, fixturePendingLevelUp, withFreshness } from '../testkit';
 import { cloneJson, hashString, stableStringify } from '../util';
 import {
   applyBetweenRound,
@@ -527,5 +527,32 @@ describe('week processing round by round (sw-009)', () => {
     expect(withSquads.length).toBeGreaterThan(0);
     const swaps = withSquads.reduce((n, r) => n + (r.betweenRounds ?? []).reduce((m, b) => m + b.home.length + b.away.length, 0), 0);
     expect(swaps).toBeGreaterThan(0);
+  });
+});
+
+describe('levelUpView and levelup.choose', () => {
+  it('lists pending offers oldest first with stat and rating after each stat pick, legality and the auto-pick; levelup.choose resolves one', () => {
+    const engine = createGameEngine(createStandInPorts());
+    const s = buildFixtureWorld({ clubLimit: 2, fightersPerClub: 8, squadReserves: 2 });
+    const club = s.playerClubId!;
+    const id = s.clubs[club]!.lineup.fighters[0]!.fighterId;
+    const f = s.fighters[id]!;
+    f.pendingLevelUps = [fixturePendingLevelUp(f, content, { level: f.level + 1 }), fixturePendingLevelUp(f, content, { level: f.level + 2 })];
+    f.level += 2;
+    expect(engine.levelUpView(s, s.clubs[club]!.lineup.fighters[1]!.fighterId, content)).toBeNull();
+    const view = engine.levelUpView(s, id, content)!;
+    expect(view.pending.map((p) => p.level)).toEqual([f.level - 1, f.level]);
+    expect(view.mode).toBe('manual');
+    const first = view.pending[0]!;
+    expect(first.options).toHaveLength(3);
+    for (const o of first.options) {
+      expect(o.legal).toBe(true);
+      if (o.option.kind === 'stat') expect(o.statAfter).toBe(engine.ports.fighters.effectiveStats({ ...f, train100: { ...f.train100, [o.option.stat]: f.train100[o.option.stat]! + o.option.gain100 } }, content)[o.option.stat]);
+    }
+    expect(first.autoPick.optionIndex).not.toBeNull();
+    const r = engine.applyCommand(s, { type: 'levelup.choose', clubId: club, fighterId: id, level: first.level, optionIndex: 1, traitIndex: null }, content);
+    if (!r.ok) throw new Error(r.error.message);
+    expect(r.value.state.fighters[id]!.pendingLevelUps.map((p) => p.level)).toEqual([f.level]);
+    expect(r.value.state.fighters[id]!.season.levelLog.at(-1)).toMatchObject({ level: first.level, how: 'player', picked: first.options[1]!.option });
   });
 });
