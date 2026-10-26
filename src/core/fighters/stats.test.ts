@@ -6,6 +6,7 @@ import { effectiveStats, humanAge100, potential, rating, ratingFromStats } from 
 import { maturityBp } from './stats';
 import { tables } from './tables';
 import { withStats } from './testing';
+import { trainFromClocks } from './levels';
 
 const content = fixtureContent();
 const base = (overrides = {}) => makeFixtureFighter(1, content, { raceId: 'human' as RaceId, classId: 'oathguard' as ClassId, ...overrides });
@@ -44,13 +45,15 @@ describe('rating is the combat formula (sys-combat-stats, cs-001, cs-002)', () =
 });
 
 describe('effectiveStats composition', () => {
-  it('caps × maturity − wear, clamped and floored (dev-003 shape)', () => {
+  it('M1.1: train100 − wear, clamped and floored; the frozen clocks no longer move a stat', () => {
     const f = withStats(base(), content, { str: 16 });
-    f.dev100 = { physical: 1800, mental: 4000 };
-    expect(effectiveStats(f, content)['str' as StatId]).toBe(9); // 1600 × 0.60 = 960
-    f.dev100.physical = 1900;
-    expect(effectiveStats(f, content)['str' as StatId]).toBe(10); // 1600 × 0.65 = 1040
-    f.dev100.physical = 2800;
+    f.train100 = { ...f.train100, ['str' as StatId]: 960 };
+    expect(effectiveStats(f, content)['str' as StatId]).toBe(9);
+    f.train100 = { ...f.train100, ['str' as StatId]: 1040 };
+    expect(effectiveStats(f, content)['str' as StatId]).toBe(10);
+    f.dev100 = { physical: 1400, mental: 1400 };
+    expect(effectiveStats(f, content)['str' as StatId]).toBe(10); // clocks frozen: no effect
+    f.train100 = { ...f.train100, ['str' as StatId]: 1600 };
     f.wear100 = { ...f.wear100, ['str' as StatId]: 120 };
     expect(effectiveStats(f, content)['str' as StatId]).toBe(14); // 1600 − 120 = 1480
   });
@@ -62,12 +65,13 @@ describe('effectiveStats composition', () => {
     g.traits = [{ id: 'still_water' as TraitId, gainedSeason: 1, source: 'rolled' }];
     expect(effectiveStats(g, content)['cmp' as StatId]).toBe(20);
   });
-  it('bloom shifts the clock per stat', () => {
+  it('bloom shifts the clock per stat at generation (train100 = cap × M(D + bloom))', () => {
     const f = withStats(base(), content, { str: 16, agi: 16 });
     f.dev100 = { physical: 2000, mental: 4000 };
     f.bloom = { ...f.bloom, ['str' as StatId]: 200 };
-    expect(effectiveStats(f, content)['str' as StatId]).toBe(12); // M(22) = 0.79
-    expect(effectiveStats(f, content)['agi' as StatId]).toBe(11); // M(20) = 0.70
+    const train = trainFromClocks(f, content);
+    expect(train['str' as StatId]).toBe(1264); // M(22) = 0.79
+    expect(train['agi' as StatId]).toBe(1120); // M(20) = 0.70
   });
   it('adds trait stat mods (whole points), statuses and context', () => {
     const f = withStats(base(), content, {});
