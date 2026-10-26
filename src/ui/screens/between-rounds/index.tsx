@@ -25,7 +25,7 @@ import { useMatchDay } from '../../store/match-day';
 import { Crest, clubName } from '../league/lib/club';
 import { fmtInt, fmtTicks } from '../league/lib/format';
 import { ClassTag, Portrait, RatingPill } from '../league/lib/ui';
-import { cycleSwap, matchXpSoFar, reserveCoverage, sameDecisions, setSwap } from './model';
+import { cycleSwap, matchXpSoFar, reserveCoverage, setSwap } from './model';
 import { t } from './text';
 import './between-rounds.css';
 
@@ -62,13 +62,12 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
     setBusy(true);
     setError(null);
     try {
-      // No command = accept the suggestions; anything else is recorded as the player's decisions.
-      if (!sameDecisions(plan, mine.suggestions)) {
-        const r = md.swapBetweenRounds(state, plan);
-        if (!r.ok) {
-          setError(r.error.message);
-          return;
-        }
+      // The plan is always sent (match.swap): core resumes a paused step only with the player's
+      // decisions recorded (WP-C), and [] or the suggestions are decisions too.
+      const r = md.swapBetweenRounds(state, plan);
+      if (!r.ok) {
+        setError(r.error.message);
+        return;
       }
       const res = await store.advance();
       if (res.ok) afterMatch(store.game.value, res.value);

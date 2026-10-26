@@ -82,6 +82,36 @@ describe('App', () => {
     updateSettings({ pacing: DEFAULT_SETTINGS.pacing });
   }, 20_000);
 
+  it("M1.1: the player's match pauses between rounds; Continue on that screen plays on to the report", async () => {
+    const { store } = createTestStore({ world: 'dev', weekIndex: 11, pauseBetweenRounds: 'always' });
+    updateSettings({ pacing: 'thorough' }); // open every report
+    const week = store.game.value!.calendar.weekIndex;
+    navigate('#/squad');
+    render(<App store={store} />);
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    screen.getByTestId('continue').click();
+    await waitFor(() => expect(location.hash).toBe('#/between-rounds'), { timeout: 10_000 });
+    expect(store.game.value!.liveMatch).not.toBeNull();
+    expect(store.game.value!.calendar.weekIndex).toBe(week);
+    await waitFor(() => expect(screen.getByTestId('screen-between-rounds')).toBeTruthy());
+    // A routine round is one click; best of 3 pauses at most twice.
+    for (let i = 0; i < 3 && location.hash === '#/between-rounds'; i++) {
+      await waitFor(() => expect(screen.getByTestId('br-continue')).toBeTruthy());
+      const before = store.game.value!.liveMatch?.rounds.length ?? 0;
+      const btn = screen.getByTestId('br-continue');
+      btn.click();
+      await new Promise((r) => setTimeout(r, 50));
+      if (document.querySelector('[data-testid="br-continue-dialog"][open]')) screen.getByTestId('br-continue-confirm').click();
+      await new Promise((r) => setTimeout(r, 50));
+      const err = document.querySelector('.br-error');
+      if (err) throw new Error(`between-round error: ${err.textContent}`);
+      await waitFor(() => expect(store.game.value!.liveMatch === null || (store.game.value!.liveMatch?.rounds.length ?? 0) > before).toBe(true), { timeout: 10_000 });
+    }
+    await waitFor(() => expect(location.hash).toMatch(/^#\/match\//), { timeout: 10_000 });
+    expect(store.game.value!.calendar.weekIndex).toBe(week + 1);
+    updateSettings({ pacing: DEFAULT_SETTINGS.pacing });
+  }, 30_000);
+
   it('opens Save / Load with S, as the side navigation shows', async () => {
     const { store } = createTestStore({ world: 'dev', weekIndex: 11 });
     navigate('#/home');

@@ -58,7 +58,15 @@ export function withFallback(base: GameEngine, provisional: Partial<GameEngine>)
 }
 
 export function createDevEngine(base: GameEngine = coreEngine): GameEngine {
-  return withFallback(base, provisional);
+  const engine = withFallback(base, provisional);
+  // Until WP-B binds the real resolution, core answers levelup.choose with "levelup.unavailable": resolve it here.
+  const apply = engine.applyCommand;
+  engine.applyCommand = (state, command, content) => {
+    const r = apply(state, command, content);
+    if (!r.ok && r.error.code === 'levelup.unavailable' && command.type === 'levelup.choose') return applyCommandDev(state, command, content);
+    return r;
+  };
+  return engine;
 }
 
 // ---- provisional views -------------------------------------------------------------------------------

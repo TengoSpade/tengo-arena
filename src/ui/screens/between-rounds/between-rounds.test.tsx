@@ -107,7 +107,7 @@ describe('Between-round screen', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(store.recentCommands.value.some((c) => c.command.type === 'match.swap')).toBe(false);
+    expect(store.recentCommands.value.find((c) => c.command.type === 'match.swap')?.command).toMatchObject({ swaps: [] });
     expect(store.game.value!.liveMatch).toBeNull();
   });
 
@@ -125,7 +125,7 @@ describe('Between-round screen', () => {
     await act(async () => {
       fireEvent.click(screen.getByTestId('br-continue-confirm'));
     });
-    // Accepting the suggestions sends no command (core applies them).
+    // Accepting the suggestions records them as the decisions for this step.
     await vi.waitFor(() => expect(advance).toHaveBeenCalledTimes(1));
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
