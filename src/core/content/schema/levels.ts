@@ -88,7 +88,14 @@ export const LevelsFileSchema = z
     pacing: z
       .object({ _doc: note(), presets: z.record(z.enum(LEVEL_UP_PACING), z.string()), default: z.enum(LEVEL_UP_PACING), _defaultNote: note() })
       .strict(),
-    levelEta: z.object({ _doc: note() }).strict(),
+    levelEta: z
+      .object({
+        _doc: note(),
+        /** Expected match XP before a fighter's first match of the season: hired blades (starters) and everyone else (bench). */
+        defaultStarterMatchXp: z.number().positive(),
+        defaultBenchMatchXp: z.number().positive(),
+      })
+      .strict(),
     stamina: z
       .object({
         _doc: note(),

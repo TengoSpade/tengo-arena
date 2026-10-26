@@ -66,6 +66,8 @@ export interface FighterRecap {
   rules: { index: number; isStance: boolean; fires: number; committedTicks: number; neverFired: boolean }[];
   /** Death summaries (who, which ability, last hits, active debuffs, late heal or shield). */
   downs: { round: number; tick: number; byFighterId: FighterId | null; abilityId: AbilityId | null; hit: number }[];
+  /** M1.1: trigger fires per perk over the match (from the re-simulated round recaps); absent when the timeline is unavailable. */
+  perkProcs?: Record<PerkId, number>;
 }
 
 export interface MatchAftermath {

@@ -312,6 +312,24 @@ export interface MatchTimelineFighter {
   injuredInRound: number | null;
 }
 
+/** Trigger fires per perk and fighter, summed over the rounds' summary recaps (M1.1 RoundRecap.perkProcs). */
+function perkProcsOf(logs: readonly FightLog[]): Map<FighterId, Record<PerkId, number>> {
+  const out = new Map<FighterId, Record<PerkId, number>>();
+  for (const log of logs) {
+    for (const ev of log.events) {
+      if (ev.type !== 'round.summary' || !ev.data) continue;
+      for (const u of ev.data.units) {
+        const id = log.header.units.find((x) => x.index === u.unit)?.fighterId;
+        if (!id) continue;
+        const row = out.get(id) ?? ({} as Record<PerkId, number>);
+        for (const [perk, n] of Object.entries(u.perkProcs ?? {})) row[perk as PerkId] = (row[perk as PerkId] ?? 0) + n;
+        out.set(id, row);
+      }
+    }
+  }
+  return out;
+}
+
 /** MatchReport plus additive detail (assignable to MatchReport). `timeline` is null for M1 results (whole-match sims). */
 export type DetailedMatchReport = MatchReport & { ruleDetails: FighterRuleDetail[]; timeline: MatchTimeline | null };
 
@@ -392,6 +410,7 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
   const home = sideOf(result.input.home);
   const away = sideOf(result.input.away);
   const captains = new Set([home.captainId, away.captainId]);
+  const procs = logs ? perkProcsOf(logs) : null;
   // Round-1 fives first, then reserves and entrants in record order (home, then away).
   const order = [...home.fighterIds, ...away.fighterIds, ...(Object.keys(result.fighterStats) as FighterId[])];
   const fighters = Object.entries(result.fighterStats)
@@ -412,6 +431,7 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
           neverFired: stats.rulesNeverFired.includes(index),
         })),
         downs: stats.downs.map((d) => ({ round: d.round, tick: d.tick, byFighterId: d.byFighterId, abilityId: d.abilityId, hit: d.hit })),
+        ...(procs ? { perkProcs: procs.get(fid) ?? {} } : {}),
       };
     });
   return ok({

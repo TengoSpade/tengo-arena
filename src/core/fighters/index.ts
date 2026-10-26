@@ -267,7 +267,7 @@ export type { XpNeededContext } from './levels';
 export { autoPickChoice, effectiveLevelUpMode, levelEtaMatches, levelOptionLegal, typicalRoundDrain10, weeklyRest10 } from './progression';
 export type { LevelUpChoice, MatchProgressionOutcome } from './progression';
 // M1.1 additive exports (WP-B).
-export { benchXpFor, clubMatchXp, freshnessLabelOf, resolveAllPending, PROVISIONAL_LEVEL_ETA_DEFAULT_XP } from './progression';
+export { benchXpFor, clubMatchXp, freshnessLabelOf, resolveAllPending } from './progression';
 export { drainBase, perkBetweenRoundsGain10, perkCaptaincyAdd, perkDrainMult, rest10, roundDrain10, roundIntensity, staminaOf } from './freshness';
 export type { RoundLoad } from './freshness';
 export { eligiblePerks, eligibleRanks, generateOffer, offerContextOf, optionScore, perkEligible, statOfferWeight } from './offers';

@@ -89,24 +89,17 @@ export function weeklyRest10(fighter: Fighter, content: ContentDB, wasSquadReser
   return rest10(fighter, content, wasSquadReserve);
 }
 
-/**
- * PROVISIONAL (OPEN, content request): the default expected match XP before a
- * fighter's first match of the season (levels.json levelEta gives 32 starter /
- * 11 reserve only as text).
- */
-export const PROVISIONAL_LEVEL_ETA_DEFAULT_XP = { starter: 32, bench: 11 } as const;
-
 /** "Next level in ≈ N matches" (null when no match XP is expected): ceil(remaining ÷ mean match XP this season; 32 starter / 11 bench before his first match). */
 export function levelEtaMatches(fighter: Fighter, content: ContentDB): number | null {
-  void content;
+  const eta = content.levels.levelEta;
   if (fighter.status === 'retired' || fighter.status === 'free-agent' || fighter.status === 'academy') return null;
   const remaining = Math.max(0, fighter.xpNeeded - fighter.xpIntoLevel);
   if (remaining === 0) return 0;
   const s = fighter.season;
   let mean: number;
   if (s.matchesStarted > 0 && s.roundXp > 0) mean = s.roundXp / s.matchesStarted;
-  else if (fighter.status === 'hired-blade') mean = PROVISIONAL_LEVEL_ETA_DEFAULT_XP.starter;
-  else mean = PROVISIONAL_LEVEL_ETA_DEFAULT_XP.bench;
+  else if (fighter.status === 'hired-blade') mean = eta.defaultStarterMatchXp;
+  else mean = eta.defaultBenchMatchXp;
   return mean > 0 ? Math.ceil(remaining / mean) : null;
 }
 

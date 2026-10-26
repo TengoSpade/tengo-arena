@@ -136,7 +136,6 @@ function fighterViewDev(state: GameState, fighterId: FighterId, content: Content
     potential: Math.max(rating, f.potentialRoll),
     humanAge,
     captaincy: { cq: cap.cq, gradeId: cap.grade.id, letter: cap.grade.letter },
-    trend: 'holding', // M1.1: retired in core (level + next-level ETA replace it); the field stays until core drops it
     injuryChanceBp: 120 + (f.age % 5) * 15,
     retirementChanceBp: humanAge >= 31 ? (humanAge - 30) * 300 : 0,
     marketWage: Math.round((minWage * (1 + rating / 60)) / 5) * 5,

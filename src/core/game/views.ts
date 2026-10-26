@@ -17,8 +17,6 @@ export interface FighterView {
   potential: number;
   humanAge: number;
   captaincy: { cq: number; gradeId: string; letter: string };
-  /** @deprecated M1.1: always 'holding' (the trend is retired). */
-  trend: string;
   injuryChanceBp: number;
   retirementChanceBp: number;
   marketWage: Gold;
@@ -113,8 +111,6 @@ export function fighterView(ports: GamePorts, state: GameState, fighterId: Fight
     // Display value in tenths of a year (03 §1: floor(age × 800 / lifespan) / 10).
     humanAge: Math.trunc(human100 / 10) / 10,
     captaincy: cap ? { cq: cap.cq, gradeId: cap.grade.id, letter: cap.grade.letter } : { cq: 0, gradeId: '', letter: '' },
-    // M1.1: the trend is retired (fighters.trend always 'holding'; level and "next level in" replace it). Kept until the UI drops the field.
-    trend: 'holding',
     injuryChanceBp: p.injuryChanceBp(f, content),
     retirementChanceBp: p.retirementChanceBp(state, f.id, content),
     marketWage: ports.economy.marketWage(state, f.id, content),

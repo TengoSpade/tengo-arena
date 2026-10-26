@@ -71,6 +71,8 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
 
   // The round checksums pin the fight itself. The event hash also covers the fight header (content hash):
   // re-pinned 2026-10 when the fixture content gained the D-P/D-T keys; checksums unchanged, no engine change.
+  // Re-derived at the M1.1 integration: fixture orc injury chanceMult 0.75, levelEta defaults as data, the six development.json
+  // removals (the header's content hash moved); round checksums unchanged.
   it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
     const out = simulateMatch(match(), content, { record: 'full' });
     expect(ENGINE_VERSION).toBe(2);
@@ -81,13 +83,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "1c5d8e2e6d9a5c953d9e0dbb1c33cec8",
+            "f39790d1c7f33470ca293a1fd6ace30d",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "049e8c97cd5b96099304baff5d075420",
+            "e0dbf4f5b2f32c78e6e2a937c7e1df40",
           ],
         ],
         "score": {
@@ -109,7 +111,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
         "home",
         896,
         "128648c2c01315596ceda6c8db45ee69",
-        "f97f39be4598d89633f95f32052f7597",
+        "e9ddcb643631a8a1f0ffebd16b3ba99f",
       ]
     `);
   });

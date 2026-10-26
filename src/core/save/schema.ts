@@ -621,6 +621,7 @@ const seasonRecord = z.strictObject({
         attributeDeltas: intRecord,
         potentialChange: int.optional(),
         retired: z.boolean().optional(),
+        picks: z.array(resolvedLevelUp).optional(),
       }),
     )
     .optional(),

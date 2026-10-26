@@ -127,7 +127,9 @@
   },
 
   "levelEta": {
-    "_doc": "Replaces the M1 development trend. Shown per fighter: level, XP bar (xp / xpNeeded), levels this season, and 'next level in about N matches' with N = ceil((xpNeeded - xp) / expected XP per match); expected = this season's mean match XP when he started a round (or as a reserve if he has not), default 32 starter / 11 reserve before his first match."
+    "_doc": "Replaces the M1 development trend. Shown per fighter: level, XP bar (xp / xpNeeded), levels this season, and 'next level in about N matches' with N = ceil((xpNeeded - xp) / expected XP per match); expected = this season's mean match XP when he started a round (or as a reserve if he has not), default 32 starter / 11 reserve before his first match.",
+    "defaultStarterMatchXp": 32,
+    "defaultBenchMatchXp": 11
   },
 
   "stamina": {
