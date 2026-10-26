@@ -15,6 +15,9 @@ export interface StaticValues {
   armor0: number;
   ward0: number;
   power0: number;
+  /** Power and Support before truncation, x BP^2 (engine 2: modifiers apply to these, one truncation). */
+  powerX: number;
+  supportX: number;
   support0: number;
   speedE4: number;
   intervalTicks: number;
@@ -170,10 +173,12 @@ export function staticValues(input: FightFighterInput, cls: CClass, tb: SimTable
   const ward0 = Math.trunc((base.ward * 100 + d.wardPerWilCenti * dd(ATTR.wil) + Math.round(wardFlat * 100)) / 100);
   let pw = 0;
   for (const [i, w] of cls.powerW) pw += w * dd(i);
-  const power0 = Math.max(1, Math.trunc((base.power * (BP * BP + d.powerPerPointBp * pw)) / (BP * BP)));
+  const powerX = base.power * (BP * BP + d.powerPerPointBp * pw);
+  const power0 = Math.max(1, Math.trunc(powerX / (BP * BP)));
   let sw = 0;
   for (const [i, w] of cls.supportW) sw += w * dd(i);
-  const support0 = cls.supportW.length === 0 ? 0 : Math.max(0, Math.trunc((base.support * (BP * BP + d.supportPerPointBp * sw)) / (BP * BP)));
+  const supportX = cls.supportW.length === 0 ? 0 : base.support * (BP * BP + d.supportPerPointBp * sw);
+  const support0 = cls.supportW.length === 0 ? 0 : Math.max(0, Math.trunc(supportX / (BP * BP)));
   const baseMm = Math.round((base.moveSpeedMps * 1000) / tb.tps);
   const speedE4 = Math.trunc((baseMm * (BP + d.movePerPacBp * dd(ATTR.pac)) * moveMult) / BP);
   const intervalTicks = Math.max(1, Math.round(base.attackIntervalS * tb.tps));
@@ -184,6 +189,8 @@ export function staticValues(input: FightFighterInput, cls: CClass, tb: SimTable
     ward0,
     power0,
     support0,
+    powerX,
+    supportX,
     speedE4,
     intervalTicks,
     atkSpeed0: BP + d.atkPerAgiBp * dd(ATTR.agi),
@@ -216,6 +223,8 @@ export function initStatic(u: Unit, tb: SimTables): void {
   u.ward0 = s.ward0;
   u.power0 = s.power0;
   u.support0 = s.support0;
+  u.powerX = s.powerX;
+  u.supportX = s.supportX;
   u.speedE4 = s.speedE4;
   u.intervalTicks = s.intervalTicks;
   u.swingThreshold = s.intervalTicks * BP;

@@ -25,7 +25,7 @@ import type {
   SideInput,
 } from '../model';
 import type { Seed } from '../rng';
-import { SIM_ENGINE_VERSION } from './fight';
+import { SIM_ENGINE_VERSION, modifiedStat } from './fight';
 import { runFight, runMatch } from './match';
 import { staticValues } from './profile';
 import { BP, ST, kitFor, simTables } from './tables';
@@ -120,8 +120,8 @@ export function combatProfile(fighter: FightFighterInput, content: ContentDB): C
     maxHp: s.maxHp,
     armor: s.armor0 + m[ST.armor]!,
     ward: s.ward0 + m[ST.ward]!,
-    power: Math.max(1, Math.trunc((s.power0 * (BP + m[ST.power]!)) / BP)),
-    support: Math.max(0, Math.trunc((s.support0 * (BP + m[ST.support]!)) / BP)),
+    power: modifiedStat(s.power0, s.powerX, m[ST.power]!, 1),
+    support: modifiedStat(s.support0, s.supportX, m[ST.support]!, 0),
     attackIntervalTicks: Math.trunc((s.intervalTicks * BP) / atk),
     moveSpeedMmPerTick: Math.trunc((s.speedE4 * speedMult) / (BP * BP)),
     critBp: Math.min(d.critMaxBp, Math.max(0, s.crit0 + m[ST.crit]!)),

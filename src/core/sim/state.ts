@@ -168,6 +168,9 @@ export class Unit {
   ward0 = 0;
   power0 = 1;
   support0 = 0;
+  /** Power and Support before truncation, x BP^2. */
+  powerX = 1;
+  supportX = 0;
   /** Move speed in mm/tick x 10,000 before the speed multiplier. */
   speedE4 = 0;
   intervalTicks = 1;

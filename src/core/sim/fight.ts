@@ -268,10 +268,10 @@ export class Fight {
 
   // ---- Derived dynamic values ---------------------------------------------------------------------
   power(u: Unit): number {
-    return Math.max(1, Math.trunc((u.power0 * (BP + u.mods[ST.power]!)) / BP));
+    return modifiedStat(u.power0, u.powerX, u.mods[ST.power]!, 1);
   }
   support(u: Unit): number {
-    return Math.max(0, Math.trunc((u.support0 * (BP + u.mods[ST.support]!)) / BP));
+    return modifiedStat(u.support0, u.supportX, u.mods[ST.support]!, 0);
   }
   armor(u: Unit): number {
     return u.armor0 + u.mods[ST.armor]!;
@@ -750,9 +750,12 @@ export class Fight {
         u.regenNow = u.mods[ST.hpRegenPct]! !== 0 || u.mods[ST.hpRegenFlat]! !== 0;
       }
       u.tally.ticksStanding++;
-      // Accumulators (03 sys-combat-stats "Integer implementation").
+      // Accumulators (03 sys-combat-stats "Integer implementation"). One stored swing, keeping the
+      // sub-tick overshoot (< one tick's gain) so the swing rate is atkNow / threshold, not ceil-quantized
+      // (engine 2: before, any attack-speed loss cost a whole tick per swing and gains below ~4% did nothing).
       const sw = u.swingAcc + u.atkNow;
-      u.swingAcc = sw < u.swingThreshold ? sw : u.swingThreshold;
+      const swingCap = u.swingThreshold + u.atkNow - 1;
+      u.swingAcc = sw < swingCap ? sw : swingCap;
       if (u.cdA1 > 0) u.cdA1 = u.cdA1 > u.cdRateNow ? u.cdA1 - u.cdRateNow : 0;
       if (u.cdA2 > 0) u.cdA2 = u.cdA2 > u.cdRateNow ? u.cdA2 - u.cdRateNow : 0;
       if (u.focus < tb.derived.focusMaxMilli) u.focus = Math.min(tb.derived.focusMaxMilli, u.focus + u.focusRegenNow);
@@ -1206,3 +1209,14 @@ function compiledFor(content: ContentDB, f: FightFighterInput, cls: CClass): Com
 const ORDER_EVEN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const ORDER_ODD = [5, 6, 7, 8, 9, 0, 1, 2, 3, 4];
 
+/**
+ * Power or Support with modifiers: one truncation of base x stat factor x
+ * (1 + modifiers), as sys-combat-stats writes it (fr-001: trunc(72 x 1.056 x
+ * 0.976)). Engine 1 truncated twice (the static value, then the modified
+ * one), so any small malus cost a whole point; an unmodified value is the
+ * static one.
+ */
+export function modifiedStat(base0: number, baseX: number, modBp: number, min: number): number {
+  if (modBp === 0) return base0;
+  return Math.max(min, Math.trunc((baseX * (BP + modBp)) / (BP * BP * BP)));
+}

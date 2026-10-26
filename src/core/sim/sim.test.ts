@@ -106,9 +106,9 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
     expect([out.result.winner, out.result.durationTicks, out.result.checksum, out.log!.hash]).toMatchInlineSnapshot(`
       [
         "home",
-        897,
-        "65ef43bb008aa542664f4684f86b3308",
-        "d16a5a14f5091c805c13a7f50b82fba6",
+        896,
+        "128648c2c01315596ceda6c8db45ee69",
+        "3283934bc367285e24e562df94aa073e",
       ]
     `);
   });

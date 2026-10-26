@@ -211,6 +211,40 @@ describe('Freshness penalty (fr-001 to fr-004)', () => {
     expect(spawn).toMatchObject({ freshness: 45, fatigueBp: 3000, abilityRanks: { a1: 1, a2: 1, passive: 1 }, perkIds: [], enteredThisRound: false });
   });
 
+  it('fr-001 in the engine: the swing accumulator keeps its sub-tick overshoot, so F 45 swings every 1.376 s on average', () => {
+    const swingsOver = (freshness: number, ticks: number): number => {
+      const f = arena([{ classId: 'oathguard', stats: KNIGHT, freshness }], ['bloodhowler']);
+      prep(f);
+      const u = f.units[0]!;
+      let swings = 0;
+      for (let t = 0; t < ticks; t++) {
+        f.tick = t;
+        f.timers();
+        if (u.swingAcc >= u.swingThreshold) {
+          swings++;
+          u.swingAcc -= u.swingThreshold;
+        }
+      }
+      return swings;
+    };
+    // 2750 ticks x 9450 / 260000 = 99.95 swings (engine 1 quantized every swing to 28 ticks: 98).
+    expect(swingsOver(45, 2750)).toBe(99);
+    // Fresh (Agility 9: attack speed 9750): 2600 x 9750 / 260000 = 97.5 (engine 1: every 27 ticks, 96).
+    expect(swingsOver(100, 2600)).toBe(97);
+  });
+
+  it('Power and Support take one truncation: a small malus does not always cost a whole point', () => {
+    // Raw Power 76.03 (worked example): x 0.9987 = 75.93 -> 75; flat-10 stats give exactly 72: x 0.9987 = 71.9 -> 71 (both engines).
+    // With raw 72 x 1.04 x 1.0 + a 0.1% malus: engine 1 trunc(trunc(74.88) x 0.999) = 73; engine 2 trunc(74.81) = 74.
+    const f = arena([{ classId: 'oathguard', stats: { ...KNIGHT, str: 11, tgh: 11 } }], ['bloodhowler']);
+    prep(f);
+    const u = f.units[0]!;
+    const raw = u.powerX / (BP * BP);
+    expect(f.power(u)).toBe(Math.trunc(raw));
+    u.mods[ST.power] = -10;
+    expect(f.power(u)).toBe(Math.trunc((raw * (BP - 10)) / BP));
+  });
+
   it('fr-002: F 10: interval 1.486 s, Power 69, move 153, reaction 7 ticks, Spent (10)', () => {
     const f = arena([{ classId: 'oathguard', stats: KNIGHT, freshness: 10 }], ['bloodhowler']);
     prep(f);

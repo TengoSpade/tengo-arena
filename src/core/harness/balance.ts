@@ -357,6 +357,19 @@ export function rankAutoValue(content: ContentDB, slot: 'a1' | 'a2' | 'passive',
   return clamp(v, lo, hi);
 }
 
+/**
+ * M1.1 modes: every attribute 10 +/- STAT_JITTER (uniform integers). Flat 10s
+ * make Power, HP and speed exact integers, so any small penalty truncates a
+ * whole point and every fighter rounds the same way (a harness artifact).
+ */
+const STAT_JITTER = 2;
+
+function jitteredStats(rng: Rng, content: ContentDB): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const s of content.stats.list) out[s.id] = 10 + rng.int(-STAT_JITTER, STAT_JITTER);
+  return out;
+}
+
 /** Draw a fighter's ranks and perks for a profile (stat gates are not applied: harness fighters have flat stats). */
 function drawSkills(rng: Rng, content: ContentDB, ctx: PickContext, profile: SkillProfile, pick: SkillPick, exclude: readonly string[] = []): Skills {
   const { ranks: nRanks, perks: nPerks } = SKILL_PROFILES[profile];
@@ -840,8 +853,8 @@ function progression(options: BalanceOptions, profile: SkillProfile, pick: Skill
   let played = 0;
   for (let i = 0; i < pairs; i++) {
     const rng = Rng.create(seed, STREAM.balance, 'progression', profile, pick, i);
-    const specsA: FighterSpec[] = drawLineup(rng, content).map((classId) => ({ classId }));
-    const specsB: FighterSpec[] = drawLineup(rng, content).map((classId) => ({ classId }));
+    const specsA: FighterSpec[] = drawLineup(rng, content).map((classId) => ({ classId, stats: jitteredStats(rng, content) }));
+    const specsB: FighterSpec[] = drawLineup(rng, content).map((classId) => ({ classId, stats: jitteredStats(rng, content) }));
     const capA = rng.int(0, 4);
     const capB = rng.int(0, 4);
     const skillsA = lineupSkills(rng, content, specsA, capA, profile, pick);
@@ -946,7 +959,7 @@ function pairedLift(dSum: number, dSq: number, n: number): { liftPts: number; ci
 }
 
 function randomArm(rng: Rng, content: ContentDB, lineup: string[], profile: SkillProfile, pick: SkillPick): Arm {
-  const specs: FighterSpec[] = lineup.map((classId) => ({ classId }));
+  const specs: FighterSpec[] = lineup.map((classId) => ({ classId, stats: jitteredStats(rng, content) }));
   const cap = rng.int(0, 4);
   return { specs, cap, skills: lineupSkills(rng, content, specs, cap, profile, pick) };
 }
