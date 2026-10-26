@@ -14,6 +14,7 @@ import { CAREER_ENDING_WEEKS, clubRoster, idNumber, type ClubId, type Fighter, t
 import { effectSources, hasEffect, sumAdds } from './effects';
 import { lifecycleEpoch, rosterMemoAllowed } from './memo';
 import { BP, bp, roundN } from './fixed';
+import { perkCaptaincyAdd } from './freshness';
 import { effectiveStatsOf, fighterHumanAge100, ratingOf } from './stats';
 
 export interface CaptaincyBreakdown {
@@ -27,6 +28,8 @@ export interface CaptaincyBreakdown {
   youth: number;
   traits: number;
   statuses: number;
+  /** M1.1: perk captaincy adds (perks.json lifecycleEffects; Banner Voice +5). */
+  perks: number;
 }
 
 export function isCareerEnded(fighter: Fighter): boolean {
@@ -107,9 +110,10 @@ export function captaincyBreakdown(fighter: Fighter, content: ContentDB, top5Mea
   const sources = effectSources(fighter, content);
   const traits = sumAdds(sources.filter((s) => s.kind !== 'status'), 'captaincy');
   const statuses = sumAdds(sources.filter((s) => s.kind === 'status'), 'captaincy');
-  const raw = roundN(weighted) + youth + traits + statuses;
+  const perks = perkCaptaincyAdd(fighter, content);
+  const raw = roundN(weighted) + youth + traits + statuses + perks;
   const cq = raw < 1 ? 1 : raw > 100 ? 100 : raw;
-  return { cq, grade: gradeFor(cq, content), leadership, composure, experience, seniority, standing, youth, traits, statuses };
+  return { cq, grade: gradeFor(cq, content), leadership, composure, experience, seniority, standing, youth, traits, statuses, perks };
 }
 
 export function captaincyAt(state: GameState, fighterId: FighterId, clubId: ClubId, content: ContentDB): CaptaincyBreakdown {
