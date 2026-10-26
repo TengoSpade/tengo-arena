@@ -231,10 +231,12 @@ function pauseHere(draft: GameState, ms: MatchState, view: BetweenRoundView): bo
  * them, else the auto-swap suggestions; the other side always decides by its
  * own auto rules, blind) and plays the next round.
  */
-function runPlayerMatch(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB, canPause: boolean): BetweenRoundView | null {
+function runPlayerMatch(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB, canPause: boolean, resuming: boolean): BetweenRoundView | null {
+  // Resuming: the pending step was on screen and the player pressed Continue (his match.swap decisions, else the suggestions).
+  let shown = resuming;
   while (ms.phase !== 'done') {
     if (ms.phase === 'between_rounds') {
-      if (canPause && ms.playerDecisions === null) {
+      if (canPause && !shown) {
         const view = betweenRounds(ports, draft, ms, content);
         if (pauseHere(draft, ms, view)) return view;
       }
@@ -242,6 +244,7 @@ function runPlayerMatch(ports: GamePorts, draft: GameState, ms: MatchState, cont
       const side = playerSideOf(draft, ms);
       if (side !== null && ms.playerDecisions !== null) auto[side] = ms.playerDecisions;
       applyBetweenRound(ports, draft, ms, auto, content);
+      shown = false;
     }
     playRound(ports, draft, ms, content);
   }
@@ -385,7 +388,7 @@ export function processWeekLive(ports: GamePorts, state: GameState, content: Con
     const run: WeekRun = { draft, newsFrom: newsFromOnResume(draft), ledgerFrom: draft.ledger.nextSeq, log: { rejections: [] } };
     return guarded(() => {
       const ms = draft.liveMatch!;
-      const pause = runPlayerMatch(ports, draft, ms, content, canPause);
+      const pause = runPlayerMatch(ports, draft, ms, content, canPause, true);
       if (pause) return { state: draft, report: null, pause, log: run.log };
       draft.liveMatch = null;
       const result = finishMatch(ports, draft, ms, content);
@@ -416,7 +419,7 @@ export function processWeekLive(ports: GamePorts, state: GameState, content: Con
     if (mine) {
       const ms = startMatch(ports, draft, mine, squadsOf(draft, mine, content), content);
       playRound(ports, draft, ms, content);
-      const pause = runPlayerMatch(ports, draft, ms, content, canPause);
+      const pause = runPlayerMatch(ports, draft, ms, content, canPause, false);
       if (pause) {
         draft.liveMatch = ms;
         return { state: draft, report: null, pause, log: run.log };
