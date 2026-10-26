@@ -86,7 +86,7 @@ export const T = {
   rotate: 'Rotate',
   rotateBtn: 'Rest {out} for {in}',
   rotateTip: '{out} is at {outF} ({label}): he would start a round of this match below 60 and play with the Freshness penalty. {in} is at {inF}, same role, within 6 rating.',
-  freshProjection: '→ {n} after a typical match',
+  freshProjection: '→ {n} after',
   freshProjectionTip: 'After a typical match (2.5 rounds at −{drain} each): {n}. {tired}',
   freshWillTire: 'He would start a round below 60 (Tired) in this match.',
   freshFine: 'He stays at 60 or more.',
