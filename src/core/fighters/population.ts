@@ -7,8 +7,10 @@
  * free-agent pool where the unsigned leave after two season ends). With
  * `matches` on, fights are abstract (round win chance from the lineup rating
  * gap; downed 30% for winners and 85% for losers; damage drawn uniformly),
- * like the lifecycle designer's scratch model, so the real fighters
- * pipeline (XP, injuries, development) runs on synthetic MatchResults.
+ * like the lifecycle designer's scratch model. M1.1: matches are played round
+ * by round through the real lifecycle hooks (./squad-match.ts: AI rotation,
+ * 5 + 2 squads, auto-swap, Freshness, immediate injuries, bench XP, level-ups
+ * with auto-pick), so XP, levels, injuries and aging run on the real code.
  * Randomness of the stand-ins comes from STREAM.soak.
  */
 import { clubMatchDefaults, type ContentDB } from '../content';
@@ -19,25 +21,18 @@ import {
   type Club,
   type ClubId,
   type Fighter,
-  type FighterId,
-  type FighterMatchStats,
-  type FightFighterInput,
   type FixtureId,
   type GameState,
-  type MatchResult,
   type RegionId,
-  type RoundResult,
-
-  type TacticsPresetId,
   type TierId,
   type WeekId,
 } from '../model';
 import { Rng, STREAM } from '../rng';
-import { captaincyBreakdown, isFitFighter, lineupCaptainOf, topFiveMean } from './captaincy';
-import { BP, bp, roundN } from './fixed';
+import { captaincyBreakdown, isFitFighter, topFiveMean } from './captaincy';
+import { BP, bp } from './fixed';
 import { createFighterOn } from './generation';
 import { isCareerEnded } from './captaincy';
-import { applyMatch, maxHpOf } from './match';
+import { playSquadMatch } from './squad-match';
 import {
   announceFinalSeasonsOn,
   generateRookiesOn,
@@ -48,7 +43,7 @@ import {
 import { effectiveStatsOf, fighterHumanAge100, potentialOf, ratingOf } from './stats';
 import { tables } from './tables';
 import { rolledPolarity } from './traits';
-import { lockLineup, weekly } from './weekly';
+import { weekly } from './weekly';
 
 export interface PopulationOptions {
   seed: string;
@@ -88,7 +83,32 @@ export interface PopulationReport {
   retirementAges: Record<string, number[]>;
   /** peakRating ÷ potential of retired fighters with ≥ 200 career rounds. */
   starterPeakOverPotential: number[];
+  /** M1.1: one row per rostered fighter-season (from season 3), for the levels bands. */
+  levelSamples: LevelSample[];
+  matches: number;
+  swaps: number;
+  roundStarts: number;
+  tiredRoundStarts: number;
+  spentRoundStarts: number;
   finalState: GameState;
+}
+
+export interface LevelSample {
+  season: number;
+  /** Human-age during the season. */
+  humanAge: number;
+  potential: number;
+  /** Levels gained this season. */
+  levels: number;
+  /** Matches in which he started a round. */
+  matches: number;
+  roundXp: number;
+  benchXp: number;
+  stamina: number;
+  /** Kinds of the picks resolved this season ('stat', 'rank', 'perk', 'empty'). */
+  picks: string[];
+  /** Traits learned from trait offers this season. */
+  trait: number;
 }
 
 function byId<T extends { id: string }>(a: T, b: T): number {
@@ -210,161 +230,6 @@ function setAiCaptains(state: GameState, content: ContentDB, seasonStart: boolea
   }
 }
 
-/** "Best five", with economy.json ai.youthMinutes: a young prospect close to the 5th starter takes the 5th slot. */
-function pickLineup(state: GameState, club: Club, content: ContentDB): void {
-  const ranked = rosterOf(state, club.id)
-    .filter(isFitFighter)
-    .map((f) => ({ f, rating: ratingOf(f, content) }))
-    .sort((a, b) => b.rating - a.rating || byId(a.f, b.f));
-  const fit = ranked.slice(0, 5);
-  const ym = content.economy.ai.youthMinutes;
-  const fifth = fit[4];
-  if (fifth) {
-    const prospect = ranked
-      .slice(5)
-      .find(
-        (x) =>
-          fighterHumanAge100(x.f, content) <= ym.maxHumanAge * 100 &&
-          potentialOf(x.f, content) - x.rating >= ym.minPotentialGap &&
-          fifth.rating - x.rating <= ym.maxRatingBelowFifthStarter,
-      );
-    if (prospect) fit[4] = prospect;
-  }
-  club.lineup.fighters = fit.map((x) => ({ fighterId: x.f.id, row: content.classes.require(x.f.classId).startingRow }));
-}
-
-function sideInput(state: GameState, club: Club, content: ContentDB): { fighters: FightFighterInput[]; captainIndex: number; viceCaptainIndex: number | null } {
-  const ids = club.lineup.fighters.map((e) => e.fighterId);
-  const cap = lineupCaptainOf(state, club.id, ids, content);
-  const fighters = club.lineup.fighters.map((e, slot) => {
-    const f = state.fighters[e.fighterId]!;
-    const k = content.classes.require(f.classId);
-    return {
-      fighterId: f.id,
-      classId: f.classId,
-      raceId: f.raceId,
-      row: e.row,
-      slot,
-      stats: effectiveStatsOf(f, content),
-      captainQuality: cap && cap.fighterId === f.id ? cap.cqForFight : 50,
-      traitIds: f.traits.map((t) => t.id),
-      tactics: { kind: 'preset' as const, presetId: k.defaultPresetId as TacticsPresetId },
-      rating: ratingOf(f, content),
-    };
-  });
-  return { fighters, captainIndex: cap?.index ?? 0, viceCaptainIndex: cap?.viceIndex ?? null };
-}
-
-function emptyStats(clubId: ClubId): FighterMatchStats {
-  return {
-    clubId,
-    roundsPlayed: 0,
-    roundsSurvived: 0,
-    ticksOnArena: 0,
-    damageDealt: 0,
-    damageToShields: 0,
-    damageTaken: 0,
-    healingDone: 0,
-    shieldingDone: 0,
-    overheal: 0,
-    ccAppliedTicks: 0,
-    ccReceivedTicks: 0,
-    downsInflicted: 0,
-    downsSuffered: 0,
-    assists: 0,
-    focusSpent: 0,
-    casts: {},
-    ruleFires: [],
-    ruleCommittedTicks: [],
-    rulesNeverFired: [],
-    downs: [],
-    opponentIds: [],
-  };
-}
-
-/** An abstract match result (scratch model): round win chance from the lineup rating gap. */
-export function syntheticMatch(state: GameState, home: Club, away: Club, fixtureId: FixtureId, content: ContentDB): MatchResult {
-  const rng = Rng.create(state.rng.root, STREAM.soak, 'match', fixtureId);
-  const h = sideInput(state, home, content);
-  const a = sideInput(state, away, content);
-  const mean = (s: FightFighterInput[]): number => (s.length ? s.reduce((x, f) => x + f.rating, 0) / s.length : 0);
-  const pHome = Math.max(1_000, Math.min(9_000, roundN(5_000 + 300 * (mean(h.fighters) - mean(a.fighters)))));
-  const stats: Record<FighterId, FighterMatchStats> = {};
-  for (const f of h.fighters) stats[f.fighterId] = emptyStats(home.id);
-  for (const f of a.fighters) stats[f.fighterId] = emptyStats(away.id);
-  const rounds: RoundResult[] = [];
-  let hw = 0;
-  let aw = 0;
-  const maxHp = new Map<string, number>();
-  for (const f of [...h.fighters, ...a.fighters]) maxHp.set(f.fighterId, maxHpOf(f, content));
-  for (let r = 1; hw < 2 && aw < 2; r++) {
-    const homeWins = rng.chanceBp(pHome);
-    if (homeWins) hw++;
-    else aw++;
-    const winners = homeWins ? h.fighters : a.fighters;
-    const losers = homeWins ? a.fighters : h.fighters;
-    const downs = { home: 0, away: 0 };
-    for (const [side, list] of [['w', winners], ['l', losers]] as const) {
-      for (const f of list) {
-        const s = stats[f.fighterId]!;
-        s.roundsPlayed += 1;
-        const hp = maxHp.get(f.fighterId) ?? 1000;
-        const downed = rng.chanceBp(side === 'w' ? 3_000 : 8_500);
-        const ratio = downed ? rng.int(10_000, 16_000) : rng.int(2_000, 9_000);
-        const dmg = Math.trunc((hp * ratio) / BP);
-        s.damageTaken += dmg;
-        if (downed) {
-          const others = side === 'w' ? losers : winners;
-          const by = others.length ? rng.pick(others).fighterId : null;
-          s.downsSuffered += 1;
-          if (by) stats[by]!.downsInflicted += 1;
-          s.downs.push({ round: r, tick: 0, byFighterId: by, abilityId: null, hit: 0, overkill: 0, damageTakenRound: dmg, maxHp: hp });
-          if (list === h.fighters) downs.home++;
-          else downs.away++;
-        } else s.roundsSurvived += 1;
-      }
-    }
-    rounds.push({
-      round: r,
-      seed: 'synthetic',
-      winner: homeWins ? 'home' : 'away',
-      endReason: 'elimination',
-      tiebreakStep: null,
-      durationTicks: 600,
-      survivors: { home: 0, away: 0 },
-      downs,
-      finalHp: [],
-      checksum: '0',
-      eventHash: null,
-    });
-  }
-  const week = state.calendar.weekId ?? ('MW1' as WeekId);
-  return {
-    fixtureId,
-    competitionId: `lg:${state.calendar.season}:${home.tierId}` as MatchResult['competitionId'],
-    stage: 'league',
-    season: state.calendar.season,
-    weekIndex: state.calendar.weekIndex,
-    weekId: week,
-    homeClubId: home.id,
-    awayClubId: away.id,
-    engineVersion: 0,
-    contentHash: 'synthetic',
-    input: {
-      seed: 'synthetic',
-      bestOf: 3,
-      home: { clubId: home.id, fighters: h.fighters, captainIndex: h.captainIndex, viceCaptainIndex: h.viceCaptainIndex, chemistry: 0 },
-      away: { clubId: away.id, fighters: a.fighters, captainIndex: a.captainIndex, viceCaptainIndex: a.viceCaptainIndex, chemistry: 0 },
-    },
-    rounds,
-    score: { home: hw, away: aw },
-    winnerClubId: hw > aw ? home.id : away.id,
-    fighterStats: stats,
-    mvpFighterId: null,
-    hiredBladeIds: [],
-  };
-}
-
 function sample(state: GameState, content: ContentDB, season: number, counts: { retirements: number; rookies: number; leavers: number }): SeasonSample {
   const living = Object.values(state.fighters).filter((f) => f.status === 'active' || f.status === 'free-agent');
   const ages = living.map((f) => fighterHumanAge100(f, content) / 100);
@@ -437,6 +302,12 @@ export function runPopulation(options: PopulationOptions): PopulationReport {
     rolled: { positive: 0, negative: 0, fighters: 0 },
     retirementAges: {},
     starterPeakOverPotential: [],
+    levelSamples: [],
+    matches: 0,
+    swaps: 0,
+    roundStarts: 0,
+    tiredRoundStarts: 0,
+    spentRoundStarts: 0,
     finalState: state,
   };
   for (const race of content.races.list) {
@@ -458,10 +329,14 @@ export function runPopulation(options: PopulationOptions): PopulationReport {
   setAiCaptains(state, content, true);
 
   for (let season = 1; season <= options.seasons; season++) {
+    const levelAtStart = new Map<string, { level: number; clubId: string | null }>();
+    for (const f of Object.values(state.fighters)) if (f.status !== 'retired') levelAtStart.set(f.id, { level: f.level, clubId: f.clubId });
     for (let w = 1; w <= t.weeksPerSeason; w++) {
       const week = content.weekByIndex(w);
       state.calendar = { season, weekIndex: w, weekId: week.id as WeekId, phase: week.phase };
       if (w === 1) announceFinalSeasonsOn(state, content);
+      // Results of this week only (weekly rest reads them); older ones are dropped to keep the harness light.
+      state.results = {};
       if (options.matches && week.phase === 'regular') {
         setAiCaptains(state, content, false);
         for (const tier of content.tiers.list) {
@@ -470,30 +345,23 @@ export function runPopulation(options: PopulationOptions): PopulationReport {
           for (let i = 0; i + 1 < order.length; i += 2) {
             const home = order[i]!;
             const away = order[i + 1]!;
-            pickLineup(state, home, content);
-            pickLineup(state, away, content);
-            if (home.lineup.fighters.length === 0 || away.lineup.fighters.length === 0) continue;
-            lockLineup(state, home.id, content);
-            lockLineup(state, away.id, content);
+            if (rosterOf(state, home.id).filter(isFitFighter).length < 5 || rosterOf(state, away.id).filter(isFitFighter).length < 5) continue;
             const fixtureId = `lg:${season}:${tier.id}:${week.id}:${home.id}:${away.id}` as FixtureId;
-            const result = syntheticMatch(state, home, away, fixtureId, content);
-            const before = new Map<string, number>();
-            for (const fid of Object.keys(result.fighterStats)) before.set(fid, state.fighters[fid as FighterId]!.traits.length);
-            const outcome = applyMatch(state, result, content);
-            for (const [fid, s] of Object.entries(result.fighterStats)) {
-              const f = state.fighters[fid as FighterId]!;
-              const bucket = report.injuries[f.raceId];
-              if (bucket) bucket.rounds += s.roundsPlayed;
+            const m = playSquadMatch(state, home, away, fixtureId, content);
+            state.results[fixtureId] = m.result;
+            report.matches += 1;
+            report.swaps += m.swaps;
+            for (const [fid, n] of m.roundStarts) {
+              const bucket = report.injuries[state.fighters[fid]!.raceId];
+              if (bucket) bucket.rounds += n;
             }
-            for (const inj of outcome.injuries) {
-              const f = state.fighters[inj.fighterId]!;
+            for (const fid of m.injured) {
+              const f = state.fighters[fid]!;
               const bucket = report.injuries[f.raceId];
               if (bucket) bucket.injuries += 1;
-              report.severities[inj.severity] = (report.severities[inj.severity] ?? 0) + 1;
+              const sev = f.injury?.severity ?? 'knock';
+              report.severities[sev] = (report.severities[sev] ?? 0) + 1;
               if (isCareerEnded(f)) report.careerEndings += 1;
-              const scarsNow = f.traits.filter((x) => x.source === 'scar' && x.gainedSeason === season).length;
-              const hadBefore = before.get(f.id) ?? 0;
-              if (f.traits.length > hadBefore && scarsNow > 0) report.scars += 1;
             }
           }
         }
@@ -503,6 +371,26 @@ export function runPopulation(options: PopulationOptions): PopulationReport {
     // ---- season end ----
     state.calendar = { season, weekIndex: t.weeksPerSeason + 1, weekId: null, phase: 'season-end' };
     state.history.push({ season, tiers: [], retirements: [], rookieIds: [] });
+    for (const f of Object.values(state.fighters).sort(byId)) {
+      const start = levelAtStart.get(f.id);
+      if (f.status !== 'active' || !start || start.clubId !== f.clubId) continue;
+      report.roundStarts += f.season.roundsStarted;
+      report.tiredRoundStarts += f.season.tiredRoundStarts;
+      report.spentRoundStarts += f.season.spentRoundStarts;
+      if (season < 3) continue;
+      report.levelSamples.push({
+        season,
+        humanAge: fighterHumanAge100(f, content) / 100,
+        potential: potentialOf(f, content),
+        levels: f.level - start.level,
+        matches: f.season.matchesStarted,
+        roundXp: f.season.roundXp,
+        benchXp: f.season.benchXp,
+        stamina: (effectiveStatsOf(f, content) as Record<string, number>)['stamina'] ?? 0,
+        picks: f.season.levelLog.map((l) => (l.picked ? l.picked.kind : 'empty')),
+        trait: f.season.levelLog.filter((l) => l.trait !== null).length,
+      });
+    }
     seasonEndDevelopmentOn(state, content);
     const retired = seasonEndRetirementsOn(state, content);
     for (const r of retired) {
