@@ -64,6 +64,7 @@ export function MatchDayPanel() {
         {label} <strong class="u-num">{rules[key]}</strong>
       </span>
       <input
+        class="range"
         type="range"
         min={min}
         max={max}
