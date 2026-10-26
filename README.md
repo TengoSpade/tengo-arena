@@ -30,6 +30,14 @@ Open http://localhost:5173, choose **New career**, pick a club (Muster Circuit c
 - Three rotating autosaves (after every week processing and after the season end) and ten manual slots. `Ctrl S` saves; **Save / Load** (`S`) lists every slot.
 - **Export** on the Save / Load screen downloads a slot as a `.json` file; **Import** loads such a file back (also into another browser). The debug overlay's **State dump** downloads the current state with the commands since the last save, for bug reports; `npx tsx scripts/replay.ts <file.json> --weeks 3` replays weeks from a dump or save headless and checks they reproduce.
 
+## Filing playtest tickets
+
+- Press **F8** on any screen (or the bug button in the top bar) to report an issue. The game takes a screenshot of what you see, then asks for one line of text: **Enter** files the ticket, **Shift+Enter** adds a new line, **Esc** cancels.
+- Ids look like `AL-R004-T012_20261025-193412`: run 4 (one run per career, kept when you load it again), ticket 12 of that run, filed at 19:34:12 local time on 2026-10-25.
+- Under `npm run dev` tickets are written to `tickets/<id>/` in the project folder (git-ignored): `screenshot.png`, `state.json` (the full save) and `ticket.json` (screen and route, season/week, build commit, engine and content versions, viewport, theme, pacing, recent commands, console errors and toasts). `tickets/tickets.md` lists them all; `tickets/index.json` keeps the run and ticket counters.
+- **Reproduce** a ticket in dev with `http://localhost:5173/?ticket=<id>`: its save opens in a new slot `ticket-<id>` on the same screen, and a banner says so. The original save is never touched.
+- Without the dev server (preview or a production build) tickets stay in the browser; **Settings › Tickets** lists them and **Export all** downloads one JSON file with the screenshots inside. **Playtest tools** in the same section turns F8 and the button off.
+
 ## Developer tools
 
 - **`window.__arena`** (dev server only): `state()` returns the committed `GameState`; `dispatch(command)` applies a command for the player's club; `await advance(n)` processes n weeks (stops at the first blocker, e.g. an injured starter); `await finishSeason()` runs the season-end step; `dump()` downloads a state dump; `store` is the UI store.
