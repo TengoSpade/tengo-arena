@@ -9,11 +9,12 @@
  * from draft.rng.root with core/rng STREAM paths (season, week, fixture,
  * fighter id, purpose), so draws never depend on iteration order.
  *
- * Orchestrator decisions 2026-10-25 (pending owner confirmation):
- * - a fighter who starts no rounds gets 0 XP and 0 development; the training
- *   emphasis only decides which stats the EARNED growth goes to;
- * - mental decline scales by race lifespan (development.json flag);
- * - chemistry in M1 comes only from trait and captain lineup modifiers.
+ * M1.1 (owner T003-T005, progression.md): effective stats read train100;
+ * growth is in-season level-ups (bench XP at ⅓ of a lineup slot; offers of
+ * 3, skills every 3rd level, trait offers; auto-pick); season end is Aging
+ * (no growth); Freshness drains per round played and recovers with rest.
+ * Mental decline scales by race lifespan (D-B); chemistry comes only from
+ * trait and captain lineup modifiers (D-D).
  */
 import type { CaptaincyGradeDef, ContentDB } from '../content';
 import { Rng, STREAM } from '../rng';
@@ -165,7 +166,7 @@ export function retirementChanceBp(state: GameState, fighterId: FighterId, conte
   return liveRetirementChance(state, f, content);
 }
 
-/** Development trend id (development.json trend.levels). */
+/** @deprecated M1.1: the trend is retired (levelEtaMatches replaces it); always 'holding'. */
 export function trend(fighter: Fighter, content: ContentDB): string {
   return trendId(fighter, content);
 }
@@ -183,17 +184,27 @@ export interface MatchLifecycleOutcome {
   newsIds: NewsId[];
 }
 
-/** After a match: XP (rounds started only), injury rolls (max 1 per match), career totals, statuses, event traits. */
+/**
+ * After a whole-match (M1) result: round XP, injury rolls (max 1 per match), career totals, statuses,
+ * event traits; then the M1.1 bench XP and level-up checks, so levels fill on this path too until the
+ * round-by-round orchestrator (freshnessAfterRound ... matchEndProgression) replaces it.
+ */
 export function applyMatchLifecycle(draft: GameState, result: MatchResult, content: ContentDB): MatchLifecycleOutcome {
-  return mutating(() => applyMatch(draft, result, content));
+  return mutating(() => {
+    const out = applyMatch(draft, result, content);
+    const prog: progression.MatchProgressionOutcome = { benchXp: {}, levelUps: [], autoResolved: [], newsIds: [] };
+    progression.benchAndLevels(draft, result, content, prog);
+    out.newsIds.push(...prog.newsIds);
+    return out;
+  });
 }
 
-/** Week processing step 3: injury and status countdown, emphasis weeks, captain streaks, weekly trait checks. */
+/** Week processing step 3: Freshness rest, injury and status countdown, emphasis weeks, captain streaks, weekly trait checks. */
 export function weeklyLifecycle(draft: GameState, content: ContentDB): NewsId[] {
   return mutating(() => weekly(draft, content));
 }
 
-/** Season end step 6: development and decline (pre-increment age), then +1 age; history rows. */
+/** Season end step 6 (M1.1 Aging): auto-resolve pending level-ups, wear (pre-increment age), trait checks, history rows, +1 age, xpNeeded recomputed. No growth. */
 export function seasonEndDevelopment(draft: GameState, content: ContentDB): NewsId[] {
   return mutating(() => seasonEndDevelopmentOn(draft, content));
 }
@@ -203,7 +214,7 @@ export function seasonEndRetirements(draft: GameState, content: ContentDB): Reti
   return mutating(() => seasonEndRetirementsOn(draft, content));
 }
 
-/** Season end step 9: off-season injury recovery. */
+/** Season end step 9: off-season injury recovery; Freshness reset to 100 (frs-010). */
 export function offseasonRecovery(draft: GameState, content: ContentDB): void {
   mutating(() => offseasonRecoveryOn(draft, content));
 }
@@ -255,6 +266,13 @@ export {
 export type { XpNeededContext } from './levels';
 export { autoPickChoice, effectiveLevelUpMode, levelEtaMatches, levelOptionLegal, typicalRoundDrain10, weeklyRest10 } from './progression';
 export type { LevelUpChoice, MatchProgressionOutcome } from './progression';
+// M1.1 additive exports (WP-B).
+export { benchXpFor, clubMatchXp, freshnessLabelOf, resolveAllPending, PROVISIONAL_LEVEL_ETA_DEFAULT_XP } from './progression';
+export { drainBase, perkBetweenRoundsGain10, perkCaptaincyAdd, perkDrainMult, rest10, roundDrain10, roundIntensity, staminaOf } from './freshness';
+export type { RoundLoad } from './freshness';
+export { eligiblePerks, eligibleRanks, generateOffer, offerContextOf, optionScore, perkEligible, statOfferWeight } from './offers';
+export type { OfferContext, RankStep } from './offers';
+export { STAMINA, staminaCap100 } from './generation';
 
 /** v2 -> v3 save migration of every fighter (core/save migrateV2ToV3; progression.md §6). */
 export function migrateFightersToV3(state: GameState, content: ContentDB): void {

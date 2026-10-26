@@ -5,9 +5,6 @@
  */
 import type { ContentDB } from '../content';
 import {
-  cloneJson,
-} from '../util';
-import {
   emptySeasonCounters,
   idNumber,
   setMembership,
@@ -26,14 +23,16 @@ import {
 import { Rng, STREAM } from '../rng';
 import { checkThresholds, type TraitChange } from './acquired';
 import { captaincyBreakdown, isCareerEnded, topFiveMean } from './captaincy';
-import { developSeason, usageBpOf, type DevelopmentInputs } from './development';
-import { trainFromClocks } from './levels';
+import { applySeasonWear, usageBpOf } from './development';
+import { levelMentorMult, xpNeededFor } from './levels';
+import { resolveAllPending } from './progression';
+import { setFreshness10 } from './freshness';
 import { effectSources } from './effects';
 import { BP, bp, roundN } from './fixed';
 import { createFighterOn } from './generation';
 import { pushNews } from './news';
 import { retirementChanceWith } from './retirement';
-import { effectiveStatsOf, fighterHumanAge100, freshRatingOf, potentialOf, ratingOf } from './stats';
+import { effectiveStatsOf, fighterHumanAge100, potentialOf, ratingOf } from './stats';
 import { tables } from './tables';
 import { removeTrait } from './traits';
 
@@ -41,10 +40,6 @@ const FINAL_SEASON = 'final_season';
 
 function byId(a: Fighter, b: Fighter): number {
   return idNumber(a.id) - idNumber(b.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-}
-
-function trainingEnabled(state: GameState, content: ContentDB): boolean {
-  return content.development.training.enabled && state.options.trainingEmphasis;
 }
 
 interface ClubMentoring {
@@ -147,32 +142,34 @@ function seasonEndLosses(f: Fighter, info: ClubMentoring | undefined, usageBp: n
   return changes;
 }
 
+/**
+ * Season-end step 6, M1.1 "Aging" (progression.md; the M1 development step is removed):
+ *   1. auto-resolve every pending level-up (oldest first, by the fighter's policy; manual -> auto);
+ *   2. wear (physical table from human-age 31, Stamina included; mental from human-age 60, D-B);
+ *   3. trait gain and loss checks; usage for the retirement modifiers = min(1, round XP ÷ 360);
+ *   4. history row (the age held during the season), age +1, then xpNeeded recomputed
+ *      (xpIntoLevel kept: a full bar triggers at the next match end); peak rating updated.
+ */
 export function seasonEndDevelopmentOn(draft: GameState, content: ContentDB): NewsId[] {
   const news: NewsId[] = [];
   const season = draft.calendar.season;
   const root = draft.rng.root;
   const mentoring = clubMentoring(draft, content);
-  const enabled = trainingEnabled(draft, content);
   // Titles: the ending season's Reckoning champions (archived before this step); their rosters at season end.
   const champions = new Set<string>();
   const ending = latestRecord(draft);
   if (ending && ending.season === season) for (const t of ending.tiers) if (t.reckoningChampionId) champions.add(t.reckoningChampionId);
+  const aged: Fighter[] = [];
   for (const f of Object.values(draft.fighters).sort(byId)) {
     if (f.status === 'retired') continue;
     if (f.status === 'active' && f.clubId !== null && champions.has(f.clubId)) f.career.titles += 1;
     const info = f.clubId ? mentoring.get(f.clubId) : undefined;
-    const inputs: DevelopmentInputs = {
-      seasonXp: f.season.xp,
-      mentor: mentorMultiplier(f, info, content),
-      emphasisWeeks: { ...f.season.emphasisWeeks },
-      trainingEnabled: enabled,
-    };
-    const delta = developSeason(f, content, inputs);
-    // M1.1 contracts: effective stats still read the clocks; train100 follows them until WP-B switches (05 M1.1 addendum).
-    f.train100 = trainFromClocks(f, content);
+    resolveAllPending(draft, f, content);
+    applySeasonWear(f, content);
+    const usageBp = usageBpOf(f.season.roundXp, content);
     if (f.season.roundsStarted > 0 || (f.clubId !== null && f.status === 'active')) f.career.proSeasons += 1;
     const changes = [
-      ...seasonEndLosses(f, info, delta.usageBp, content, root, season),
+      ...seasonEndLosses(f, info, usageBp, content, root, season),
       ...checkThresholds(f, 'seasonEnd', season, content, root),
     ];
     for (const c of changes) {
@@ -180,30 +177,35 @@ export function seasonEndDevelopmentOn(draft: GameState, content: ContentDB): Ne
     }
     const rating = ratingOf(f, content);
     if (rating > f.career.peakRating) f.career.peakRating = rating;
+    const stats = effectiveStatsOf(f, content);
+    const levelsThisSeason = f.season.levelLog.filter((l) => l.season === season).length;
     f.history.push({
       season,
       age: f.age,
       clubId: f.clubId,
       rating,
       potential: potentialOf(f, content),
-      stats: effectiveStatsOf(f, content),
+      stats,
       xp: f.season.xp,
-      usageBp: delta.usageBp,
+      usageBp,
       injuries: f.season.injuries,
       traitsGained: [
-        ...f.traits.filter((t) => t.gainedSeason === season && (t.source === 'event' || t.source === 'scar')).map((t) => t.id),
+        ...f.traits.filter((t) => t.gainedSeason === season && (t.source === 'event' || t.source === 'scar' || t.source === 'level')).map((t) => t.id),
       ],
       traitsLost: changes.filter((c) => c.change === 'lost').map((c) => c.traitId as TraitId),
-      levelStart: f.level - f.season.levelLog.length,
+      levelStart: f.level - levelsThisSeason,
       levelEnd: f.level,
-      stamina: effectiveStatsOf(f, content)['stamina' as StatId] ?? null,
+      stamina: stats['stamina' as StatId] ?? null,
       benchXp: f.season.benchXp,
       tiredRoundStarts: f.season.tiredRoundStarts + f.season.spentRoundStarts,
     });
     trimHistoryStats(f.history);
     f.season = emptySeasonCounters();
     f.age += 1;
+    aged.push(f);
   }
+  // XP per level after age +1 (the mentor term reads club-mates' new ages and grades).
+  for (const f of aged) f.xpNeeded = xpNeededFor(f, content, { mentor: levelMentorMult(draft, f, content) });
   return news;
 }
 
@@ -219,7 +221,7 @@ export function seasonEndRetirementsOn(draft: GameState, content: ContentDB): Re
     if (f.status === 'retired') continue;
     const row = f.history.find((r) => r.season === season);
     const ageDuring = row ? row.age : f.age;
-    const usageBp = row ? row.usageBp : usageBpOf(f.season.xp, content);
+    const usageBp = row ? row.usageBp : usageBpOf(f.season.roundXp, content);
     const careerEnded = isCareerEnded(f);
     let retire = careerEnded || f.finalSeason;
     if (!retire) {
@@ -252,7 +254,10 @@ export function seasonEndRetirementsOn(draft: GameState, content: ContentDB): Re
 
 export function offseasonRecoveryOn(draft: GameState, content: ContentDB): void {
   const weeks = content.development.time.offseasonRecoveryWeeks;
+  const fr = content.levels.freshness;
   for (const f of Object.values(draft.fighters).sort(byId)) {
+    // M1.1 (frs-010): the off-season resets Freshness to seasonEndReset.
+    if (f.status !== 'retired') setFreshness10(f, Math.round(fr.seasonEndReset * fr.storageUnitsPerPoint));
     if (f.status === 'retired' || !f.injury || isCareerEnded(f)) continue;
     f.injury.weeksOut = Math.max(0, f.injury.weeksOut - weeks);
     if (f.injury.weeksOut === 0 && f.injury.severity !== 'serious') f.injury = null;
@@ -299,7 +304,7 @@ export function generateRookiesOn(draft: GameState, content: ContentDB, count?: 
 export function liveRetirementChance(state: GameState, f: Fighter, content: ContentDB, usageBp?: number): number {
   return retirementChanceWith(f, content, {
     age: f.age,
-    usageBp: usageBp ?? usageBpOf(f.season.xp, content),
+    usageBp: usageBp ?? usageBpOf(f.season.roundXp, content),
     season: state.calendar.season,
     enabled: state.options.retirement,
   });
@@ -320,32 +325,19 @@ export function announceFinalSeasonsOn(draft: GameState, content: ContentDB): Ne
 }
 
 /**
- * Trend: projected rating change at season end if the XP rate so far
- * continues (projected seasonXp = seasonXp × matchweeks ÷ matchweeks elapsed),
- * development and decline applied on a copy (no mentoring, no rolls).
- * Matchweeks elapsed are read from the fighter's processed weeks this season
- * (emphasis weeks minus the preseason weeks), so the function needs no state.
+ * Trend (M1): RETIRED in M1.1 (progression.md: replaced by the level, the XP bar and
+ * "next level in ≈ N matches", levelEtaMatches). Kept only so the M1 contract and its callers
+ * compile until they switch (CHANGE REQUEST to WP-C / WP-D): always 0 / 'holding', reading
+ * nothing from development.json trend.
  */
-export function trendDelta(f: Fighter, content: ContentDB, trainingOn = content.development.training.enabled): number {
-  const t = tables(content);
-  const processed = f.season.emphasisWeeks.balanced + f.season.emphasisWeeks.body + f.season.emphasisWeeks.mind;
-  const elapsed = Math.max(0, processed - t.preseasonWeeks);
-  const mw = t.matchweekIndexes.length;
-  const projected = elapsed > 0 ? Math.trunc((f.season.xp * mw) / elapsed) : f.season.xp;
-  const projectedWeeks = { ...f.season.emphasisWeeks };
-  const remaining = Math.max(0, t.weeksPerSeason - processed);
-  projectedWeeks[f.trainingEmphasis] += remaining;
-  // A scratch copy changed between the two ratings: never memoized.
-  const copy = cloneJson(f);
-  const before = freshRatingOf(copy, content);
-  developSeason(copy, content, { seasonXp: projected, mentor: 1, emphasisWeeks: projectedWeeks, trainingEnabled: trainingOn });
-  return freshRatingOf(copy, content) - before;
+export function trendDelta(f: Fighter, content: ContentDB): number {
+  void f;
+  void content;
+  return 0;
 }
 
 export function trendId(f: Fighter, content: ContentDB): string {
-  const delta = trendDelta(f, content);
-  const levels = content.development.trend.levels.slice().sort((a, b) => b.minDelta - a.minDelta);
-  for (const l of levels) if (delta >= l.minDelta) return l.id;
-  return levels[levels.length - 1]?.id ?? 'holding';
+  void f;
+  void content;
+  return 'holding';
 }
-

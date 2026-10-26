@@ -11,7 +11,6 @@ import * as fighters from '../fighters';
 import * as league from '../league';
 import * as sim from '../sim';
 import * as tactics from '../tactics';
-import { interimLifecycleHooks } from './interim-lifecycle';
 
 export interface GamePorts {
   /** M1.1: simulateRound (WP-A) is what the orchestrator calls; simulateMatch stays for the M1 whole-match path and tests. */
@@ -29,7 +28,6 @@ export interface GamePorts {
     | 'isFit'
     | 'injuryChanceBp'
     | 'retirementChanceBp'
-    | 'trend'
     | 'lineupCaptain'
     | 'captainChangeConsequences'
     | 'lineupLock'
@@ -52,9 +50,10 @@ export interface GamePorts {
     | 'freshnessBetweenRounds'
     | 'matchEndProgression'
     | 'resolveLevelUp'
-    // M1.1 reads for levelUpView (WP-B)
+    // M1.1 reads for levelUpView and policy picks (WP-B)
     | 'levelOptionLegal'
     | 'levelEtaMatches'
+    | 'offerContextOf'
   >;
   league: Pick<
     typeof league,
@@ -126,7 +125,6 @@ export const realGamePorts: GamePorts = {
     isFit: fighters.isFit,
     injuryChanceBp: fighters.injuryChanceBp,
     retirementChanceBp: fighters.retirementChanceBp,
-    trend: fighters.trend,
     lineupCaptain: fighters.lineupCaptain,
     captainChangeConsequences: fighters.captainChangeConsequences,
     lineupLock: fighters.lineupLock,
@@ -140,9 +138,17 @@ export const realGamePorts: GamePorts = {
     freshnessOf: fighters.freshnessOf,
     freshnessLabel: fighters.freshnessLabel,
     effectiveLevelUpMode: fighters.effectiveLevelUpMode,
-    // INTERIM until WP-B lands (./interim-lifecycle.ts): autoPickChoice, typicalRoundDrain10, the round hooks,
-    // matchEndProgression and resolveLevelUp are core/fighters stubs; bind fighters.* here when they are implemented.
-    ...interimLifecycleHooks,
+    autoPickChoice: fighters.autoPickChoice,
+    offerContextOf: fighters.offerContextOf,
+    typicalRoundDrain10: fighters.typicalRoundDrain10,
+    freshnessAfterRound: fighters.freshnessAfterRound,
+    xpAfterRound: fighters.xpAfterRound,
+    injuriesAfterRound: fighters.injuriesAfterRound,
+    freshnessBetweenRounds: fighters.freshnessBetweenRounds,
+    matchEndProgression: fighters.matchEndProgression,
+    resolveLevelUp: fighters.resolveLevelUp,
+    levelOptionLegal: fighters.levelOptionLegal,
+    levelEtaMatches: fighters.levelEtaMatches,
   },
   league: {
     nextCalendar: league.nextCalendar,

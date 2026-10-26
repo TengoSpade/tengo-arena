@@ -370,7 +370,6 @@ export function standInFighters(): Port {
     isFit,
     injuryChanceBp: () => 150,
     retirementChanceBp: (state, id, content) => (humanAge100(state.fighters[id]!, content) >= 3600 ? 10000 : 0),
-    trend: (_f, content) => content.development.trend.levels[2]?.id ?? 'holding',
     lineupCaptain: (state, clubId, ids, content) => {
       if (ids.length === 0) return null;
       const club = state.clubs[clubId];
@@ -403,6 +402,7 @@ export function standInFighters(): Port {
     freshnessLabel: (v) => (v >= 80 ? 'fresh' : v >= 60 ? 'ready' : v >= 40 ? 'tired' : 'spent'),
     effectiveLevelUpMode,
     autoPickChoice: autoPick,
+    offerContextOf: () => ({ captainOrVice: false, trainingEnabled: false }),
     typicalRoundDrain10: () => 60,
     freshnessAfterRound,
     xpAfterRound,

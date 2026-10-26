@@ -55,6 +55,26 @@ export interface GenerationSpec {
  */
 export const PROVISIONAL_JOURNEYMAN_HUMAN_AGE = { min: 26, max: 33 } as const;
 
+/** The M1.1 13th stat (progression.md sys-fighters amendment). */
+export const STAMINA = 'stamina' as StatId;
+
+/**
+ * Stamina cap (sta-001): clamp(round(P × 20 + classOffset + 100 × race tendency + capOffset + jitter), 200, 2000),
+ * with `jitter100` uniform in ±levels.json stamina.jitterPoints × 100 at generation (the cap offset is added here).
+ */
+export function staminaCap100(content: ContentDB, classId: string, raceId: string, potentialRoll: number, jitter100: number): number {
+  const dev = content.development;
+  const race = content.races.require(raceId);
+  const tendCap = dev.scale.raceTendencyCapPerStat;
+  const tend = (race.statTendencies as Record<string, number>)[STAMINA] ?? 0;
+  const tend100 = roundN((tend > tendCap ? tendCap : tend < -tendCap ? -tendCap : tend) * 100);
+  const offset = tables(content).classOffset100.get(classId)?.[STAMINA] ?? 0;
+  const raw = roundN(potentialRoll * 20 + offset + tend100 + roundN(content.levels.stamina.capOffsetPoints * 100) + jitter100);
+  const lo = dev.scale.capMin * 100;
+  const hi = dev.scale.capMax * 100;
+  return raw < lo ? lo : raw > hi ? hi : raw;
+}
+
 export function debutRange(race: RaceDef, content: ContentDB): { min: number; max: number } {
   const floor = content.development.time.debutAgeFloor;
   const min = Math.max(floor, race.debutAge.min);
@@ -115,11 +135,15 @@ export function createFighterOn(draft: GameState, spec: GenerationSpec, content:
   // 4. pace
   const pace = gen('pace').weighted(dev.pace.levels, (l) => bp(l.weight));
 
-  // 5. caps: P × 20 + class offset + race tendency + jitter, clamped
+  // 5. caps: P × 20 + class offset + race tendency + jitter, clamped. M1.1 Stamina (levels.json stamina):
+  //    + capOffsetPoints and a wider ±jitterPoints (it is the last stat, so the other draws are unchanged).
   const jitterMax = roundN(dev.potential.capJitterPoints * 100);
   const jRng = gen('caps');
   const jitter: Record<string, number> = {};
-  for (const sid of t.statIds) jitter[sid] = jRng.int(-jitterMax, jitterMax);
+  for (const sid of t.statIds) {
+    const j = sid === STAMINA ? roundN(content.levels.stamina.jitterPoints * 100) : jitterMax;
+    jitter[sid] = jRng.int(-j, j) + (sid === STAMINA ? roundN(content.levels.stamina.capOffsetPoints * 100) : 0);
+  }
   const tendencyCap = dev.scale.raceTendencyCapPerStat;
   const offsets = t.classOffset100.get(klass.id) ?? {};
   const capsFor = (p: number): Record<StatId, number> => {
