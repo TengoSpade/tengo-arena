@@ -120,7 +120,9 @@ function classOffsets(content: ContentDB, k: ClassDef, weightsBp: Record<string,
   const emphasis = k.statEmphasis as Record<string, number> | undefined | null;
   if (emphasis) {
     for (const id of statIds) {
-      const eBp = bp(emphasis[id] ?? 1);
+      // M1.1: a class without statEmphasis.stamina falls back to levels.json stamina.classEmphasisFallback by affinity group.
+      const fallback = id === 'stamina' ? (content.levels.stamina.classEmphasisFallback as Record<string, number>)[k.affinityGroup] : undefined;
+      const eBp = bp(emphasis[id] ?? fallback ?? 1);
       const raw = Math.trunc((per100 * (eBp - BP)) / BP);
       off[id] = raw < min100 ? min100 : raw > max100 ? max100 : raw;
     }

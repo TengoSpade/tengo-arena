@@ -1,15 +1,19 @@
 /**
- * Seeded 20-season population runs (05 §9.2 WP2 acceptance) against
- * development.json soakTargets. Bands are read from content, never typed here.
+ * Seeded 20-season population runs (05 §9.2 WP2, M1.1 WP-B acceptance) against
+ * development.json soakTargets and levels.json soakTargets. Bands are read from
+ * content, never typed here. M1.1: matches are played round by round through the
+ * real lifecycle hooks (./squad-match.ts), with 5 + 2 squads, Freshness, bench XP
+ * and level-ups with auto-pick.
  */
 import { describe, expect, it } from 'vitest';
 import { PHYSICAL_STAT_IDS } from '../content';
 import type { Fighter } from '../model';
 import { fixtureContent } from '../testkit';
-import { runPopulation, type PopulationReport } from './population';
+import { runPopulation, type LevelSample, type PopulationReport } from './population';
 
 const content = fixtureContent();
 const targets = content.development.soakTargets;
+const levelTargets = content.levels.soakTargets;
 const SEASONS = 20;
 const FROM = 3; // soakTargets._doc: measured from season 3
 
@@ -69,8 +73,11 @@ describe('20-season population without matches (usage at the floor)', () => {
     // Mental stats hold until human-age 60, physical ones fall from 31: the non-elf survivors are mostly mental classes.
     expect(others.filter((f) => !physicallyWeighted(f)).length).toBeGreaterThanOrEqual(Math.ceil(others.length * 0.75));
   });
-  it('without rounds started nobody develops (D-A): world-gen clocks never move', () => {
-    for (const f of Object.values(report.finalState.fighters)) expect(f.career.xpTotal).toBe(0);
+  it('without matches there is no XP (no round XP, no bench XP) and nobody levels: trained values never move', () => {
+    for (const f of Object.values(report.finalState.fighters)) {
+      expect(f.career.xpTotal).toBe(0);
+      expect(f.career.levelsGained).toBe(0);
+    }
   });
   it('is deterministic for a seed', () => {
     const again = runPopulation({ seed: 'population-1', seasons: 4, content });
@@ -80,7 +87,8 @@ describe('20-season population without matches (usage at the floor)', () => {
 });
 
 describe('20-season population with synthetic matches', () => {
-  const report = runPopulation({ seed: 'population-2', seasons: SEASONS, content, matches: true });
+  const SEED = 'population-3';
+  const report = runPopulation({ seed: SEED, seasons: SEASONS, content, matches: true });
 
   it('stays inside the age and population bands', () => {
     checkAgeAndPopulation(report);
@@ -123,8 +131,52 @@ describe('20-season population with synthetic matches', () => {
     const at = (pick: (f: Fighter) => boolean) => median(retired.filter(pick).map((f) => humanAge(f, f.history[f.history.length - 1]!.age)));
     expect(at((f) => !physicallyWeighted(f)) - at(physicallyWeighted)).toBeGreaterThanOrEqual(4);
   });
+  it('levels a season by human-age (starters, >= 10 matches) are inside levels.json soakTargets', () => {
+    const starters = report.levelSamples.filter((x) => x.matches >= 10);
+    const cohorts: Record<string, (x: LevelSample) => boolean> = {
+      '18-20 potential>=70': (x) => x.humanAge >= 18 && x.humanAge < 21 && x.potential >= 70,
+      '21-23': (x) => x.humanAge >= 21 && x.humanAge < 24,
+      '24-26 potential 50-65': (x) => x.humanAge >= 24 && x.humanAge < 27 && x.potential >= 50 && x.potential <= 65,
+      '27-30': (x) => x.humanAge >= 27 && x.humanAge < 31,
+      '31-34': (x) => x.humanAge >= 31 && x.humanAge < 35,
+      '35+': (x) => x.humanAge >= 35,
+    };
+    for (const [key, band] of Object.entries(levelTargets.starterLevelsPerSeasonByHumanAge)) {
+      const pick = cohorts[key];
+      expect(pick, key).toBeDefined();
+      const rows = starters.filter(pick!);
+      expect(rows.length, key).toBeGreaterThanOrEqual(5);
+      const mean = rows.reduce((s, x) => s + x.levels, 0) / rows.length;
+      expect(inBand(mean, band), `${key}: ${mean.toFixed(2)} levels a season`).toBe(true);
+    }
+    // The owner's calibration: a mid-age, mid-potential starter levels about every 5 matches played.
+    const mid = starters.filter(cohorts['24-26 potential 50-65']!);
+    const perLevel = mid.reduce((s, x) => s + x.matches, 0) / mid.reduce((s, x) => s + x.levels, 0);
+    expect(inBand(perLevel, levelTargets.matchesPerLevelMidCohort), `${perLevel.toFixed(2)} matches per level`).toBe(true);
+    expect(inBand(median(starters.map((x) => x.stamina)), levelTargets.starterStaminaMedian)).toBe(true);
+  });
+  it('Tired and Spent round starts stay under the AI caps; skills and trait offers are taken', () => {
+    expect(report.tiredRoundStarts / report.roundStarts).toBeLessThanOrEqual(levelTargets.aiTiredRoundStartShareMax);
+    expect(report.spentRoundStarts / report.roundStarts).toBeLessThanOrEqual(levelTargets.aiSpentRoundStartShareMax);
+    const picks = report.levelSamples.flatMap((x) => x.picks);
+    expect(picks.filter((k) => k === 'rank').length).toBeGreaterThan(0);
+    expect(picks.filter((k) => k === 'perk').length).toBeGreaterThan(0);
+    expect(report.levelSamples.reduce((s, x) => s + x.trait, 0)).toBeGreaterThan(0);
+  });
+  it('the bench levels at about a third to a half of a starter of the same age (T004)', () => {
+    const ratio = (lo: number, hi: number) => {
+      const band = report.levelSamples.filter((x) => x.humanAge >= lo && x.humanAge < hi);
+      const mean = (rows: LevelSample[]) => rows.reduce((s, x) => s + x.levels, 0) / Math.max(1, rows.length);
+      return mean(band.filter((x) => x.matches <= 2)) / mean(band.filter((x) => x.matches >= 10));
+    };
+    for (const [lo, hi] of [[21, 24], [24, 27], [27, 31]] as const) {
+      const r = ratio(lo, hi);
+      expect(r, `bench/starter ${lo}-${hi - 1}: ${r.toFixed(3)}`).toBeGreaterThanOrEqual(levelTargets.benchLevelsToStarterLevelsRatio[0]);
+      expect(r).toBeLessThanOrEqual(levelTargets.benchLevelsToStarterLevelsRatio[1]);
+    }
+  });
   it('dev-007: training emphasis switched off equals everyone Balanced, bit for bit, over 20 seasons', () => {
-    const off = runPopulation({ seed: 'population-2', seasons: SEASONS, content, matches: true, trainingEmphasis: false });
+    const off = runPopulation({ seed: SEED, seasons: SEASONS, content, matches: true, trainingEmphasis: false });
     const strip = (r: PopulationReport) => JSON.stringify({ ...r.finalState, options: null });
     expect(strip(off)).toBe(strip(report));
   }, 120_000);

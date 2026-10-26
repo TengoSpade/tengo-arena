@@ -1,7 +1,9 @@
 /**
  * Lineup lock (captain strip, Snubbed, Passed Over, Losing the Room) and the
  * weekly lifecycle step 3 (injury and status countdown, emphasis weeks,
- * matchweeks at club and as captain, Wore the Armband, captain vacancy).
+ * matchweeks at club and as captain, Wore the Armband, captain vacancy, and
+ * M1.1 Freshness recovery: rest for every fighter who started no round this
+ * week, 80% for an unused squad reserve; +50 × age a preseason week).
  */
 import type { ContentDB } from '../content';
 import { idNumber, type Club, type ClubId, type Fighter, type FighterId, type GameState, type NewsId } from '../model';
@@ -20,6 +22,9 @@ import {
 import { pushNews } from './news';
 import { fighterHumanAge100, ratingOf } from './stats';
 import { tables } from './tables';
+import { freshness10Of, preseasonRest10, rest10, setFreshness10 } from './freshness';
+import { freshnessOf } from './levels';
+import { weekParticipation } from './progression';
 
 export const SNUBBED = 'snubbed';
 export const PASSED_OVER = 'passed_over';
@@ -60,7 +65,8 @@ export function lockLineup(draft: GameState, clubId: ClubId, content: ContentDB)
   if (!club) return [];
   const news: NewsId[] = [];
   const t = now(draft);
-  const fielded = new Set<string>(club.lineup.fighters.map((e) => e.fighterId));
+  // M1.1: "fielded" = started a round or named a match-squad reserve (development.json losingTheRoom.fieldedMeans).
+  const fielded = new Set<string>([...club.lineup.fighters.map((e) => e.fighterId), ...(club.lineup.reserves ?? [])]);
 
   // Passed Over clears when the fighter is made vice-captain.
   const vice = club.viceCaptainId ? draft.fighters[club.viceCaptainId] : undefined;
@@ -81,6 +87,8 @@ export function lockLineup(draft: GameState, clubId: ClubId, content: ContentDB)
     if (fielded.has(captain.id)) {
       clearStatus(captain, LOSING_THE_ROOM);
       club.captainNotFieldedStreak = 0;
+    } else if (isFitFighter(captain) && freshnessOf(captain) < content.development.captaincy.losingTheRoom.freshnessRestExemptBelow) {
+      // A rest (cap-011): a tired captain left out of the squad neither extends nor resets the count.
     } else if (isFitFighter(captain)) {
       if (club.captainNotFieldedStreak >= threshold && !hasStatus(captain, LOSING_THE_ROOM)) {
         setStatus(captain, LOSING_THE_ROOM, null, t);
@@ -226,9 +234,17 @@ export function weekly(draft: GameState, content: ContentDB): NewsId[] {
   const matchweek = isMatchweek(draft, content);
   const trainingOn = content.development.training.enabled && draft.options.trainingEmphasis;
   const fighters = Object.values(draft.fighters).sort((a, b) => idNumber(a.id) - idNumber(b.id) || (a.id < b.id ? -1 : 1));
+  const preseason = draft.calendar.phase === 'preseason';
+  const played = matchweek ? weekParticipation(draft) : null;
 
   for (const f of fighters) {
     if (f.status === 'retired') continue;
+    // Freshness recovery (sys-freshness): before the injury countdown, from this week's results.
+    if (preseason) setFreshness10(f, freshness10Of(f) + preseasonRest10(f, content));
+    else if (played && !played.started.has(f.id)) {
+      setFreshness10(f, freshness10Of(f) + rest10(f, content, played.reserves.has(f.id)));
+      f.season.restWeeks += 1;
+    }
     // Injury countdown (not the week the injury happened; career-ending injuries never count down).
     if (f.injury && f.injury.weeksOut > 0 && !isCareerEnded(f)) {
       const fresh = f.injury.since.season === t.season && f.injury.since.weekIndex === t.weekIndex;

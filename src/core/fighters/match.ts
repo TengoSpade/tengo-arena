@@ -21,6 +21,7 @@ import {
   type FighterId,
   type FighterMatchStats,
   type FightFighterInput,
+  type FixtureId,
   type GameState,
   type MatchResult,
   type NewsId,
@@ -214,6 +215,8 @@ export function applyMatch(draft: GameState, result: MatchResult, content: Conte
     }
     out.xp[fid] = xp;
     f.season.xp += xp;
+    f.season.roundXp += xp;
+    f.xpIntoLevel += xp;
     f.season.roundsStarted += n;
     f.season.matchesStarted += 1;
     f.career.matches += 1;
@@ -238,19 +241,29 @@ export function applyMatch(draft: GameState, result: MatchResult, content: Conte
       out.newsIds.push(pushNews(draft, { key: c.change === 'skipped' ? 'fighter.trait_skipped' : `fighter.trait_${c.change}`, clubId: f.clubId, fighterId: fid, params: { traitId: c.traitId } }));
     }
 
-    if (injury) out.newsIds.push(...applyInjury(draft, f, injury, facts[injury.round - 1]!, { atRisk, seriousMatch, result, since }, content, out));
+    if (injury) out.newsIds.push(...applyInjury(draft, f, injury, facts[injury.round - 1]!, { atRisk, seriousMatch, fixtureId: result.fixtureId, season: result.season, since }, content, out));
   }
   return out;
 }
 
-function applyInjury(
+export interface InjuryContext {
+  atRisk: boolean;
+  /** P(serious injury this match) in bp, for the career-ending per-match cap. */
+  seriousMatch: number;
+  fixtureId: FixtureId;
+  season: number;
+  since: { season: number; weekIndex: number };
+}
+
+/** Apply a rolled injury (weeks out, Still tender, scar, Pain-Tempered, career-ending, Captain Departed). Shared by the M1 match path and the M1.1 round hook. */
+export function applyInjury(
   draft: GameState,
   f: Fighter,
   injury: { round: number; severity: Severity; rng: Rng },
-  facts: RoundFacts,
-  ctx: { atRisk: boolean; seriousMatch: number; result: MatchResult; since: { season: number; weekIndex: number } },
+  facts: { byFighterId: FighterId | null; exposure: RoundExposure },
+  ctx: InjuryContext,
   content: ContentDB,
-  out: MatchLifecycleResult,
+  out: { injuries: MatchInjury[] },
 ): NewsId[] {
   const news: NewsId[] = [];
   const root = draft.rng.root;
@@ -264,7 +277,7 @@ function applyInjury(
   f.injury = {
     severity,
     weeksOut,
-    fixtureId: ctx.result.fixtureId,
+    fixtureId: ctx.fixtureId,
     round: injury.round,
     causeFighterId: facts.byFighterId,
     damageBp: facts.exposure.damageRatioBp,
@@ -273,7 +286,7 @@ function applyInjury(
   };
   f.season.injuries += 1;
   out.injuries.push({ fighterId: f.id, severity, weeksOut });
-  news.push(pushNews(draft, { key: 'fighter.injured', clubId: f.clubId, fighterId: f.id, fixtureId: ctx.result.fixtureId, params: { severity, weeksOut, round: injury.round }, importance: 'urgent' }));
+  news.push(pushNews(draft, { key: 'fighter.injured', clubId: f.clubId, fighterId: f.id, fixtureId: ctx.fixtureId, params: { severity, weeksOut, round: injury.round }, importance: 'urgent' }));
 
   if (severity === 'moderate' || severity === 'serious') {
     f.statuses = f.statuses.filter((s) => s.id !== STILL_TENDER);
@@ -285,13 +298,13 @@ function applyInjury(
   if (scarRng.chanceBp(scarChanceBp(f, severity, content))) {
     const scar = pickScar(scarRng, f, content);
     if (scar) {
-      const changes = gainTrait(f, scar, 'scar', ctx.result.season, content, root);
+      const changes = gainTrait(f, scar, 'scar', ctx.season, content, root);
       const gained = changes.some((c) => c.traitId === scar && c.change === 'gained');
       for (const c of changes) {
         news.push(pushNews(draft, { key: c.change === 'skipped' ? 'fighter.trait_skipped' : c.traitId === scar ? 'fighter.scarred' : `fighter.trait_${c.change}`, clubId: f.clubId, fighterId: f.id, params: { traitId: c.traitId } }));
       }
       if (gained && content.traits.has(EVENT_TRAIT_IDS.painTempered) && scarRng.chanceBp(bp(content.development.injury.scar.painTemperedChance))) {
-        for (const c of gainTrait(f, EVENT_TRAIT_IDS.painTempered, 'event', ctx.result.season, content, root)) {
+        for (const c of gainTrait(f, EVENT_TRAIT_IDS.painTempered, 'event', ctx.season, content, root)) {
           news.push(pushNews(draft, { key: c.change === 'skipped' ? 'fighter.trait_skipped' : `fighter.trait_${c.change}`, clubId: f.clubId, fighterId: f.id, params: { traitId: c.traitId } }));
         }
       }
@@ -299,7 +312,7 @@ function applyInjury(
   }
 
   if (careerEnded) {
-    news.push(pushNews(draft, { key: 'fighter.career_ended', clubId: f.clubId, fighterId: f.id, fixtureId: ctx.result.fixtureId, importance: 'urgent' }));
+    news.push(pushNews(draft, { key: 'fighter.career_ended', clubId: f.clubId, fighterId: f.id, fixtureId: ctx.fixtureId, importance: 'urgent' }));
     const club = f.clubId ? draft.clubs[f.clubId] : undefined;
     if (club && club.captainId === f.id) news.push(...captainLeft(draft, club.id, content));
   }

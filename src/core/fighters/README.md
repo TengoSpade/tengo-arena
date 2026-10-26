@@ -1,6 +1,6 @@
 # core/fighters
 
-**Owner:** WP2 (fighters). **Status:** implemented (M1.2). Every function of the phase-B contract in `index.ts` is implemented; additive exports are listed at the bottom of `index.ts`. Rules: 03 §3.2 (sys-races, sys-fighters, sys-youth-intake, sys-development, sys-injury, sys-traits, sys-captaincy, sys-chemistry); numbers: `content/<theme>/{races,traits,names,development}.json`.
+**Owner:** WP2 (fighters); M1.1 WP-B. **Status:** M1 implemented; M1.1 (levels, offers, auto-pick, bench XP, Stamina, Freshness) implemented, see "M1.1" below. Every function of the phase-B contract in `index.ts` is implemented; additive exports are listed at the bottom of `index.ts`. Rules: 03 §3.2 (sys-races, sys-fighters, sys-youth-intake, sys-development, sys-injury, sys-traits, sys-captaincy, sys-chemistry); numbers: `content/<theme>/{races,traits,names,development}.json`.
 
 ## Age curves per race (O11, D-B)
 
@@ -44,7 +44,9 @@ Every age rule reads **human-age** = age × 80 ÷ lifespan; per-season rates are
 | `development.ts`, `season.ts`, `retirement.ts` | season-end development and wear, mentoring, trait checks, retirements, recovery, rookies, final seasons, trend |
 | `captaincy.ts`, `weekly.ts` | CQ, grades, lineup captain, chemistry, lineup lock (Snubbed, Passed Over, Losing the Room), weekly step |
 | `invariants.ts` | lifecycle content checks the shared validator lacks (O11 injury order, debut floor, roll-table share) |
-| `population.ts`, `testing.ts` | test tooling: seeded multi-season population harness, MatchResult builders (not exported from `index.ts`) |
+| `levels.ts` | M1.1: initial level, XP per level, mentoring, Freshness reads, the v2 -> v3 migration (contracts phase) |
+| `progression.ts`, `offers.ts`, `freshness.ts` | M1.1: round hooks, match-end progression, bench XP, level-up queue and resolution; offer generation and auto-pick; Freshness drain, rest and perk lifecycle effects |
+| `population.ts`, `squad-match.ts`, `testing.ts` | test tooling: seeded multi-season population harness, a round-by-round squad match through the hooks, MatchResult builders (not exported from `index.ts`) |
 
 ## Decisions (for the architect to merge as `tech-` entries)
 
@@ -108,3 +110,17 @@ Every age rule reads **human-age** = age × 80 ÷ lifespan; per-season rates are
 - **World-generation veterans** get a career line that adds up: `matches = round(roundsStarted × 2 / (bestOf + 2))`, `roundsWon = roundsStarted / 2`, and `debutSeason = 1 − proSeasons` (so they are not flagged as first-season fighters).
 - **Titles.** At the season-end development step every fighter on a Reckoning champion's roster gains `career.titles + 1`.
 - **Durability and decline (owner rule: orcs and dwarves live shorter but are more durable).** Orc injury `chanceMult` 0.85 → 0.75, `recoveryMult` 0.85 → 0.8, `scarMult` 1 → 0.9 (races.json). Physical decline per human-year softened to 0.2 (31) … 0.7 (41) … 1.0 (47+), so a human at 42 keeps about 55-65% of a 11-13 point physical attribute; the D-T rating-drop hazard was moved down to match (physical classes still retire in their late 30s, mentally weighted ones in their 40s).
+
+## M1.1 (WP-B; progression.md, combat-skills.md eligibility)
+
+**What changed.** Effective stats read `train100` (the clocks are frozen after generation). Growth is in-season level-ups: round XP per round (`xpAfterRound`), bench XP at match end (⅓ of one lineup slot of the club's match XP, own trait XP multipliers, injured 0), level checks at match end only (at most 2 per match), offers of 3 (every 3rd level one skill, every 9th two: one rank step and one perk; 12.5% trait offers), a queue of 3 (the oldest auto-resolves), AI and auto fighters resolve at once. Season-end step 6 is Aging: pending level-ups auto-resolve, wear (Stamina is physical), trait checks, retirement usage = round XP ÷ 360, age +1, xpNeeded recomputed. Freshness drains per round played (`freshnessAfterRound`), recovers with weekly rest (80% for an unused squad reserve), resets at season end; Second Breath, Campaign Legs and Banner Voice apply. Injuries are immediate (`injuriesAfterRound`, Freshness multiplier at the round start). Losing the Room: a squad reserve counts as fielded and a tired captain's rest is exempt. Stamina: +2.5 cap offset and a ±3 jitter at generation (the other stats' draws are unchanged).
+
+**Decisions (tech-, for the architect).**
+1. Hook order assumed: freshnessAfterRound → xpAfterRound → injuriesAfterRound. The injury roll reads the round-start Freshness from `ms.roundLineups` (record it before the hooks); without it, the value before this round's drain is rebuilt.
+2. Round XP is committed per round (season XP, round XP, the bar, career XP); career and match counters, Still tender, Green Nerves and Title-Tested at match end (`matchEndProgression`). The M1 whole-match path (`applyMatchLifecycle`) also adds round XP to the bar and then runs bench XP and level-ups, so levels work before WP-C switches.
+3. `autoPickChoice` takes an optional 5th argument (captain or vice, the fighter's preset); without it the fighter reads as no captain with his class default preset. Option order in an offer: stats first, then skills.
+4. `trend` is retired: it returns 'holding' and reads nothing (callers to be dropped by WP-C / WP-D). No reader of the six deferred `development.json` keys is left in core/fighters.
+5. Weekly rest reads this week's results (`state.results`, week and season) to know who started a round and who was an unused reserve.
+6. A still_tender set during a match counts from the next match (its `since` is the match week).
+
+**Calibration (fixture content, seed population-3, seasons 3-20, starters = 10+ matches).** Levels a season by human-age: 18-20 P ≥ 70 5.2 · 21-23 3.6 · 24-26 P 50-65 2.5 · 27-30 2.2 · 31-34 1.4 · 35+ 0.9 (all inside levels.json bands); mid cohort 4.5 matches per level (lvl-001: 155 XP ÷ 32 = 4.8); starter distribution 0: 7% · 1: 33% · 2: 33% · 3: 18% · 4: 6% · 5+: 3% (mean 1.9). Bench ÷ starter levels within an age band 0.39-0.42. Stamina: 16 starts 10 typical rounds at ≥ 60 (4 matches), 6 starts 5 (2 matches) (frs-004); starter Stamina median 12. Tired / Spent round starts 20% / 7%; swaps 0.5 a match.
