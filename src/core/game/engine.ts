@@ -13,7 +13,9 @@ import type { GamePorts } from './ports';
 import { processSeasonEnd, type SeasonEndOutcome } from './season-end';
 import { newsSince } from './shared';
 import { captaincyPreview, fighterView, freeAgents, getBlockers, releasePreview, roster, suggestLineup, type CaptaincyPreview, type FighterView, type ReleasePreview } from './views';
-import { processWeek, type WeekOutcome } from './week';
+import { processWeek, type LiveWeekOutcome, type WeekOutcome } from './week';
+import { advanceLoggedWith, advanceWith, betweenRoundViewWith, levelUpViewWith, type AdvanceOutcome, type LevelUpView } from './live';
+import type { BetweenRoundView } from './orchestrator';
 import { createWorld, type NewGameParams } from './world';
 import type { OfferResponse, NewsId } from '../model';
 
@@ -42,6 +44,12 @@ export interface GameEngine {
   suggestLineup(state: GameState, clubId: ClubId, content: ContentDB): Command;
   releasePreview(state: GameState, clubId: ClubId, fighterId: FighterId, content: ContentDB): ReleasePreview | null;
   captaincyPreview(state: GameState, clubId: ClubId, captainId: FighterId | null, viceCaptainId: FighterId | null, content: ContentDB): CaptaincyPreview | null;
+  // ---- M1.1 ----
+  /** Continue: the week, or the next pause of the player's match (05 M1.1 addendum). */
+  advance(state: GameState, content: ContentDB): Result<AdvanceOutcome, EngineError>;
+  advanceLogged(state: GameState, content: ContentDB): Result<LiveWeekOutcome, EngineError>;
+  betweenRoundView(state: GameState, content: ContentDB): BetweenRoundView | null;
+  levelUpView(state: GameState, fighterId: FighterId, content: ContentDB): LevelUpView | null;
 }
 
 export function createGameEngine(ports: GamePorts): GameEngine {
@@ -87,5 +95,9 @@ export function createGameEngine(ports: GamePorts): GameEngine {
     suggestLineup: (state, clubId, content) => suggestLineup(ports, state, clubId, content),
     releasePreview: (state, clubId, fighterId, content) => releasePreview(ports, state, clubId, fighterId, content),
     captaincyPreview: (state, clubId, captainId, viceCaptainId, content) => captaincyPreview(ports, state, clubId, captainId, viceCaptainId, content),
+    advance: (state, content) => withDerivedMemo(() => advanceWith(ports, state, content)),
+    advanceLogged: (state, content) => withDerivedMemo(() => advanceLoggedWith(ports, state, content)),
+    betweenRoundView: (state, content) => betweenRoundViewWith(ports, state, content),
+    levelUpView: (state, fighterId, content) => levelUpViewWith(ports, state, fighterId, content),
   };
 }

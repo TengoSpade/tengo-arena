@@ -30,12 +30,14 @@ import type { EngineError, Result } from '../util';
 import { createGameEngine, type CommandOutcome } from './engine';
 import { realGamePorts } from './ports';
 import type { CaptaincyPreview, FighterView, ReleasePreview } from './views';
+import type { AdvanceOutcome, LevelUpView } from './live';
+import type { BetweenRoundView } from './orchestrator';
 import type { NewGameParams } from './world';
 
 export { createGameEngine } from './engine';
 export type { CommandOutcome, GameEngine } from './engine';
 export type { CaptaincyPick, CaptaincyPreview, FighterView, ReleasePreview } from './views';
-export type { DetailedMatchReport, FighterRuleDetail } from './match';
+export type { DetailedMatchReport, FighterRuleDetail, MatchTimeline, MatchTimelineFighter } from './match';
 export type { NewGameParams } from './world';
 export type { AiRejection, PhaseLog } from './week';
 export { realGamePorts, aiPortsOf } from './ports';
@@ -133,5 +135,25 @@ export { developmentSummary } from './views';
 
 export { applyBetweenRound, autoSwapDecisions, betweenRounds, checkSwaps, finishMatch, playMatchAuto, playRound, roundInputOf, startMatch } from './orchestrator';
 export type { BetweenRoundSideView, BetweenRoundView, LockedSquads, MatchSide, SwapCheck } from './orchestrator';
-export { advance, betweenRoundView, levelUpView } from './live';
 export type { AdvanceOutcome, LevelUpOptionView, LevelUpView } from './live';
+export type { LiveWeekOutcome } from './week';
+
+/**
+ * Continue (M1.1): with no live match, process the week; the player's match is played round by round and
+ * pauses at a between-round step per Club.pauseBetweenRounds (state.liveMatch set, `pause` the screen).
+ * With a live match, play on from the pending step (the player's match.swap decisions, else the
+ * auto-swap suggestions). `week` is the report once the whole week has run. advanceWeek never pauses.
+ */
+export function advance(state: GameState, content: ContentDB): Result<AdvanceOutcome, EngineError> {
+  return engine.advance(state, content);
+}
+
+/** The between-round screen of the player's live match, or null when no match is waiting. */
+export function betweenRoundView(state: GameState, content: ContentDB): BetweenRoundView | null {
+  return engine.betweenRoundView(state, content);
+}
+
+/** The level-up dialog of one fighter: his pending offers (oldest first), stat and rating after each stat pick, the auto-pick. Null when none is pending. */
+export function levelUpView(state: GameState, fighterId: FighterId, content: ContentDB): LevelUpView | null {
+  return engine.levelUpView(state, fighterId, content);
+}

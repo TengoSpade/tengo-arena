@@ -18,14 +18,19 @@ import type {
   MatchInput,
   MatchReport,
   MatchResult,
+  BetweenRoundRecord,
+  MatchSquad,
   NewsItem,
   ReportEvent,
+  RoundLineups,
   RuleSkipReason,
   SideInput,
+  SwapReason,
 } from '../model';
 import { STREAM, deriveSeed } from '../rng';
 import { clamp, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
+import { roundInputOf } from './rounds';
 import { GAME_NEWS_KEYS, addNews, defaultTactics, fail, onRoster } from './shared';
 
 export function matchSeed(state: GameState, fixtureId: FixtureId): string {
@@ -42,6 +47,48 @@ export function eligibleEntries(ports: GamePorts, state: GameState, club: Club):
   });
 }
 
+export function matchTypeOf(fixture: Pick<Fixture, 'stage'>): 'league' | 'tournament' {
+  return fixture.stage === 'league' ? 'league' : 'tournament';
+}
+
+/**
+ * One fighter's fight input at the lineup lock (starters, squad reserves, and
+ * emergency entrants when they enter): effective stats with the side's lock
+ * chemistry (03 sys-chemistry: entering fighters get the same composure
+ * modifier), CQ (`cq`: the lead's cqForFight, else his own), rating, tactics,
+ * and the M1.1 ability ranks and perks (only when not the defaults, so M1
+ * inputs keep their shape).
+ */
+export function fightInputOf(
+  ports: GamePorts,
+  state: GameState,
+  club: Club,
+  fighterId: FighterId,
+  row: LineupEntry['row'],
+  slot: number,
+  ctx: { matchType: 'league' | 'tournament'; chemistry: number; acting: boolean; cq: number | null },
+  content: ContentDB,
+): FightFighterInput {
+  const f = state.fighters[fighterId]!;
+  const cq = ctx.cq ?? ports.fighters.captaincy(state, f.id, club.id, content).cq;
+  const input: FightFighterInput = {
+    fighterId: f.id,
+    classId: f.classId,
+    raceId: f.raceId,
+    row,
+    slot,
+    stats: ports.fighters.effectiveStats(f, content, { matchType: ctx.matchType, chemistry: ctx.chemistry, actingCaptain: ctx.acting }),
+    captainQuality: clamp(cq, 0, 100),
+    traitIds: f.traits.map((t) => t.id),
+    tactics: club.lineup.tactics[f.id] ?? defaultTactics(content, f),
+    rating: ports.fighters.rating(f, content),
+  };
+  const ranks = f.abilityRanks;
+  if (ranks && (ranks.a1 !== 1 || ranks.a2 !== 1 || ranks.passive !== 1)) input.abilityRanks = { ...ranks };
+  if (f.perkIds && f.perkIds.length > 0) input.perkIds = [...f.perkIds];
+  return input;
+}
+
 function sideInput(
   ports: GamePorts,
   state: GameState,
@@ -56,24 +103,10 @@ function sideInput(
   if (lead === null) throw new RangeError(`${club.id}: empty lineup`);
   // Chemistry: trait terms (the club captain's count double) and the club captain's grade (03 sys-chemistry).
   const chemistry = ports.fighters.lineupChemistry(state, club.id, ids, club.captainId, content);
-  const matchType = fixture.stage === 'league' ? 'league' : 'tournament';
+  const matchType = matchTypeOf(fixture);
   const fighters: FightFighterInput[] = entries.map((e, slot) => {
-    const f = state.fighters[e.fighterId]!;
     const isLead = slot === lead.index;
-    const acting = isLead && !lead.isClubCaptain;
-    const cq = isLead ? lead.cqForFight : ports.fighters.captaincy(state, f.id, club.id, content).cq;
-    return {
-      fighterId: f.id,
-      classId: f.classId,
-      raceId: f.raceId,
-      row: e.row,
-      slot,
-      stats: ports.fighters.effectiveStats(f, content, { matchType, chemistry, actingCaptain: acting }),
-      captainQuality: clamp(cq, 0, 100),
-      traitIds: f.traits.map((t) => t.id),
-      tactics: club.lineup.tactics[f.id] ?? defaultTactics(content, f),
-      rating: ports.fighters.rating(f, content),
-    };
+    return fightInputOf(ports, state, club, e.fighterId, e.row, slot, { matchType, chemistry, acting: isLead && !lead.isClubCaptain, cq: isLead ? lead.cqForFight : null }, content);
   });
   return { clubId: club.id, fighters, captainIndex: lead.index, viceCaptainIndex: lead.viceIndex, chemistry };
 }
@@ -252,8 +285,61 @@ export interface FighterRuleDetail {
   rounds: { round: number; ruleFires: number[]; ruleSkips: Partial<Record<RuleSkipReason, number>>[]; stanceTicks: number }[];
 }
 
-/** MatchReport plus additive detail (assignable to MatchReport). */
-export type DetailedMatchReport = MatchReport & { ruleDetails: FighterRuleDetail[] };
+/** M1.1 squads, per-round lineups and swap lines of a round-by-round match (combat-skills.md "Match report and timeline"). */
+export interface MatchTimeline {
+  squads: { home: MatchSquad; away: MatchSquad };
+  /** Who fought each round: ids by slot, rows, acting captain and vice index, the captain's CQ, Freshness at the round start (Fresh / Tired / Spent tags), entered flags. */
+  rounds: RoundLineups[];
+  /** One per between-round step: both sides' swap lines (out -> in, row, reason player / auto / injury / emergency), the injured, acting captains, Freshness after the step. */
+  steps: BetweenRoundRecord[];
+  emergencyEntrants: FighterId[];
+  /** Every squad member and entrant: rounds started, "entered after round n" (and how), "swapped out after round n", "injured in round n". */
+  fighters: Record<FighterId, MatchTimelineFighter>;
+}
+
+export interface MatchTimelineFighter {
+  side: 'home' | 'away';
+  role: 'starter' | 'reserve' | 'emergency';
+  rounds: number[];
+  enteredAfter: number | null;
+  enteredHow: SwapReason | null;
+  withdrawnAfter: number | null;
+  injuredInRound: number | null;
+}
+
+/** MatchReport plus additive detail (assignable to MatchReport). `timeline` is null for M1 results (whole-match sims). */
+export type DetailedMatchReport = MatchReport & { ruleDetails: FighterRuleDetail[]; timeline: MatchTimeline | null };
+
+function timelineOf(state: GameState, result: MatchResult): MatchTimeline | null {
+  if (!result.squads || !result.roundLineups) return null;
+  const steps = result.betweenRounds ?? [];
+  const emergency = result.emergencyEntrants ?? [];
+  const fighters: Record<FighterId, MatchTimelineFighter> = {};
+  for (const side of ['home', 'away'] as const) {
+    const sq = result.squads[side];
+    const sideEmergency = emergency.filter((id) => result.fighterStats[id]?.clubId === (side === 'home' ? result.homeClubId : result.awayClubId));
+    const all: (readonly [FighterId, MatchTimelineFighter['role']])[] = [...sq.starters.map((id) => [id, 'starter'] as const), ...sq.reserves.map((id) => [id, 'reserve'] as const), ...sideEmergency.map((id) => [id, 'emergency'] as const)];
+    for (const [id, role] of all) {
+      const rounds = result.roundLineups.filter((r) => r[side].fighterIds.includes(id)).map((r) => r.round);
+      let enteredAfter: number | null = null;
+      let enteredHow: SwapReason | null = null;
+      let withdrawnAfter: number | null = null;
+      let injuredInRound: number | null = null;
+      for (const step of steps) {
+        for (const s of step[side]) {
+          if (s.in === id) [enteredAfter, enteredHow] = [step.afterRound, s.reason];
+          if (s.out === id) withdrawnAfter = step.afterRound;
+        }
+        if (step.injured.includes(id)) injuredInRound = step.afterRound;
+      }
+      // Injured in the deciding round: no step follows; the fighter's injury record names the round.
+      const inj = state.fighters[id]?.injury;
+      if (injuredInRound === null && inj && inj.fixtureId === result.fixtureId && inj.round !== null) injuredInRound = inj.round;
+      fighters[id] = { side, role, rounds, enteredAfter, enteredHow, withdrawnAfter, injuredInRound };
+    }
+  }
+  return { squads: result.squads, rounds: result.roundLineups, steps, emergencyEntrants: [...emergency], fighters };
+}
 
 function ruleDetails(logs: readonly FightLog[]): FighterRuleDetail[] {
   const byFighter = new Map<FighterId, FighterRuleDetail>();
@@ -275,13 +361,19 @@ function ruleDetails(logs: readonly FightLog[]): FighterRuleDetail[] {
 export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: FixtureId, content: ContentDB): Result<DetailedMatchReport, EngineError> {
   const result = state.results[fixtureId];
   if (!result) return fail('report.not-played', `Fixture "${fixtureId}" has not been played`);
-  // Re-simulate at 'summary' only when the build matches the one that played it (05 §6).
+  // Re-simulate at 'summary' only when the build matches the one that played it (05 §6). M1.1 results
+  // replay round by round from the record (roundInputOf: no decision policy runs); M1 results as a whole match.
   let logs: FightLog[] | null = null;
   if (result.engineVersion === ports.sim.engineVersion && result.contentHash === content.ref.hash && !ports.league.isCompactedResult(result)) {
     try {
-      const out = ports.sim.simulateMatch(result.input, content, { record: 'summary' });
-      const same = out.rounds.length === result.rounds.length && out.rounds.every((r, i) => r.checksum === result.rounds[i]!.checksum);
-      logs = same && out.logs ? out.logs : null;
+      if (result.roundLineups) {
+        const out = result.rounds.map((r) => ({ r, o: ports.sim.simulateRound(roundInputOf(result, r.round), r.seed, content, { record: 'summary' }) }));
+        logs = out.every(({ r, o }) => o.result.checksum === r.checksum && o.log !== null) ? out.map(({ o }) => o.log!) : null;
+      } else {
+        const out = ports.sim.simulateMatch(result.input, content, { record: 'summary' });
+        const same = out.rounds.length === result.rounds.length && out.rounds.every((r, i) => r.checksum === result.rounds[i]!.checksum);
+        logs = same && out.logs ? out.logs : null;
+      }
     } catch {
       logs = null;
     }
@@ -295,11 +387,10 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
   const home = sideOf(result.input.home);
   const away = sideOf(result.input.away);
   const captains = new Set([home.captainId, away.captainId]);
+  // Round-1 fives first, then reserves and entrants in record order (home, then away).
+  const order = [...home.fighterIds, ...away.fighterIds, ...(Object.keys(result.fighterStats) as FighterId[])];
   const fighters = Object.entries(result.fighterStats)
-    .sort(([a], [b]) => {
-      const order = [...home.fighterIds, ...away.fighterIds];
-      return order.indexOf(a as FighterId) - order.indexOf(b as FighterId);
-    })
+    .sort(([a], [b]) => order.indexOf(a as FighterId) - order.indexOf(b as FighterId))
     .map(([id, stats]) => {
       const fid = id as FighterId;
       const n = stats.ruleFires.length;
@@ -340,5 +431,6 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
     timelineAvailable: logs !== null,
     aftermath: aftermathOf(state, result),
     ruleDetails: logs ? ruleDetails(logs) : [],
+    timeline: timelineOf(state, result),
   });
 }

@@ -26,11 +26,11 @@ describe('runSoak on stand-ins', () => {
   it('reports blocked checks as pending when a module is a stub', () => {
     // Default ports are the real modules; on the fixture content the real sim may still be a stub.
     const ports = createStandInPorts();
-    const stubbed = { ...ports, sim: { ...ports.sim, simulateMatch: () => { throw new NotImplementedError('sim.simulateMatch'); } } };
+    const stubbed = { ...ports, sim: { ...ports.sim, simulateRound: () => { throw new NotImplementedError('sim.simulateRound'); } } };
     const report = runSoak({ seed: 'soak-stub', seasons: 1, content, ports: stubbed });
     expect(report.stub).toBe(true);
     expect(report.checks.every((c) => c.status === 'pending')).toBe(true);
-    expect(report.checks[0]!.detail).toContain('sim.simulateMatch');
+    expect(report.checks[0]!.detail).toContain('sim.simulateRound');
   });
 
   it('fails the checks it could not reach when the engine itself fails', () => {
