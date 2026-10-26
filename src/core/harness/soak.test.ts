@@ -4,7 +4,7 @@ import { asId, type ClubId, type GameState, type SeasonRecord, type TierId } fro
 import { checksumState, createSave, parseSave, saveMetaFor, serializeSave } from '../save';
 import { fixtureContent } from '../testkit';
 import { NotImplementedError, cloneJson } from '../util';
-import { SOAK_CHECKS, dynastyFlags, ledgerMismatches, lineupProblems, overCap, runSoak, scheduleProblems } from './soak';
+import { SOAK_CHECKS, dynastyFlags, freshnessStarts, ledgerMismatches, lineupProblems, overCap, parseCohort, runSoak, scheduleProblems, squadRecordProblems, swapCounts } from './soak';
 
 const content = fixtureContent();
 
@@ -121,5 +121,68 @@ describe('individual checks', () => {
     const b = engine.advanceWeek(parsed.value.envelope.state, content);
     expect(a.ok && b.ok).toBe(true);
     if (a.ok && b.ok) expect(checksumState(b.value.state)).toBe(checksumState(a.value.state));
+  });
+});
+
+describe('M1.1: a match saved between rounds (sw-009) and the squad checks', () => {
+  const engine = createGameEngine(createStandInPorts());
+  function atMw1(seed: string): GameState {
+    const w = engine.createWorld(content, { rootSeed: seed });
+    if (!w.ok) throw new Error(w.error.message);
+    const club = Object.keys(w.value.clubs).sort()[0] as ClubId;
+    const c = engine.applyCommand(w.value, { type: 'club.choose', clubId: club }, content);
+    if (!c.ok) throw new Error(c.error.message);
+    let s = c.value.state;
+    for (let guard = 0; guard < 10 && s.calendar.weekId !== 'MW1'; guard++) {
+      const r = engine.advanceWeek(s, content);
+      if (!r.ok) throw new Error(r.error.message);
+      s = r.value.state;
+    }
+    return s;
+  }
+
+  it('saving on the between-round screen and loading resumes on the same screen with the same results', { timeout: 60_000 }, () => {
+    const r = engine.advance(atMw1('live-save'), content);
+    if (!r.ok) throw new Error(r.error.message);
+    const paused = r.value.state;
+    expect(paused.liveMatch?.phase).toBe('between_rounds');
+    const env = createSave(paused, saveMetaFor(paused, { slotId: 'auto', kind: 'auto', label: 'x', savedAt: '2026-10-26T00:00:00Z', playtimeSec: 0, gameVersion: 't' }), { engineVersion: 1 });
+    const parsed = parseSave(serializeSave(env), content);
+    if (!parsed.ok) throw new Error(`${parsed.error.code}: ${parsed.error.message}`);
+    const loaded = parsed.value.envelope.state;
+    expect(checksumState(loaded)).toBe(checksumState(paused));
+    expect(loaded.liveMatch!.rounds).toEqual(paused.liveMatch!.rounds);
+    expect(loaded.liveMatch!.playerDecisions).toBeNull();
+    expect(engine.betweenRoundView(loaded, content)).toEqual(r.value.pause);
+    const a = engine.advance(paused, content);
+    const b = engine.advance(loaded, content);
+    if (!a.ok || !b.ok) throw new Error('advance failed');
+    expect(checksumState(b.value.state)).toBe(checksumState(a.value.state));
+  });
+
+  it('squadRecordProblems flags a withdrawn fighter who plays again, a sixth fighter and a swap from outside the squad', { timeout: 60_000 }, () => {
+    const s = atMw1('squad-check');
+    const r = engine.advanceWeek(s, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const results = r.value.report.fixtureIds.map((id) => r.value.state.results[id]!);
+    expect(squadRecordProblems(results, content)).toEqual([]);
+    const bad = cloneJson(results[0]!);
+    const rl = bad.roundLineups!;
+    rl[1] = cloneJson(rl[0]!);
+    rl[1].round = 2;
+    const out = rl[0]!.home.fighterIds[0]!;
+    bad.betweenRounds = [{ afterRound: 1, home: [{ out, in: asId('f-99999'), row: 'front', reason: 'auto', costsSwap: true }], away: [], injured: [], actingCaptain: { home: null, away: null }, freshness: {} }];
+    const problems = squadRecordProblems([bad], content);
+    expect(problems.some((p) => p.includes('returned'))).toBe(true);
+    expect(problems.some((p) => p.includes('no reserve'))).toBe(true);
+    expect(swapCounts([bad]).swaps).toBe(1);
+    expect(freshnessStarts(r.value.state, [bad]).starts).toBe(rl.length * 10);
+  });
+
+  it('parseCohort reads the levels.json cohort keys', () => {
+    expect(parseCohort('18-20 potential>=70')).toMatchObject({ minAge: 18, maxAge: 20, potMin: 70, potMax: 999 });
+    expect(parseCohort('24-26 potential 50-65')).toMatchObject({ minAge: 24, maxAge: 26, potMin: 50, potMax: 65 });
+    expect(parseCohort('35+')).toMatchObject({ minAge: 35, maxAge: 999, potMin: 0 });
+    expect(() => parseCohort('young')).toThrow();
   });
 });

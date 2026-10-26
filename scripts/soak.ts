@@ -38,6 +38,7 @@ function portsFor(list: readonly string[]): GamePorts | undefined {
 const determinismSeasons = args.has('determinism-seasons') ? intArg(args, 'determinism-seasons', seasons) : undefined;
 
 const content = loadThemeOrExit(theme);
+const pct = (n: number, d: number): string => `${d ? ((n * 100) / d).toFixed(1) : '0.0'}%`;
 
 console.log(`soak: ${seasons} seasons, seed "${seed}", theme "${theme}"${standIns ? `  [STAND-INS for ${standInList.join(', ')}: not the real modules]` : ''}`);
 const t0 = performance.now();
@@ -54,7 +55,7 @@ const report = runSoak({
     seasonMs.push(now - last);
     last = now;
     console.log(
-      `  season ${String(s.season).padStart(2)}: ${(seasonMs[seasonMs.length - 1]! / 1000).toFixed(2)} s  pop ${s.population} (rostered ${s.rostered}), pool P1 ${s.freeAgentsAtP1}, median human-age ${s.medianHumanAge.toFixed(1)}, retirements ${s.retirements}, rookies ${s.rookies}, solvent ${(s.solventShareBp / 100).toFixed(1)}%, median wage ${s.medianWage}, AI refusals ${s.aiRejections}`,
+      `  season ${String(s.season).padStart(2)}: ${(seasonMs[seasonMs.length - 1]! / 1000).toFixed(2)} s  pop ${s.population} (rostered ${s.rostered}), pool P1 ${s.freeAgentsAtP1}, median human-age ${s.medianHumanAge.toFixed(1)}, retirements ${s.retirements}, rookies ${s.rookies}, solvent ${(s.solventShareBp / 100).toFixed(1)}%, median wage ${s.medianWage}, AI refusals ${s.aiRejections}; Tired ${pct(s.tiredStarts, s.roundStarts)} Spent ${pct(s.spentStarts, s.roundStarts)}, swaps/match ${s.matches ? (s.swaps / s.matches).toFixed(2) : '-'} (forced ${s.forcedSwaps}, emergency ${s.emergencyEntrants}), levels ${s.levels.total} (starters ${s.levels.starters.fighters ? (s.levels.starters.levels / s.levels.starters.fighters).toFixed(2) : '-'}/season)`,
     );
   },
 });

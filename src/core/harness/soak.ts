@@ -1,6 +1,6 @@
 import type { ContentDB } from '../content';
 import { createGameEngine, realGamePorts, type GamePorts } from '../game';
-import type { ClubId, GameState, MatchResult, SeasonRecord } from '../model';
+import type { ClubId, FighterId, GameState, MatchResult, SeasonRecord, StatId } from '../model';
 import { checksumState, createSave, parseSave, saveMetaFor, serializeSave, validateState } from '../save';
 import { type Seed } from '../rng';
 import { NotImplementedError } from '../util';
@@ -56,6 +56,27 @@ export interface SoakSeasonSummary {
   lineupSlots: number;
   aiRejections: number;
   checksum: string;
+  // ---- M1.1 (additive) ----
+  /** Round starts by AI clubs, and those started Tired (40-59) or Spent (< 40). */
+  roundStarts: number;
+  tiredStarts: number;
+  spentStarts: number;
+  /** Round-by-round matches, swaps (both sides), forced ones (injury or emergency), emergency entrants. */
+  matches: number;
+  swaps: number;
+  forcedSwaps: number;
+  emergencyEntrants: number;
+  /** Levels gained this season: starters by levels.json soakTargets cohort, the bench, everyone. */
+  levels: SoakLevelSummary;
+  /** Median effective Stamina of the season's starters (null without the stat). */
+  starterStaminaMedian: number | null;
+}
+
+export interface SoakLevelSummary {
+  cohorts: Record<string, { fighters: number; levels: number; matches: number }>;
+  starters: { fighters: number; levels: number };
+  bench: { fighters: number; levels: number };
+  total: number;
 }
 
 export interface SoakReport {
@@ -87,7 +108,20 @@ export const SOAK_CHECKS: readonly { id: string; description: string }[] = [
   { id: 'schedule-integrity', description: 'Every club plays the configured matches; tournament has 8 clubs and 3 rounds' },
   { id: 'references', description: 'validateState() finds no broken references after every season' },
   { id: 'save-roundtrip', description: 'serialize -> parse -> deep-equal after every season' },
+  // M1.1 (levels.json soakTargets; combat sys-match)
+  { id: 'freshness-rotation', description: 'AI round starts Tired / Spent within levels.json soakTargets' },
+  { id: 'level-ups', description: 'Starter levels per season by human-age, matches per level, bench ratio, starter Stamina within levels.json soakTargets' },
+  { id: 'match-squads', description: 'Squad records legal (5 a side every round, <= 2 swaps, no return); swaps per match within the PROVISIONAL band' },
 ];
+
+/** Swaps per match, both sides (PROVISIONAL: no content band; lifecycle model ~0.5, combat squad-match 0.6-1.4 at harsher Freshness). */
+export const PROVISIONAL_SWAPS_PER_MATCH: readonly [number, number] = [0.1, 1.5];
+/** Starters for the level bands: fighters who started at least this many matches of the season (PROVISIONAL). */
+export const PROVISIONAL_STARTER_MIN_MATCHES = 8;
+/** Bench for the bench ratio: rostered all season, started at most this many matches (PROVISIONAL). */
+export const PROVISIONAL_BENCH_MAX_MATCHES = 3;
+/** Cohorts with fewer fighters than this are reported but not checked. */
+const MIN_COHORT = 8;
 
 /**
  * wage-inflation band: |median wage growth| per season after the warm-up.
@@ -236,6 +270,149 @@ export function ageStats(state: GameState, ports: GamePorts, content: ContentDB)
   };
 }
 
+// ---- M1.1 observations ------------------------------------------------------------------------------------------
+
+/** Round starts of non-player clubs by Freshness label (from the recorded round lineups). */
+export function freshnessStarts(state: GameState, results: readonly MatchResult[]): { starts: number; tired: number; spent: number } {
+  const out = { starts: 0, tired: 0, spent: 0 };
+  for (const r of results) {
+    for (const rl of r.roundLineups ?? []) {
+      for (const side of ['home', 'away'] as const) {
+        const clubId = side === 'home' ? r.homeClubId : r.awayClubId;
+        if (clubId === state.playerClubId) continue;
+        for (const f of rl[side].freshness) {
+          out.starts++;
+          if (f < 40) out.spent++;
+          else if (f < 60) out.tired++;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Swaps per result (both sides), forced (injury or emergency), emergency entrants. */
+export function swapCounts(results: readonly MatchResult[]): { matches: number; swaps: number; forced: number; emergency: number } {
+  const out = { matches: 0, swaps: 0, forced: 0, emergency: 0 };
+  for (const r of results) {
+    if (!r.roundLineups) continue;
+    out.matches++;
+    for (const b of r.betweenRounds ?? []) {
+      for (const s of [...b.home, ...b.away]) {
+        out.swaps++;
+        if (s.reason === 'injury' || s.reason === 'emergency') out.forced++;
+        if (s.reason === 'emergency') out.emergency++;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Integrity of the round-by-round records: 5 distinct fighters a side every
+ * round; at most combat.json maxPerMatch swaps a side (emergency entrants
+ * aside); a swapped-out fighter never plays again; who enters was a squad
+ * reserve (a swap) or an emergency entrant.
+ */
+export function squadRecordProblems(results: readonly MatchResult[], content: ContentDB): string[] {
+  const out: string[] = [];
+  const max = content.combat.match.swaps.maxPerMatch;
+  for (const r of results) {
+    if (!r.roundLineups || !r.squads) continue;
+    for (const side of ['home', 'away'] as const) {
+      const squad = r.squads[side];
+      const out5 = new Set<FighterId>();
+      let swaps = 0;
+      for (const rl of r.roundLineups) {
+        const ids = rl[side].fighterIds;
+        if (ids.length !== 5 || new Set(ids).size !== 5) out.push(`${r.fixtureId} ${side} round ${rl.round}: ${new Set(ids).size} distinct`);
+        for (const id of ids) if (out5.has(id)) out.push(`${r.fixtureId} ${side}: ${id} returned in round ${rl.round}`);
+        for (const b of r.betweenRounds ?? []) {
+          if (b.afterRound !== rl.round) continue;
+          for (const s of b[side]) {
+            out5.add(s.out);
+            if (s.costsSwap) {
+              swaps++;
+              if (!squad.reserves.includes(s.in)) out.push(`${r.fixtureId} ${side}: ${s.in} entered with a swap but is no reserve`);
+            } else if (!(r.emergencyEntrants ?? []).includes(s.in)) out.push(`${r.fixtureId} ${side}: ${s.in} entered without a swap and is no emergency entrant`);
+          }
+        }
+      }
+      if (swaps > max) out.push(`${r.fixtureId} ${side}: ${swaps} swaps`);
+    }
+  }
+  return out;
+}
+
+interface LevelCohort {
+  key: string;
+  minAge: number;
+  maxAge: number;
+  potMin: number;
+  potMax: number;
+}
+
+/** levels.json soakTargets cohort keys: "18-20 potential>=70", "21-23", "24-26 potential 50-65", "35+". */
+export function parseCohort(key: string): LevelCohort {
+  const m = /^(\d+)(?:-(\d+)|\+)(?:\s+potential\s*(?:>=\s*(\d+)|(\d+)-(\d+)))?$/.exec(key.trim());
+  if (!m) throw new RangeError(`soak: unreadable cohort "${key}"`);
+  return {
+    key,
+    minAge: Number(m[1]),
+    maxAge: m[2] !== undefined ? Number(m[2]) : 999,
+    potMin: m[3] !== undefined ? Number(m[3]) : m[4] !== undefined ? Number(m[4]) : 0,
+    potMax: m[5] !== undefined ? Number(m[5]) : 999,
+  };
+}
+
+interface LevelStart {
+  level: number;
+  humanAge: number;
+  potential: number;
+  clubId: ClubId | null;
+}
+
+function levelSnapshot(state: GameState, ports: GamePorts, content: ContentDB): Map<FighterId, LevelStart> {
+  const m = new Map<FighterId, LevelStart>();
+  for (const f of Object.values(state.fighters)) {
+    if (f.status !== 'active') continue;
+    m.set(f.id, { level: f.level, humanAge: Math.floor(ports.fighters.humanAge100(f, content) / 100), potential: ports.fighters.potential(f, content), clubId: f.clubId });
+  }
+  return m;
+}
+
+/** Levels gained over the season (state at phase 'season-end', before the season-end step) by fighters rostered at its start. */
+function levelSummary(state: GameState, start: Map<FighterId, LevelStart>, ports: GamePorts, content: ContentDB): { levels: SoakLevelSummary; stamina: number | null } {
+  const cohorts = Object.keys(content.levels.soakTargets.starterLevelsPerSeasonByHumanAge).map(parseCohort);
+  const levels: SoakLevelSummary = { cohorts: {}, starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 }, total: 0 };
+  for (const c of cohorts) levels.cohorts[c.key] = { fighters: 0, levels: 0, matches: 0 };
+  const stamina: number[] = [];
+  const hasStamina = content.stats.list.some((s) => s.id === 'stamina');
+  for (const [id, s0] of start) {
+    const f = state.fighters[id];
+    if (!f || f.status !== 'active' || f.clubId !== s0.clubId) continue;
+    const gained = Math.max(0, f.level - s0.level);
+    levels.total += gained;
+    const matches = f.season.matchesStarted;
+    if (matches >= PROVISIONAL_STARTER_MIN_MATCHES) {
+      levels.starters.fighters++;
+      levels.starters.levels += gained;
+      if (hasStamina) stamina.push(ports.fighters.effectiveStats(f, content)['stamina' as StatId] ?? 0);
+      for (const c of cohorts) {
+        if (s0.humanAge < c.minAge || s0.humanAge > c.maxAge || s0.potential < c.potMin || s0.potential > c.potMax) continue;
+        const row = levels.cohorts[c.key]!;
+        row.fighters++;
+        row.levels += gained;
+        row.matches += matches;
+      }
+    } else if (matches <= PROVISIONAL_BENCH_MAX_MATCHES) {
+      levels.bench.fighters++;
+      levels.bench.levels += gained;
+    }
+  }
+  return { levels, stamina: stamina.length > 0 ? median(stamina) : null };
+}
+
 // ---- the run ----------------------------------------------------------------------------------------------------
 
 interface RunResult {
@@ -257,6 +434,7 @@ interface Observations {
   solvency: { season: number; shareBp: number }[];
   ages: { season: number; stats: AgeStats }[];
   aiRejections: Record<string, number>;
+  squads: string[];
 }
 
 function notImplementedOf(message: string): string | null {
@@ -270,7 +448,7 @@ function runOnce(options: SoakOptions, seasons: number, observe: boolean): RunRe
   } catch (e) {
     // A stubbed module throws NotImplementedError through the engine; any other throw is an engine bug.
     const message = e instanceof Error ? e.message : String(e);
-    const obs: Observations = { ledger: [], lineups: [], overCap: [], schedule: [], references: [], roundtrip: [], solvency: [], ages: [], aiRejections: {} };
+    const obs: Observations = { ledger: [], lineups: [], overCap: [], schedule: [], references: [], roundtrip: [], solvency: [], ages: [], aiRejections: {}, squads: [] };
     return { summaries: [], checksums: [], final: null, error: message, notImplemented: e instanceof NotImplementedError ? notImplementedOf(message) : null, observations: obs };
   }
 }
@@ -279,7 +457,7 @@ function runOnceUnsafe(options: SoakOptions, seasons: number, observe: boolean):
   const { content } = options;
   const ports = options.ports ?? realGamePorts;
   const engine = createGameEngine(ports);
-  const obs: Observations = { ledger: [], lineups: [], overCap: [], schedule: [], references: [], roundtrip: [], solvency: [], ages: [], aiRejections: {} };
+  const obs: Observations = { ledger: [], lineups: [], overCap: [], schedule: [], references: [], roundtrip: [], solvency: [], ages: [], aiRejections: {}, squads: [] };
   const summaries: SoakSeasonSummary[] = [];
   const checksums: string[] = [];
   const fail = (message: string, state: GameState | null): RunResult => ({ summaries, checksums, final: state, error: message, notImplemented: notImplementedOf(message), observations: obs });
@@ -295,8 +473,12 @@ function runOnceUnsafe(options: SoakOptions, seasons: number, observe: boolean):
     let bladeSlots = 0;
     let slots = 0;
     let rejections = 0;
+    const fresh = { starts: 0, tired: 0, spent: 0 };
+    const swaps = { matches: 0, swaps: 0, forced: 0, emergency: 0 };
+    let levelStart: Map<FighterId, LevelStart> | null = null;
     while (state.calendar.phase !== 'season-end') {
       if (freeAgentsAtP1 < 0) freeAgentsAtP1 = Object.values(state.fighters).filter((f) => f.status === 'free-agent').length;
+      if (observe && levelStart === null) levelStart = levelSnapshot(state, ports, content);
       const r = engine.advanceWeekLogged(state, content);
       if (!r.ok) return fail(`${r.error.code}: ${r.error.message}`, state);
       state = r.value.state;
@@ -306,6 +488,16 @@ function runOnceUnsafe(options: SoakOptions, seasons: number, observe: boolean):
         const results = r.value.report.fixtureIds.map((id) => state.results[id]!).filter(Boolean);
         push(obs.ledger, ledgerMismatches(state).map((m) => `S${state.calendar.season} ${r.value.report.weekId}: ${m}`));
         push(obs.lineups, lineupProblems(state, results));
+        push(obs.squads, squadRecordProblems(results, content));
+        const fr = freshnessStarts(state, results);
+        fresh.starts += fr.starts;
+        fresh.tired += fr.tired;
+        fresh.spent += fr.spent;
+        const sw = swapCounts(results);
+        swaps.matches += sw.matches;
+        swaps.swaps += sw.swaps;
+        swaps.forced += sw.forced;
+        swaps.emergency += sw.emergency;
         push(obs.overCap, overCap(state, content).map((m) => `S${state.calendar.season} ${r.value.report.weekId}: ${m}`));
         for (const res of results) {
           slots += 10;
@@ -319,6 +511,7 @@ function runOnceUnsafe(options: SoakOptions, seasons: number, observe: boolean):
     const season = state.calendar.season;
     let solventShareBp = 0;
     let medianWage = 0;
+    const progression = observe && levelStart ? levelSummary(state, levelStart, ports, content) : null;
     if (observe) {
       push(obs.schedule, scheduleProblems(state, content).map((m) => `S${season}: ${m}`));
       const ai = Object.values(state.clubs).filter((c) => c.id !== state.playerClubId);
@@ -352,6 +545,15 @@ function runOnceUnsafe(options: SoakOptions, seasons: number, observe: boolean):
       lineupSlots: slots,
       aiRejections: rejections,
       checksum,
+      roundStarts: fresh.starts,
+      tiredStarts: fresh.tired,
+      spentStarts: fresh.spent,
+      matches: swaps.matches,
+      swaps: swaps.swaps,
+      forcedSwaps: swaps.forced,
+      emergencyEntrants: swaps.emergency,
+      levels: progression?.levels ?? { cohorts: {}, starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 }, total: 0 },
+      starterStaminaMedian: progression?.stamina ?? null,
     };
     if (observe) {
       const stats = ageStats(state, ports, content);
@@ -462,6 +664,73 @@ function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | nul
   if (needSeasons('references')) set('references', obs.references.length === 0, obs.references.length ? obs.references.slice(0, 3).join('; ') : `validateState clean after ${done} seasons`);
   // save-roundtrip
   if (needSeasons('save-roundtrip')) set('save-roundtrip', obs.roundtrip.length === 0, obs.roundtrip.length ? obs.roundtrip.slice(0, 3).join('; ') : `${done} season-end saves parsed back to identical checksums`);
+
+  // ---- M1.1 ----
+  const lt = content.levels.soakTargets;
+  const pct = (n: number, d: number): string => `${d ? ((n * 100) / d).toFixed(1) : '0.0'}%`;
+  // freshness-rotation (measured seasons)
+  if (needSeasons('freshness-rotation')) {
+    const starts = measured.reduce((n, s) => n + s.roundStarts, 0);
+    const tired = measured.reduce((n, s) => n + s.tiredStarts, 0);
+    const spent = measured.reduce((n, s) => n + s.spentStarts, 0);
+    if (starts === 0) result.set('freshness-rotation', { status: 'pending', detail: 'no round-by-round matches recorded' });
+    else {
+      const ok = tired <= lt.aiTiredRoundStartShareMax * starts && spent <= lt.aiSpentRoundStartShareMax * starts;
+      const per = measured.map((s) => `${pct(s.tiredStarts, s.roundStarts)}/${pct(s.spentStarts, s.roundStarts)}`).join(' ');
+      set('freshness-rotation', ok, `Tired ${pct(tired, starts)} (max ${lt.aiTiredRoundStartShareMax * 100}%), Spent ${pct(spent, starts)} (max ${lt.aiSpentRoundStartShareMax * 100}%) of ${starts} AI round starts; by season ${per}`);
+    }
+  }
+  // level-ups (measured seasons)
+  if (needSeasons('level-ups')) {
+    const total = measured.reduce((n, s) => n + s.levels.total, 0);
+    if (total === 0) result.set('level-ups', { status: 'pending', detail: 'no level-ups observed (in-season leveling not active)' });
+    else {
+      const bad: string[] = [];
+      const parts: string[] = [];
+      for (const [key, band] of Object.entries(lt.starterLevelsPerSeasonByHumanAge)) {
+        const f = measured.reduce((n, s) => n + (s.levels.cohorts[key]?.fighters ?? 0), 0);
+        const l = measured.reduce((n, s) => n + (s.levels.cohorts[key]?.levels ?? 0), 0);
+        const mean = f ? l / f : 0;
+        parts.push(`${key}: ${mean.toFixed(2)} (n ${f})`);
+        if (f >= MIN_COHORT && !inBand(mean, band)) bad.push(`${key} ${mean.toFixed(2)} (band ${band.join('-')})`);
+      }
+      const midKey = Object.keys(lt.starterLevelsPerSeasonByHumanAge).find((k) => k.startsWith('24-26'));
+      const mid = midKey ? measured.reduce((a, s) => ({ l: a.l + (s.levels.cohorts[midKey]?.levels ?? 0), m: a.m + (s.levels.cohorts[midKey]?.matches ?? 0) }), { l: 0, m: 0 }) : { l: 0, m: 0 };
+      const perLevel = mid.l ? mid.m / mid.l : 0;
+      if (mid.l > 0 && !inBand(perLevel, lt.matchesPerLevelMidCohort)) bad.push(`matches per level (mid) ${perLevel.toFixed(2)} (band ${lt.matchesPerLevelMidCohort.join('-')})`);
+      const st = measured.reduce((a, s) => ({ f: a.f + s.levels.starters.fighters, l: a.l + s.levels.starters.levels }), { f: 0, l: 0 });
+      const be = measured.reduce((a, s) => ({ f: a.f + s.levels.bench.fighters, l: a.l + s.levels.bench.levels }), { f: 0, l: 0 });
+      const ratio = st.l && be.f ? be.l / be.f / (st.l / st.f) : 0;
+      if (be.f >= MIN_COHORT && st.l > 0 && !inBand(ratio, lt.benchLevelsToStarterLevelsRatio)) bad.push(`bench/starter levels ${ratio.toFixed(2)} (band ${lt.benchLevelsToStarterLevelsRatio.join('-')})`);
+      const sta = measured.map((s) => s.starterStaminaMedian).filter((x): x is number => x !== null);
+      const staMed = sta.length ? median(sta) : null;
+      if (staMed !== null && !inBand(staMed, lt.starterStaminaMedian)) bad.push(`starter Stamina median ${staMed} (band ${lt.starterStaminaMedian.join('-')})`);
+      set(
+        'level-ups',
+        bad.length === 0,
+        bad.length
+          ? bad.slice(0, 4).join('; ')
+          : `starter levels/season ${parts.join(', ')}; matches per level (mid) ${perLevel.toFixed(2)}; bench/starter ${ratio.toFixed(2)}; starter Stamina median ${staMed ?? 'n/a'}`,
+      );
+    }
+  }
+  // match-squads (all seasons)
+  if (needSeasons('match-squads') || obs.squads.length > 0) {
+    const m = main.summaries.reduce((n, s) => n + s.matches, 0);
+    const sw = main.summaries.reduce((n, s) => n + s.swaps, 0);
+    const forced = main.summaries.reduce((n, s) => n + s.forcedSwaps, 0);
+    const em = main.summaries.reduce((n, s) => n + s.emergencyEntrants, 0);
+    const per = m ? sw / m : 0;
+    const band = PROVISIONAL_SWAPS_PER_MATCH;
+    const ok = obs.squads.length === 0 && (m === 0 || inBand(per, band));
+    set(
+      'match-squads',
+      ok,
+      obs.squads.length
+        ? obs.squads.slice(0, 3).join('; ')
+        : `${m} matches: ${per.toFixed(2)} swaps a match (band ${band.join('-')}, provisional), ${m ? (forced / m).toFixed(2) : '0'} forced, ${em} emergency entrants`,
+    );
+  }
 
   return SOAK_CHECKS.map((c) => {
     const r = result.get(c.id) ?? { status: 'pending' as const, detail: blocked ?? 'not evaluated' };
