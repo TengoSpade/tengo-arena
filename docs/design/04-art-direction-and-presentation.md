@@ -77,7 +77,7 @@
 | Controller (`controller`) | Hourglass | reddish purple `#d88bb6` / `#a8457e` | Time, slows, holds |
 | Healer (`healer`) | Circle with a cross | bluish green `#1fb88a` / `#007f5c` | Care |
 
-Hybrids show both glyphs side by side (e.g. Vowknight = shield + cross). Hues derive from ref-009; the light-theme variants are darkened to keep 3:1 on white.
+Hybrids show both glyphs side by side (e.g. Paladin = shield + cross). Hues derive from ref-009; the light-theme variants are darkened to keep 3:1 on white.
 
 ## 4. Viewpoint and camera
 
