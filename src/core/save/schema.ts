@@ -396,6 +396,7 @@ const roundSideLineup = z.strictObject({
   viceCaptainIndex: int.nullable(),
   captainQuality: int,
   freshness: z.array(int.min(0).max(100)).length(SAVE_BOUNDS.squadStarters),
+  freshnessAfter: z.array(int.min(0).max(100)).length(SAVE_BOUNDS.squadStarters).optional(),
   entered: z.array(z.boolean()).length(SAVE_BOUNDS.squadStarters),
 });
 const roundLineups = z.strictObject({ round: int.min(1), home: roundSideLineup, away: roundSideLineup });
@@ -434,6 +435,7 @@ const fighterMatchStats = z.strictObject({
   damageToShields: int,
   damageTaken: int,
   healingDone: int,
+  healingReceived: int.optional(),
   shieldingDone: int,
   overheal: int,
   ccAppliedTicks: int,

@@ -6,11 +6,14 @@
 import type { ContentDB } from '../content';
 import type {
   BenchXpLine,
+  BoxScoreLine,
   Club,
   ClubId,
   CompactFighterTotals,
   FightFighterInput,
   FightLog,
+  FighterBox,
+  FighterBoxRound,
   FighterMatchStats,
   FighterRecap,
   FighterId,
@@ -504,6 +507,62 @@ function roundsStartedOf(result: MatchResult): Map<FighterId, number[]> {
   return out;
 }
 
+function lineOf(s: FighterMatchStats): BoxScoreLine {
+  return {
+    damageDone: s.damageDealt,
+    damageReceived: s.damageTaken,
+    healingDone: s.healingDone,
+    ...(s.healingReceived !== undefined ? { healingReceived: s.healingReceived } : {}),
+    shieldingDone: s.shieldingDone,
+    downsInflicted: s.downsInflicted,
+    downsSuffered: s.downsSuffered,
+  };
+}
+
+/** Sum of box lines; healingReceived is kept only when every line has it. */
+function sumLines(lines: readonly BoxScoreLine[]): BoxScoreLine {
+  const sum = (pick: (l: BoxScoreLine) => number): number => lines.reduce((n, l) => n + pick(l), 0);
+  const known = lines.every((l) => l.healingReceived !== undefined);
+  return {
+    damageDone: sum((l) => l.damageDone),
+    damageReceived: sum((l) => l.damageReceived),
+    healingDone: sum((l) => l.healingDone),
+    ...(known ? { healingReceived: sum((l) => l.healingReceived!) } : {}),
+    shieldingDone: sum((l) => l.shieldingDone),
+    downsInflicted: sum((l) => l.downsInflicted),
+    downsSuffered: sum((l) => l.downsSuffered),
+  };
+}
+
+/**
+ * The box score of one fighter (R2-T001): the stored match counters (authoritative), the Freshness around his first and
+ * last round from the round lineups, and, when the rounds were re-simulated, a line per round he started. A result
+ * played before `healingReceived` was counted gets it from the re-simulated rounds, or none.
+ */
+function boxOf(result: MatchResult, side: 'home' | 'away', id: FighterId, stats: FighterMatchStats, roundStats: ReadonlyMap<number, Record<FighterId, FighterMatchStats>> | null): FighterBox {
+  const rounds: FighterBoxRound[] = [];
+  let before: number | null = null;
+  let after: number | null = null;
+  let started = 0;
+  for (const rl of result.roundLineups ?? []) {
+    const lineup = rl[side];
+    const slot = lineup.fighterIds.indexOf(id);
+    if (slot < 0) continue;
+    started++;
+    const freshnessBefore = lineup.freshness[slot] ?? null;
+    const freshnessAfter = lineup.freshnessAfter?.[slot] ?? null;
+    if (before === null) before = freshnessBefore;
+    after = freshnessAfter;
+    const rs = roundStats?.get(rl.round)?.[id];
+    if (rs) rounds.push({ round: rl.round, ...lineOf(rs), freshnessBefore, freshnessAfter });
+  }
+  const whole = lineOf(stats);
+  if (whole.healingReceived === undefined && rounds.length > 0 && rounds.length === started) {
+    whole.healingReceived = rounds.reduce((n, r) => n + (r.healingReceived ?? 0), 0);
+  }
+  return { ...whole, roundsStarted: started > 0 ? started : stats.roundsPlayed, freshnessBefore: before, freshnessAfter: after, rounds: rounds.length === started ? rounds : [] };
+}
+
 export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: FixtureId, content: ContentDB): Result<DetailedMatchReport, EngineError> {
   const result = state.results[fixtureId];
   if (!result) return fail('report.not-played', `Fixture "${fixtureId}" has not been played`);
@@ -511,11 +570,15 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
   // Re-simulate at 'summary' only when the build matches the one that played it (05 §6). M1.1 results
   // replay round by round from the record (roundInputOf: no decision policy runs); M1 results as a whole match.
   let logs: FightLog[] | null = null;
+  // Per-round counters of every fighter, index = round - 1: the re-simulated rounds' stats (null when the rounds were not re-simulated).
+  let roundStats: Map<number, Record<FighterId, FighterMatchStats>> | null = null;
   if (result.engineVersion === ports.sim.engineVersion && result.contentHash === content.ref.hash && !compacted) {
     try {
       if (result.roundLineups) {
         const out = result.rounds.map((r) => ({ r, o: ports.sim.simulateRound(roundInputOf(result, r.round), r.seed, content, { record: 'summary' }) }));
-        logs = out.every(({ r, o }) => o.result.checksum === r.checksum && o.log !== null) ? out.map(({ o }) => o.log!) : null;
+        const same = out.every(({ r, o }) => o.result.checksum === r.checksum && o.log !== null);
+        logs = same ? out.map(({ o }) => o.log!) : null;
+        roundStats = same ? new Map(out.map(({ r, o }) => [r.round, o.fighterStats] as const)) : null;
       } else {
         const out = ports.sim.simulateMatch(result.input, content, { record: 'summary' });
         const same = out.rounds.length === result.rounds.length && out.rounds.every((r, i) => r.checksum === result.rounds[i]!.checksum);
@@ -523,6 +586,7 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
       }
     } catch {
       logs = null;
+      roundStats = null;
     }
   }
   const sideOf = (side: SideInput) => ({
@@ -563,6 +627,7 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
         clubId: stats.clubId as ClubId,
         isCaptain: captains.has(fid),
         stats,
+        box: boxOf(result, sideKeyOf(stats.clubId), fid, stats, roundStats),
         rules: stats.ruleFires.map((fires, index) => ({
           index,
           isStance: index === n - 1,
@@ -605,15 +670,24 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
     const clubId = clubOf(side);
     const mine = fighters.filter((f) => f.clubId === clubId);
     const sum = (pick: (s: FighterMatchStats) => number): number => mine.reduce((n, f) => n + pick(f.stats), 0);
+    const boxes = mine.flatMap((f) => (f.box ? [f.box] : []));
+    const healingReceived = fromStats.length > 0 && boxes.length === mine.length && boxes.every((b) => b.healingReceived !== undefined) ? boxes.reduce((n, b) => n + b.healingReceived!, 0) : undefined;
     return {
       downsInflicted: sum((s) => s.downsInflicted),
       downsSuffered: sum((s) => s.downsSuffered),
       damageDealt: sum((s) => s.damageDealt),
       healingDone: sum((s) => s.healingDone),
+      ...(healingReceived !== undefined ? { healingReceived } : {}),
       ...(fromStats.length > 0 ? { damageTaken: sum((s) => s.damageTaken), shieldingDone: sum((s) => s.shieldingDone) } : {}),
       xp: mine.reduce((n, f) => n + (aftermath.xp[f.fighterId] ?? 0), 0),
       benchXp: bench.filter((b) => b.clubId === clubId).reduce((n, b) => n + b.xp, 0),
     };
+  };
+  // Per-round team totals: the sum of the sides' fighters' lines for that round (only when the rounds were re-simulated).
+  const roundTotals = (round: number): { totals?: { home: BoxScoreLine; away: BoxScoreLine } } => {
+    if (roundStats === null) return {};
+    const lines = (side: 'home' | 'away'): BoxScoreLine[] => fighters.filter((f) => f.clubId === clubOf(side)).flatMap((f) => f.box?.rounds.filter((r) => r.round === round) ?? []);
+    return { totals: { home: sumLines(lines('home')), away: sumLines(lines('away')) } };
   };
   const reportSide = (side: 'home' | 'away', base: ReturnType<typeof sideOf>) => ({
     ...base,
@@ -636,6 +710,7 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
       tiebreakStep: r.tiebreakStep,
       durationTicks: r.durationTicks,
       keyEvents: logs?.[i] ? keyEvents(logs[i]!) : [],
+      ...roundTotals(r.round),
     })),
     fighters,
     mvpFighterId: result.mvpFighterId,

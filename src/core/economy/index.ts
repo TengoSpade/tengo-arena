@@ -39,6 +39,7 @@ import {
   rollContractProfileImpl,
   topUpFreeAgentPoolImpl,
 } from './pool';
+import { nextSeasonWageOf, type NextSeasonWage } from './next-season';
 import { requireClub, requireFighter, wageBillOf } from './queries';
 import {
   contractExpiriesImpl,
@@ -96,6 +97,12 @@ export function ask(state: GameState, fighterId: FighterId, clubId: ClubId, seas
 export interface OfferCheck {
   signingCost: Gold;
   wageRoomAfter: Gold;
+  /**
+   * R2-T006 (additive; core always sets it): which wage room `wageRoomAfter` and the commitment rule used: 'next-season'
+   * for renewals and signings that start next season, 'this-season' otherwise. A refusal for the wage budget carries the
+   * same in `error.details.basis` (and `nextSeasonWageRoom` for the next-season basis).
+   */
+  basis?: 'this-season' | 'next-season';
 }
 
 /** Legality of an offer/renewal/trials signing now: cap, commitment rule, embargo, blocks (no mutation). */
@@ -119,6 +126,14 @@ export interface FinanceView {
   projectedSeasonEndBalance: Gold;
   registryDebt: Gold;
   byCategory: Partial<Record<LedgerCategory, Gold>>;
+  /**
+   * R2-T006 (additive; core always sets them, optional so hand-built fakes may omit them): the wage room a renewal is judged
+   * against, `nextSeason.wageRoom`: the projected next-season wage budget (the current one: no promotion or relegation
+   * assumed) less the commitments that continue into next season, the agreed renewals and the pending offers that would run
+   * into it. Contracts ending this season and not renewed are not counted. `nextSeason` has the breakdown.
+   */
+  nextSeasonWageRoom?: Gold;
+  nextSeason?: NextSeasonWage;
   /**
    * Week-by-week projection of the rest of the season (current week through the
    * last): scheduled income (retainer part, grant installment, projected home
@@ -303,6 +318,13 @@ export {
 export { assignTrialsRookies, poolCounts, PROVISIONAL_JOURNEYMAN_HUMAN_AGE } from './pool';
 export { reckoningStages, watchProjection } from './season';
 export { financeDetails, type FinanceDetails } from './view';
+export type { NextSeasonWage } from './next-season';
+
+/** R2-T006: the club's projected next-season wage room with its breakdown (also on FinanceView): what a renewal is judged against. */
+export function nextSeasonWage(state: GameState, clubId: ClubId): NextSeasonWage {
+  requireClub(state, clubId);
+  return nextSeasonWageOf(state, clubId);
+}
 
 /** Initial finances with the digest items it produced (status changes at setup). */
 export function initialFinancesWithNews(draft: GameState, content: ContentDB): NewsId[] {

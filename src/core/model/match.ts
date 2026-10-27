@@ -193,6 +193,11 @@ export interface RoundSideLineup {
   captainQuality: number;
   /** Freshness 0-100 at the round start, by slot. */
   freshness: number[];
+  /**
+   * M1.1 (additive, optional): Freshness 0-100 right after the round's drain (before the between-round recovery and
+   * swaps), by slot. Written by the orchestrator once `freshnessAfterRound` ran; absent in older results.
+   */
+  freshnessAfter?: number[];
   /** Entered for this round, by slot. */
   entered: boolean[];
 }
@@ -284,6 +289,12 @@ export interface FighterMatchStats {
   damageToShields: number;
   damageTaken: number;
   healingDone: number;
+  /**
+   * M1.1 (additive, optional): effective healing received (overheal excluded), the mirror of `healingDone`. Written
+   * by the sim since the box-score round; absent in results played before it (the report re-derives it from the
+   * re-simulated rounds when it can).
+   */
+  healingReceived?: number;
   shieldingDone: number;
   overheal: number;
   ccAppliedTicks: number;

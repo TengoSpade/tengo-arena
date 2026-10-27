@@ -798,6 +798,136 @@ describe('match report: every fighter who started a round (QA: "us 8 downs" agai
   });
 });
 
+describe('match report box score (R2-T001): damage, healing, shielding, downs and Freshness, per match and per round', () => {
+  const KEYS = ['damageDone', 'damageReceived', 'healingDone', 'healingReceived', 'shieldingDone', 'downsInflicted', 'downsSuffered'] as const;
+
+  it('every fighter who started a round has a box: the stored match counters, a line per round started that adds up to them, and Freshness before and after', () => {
+    const { s, fx, home, ports, result, entrant, swappedIn } = playedWithEntrants();
+    const r = buildMatchReport(ports, s, fx.id, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const report = r.value;
+    expect(report.timelineAvailable).toBe(true);
+    expect(report.fighters.length).toBeGreaterThan(10);
+    for (const f of report.fighters) {
+      const box = f.box!;
+      expect(box, f.fighterId).toBeDefined();
+      expect(box).toMatchObject({
+        damageDone: f.stats.damageDealt,
+        damageReceived: f.stats.damageTaken,
+        healingDone: f.stats.healingDone,
+        healingReceived: f.stats.healingReceived,
+        shieldingDone: f.stats.shieldingDone,
+        downsInflicted: f.stats.downsInflicted,
+        downsSuffered: f.stats.downsSuffered,
+        roundsStarted: f.roundsStarted!.length,
+      });
+      expect(box.healingReceived).toBeDefined();
+      // One line per round he started, and the lines add up to the match.
+      expect(box.rounds.map((x) => x.round)).toEqual(f.roundsStarted);
+      for (const k of KEYS) expect(box.rounds.reduce((n, x) => n + (x[k] ?? 0), 0), `${f.fighterId} ${k}`).toBe(box[k]);
+      // Freshness: what he took the field with, and where each round's drain left him.
+      const side = f.clubId === home ? 'home' : 'away';
+      box.rounds.forEach((x) => {
+        const lineup = result.roundLineups![x.round - 1]![side];
+        const slot = lineup.fighterIds.indexOf(f.fighterId);
+        expect(x.freshnessBefore).toBe(lineup.freshness[slot]);
+        expect(x.freshnessAfter).toBe(lineup.freshnessAfter![slot]);
+        expect(x.freshnessAfter!).toBeLessThanOrEqual(x.freshnessBefore!);
+      });
+      expect(box.freshnessBefore).toBe(box.rounds[0]!.freshnessBefore);
+      expect(box.freshnessAfter).toBe(box.rounds.at(-1)!.freshnessAfter);
+    }
+    // Swapped-in reserves and the emergency entrant are in, with the Freshness they entered on.
+    for (const id of [...swappedIn, entrant]) expect(report.fighters.find((f) => f.fighterId === id)!.box!.roundsStarted).toBeGreaterThan(0);
+    // Team totals are the sums of the lines; healing is only ever aimed at allies, so received never exceeds done (Deathward's heal above 1 HP aside).
+    for (const side of ['home', 'away'] as const) {
+      const t = report.totals![side];
+      const sum = (k: (typeof KEYS)[number]) => report.fighters.filter((f) => f.clubId === report[side].clubId).reduce((n, f) => n + (f.box![k] ?? 0), 0);
+      expect(t.healingReceived).toBe(sum('healingReceived'));
+      expect(t.healingReceived!).toBeLessThanOrEqual(t.healingDone);
+      expect(t.damageDealt).toBe(sum('damageDone'));
+    }
+    // Per-round team totals are the sum of the fighters' lines of that round, and the sides mirror each other.
+    for (const rd of report.rounds) {
+      for (const side of ['home', 'away'] as const) {
+        const lines = report.fighters.filter((f) => f.clubId === report[side].clubId).flatMap((f) => f.box!.rounds.filter((x) => x.round === rd.round));
+        expect(lines).toHaveLength(5);
+        for (const k of KEYS) expect(rd.totals![side][k], `round ${rd.round} ${side} ${k}`).toBe(lines.reduce((n, x) => n + (x[k] ?? 0), 0));
+      }
+      expect(rd.totals!.home.downsInflicted).toBe(rd.totals!.away.downsSuffered);
+      expect(rd.totals!.home.damageDone).toBe(rd.totals!.away.damageReceived);
+    }
+  });
+
+  it('results played before the new counters: healing received is re-derived from the re-simulated rounds, Freshness after is null', () => {
+    const { s, fx, ports } = playedWithEntrants();
+    const fresh = buildMatchReport(ports, s, fx.id, content);
+    if (!fresh.ok) throw new Error(fresh.error.message);
+    const t = cloneJson(s);
+    const res = t.results[fx.id]!;
+    for (const st of Object.values(res.fighterStats)) delete st.healingReceived;
+    for (const rl of res.roundLineups!) {
+      delete rl.home.freshnessAfter;
+      delete rl.away.freshnessAfter;
+    }
+    const old = buildMatchReport(ports, t, fx.id, content);
+    if (!old.ok) throw new Error(old.error.message);
+    expect(old.value.timelineAvailable).toBe(true);
+    for (const f of old.value.fighters) {
+      const before = fresh.value.fighters.find((x) => x.fighterId === f.fighterId)!.box!;
+      expect(f.box!.healingReceived).toBe(before.healingReceived);
+      expect(f.box!.freshnessAfter).toBeNull();
+      expect(f.box!.freshnessBefore).toBe(before.freshnessBefore);
+      expect(f.box!.rounds.every((x) => x.freshnessAfter === null)).toBe(true);
+    }
+    expect(old.value.totals!.home.healingReceived).toBe(fresh.value.totals!.home.healingReceived);
+    // No timeline (another engine version): the totals keep what was stored, the per-round lines are empty, nothing is invented.
+    const stale = cloneJson(t);
+    stale.results[fx.id]!.engineVersion = -1;
+    const noTimeline = buildMatchReport(ports, stale, fx.id, content);
+    if (!noTimeline.ok) throw new Error(noTimeline.error.message);
+    expect(noTimeline.value.timelineAvailable).toBe(false);
+    for (const f of noTimeline.value.fighters) {
+      expect(f.box!.rounds).toEqual([]);
+      expect(f.box!.healingReceived).toBeUndefined();
+      expect(f.box!.damageDone).toBe(f.stats.damageDealt);
+      expect(f.box!.roundsStarted).toBe(f.roundsStarted!.length);
+    }
+    expect(noTimeline.value.rounds.every((rd) => rd.totals === undefined)).toBe(true);
+    expect(noTimeline.value.totals!.home.healingReceived).toBeUndefined();
+    // The same result with the stored counter still reports it without a timeline.
+    const storedOnly = cloneJson(s);
+    storedOnly.results[fx.id]!.engineVersion = -1;
+    const kept = buildMatchReport(ports, storedOnly, fx.id, content);
+    if (!kept.ok) throw new Error(kept.error.message);
+    for (const f of kept.value.fighters) expect(f.box!.healingReceived).toBe(fresh.value.fighters.find((x) => x.fighterId === f.fighterId)!.box!.healingReceived);
+  });
+
+  it('a whole-match (M1) result has totals and no Freshness; a compacted report has no box (stats keeps the few totals it has)', () => {
+    const { s, fx, ports } = playedWithEntrants();
+    const m1 = cloneJson(s);
+    const r1 = m1.results[fx.id]!;
+    delete r1.squads;
+    delete r1.reserveInputs;
+    delete r1.roundLineups;
+    delete r1.betweenRounds;
+    delete r1.emergencyEntrants;
+    const old = buildMatchReport(ports, m1, fx.id, content);
+    if (!old.ok) throw new Error(old.error.message);
+    for (const f of old.value.fighters) {
+      expect(f.box).toMatchObject({ freshnessBefore: null, freshnessAfter: null, rounds: [], damageDone: f.stats.damageDealt, roundsStarted: f.stats.roundsPlayed });
+    }
+    s.playerClubId = null;
+    s.calendar = { ...s.calendar, season: 2 };
+    compactHistory(s, content);
+    const compacted = buildMatchReport(ports, s, fx.id, content);
+    if (!compacted.ok) throw new Error(compacted.error.message);
+    expect(compacted.value.compacted).toBe(true);
+    expect(compacted.value.fighters.every((f) => f.box === undefined)).toBe(true);
+    expect(compacted.value.totals!.home.healingReceived).toBeUndefined();
+  });
+});
+
 describe('compaction keeps the attribution of every fighter (QA: emergency entrants vanished from old reports)', () => {
   it('drops the per-round records and per-fighter stats, keeps score, squads summary and per-fighter totals with the club', () => {
     const { s, fx, home, away, ports, result, entrant, swappedIn } = playedWithEntrants();

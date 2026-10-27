@@ -6,6 +6,7 @@ import type { ContentDB } from '../content';
 import type { ClubId, GameState, Gold, LedgerCategory } from '../model';
 import { currentSeasonBudgetParts, registryDeduction } from './budget';
 import { ledgerByCategory } from './ledger';
+import { nextSeasonWageOf, type NextSeasonWage } from './next-season';
 import { capReliefAllowance, pendingSigningCostsOf, pendingWagesOf } from './offers';
 import { committedBillOf, profileOf, requireClub, wageBillOf } from './queries';
 import { projectedCashFlow, projectedWeeks, watchProjection } from './season';
@@ -23,6 +24,9 @@ export interface FinanceViewShape {
   projectedSeasonEndBalance: Gold;
   registryDebt: Gold;
   byCategory: Partial<Record<LedgerCategory, Gold>>;
+  /** R2-T006: next-season wage room and its breakdown (see economy/next-season.ts). */
+  nextSeasonWageRoom: Gold;
+  nextSeason: NextSeasonWage;
   weeklyProjection: WeekProjectionShape[];
 }
 
@@ -47,6 +51,7 @@ export function financeViewImpl(state: GameState, clubId: ClubId, content: Conte
     running += w.income - w.costs;
     return { weekIndex: w.weekIndex, weekId: content.weekByIndex(w.weekIndex).id, income: w.income, costs: w.costs, net: w.income - w.costs, balance: running };
   });
+  const nextSeason = nextSeasonWageOf(state, clubId);
   const projected = inSeason ? club.finance.balance + projectedCashFlow(state, club, state.calendar.season, state.calendar.weekIndex - 1, weeksPerSeason(content), content) - pendingCosts : club.finance.balance;
   return {
     balance: club.finance.balance,
@@ -66,6 +71,8 @@ export function financeViewImpl(state: GameState, clubId: ClubId, content: Conte
     projectedSeasonEndBalance: projected,
     registryDebt: club.finance.registryDebt,
     byCategory: ledgerByCategory(state, clubId),
+    nextSeasonWageRoom: nextSeason.wageRoom,
+    nextSeason,
     weeklyProjection,
   };
 }
@@ -73,8 +80,11 @@ export function financeViewImpl(state: GameState, clubId: ClubId, content: Conte
 export interface FinanceDetails {
   /** Wage room for new commitments now: WB − (committed bill + pending wages). */
   wageRoom: Gold;
-  /** Bill including agreed renewal raises (used by the commitment rule). */
+  /** Bill including agreed renewal raises (used by the commitment rule for signings that start this season). */
   committedBill: Gold;
+  /** R2-T006: wage room a renewal is judged against (projected next-season wage budget - next-season commitments); `nextSeason` is the breakdown. */
+  nextSeasonWageRoom: Gold;
+  nextSeason: NextSeasonWage;
   pendingSigningCosts: Gold;
   debtWeeks: number;
   /** Next season's Registry deduction at the current tier's grant. */
@@ -93,7 +103,10 @@ export function financeDetails(state: GameState, clubId: ClubId, content: Conten
   const profile = profileOf(club, content);
   const committedBill = committedBillOf(state, clubId);
   const pending = pendingWagesOf(state, clubId);
+  const nextSeason = nextSeasonWageOf(state, clubId);
   return {
+    nextSeasonWageRoom: nextSeason.wageRoom,
+    nextSeason,
     wageRoom: club.finance.wageBudgetPerWeek - committedBill - pending,
     committedBill,
     pendingSigningCosts: pendingSigningCostsOf(state, clubId, content),

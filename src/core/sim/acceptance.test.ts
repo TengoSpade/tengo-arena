@@ -310,6 +310,9 @@ describe('damage and healing pipelines (worked example, cmb-003 to cmb-005, cmb-
     expect(ally.standing).toBe(true);
     expect(statusInst(ally, 'deathward')).toBeNull();
     expect(events(f, 'deathward.save').at(-1)).toMatchObject({ unit: 0, data: { healed: 105 } });
+    // R2 box score: the heal above the 1 HP floor is healing received by the saved ally and healing done by the warder.
+    expect(ally.tally.healingReceived).toBe(105);
+    expect(f.units[1]!.tally.healingDone).toBe(105);
     nextTick(f);
     f.pendDmg[0] = 300;
     f.maxHitSrc[0] = 5;

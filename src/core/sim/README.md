@@ -62,3 +62,6 @@ Depends on: `util`, `rng`, `model`, `content`, `tactics`.
 
 ## Orchestrator decisions (M1 core fix round, pending owner confirmation)
 - **D-Q.** `fighterInput` (balance harness and tests) gives a fighter the OVR of his stats by core/content `combatRating` unless a test pins `rating`; game fight inputs already carry fighters' ratings, the same function. The golden event hashes were re-pinned when the fixture content changed (the header carries the content hash); round checksums are unchanged.
+
+## R2 box score (T001): healing received
+`Tally.healingReceived` counts the **effective** healing a unit received (overheal excluded), added where heals land in the commit phase (and for Deathward's heal above the 1 HP floor), the mirror of `healingDone` (which stays as it was: Deathward credits the warder the uncapped heal). It is copied into `FighterMatchStats.healingReceived` (optional in the model; `mergeStats` sums it) and is in no event, no recap and not in the round checksum, so event hashes and the pinned goldens did not move and `ENGINE_VERSION` stays 2.

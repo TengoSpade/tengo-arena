@@ -3,7 +3,7 @@
  * player's Continue blockers (02 §3 transitions table).
  */
 import type { ContentDB } from '../content';
-import type { SnubExemption } from '../fighters';
+import type { FreshnessRating, SnubExemption } from '../fighters';
 import { freeAgentList, type FighterDevelopment, type Blocker, type ClubId, type Command, type Fighter, type FighterId, type GameState, type Gold, type StatId } from '../model';
 import type { GamePorts } from './ports';
 import { getOwn } from '../util';
@@ -20,6 +20,17 @@ export interface FighterView {
   injuryChanceBp: number;
   retirementChanceBp: number;
   marketWage: Gold;
+  /**
+   * R2-T002 (additive; core always sets them, optional only so UI-side stand-ins may omit them): the fighter's Freshness now
+   * (0-100, whole points) and what his rating is worth at it. `effectiveRating` = `rating` at Freshness 60 and above;
+   * `freshnessRatingDelta` = effectiveRating - rating (0 or negative); `freshnessRating` has the severity and the
+   * per-penalty breakdown (core/fighters freshness-rating.ts documents the approximation). Roster rows read these from
+   * `fighterView` like every other column.
+   */
+  freshness?: number;
+  effectiveRating?: number;
+  freshnessRatingDelta?: number;
+  freshnessRating?: FreshnessRating;
   /** Ask from the viewing club for its preferred length (free agents and renewals). */
   askFromPlayer: Gold | null;
   available: boolean;
@@ -103,6 +114,8 @@ export function fighterView(ports: GamePorts, state: GameState, fighterId: Fight
     askFromPlayer = Number.isFinite(best) ? best : null;
   }
   const human100 = p.humanAge100(f, content);
+  const freshness = p.freshnessOf(f);
+  const fr = p.ratingAtFreshness(f, freshness, content);
   return {
     fighter: f,
     stats: p.effectiveStats(f, content),
@@ -114,6 +127,10 @@ export function fighterView(ports: GamePorts, state: GameState, fighterId: Fight
     injuryChanceBp: p.injuryChanceBp(f, content),
     retirementChanceBp: p.retirementChanceBp(state, f.id, content),
     marketWage: ports.economy.marketWage(state, f.id, content),
+    freshness,
+    effectiveRating: fr.effectiveRating,
+    freshnessRatingDelta: fr.delta,
+    freshnessRating: fr,
     askFromPlayer,
     available: f.status === 'active' && p.isFit(f),
   };
