@@ -46,7 +46,7 @@
 }
 
 .br-swap__select {
-  min-width: 12rem;
+  min-width: 9.5rem;
 }
 
 .br-keys {
@@ -97,7 +97,13 @@
   gap: var(--sp-2);
 }
 
-/* Below 1800 px the five take the full width and the side panels sit in a row underneath. */
+/* Below 2000 px the five take the full width (twelve columns of numbers and the swap controls need it) and the side
+   panels sit in a row underneath; from 2000 px they stand beside it. */
+.br-main,
+.br-side {
+  grid-column: 1 / -1;
+}
+
 .br-side {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
@@ -105,23 +111,55 @@
   align-items: start;
 }
 
-@media (min-width: 1800px) {
+@media (min-width: 2000px) {
+  .br-main {
+    grid-column: span 8;
+  }
+
   .br-side {
+    grid-column: span 4;
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.br-tags {
+.br-nameline {
   display: flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  align-items: center;
+  gap: 0 var(--sp-2);
+}
+
+.br-tags {
+  display: inline-flex;
   flex-wrap: wrap;
   gap: var(--sp-1);
-  margin-top: var(--sp-1);
-  padding-left: calc(1.6rem + var(--sp-2));
 }
 
 .br-fresh {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
+  white-space: nowrap;
+}
+
+/* The five's stat block: quiet numbers beside the scan path (name, rating, Freshness, swap). */
+.br-table .br-stat {
+  color: var(--c-text-muted);
+}
+
+.br-table .br-group {
+  text-align: center;
+  border-bottom: 1px solid var(--c-divider);
+}
+
+.br-table .br-subhead th {
+  font-weight: var(--fw-medium, 500);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--c-text-faint);
+}
+
+.br-rating {
   white-space: nowrap;
 }

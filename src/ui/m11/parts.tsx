@@ -5,9 +5,9 @@
  */
 import type { ContentDB } from '../../core/content';
 import type { FreshnessLabel, PerkId } from '../../core/model';
-import { Meter, Pips, Progress, Tag, tipAttrs, type TipContent } from '../components';
+import { Meter, Pips, Progress, Rating, Tag, tipAttrs, type Tip, type TipContent } from '../components';
 import { formatInt } from '../format';
-import { labelFor, penaltyText, tierRoman, type FreshInfo, type LevelInfo } from './model';
+import { labelFor, penaltyText, tierRoman, type FreshInfo, type LevelInfo, type RatingNow } from './model';
 import './m11.css';
 
 const METER_STATE: Record<FreshnessLabel, 'good' | 'warn' | 'bad' | undefined> = { fresh: 'good', ready: undefined, tired: 'warn', spent: 'bad' };
@@ -37,6 +37,42 @@ export function FreshMeter({ info, content, label, testId, compact }: { info: Fr
       <Meter value={info.value / 100} mark={info.threshold / 100} state={METER_STATE[info.label]} thin />
       <span class="fresh__value">{info.value}</span>
       {label && <span class="fresh__label">{info.labelText}</span>}
+    </span>
+  );
+}
+
+/** What the Freshness penalty does to a rating, in words: the tooltip of "45 → 41". */
+export function ratingNowTip(now: RatingNow, content: ContentDB): TipContent {
+  const penalty = penaltyText(now.freshness, content);
+  const threshold = content.combat.freshness.thresholdBelow;
+  return {
+    kicker: 'Rating · Freshness penalty',
+    title: now.drop > 0 ? `${now.rating} → ${now.effective}` : `${now.rating}`,
+    body:
+      now.drop > 0
+        ? `At Freshness ${now.freshness} (${now.labelText}) he fights as a ${now.effective}, not a ${now.rating}: ${penalty ?? 'a penalty to his speed and Power'}.`
+        : `Rested (${threshold} or more): no Freshness penalty, he fights at his full rating.`,
+    rows: [
+      { label: 'Rating (rested)', value: String(now.rating) },
+      { label: `Freshness · ${now.labelText}`, value: String(now.freshness) },
+      ...now.parts.map((p) => ({ label: p.label, value: `−${Math.abs(p.points).toFixed(1)}` })),
+      { label: 'Effective rating now', value: String(now.effective), total: true },
+    ],
+    meta: `Below ${threshold} Freshness the penalty grows; rest or a fresher fighter brings the rating back.`,
+  };
+}
+
+/**
+ * Rating with what it is worth at his Freshness now: "45" when rested, "45 → 41" when the Freshness penalty
+ * bites (the base figure dimmed, the effective one in the pill, tinted by Tired / Spent). Same rating pill as ever.
+ */
+export function RatingEff({ now, content, tip, testId }: { now: RatingNow; content: ContentDB; tip?: Tip; testId?: string }) {
+  if (now.drop <= 0) return <Rating value={now.rating} tip={tip} />;
+  return (
+    <span class="rating-eff" data-label={now.label} tabIndex={0} aria-label={`Rating ${now.rating}, ${now.effective} at Freshness ${now.freshness}`} data-testid={testId} {...tipAttrs(ratingNowTip(now, content))}>
+      <span class="rating-eff__base">{now.rating}</span>
+      <span class="rating-eff__arrow" aria-hidden="true">→</span>
+      <Rating value={now.effective} />
     </span>
   );
 }

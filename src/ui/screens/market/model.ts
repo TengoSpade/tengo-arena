@@ -7,7 +7,7 @@
  * midpoint; lower is refused). Never a probability forecast (P-13).
  */
 import type { ContentDB } from '../../../core/content';
-import type { OfferCheck } from '../../../core/economy';
+import type { NextSeasonWage, OfferCheck } from '../../../core/economy';
 import type { FighterView } from '../../../core/game';
 import type { ClubId, Fighter, FighterId, GameState } from '../../../core/model';
 import type { EngineError, Result } from '../../../core/util';
@@ -33,6 +33,11 @@ export interface ClubMarket {
   /** Rating of the 5th-best rostered fighter: "would start" means a higher rating. */
   starterBar: number | null;
   lengths: number[];
+  /**
+   * R2-T006: next season's projected wage room and its breakdown (core finance view): what renewals are judged
+   * against. Null when the engine does not say (a stand-in without it).
+   */
+  nextSeason: NextSeasonWage | null;
 }
 
 export function clubMarket(engine: Wp7Engine, state: GameState, content: ContentDB, clubId: ClubId): ClubMarket {
@@ -50,6 +55,7 @@ export function clubMarket(engine: Wp7Engine, state: GameState, content: Content
     .map((v) => v.value.rating)
     .sort((a, b) => b - a);
   const cap = tier?.rosterCap ?? 0;
+  const finance = tryView(() => engine.financeView(state, clubId, content));
   return {
     clubId,
     cap,
@@ -65,7 +71,31 @@ export function clubMarket(engine: Wp7Engine, state: GameState, content: Content
     tierMinWage: content.tierProfile(tier?.level ?? 1).tierMinWage,
     starterBar: ratings.length >= 5 ? ratings[4]! : null,
     lengths: [...content.economy.contracts.lengthsSeasons],
+    nextSeason: finance.ok ? (finance.value.nextSeason ?? null) : null,
   };
+}
+
+/** The wage a renewal rows its check on, and what the check says about next season's room. */
+export type RenewalFit =
+  | { kind: 'fits'; roomAfter: number }
+  | { kind: 'over'; over: number }
+  | { kind: 'blocked'; code: string }
+  | { kind: 'unknown' };
+
+/** Does renewing him at his ask now fit next season's wage room? Read from core's offer check (the one rulebook). */
+export function renewalFit(check: MarketRow['check']): RenewalFit {
+  if (!check) return { kind: 'unknown' };
+  if (check.ok) return { kind: 'fits', roomAfter: check.value.wageRoomAfter };
+  const d = (check.error.details ?? {}) as Record<string, unknown>;
+  if (check.error.code === 'budget.wage') return { kind: 'over', over: Number(d['over'] ?? 0) };
+  return { kind: 'blocked', code: check.error.code };
+}
+
+/** The contracts that end this season and are not renewed (not counted in next season's room), other than `exceptId`. */
+export function notCounted(game: GameState, next: NextSeasonWage | null, exceptId?: FighterId): { id: FighterId; name: string; wage: number }[] {
+  return (next?.expiring.fighterIds ?? [])
+    .filter((id) => id !== exceptId)
+    .map((id) => ({ id, name: game.fighters[id]?.name.full ?? id, wage: game.fighters[id]?.contract?.wagePerWeek ?? 0 }));
 }
 
 export interface MarketRow {

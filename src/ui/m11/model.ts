@@ -8,6 +8,7 @@
  * Lazy-only: imported by screens and the M1.1 dialogs, never by the startup path.
  */
 import type { ContentDB } from '../../core/content';
+import type { FighterView } from '../../core/game';
 import type { AbilityId, Fighter, FreshnessLabel, GameState, LevelOption, PerkId, RankableSlot, StatId } from '../../core/model';
 import type { TipContent } from '../components';
 import { safeView, type GameEngine } from '../store/engine';
@@ -400,3 +401,45 @@ export function pickLine(content: ContentDB, option: LevelOption | null): string
   if (option.kind === 'rank') return abilityName(content, option.abilityId, option.toRank);
   return `perk ${content.perks.get(option.perkId)?.name ?? option.perkId}`;
 }
+
+// ---- effective rating (AL-R002-T002 / T004) -----------------------------------------------------------------
+
+/**
+ * A fighter's rating and what it is worth at his Freshness now. Below the Freshness threshold he fights with a
+ * penalty (attack and move speed, Power, Support, reaction); core prices it as the effective rating
+ * (core/fighters freshness-rating.ts, on `FighterView.effectiveRating`), shown as "45 → 41" wherever the
+ * rating sits next to a Freshness meter.
+ */
+export interface RatingNow {
+  rating: number;
+  /** Rating at the Freshness he has now (never above `rating`). */
+  effective: number;
+  /** rating − effective (0 when rested). */
+  drop: number;
+  /** Freshness 0-100 the figure is for. */
+  freshness: number;
+  label: FreshnessLabel;
+  labelText: string;
+  /** Where the loss comes from, largest first (rating points, negative): attack speed, move speed, Power, Support, reaction. */
+  parts: { label: string; points: number }[];
+}
+
+const PART_LABELS: Record<string, string> = { attackSpeed: 'Attack speed', moveSpeed: 'Move speed', power: 'Power', support: 'Support', reaction: 'Reaction time' };
+
+/** From a core fighter view; a view without the effective figure (a stand-in engine) reads as no penalty. */
+export function ratingFromView(content: ContentDB, view: FighterView, fighter: Fighter): RatingNow {
+  const freshness = view.freshness ?? freshnessValue(fighter);
+  const { id, text } = labelFor(freshness, content);
+  const effective = Math.min(view.rating, view.effectiveRating ?? view.rating);
+  const parts = Object.entries(view.freshnessRating?.parts ?? {})
+    .map(([key, points]) => ({ label: PART_LABELS[key] ?? key, points }))
+    .filter((p) => p.points <= -0.05)
+    .sort((a, b) => a.points - b.points);
+  return { rating: view.rating, effective, drop: view.rating - effective, freshness, label: id, labelText: text, parts };
+}
+
+export function ratingNow(engine: GameEngine, state: GameState, content: ContentDB, fighter: Fighter): RatingNow | null {
+  const view = fighterViewOf(engine, state, content, fighter.id);
+  return view ? ratingFromView(content, view, fighter) : null;
+}
+

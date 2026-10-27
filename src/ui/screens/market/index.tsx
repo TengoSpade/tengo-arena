@@ -26,8 +26,9 @@ import { freshInfo } from '../../m11/model';
 import { FreshMeter } from '../../m11/parts';
 import { useEngine } from '../../store/engine';
 import { CompareDialog } from './CompareDialog';
-import { clubMarket, marketRow, termsCheck, willingLevel, type ClubMarket, type MarketRow } from './model';
-import { OfferDialog, type OfferTarget } from './OfferDialog';
+import { clubMarket, marketRow, renewalFit, termsCheck, willingLevel, type ClubMarket, type MarketRow } from './model';
+import { NextSeasonRoom } from './NextSeasonRoom';
+import { OfferDialog, offerErrorText, type OfferTarget } from './OfferDialog';
 import { t } from './text';
 import './market.css';
 
@@ -970,6 +971,40 @@ function RenewalsTable({
     { id: 'contract', header: t('col.contract'), cell: (r) => <span class="tag tag--warn">{t('renewals.ends', { n: r.fighter.contract?.endSeason ?? '' })}</span> },
     { id: 'ask', header: t('col.ask'), align: 'num', sortValue: (r) => r.ask, cellAttrs: (r) => ({ 'data-tip': t('tip.ask', { n: r.preferred }) }), cell: (r) => <span class="u-num">{fmtMoney(r.ask, content)}</span> },
     {
+      // Does renewing him at his ask fit next season's wage room? (core's offer check, the one rulebook)
+      id: 'fit',
+      header: t('col.fit'),
+      sortValue: (r) => {
+        const fit = renewalFit(r.check);
+        return fit.kind === 'fits' ? fit.roomAfter : fit.kind === 'over' ? -fit.over : -1e9;
+      },
+      cell: (r) => {
+        const fit = renewalFit(r.check);
+        if (fit.kind === 'fits') {
+          return (
+            <span class="tag tag--good" data-testid="renewal-fit" data-fit="fits" {...tipAttrs(t('tip.fit.fits', { room: fmtMoney(fit.roomAfter, content) }))}>
+              {t('fit.fits')}
+            </span>
+          );
+        }
+        if (fit.kind === 'over') {
+          return (
+            <span class="tag tag--bad" data-testid="renewal-fit" data-fit="over" {...tipAttrs(t('tip.fit.over', { over: fmtMoney(fit.over, content) }))}>
+              {t('fit.over', { over: fmtMoney(fit.over, content) })}
+            </span>
+          );
+        }
+        if (fit.kind === 'blocked' && r.check && !r.check.ok) {
+          return (
+            <span class="u-faint" data-testid="renewal-fit" data-fit="blocked" {...tipAttrs(t('tip.fit.blocked', { reason: offerErrorText(r.check.error, market, content) }))}>
+              —
+            </span>
+          );
+        }
+        return <span class="u-faint">—</span>;
+      },
+    },
+    {
       id: 'patience',
       header: t('col.patience'),
       cell: (r) => {
@@ -1005,16 +1040,19 @@ function RenewalsTable({
     },
   ];
   return (
-    <Panel title={t('renewals.title')} icon="contract" subtitle={t('renewals.subtitle')} body="none" testId="market-renewals">
-      <DataTable
-        label={t('renewals.title')}
-        columns={columns}
-        rows={rows}
-        rowKey={(r) => r.fighter.id}
-        variant={['compact']}
-        empty={<Empty compact icon="contract" title={t('renewals.empty')} text={t('renewals.emptyText')} />}
-      />
-    </Panel>
+    <div class="l-stack">
+      {fighters.length > 0 && <NextSeasonRoom game={game} content={content} market={market} asks={{ count: rows.length, total: rows.reduce((n, r) => n + r.ask, 0) }} />}
+      <Panel title={t('renewals.title')} icon="contract" subtitle={t('renewals.subtitle')} body="none" testId="market-renewals">
+        <DataTable
+          label={t('renewals.title')}
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.fighter.id}
+          variant={['compact']}
+          empty={<Empty compact icon="contract" title={t('renewals.empty')} text={t('renewals.emptyText')} />}
+        />
+      </Panel>
+    </div>
   );
 }
 

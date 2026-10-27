@@ -128,7 +128,7 @@ describe('Match report: reserves who came in', () => {
     const { world, state, id, reserve } = worldWithSwap();
     renderReport(state, world.content, id);
     const table = screen.getByTestId('box-table');
-    expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(11);
+    expect(table.querySelectorAll('tbody tr:not(.row-group):not(.row-total)')).toHaveLength(11);
     const subRow = within(table).getByTestId('sub-mark').closest('tr')!;
     expect(subRow.textContent).toContain(state.fighters[reserve]!.name.full);
     expect(subRow.textContent).toMatch(/sub R2/);
@@ -137,10 +137,10 @@ describe('Match report: reserves who came in', () => {
     // His rounds only: the round 1 tab leaves him out, the round 2 tab has him and not the fighter he replaced.
     fireEvent.click(screen.getByRole('tab', { name: /Round 1/ }));
     expect(within(table).queryByTestId('sub-mark')).toBeNull();
-    expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(10);
+    expect(table.querySelectorAll('tbody tr:not(.row-group):not(.row-total)')).toHaveLength(10);
     fireEvent.click(screen.getByRole('tab', { name: /Round 2/ }));
     expect(within(table).getByTestId('sub-mark').closest('tr')!.textContent).toContain(state.fighters[reserve]!.name.full);
-    expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(10);
+    expect(table.querySelectorAll('tbody tr:not(.row-group):not(.row-total)')).toHaveLength(10);
   });
 
   it('lists the reserve in the XP gained panel too, and reports the Freshness as unknown once a later week passed', () => {
@@ -211,15 +211,18 @@ describe('Match report: bench XP', () => {
     expect(screen.getByTestId('xp-total').textContent).not.toContain('bench');
   });
 
-  it('uses the report’s own team totals and XP totals (core totals), not a sum of the five', () => {
+  it('the team total row adds up everyone who started, the reserve who came on included; the XP line quotes the report’s XP total', () => {
     const { world, state, id } = worldWithSwap();
     const base = (side: 'home' | 'away') => ({ downsInflicted: side === 'home' ? 11 : 12, downsSuffered: side === 'home' ? 12 : 11, damageDealt: 4321, healingDone: 1234, xp: 150, benchXp: 24 });
     renderReport(state, world.content, id, (r) => ({ ...r, totals: { home: base('home'), away: base('away') } }));
-    const footer = screen.getByTestId('panel-box').querySelector('.panel__footer')!.textContent!;
-    expect(footer).toMatch(/4,321 damage/);
-    expect(footer).toMatch(/1,234 healed/);
-    expect(footer).toMatch(/(11|12) downs/);
-    // Round 1 view leaves them out; the XP line quotes the report's totals.
+    // The total is the sum of the column above it (six of ours fought), not the report's own number and not the five alone.
+    const mine = Object.values(state.results[id]!.fighterStats).filter((st) => st.clubId === state.playerClubId);
+    expect(mine).toHaveLength(6);
+    const total = (col: string) => screen.getByTestId('box-total-us').querySelector(`td[data-col="${col}"]`)!.textContent;
+    expect(total('damageDone')).toBe(mine.reduce((n, st) => n + st.damageDealt, 0).toLocaleString('en-US'));
+    expect(total('damageReceived')).toBe(mine.reduce((n, st) => n + st.damageTaken, 0).toLocaleString('en-US'));
+    expect(total('downs')).toBe(String(mine.reduce((n, st) => n + st.downsInflicted, 0)));
+    // The XP line quotes the report's totals.
     expect(within(screen.getByTestId('panel-box')).getByTestId('xp-total').textContent).toContain('150');
   });
 
@@ -272,7 +275,7 @@ describe('Match report: bench XP', () => {
     }));
     expect(screen.getByText('Summary only')).toBeTruthy();
     const table = screen.getByTestId('box-table');
-    expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(11);
+    expect(table.querySelectorAll('tbody tr:not(.row-group):not(.row-total)')).toHaveLength(11);
     expect(within(table).getAllByTestId('sub-mark')).toHaveLength(1);
     expect(table.querySelector('thead')!.textContent).toContain('Rounds');
     expect(screen.queryByRole('tablist')).toBeNull();

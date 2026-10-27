@@ -16,7 +16,7 @@ import type { Wp7Engine } from '../league/lib/engine';
 import { fmtMoney, fmtPctBp } from '../league/lib/format';
 import { Callout, ClassTag, Portrait, Segmented } from '../league/lib/ui';
 import { tryView } from '../league/lib/views';
-import { greedLabel, termsCheck, type ClubMarket, type OfferKind } from './model';
+import { greedLabel, notCounted, termsCheck, type ClubMarket, type OfferKind } from './model';
 import { t } from './text';
 
 export interface OfferTarget {
@@ -37,6 +37,11 @@ export function offerErrorText(error: EngineError, m: ClubMarket, content: Conte
         : t('err.roster.full', { roster: m.roster, cap: m.cap });
     // Codes and detail keys as core/economy/offers.ts evaluateOffer emits them.
     case 'budget.wage':
+      // A renewal (and a signing that starts next season) is judged on next season's room, and says so.
+      if (d['basis'] === 'next-season') {
+        const budget = Number(d['wageBudget'] ?? 0);
+        return t('err.wage.next', { excess: fmtMoney(Number(d['over'] ?? 0), content), budget: fmtMoney(budget, content), held: fmtMoney(budget - Number(d['nextSeasonWageRoom'] ?? budget), content) });
+      }
       return t('err.wage.budget', { excess: fmtMoney(Number(d['over'] ?? 0), content) });
     case 'budget.cash':
       return t('err.cash.balance', { cost: fmtMoney(Number(d['signingCost'] ?? 0), content), available: fmtMoney(Number(d['available'] ?? 0), content) });
@@ -133,6 +138,18 @@ export function OfferDialog({
   const replaced = kind === 'renewal' ? (fighter.contract?.wagePerWeek ?? 0) : own ? own.wagePerWeek : 0;
   const billAfter = market.wageBill + market.pendingWages - replaced + wage;
   const share = market.wageBudget > 0 ? billAfter / market.wageBudget : 1;
+  // R2-T006: a renewal (and a signing that starts next season) is judged on next season's wage room: the projected
+  // budget less what continues, what renewals agreed and what pending offers add. Core's check says which basis it used.
+  const next = market.nextSeason;
+  const checkError = check.ok && !check.value.ok ? check.value.error : null;
+  const basis = legal?.basis ?? (checkError?.details as { basis?: string } | undefined)?.basis ?? (kind === 'renewal' ? 'next-season' : 'this-season');
+  const nextBasis = basis === 'next-season' && next !== null;
+  const nextBillAfter = next ? next.commitments + wage : 0;
+  const nextShare = next && next.projectedWageBudget > 0 ? nextBillAfter / next.projectedWageBudget : 1;
+  const nextOver = next ? Math.max(0, nextBillAfter - next.projectedWageBudget) : 0;
+  const noRaise = kind === 'renewal' && wage <= replaced;
+  const nextLeft = legal ? legal.wageRoomAfter : next ? next.projectedWageBudget - nextBillAfter : 0;
+  const others = notCounted(game, next, fighter.id);
   const rosterAfter = kind === 'renewal' ? market.roster + market.pendingOffers : market.roster + market.pendingOffers + (own ? 0 : 1);
   const endSeason = (kind === 'renewal' ? (fighter.contract?.endSeason ?? game.calendar.season) : game.calendar.season - 1) + seasons;
   const race = content.races.get(fighter.raceId)?.name ?? fighter.raceId;
@@ -322,18 +339,50 @@ export function OfferDialog({
               </dd>
             </div>
           </dl>
-          <div class="l-stack l-stack--xs">
-            <div class="l-row u-sm">
-              <span class="u-muted">{t('offer.billAfter')}</span>
-              <span class="l-push u-num">
-                <strong>{fmtMoney(billAfter, content)}</strong> <span class="u-muted">{t('offer.billOf', { budget: fmtMoney(market.wageBudget, content) })}</span>
+          {nextBasis && next ? (
+            <div class="l-stack l-stack--xs" data-testid="offer-next-room">
+              <div class="l-row u-sm">
+                <span class="u-muted">{t('offer.nextBillAfter')}</span>
+                <span class="l-push u-num">
+                  <strong data-testid="offer-next-bill">{fmtMoney(nextBillAfter, content)}</strong>{' '}
+                  <span class="u-muted">{t('offer.nextBillOf', { budget: fmtMoney(next.projectedWageBudget, content) })}</span>
+                </span>
+              </div>
+              <Meter value={nextShare} mark={1} state={nextShare > 1 ? 'bad' : nextShare > 0.9 ? 'warn' : 'good'} />
+              <span class={`u-xs offer-next__verdict ${nextOver > 0 && !noRaise ? 'u-bad' : 'u-good'}`} data-testid="offer-next-verdict" data-fits={nextOver > 0 && !noRaise ? 'no' : 'yes'}>
+                {nextOver > 0 ? (noRaise ? t('offer.nextNoRaise') : t('offer.nextOver', { over: fmtMoney(nextOver, content) })) : t('offer.nextFits', { room: fmtMoney(Math.max(0, nextLeft), content) })}
+              </span>
+              <span class="u-xs u-faint">
+                {t('offer.nextBreakdown', {
+                  continuing: fmtMoney(next.continuing, content),
+                  agreed: fmtMoney(next.agreedRenewals, content),
+                  pending: next.pendingOffers > 0 ? t('offer.nextBreakdownPending', { pending: fmtMoney(next.pendingOffers, content) }) : '',
+                  wage: fmtMoney(wage, content),
+                })}
+              </span>
+              <span class="u-xs u-muted" data-testid="offer-next-notcounted">
+                {others.length > 0
+                  ? t('offer.nextNotCounted', { names: others.map((o) => `${o.name} (${fmtMoney(o.wage, content)})`).join(', ') })
+                  : t('offer.nextNone')}
+              </span>
+              <span class="u-xs u-faint" data-testid="offer-next-assumes">
+                {t('offer.nextAssumes')}
               </span>
             </div>
-            <Meter value={share} mark={1} state={share > 1 ? 'bad' : share > 0.9 ? 'warn' : 'good'} />
-            <span class="u-xs u-faint">
-              {t('offer.billNote', { pct: `${Math.round(share * 100)}%`, room: fmtMoney(market.wageBudget - billAfter, content) })}
-            </span>
-          </div>
+          ) : (
+            <div class="l-stack l-stack--xs">
+              <div class="l-row u-sm">
+                <span class="u-muted">{t('offer.billAfter')}</span>
+                <span class="l-push u-num">
+                  <strong>{fmtMoney(billAfter, content)}</strong> <span class="u-muted">{t('offer.billOf', { budget: fmtMoney(market.wageBudget, content) })}</span>
+                </span>
+              </div>
+              <Meter value={share} mark={1} state={share > 1 ? 'bad' : share > 0.9 ? 'warn' : 'good'} />
+              <span class="u-xs u-faint">
+                {t('offer.billNote', { pct: `${Math.round(share * 100)}%`, room: fmtMoney(market.wageBudget - billAfter, content) })}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </Modal>

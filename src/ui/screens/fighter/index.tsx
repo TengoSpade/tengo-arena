@@ -96,6 +96,7 @@ export default function FighterScreen({ params }: ScreenProps) {
           back: '{name} to the back row',
           reserve: '{name} to the bench',
           replace: '{name} replaces {other}',
+          replaceReserveSub: '{other} takes the match reserve place. Undo puts both back.',
           captain: '{name} is captain',
           vice: '{name} is vice-captain',
           captainSub: 'Captaincy costs are evaluated at the next lineup lock, so changing back before then is free.',

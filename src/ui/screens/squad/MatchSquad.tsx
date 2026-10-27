@@ -8,8 +8,8 @@ import type { ContentDB } from '../../../core/content';
 import type { Club, Command, Fighter, FighterId, GameState, LineupEntry } from '../../../core/model';
 import { Icon, Kbd, RoleGlyph, Tag, tipAttrs } from '../../components';
 import { runUndoable } from '../../store/actions';
-import { freshInfo, type FreshInfo } from '../../m11/model';
-import { FreshMeter } from '../../m11/parts';
+import { freshInfo, ratingNow, type FreshInfo } from '../../m11/model';
+import { FreshMeter, RatingEff } from '../../m11/parts';
 import type { GameStore } from '../../store';
 import type { GameEngine } from '../../store/engine';
 import { fighterViewOf } from '../../store/views';
@@ -128,8 +128,11 @@ export function ReservesZone(props: {
   onSelect: (id: FighterId) => void;
   dragId: FighterId | null;
   setDragId: (id: FighterId | null) => void;
+  /** A starter dropped on a reserve's card: the two trade places (the reserve takes the starter's slot and row). */
+  onSwapStarter?: (starterId: FighterId, reserveId: FighterId) => void;
 }) {
   const { state, content, engine, club, store } = props;
+  const isStarter = (id: FighterId | null) => !!id && club.lineup.fighters.some((e) => e.fighterId === id);
   const reserves = (club.lineup.reserves ?? []).map((id) => state.fighters[id]).filter((f): f is Fighter => !!f);
   const fiveRoles = new Set(club.lineup.fighters.flatMap((e) => rolesOf(content, state.fighters[e.fighterId])));
   const covered = new Set(reserves.flatMap((f) => rolesOf(content, f)));
@@ -159,7 +162,7 @@ export function ReservesZone(props: {
       <div class="reserves">
         {reserves.map((f) => {
           const info = freshInfo(engine, state, content, f);
-          const rating = fighterViewOf(engine, state, content, f.id)?.rating ?? null;
+          const now = ratingNow(engine, state, content, f);
           return (
             <article
               key={f.id}
@@ -172,6 +175,17 @@ export function ReservesZone(props: {
                 props.setDragId(f.id);
               }}
               onDragEnd={() => props.setDragId(null)}
+              onDragOver={(e) => {
+                if (props.onSwapStarter && isStarter(props.dragId)) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                // A starter dropped here trades places with this reserve; anything else falls through to the zone (name a reserve).
+                if (!props.onSwapStarter || !props.dragId || !isStarter(props.dragId)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                props.onSwapStarter(props.dragId, f.id);
+                props.setDragId(null);
+              }}
               onClick={() => props.onSelect(f.id)}
               onFocus={(e) => {
                 if (e.target === e.currentTarget) props.onSelect(f.id);
@@ -181,11 +195,16 @@ export function ReservesZone(props: {
               <span class="reserve-card__name">{f.name.full}</span>
               <span class="reserve-card__meta u-xs u-muted">
                 {content.classes.get(f.classId)?.name}
-                {rating !== null && (
-                  <span {...tipAttrs(T.reserveRatingTip)}>
+                {now && (
+                  <>
                     {' '}
-                    · {rating}
-                  </span>
+                    ·{' '}
+                    {now.drop > 0 ? (
+                      <RatingEff now={now} content={content} testId={`rating-${f.id}`} />
+                    ) : (
+                      <span {...tipAttrs(T.reserveRatingTip)}>{now.rating}</span>
+                    )}
+                  </>
                 )}
               </span>
               <FreshMeter info={info} content={content} label />

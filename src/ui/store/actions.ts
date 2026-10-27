@@ -6,7 +6,7 @@
  * The UI only composes the command; core validates it.
  */
 import type { ContentDB } from '../../core/content';
-import type { Club, Command, FighterId, GameState, LineupEntry, StartingRow, TacticsAssignment, TacticsPresetId, TrainingEmphasis } from '../../core/model';
+import type { Club, Command, Fighter, FighterId, GameState, LineupEntry, StartingRow, TacticsAssignment, TacticsPresetId, TrainingEmphasis } from '../../core/model';
 import { showToast } from '../components/Toast';
 import { format } from '../text';
 import type { GameStore } from './contract';
@@ -16,6 +16,8 @@ export interface ActionText {
   back: string;
   reserve: string;
   replace: string;
+  /** Toast sub-line when the displaced starter takes the match reserve place the entering fighter leaves ("{other} takes the reserve place"). */
+  replaceReserveSub?: string;
   captain: string;
   vice: string;
   captainSub: string;
@@ -28,6 +30,27 @@ export type LineupTarget = StartingRow | 'reserve';
 function lineupCommand(club: Club, fighters: LineupEntry[]): Command {
   const keep = club.lineup.matchCaptainId && fighters.some((e) => e.fighterId === club.lineup.matchCaptainId) ? club.lineup.matchCaptainId : null;
   return { type: 'lineup.set', clubId: club.id, fighters, matchCaptainId: keep };
+}
+
+/** The five and the two match reserves in one command (core's squad.set); the match captain stays only while fielded. */
+function squadSetCommand(club: Club, fighters: LineupEntry[], reserves: FighterId[]): Command {
+  const keep = club.lineup.matchCaptainId && fighters.some((e) => e.fighterId === club.lineup.matchCaptainId) ? club.lineup.matchCaptainId : null;
+  return { type: 'squad.set', clubId: club.id, fighters, reserves, matchCaptainId: keep };
+}
+
+/** Fit to play (core isFit: not retired, no weeks out). */
+export const isFitFighter = (f: Fighter | undefined): boolean => !!f && f.status !== 'retired' && !(f.injury && f.injury.weeksOut > 0);
+
+/**
+ * A reserve takes a starter's place and the starter takes the reserve's place (a true swap, AL-R002-T003):
+ * the fighter coming into the five leaves the reserve list and the displaced starter is named in his
+ * place, in the same order. Null when `entering` is no reserve, or when core would refuse the new list
+ * (it only names fit reserves): the displaced starter then goes to the bench as before.
+ */
+export function swapReserves(reserves: readonly FighterId[], entering: FighterId, displaced: FighterId, fit: (id: FighterId) => boolean): FighterId[] | null {
+  if (!reserves.includes(entering)) return null;
+  const next = reserves.map((r) => (r === entering ? displaced : r));
+  return next.every(fit) ? next : null;
 }
 
 /** Run a command; on success show a toast whose Undo dispatches `inverse`. */
@@ -43,13 +66,23 @@ export type CaptaincyDescriber = (captainId: FighterId | null, viceCaptainId: Fi
 
 export function clubActions(store: GameStore, state: GameState, content: ContentDB, club: Club, text: ActionText, describeCaptaincy?: CaptaincyDescriber) {
   const nameOf = (id: FighterId) => state.fighters[id]?.name.full ?? id;
-  const before = lineupCommand(club, club.lineup.fighters.map((e) => ({ ...e })));
+  const entries0 = club.lineup.fighters.map((e) => ({ ...e }));
+  const reserves0: FighterId[] = [...(club.lineup.reserves ?? [])];
+  const before = lineupCommand(club, entries0);
+  const fitId = (id: FighterId) => isFitFighter(state.fighters[id]);
+  // Undo for a move that touches a match reserve: the five and the reserves together (squad.set needs fit reserves, else the five only).
+  const beforeSquad = reserves0.every(fitId) ? squadSetCommand(club, entries0, reserves0) : before;
 
-  /** Move a fighter to a row or the reserves. When the lineup is full, the fighter replaces `swapWith` or the last fighter of that row. */
+  /**
+   * Move a fighter to a row or the bench. When the lineup is full, the fighter replaces `swapWith` or the last fighter of that row.
+   * A match reserve who comes into the five hands his reserve place to the starter he replaces (a true swap); a bench
+   * fighter who comes in sends the starter to the bench.
+   */
   const moveTo = (id: FighterId, target: LineupTarget, swapWith?: FighterId | null): boolean => {
     const entries = club.lineup.fighters.map((e) => ({ ...e }));
     const i = entries.findIndex((e) => e.fighterId === id);
     let title: string;
+    let displaced: FighterId | null = null;
     if (target === 'reserve') {
       if (i < 0) return false;
       entries.splice(i, 1);
@@ -61,7 +94,10 @@ export function clubActions(store: GameStore, state: GameState, content: Content
         const mine = entries[i]!;
         entries[i] = { fighterId: other.fighterId, row: mine.row };
         entries[j] = { fighterId: id, row: other.row };
-      } else entries[j] = { fighterId: id, row: other.row };
+      } else {
+        entries[j] = { fighterId: id, row: other.row };
+        displaced = other.fighterId;
+      }
       title = format(text.replace, { name: nameOf(id), other: nameOf(other.fighterId) });
     } else if (i >= 0) {
       if (entries[i]!.row === target) return false;
@@ -79,7 +115,17 @@ export function clubActions(store: GameStore, state: GameState, content: Content
       if (j < 0) j = entries.length - 1;
       const other = entries[j]!.fighterId;
       entries[j] = { fighterId: id, row: target };
+      displaced = other;
       title = format(text.replace, { name: nameOf(id), other: nameOf(other) });
+    }
+    if (i < 0 && reserves0.includes(id)) {
+      // A match reserve comes into the five.
+      const swapped = displaced ? swapReserves(reserves0, id, displaced, fitId) : null;
+      if (swapped && displaced) {
+        const sub = text.replaceReserveSub ? format(text.replaceReserveSub, { other: nameOf(displaced) }) : undefined;
+        return runUndoable(store, squadSetCommand(club, entries, swapped), beforeSquad, title, sub);
+      }
+      return runUndoable(store, lineupCommand(club, entries), beforeSquad, title);
     }
     return runUndoable(store, lineupCommand(club, entries), before, title);
   };

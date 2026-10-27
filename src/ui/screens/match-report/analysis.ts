@@ -238,6 +238,83 @@ function sideTotals(infos: FighterInfo[], side: SideKey) {
 }
 
 /**
+ * One fighter's box score line for the whole match (round null) or one round (AL-R002-T001): downs, damage
+ * done and received, healing done and received, shielding, and Freshness before → after. Read from core's
+ * `FighterRecap.box` (`box.rounds` for a round); a report without it (an older result) reads the raw match
+ * counters, and a round it cannot tell is null. `healingReceived` is null where core could not count it.
+ */
+export interface BoxLine {
+  downs: number;
+  downed: number;
+  damageDone: number;
+  damageReceived: number;
+  healingDone: number;
+  healingReceived: number | null;
+  shieldingDone: number;
+  /** Freshness at the start (of his first round, or of this round) and where it ended; null when not recorded. */
+  freshBefore: number | null;
+  freshAfter: number | null;
+}
+
+export function boxLine(state: GameState, report: MatchReport, info: FighterInfo, round: number | null): BoxLine | null {
+  const recap = info.recap;
+  if (!recap) return null;
+  const box = recap.box;
+  if (round !== null) {
+    const r = box?.rounds.find((x) => x.round === round);
+    if (!r) return null;
+    return {
+      downs: r.downsInflicted,
+      downed: r.downsSuffered,
+      damageDone: r.damageDone,
+      damageReceived: r.damageReceived,
+      healingDone: r.healingDone,
+      healingReceived: r.healingReceived ?? null,
+      shieldingDone: r.shieldingDone,
+      freshBefore: r.freshnessBefore,
+      freshAfter: r.freshnessAfter,
+    };
+  }
+  const s = recap.stats;
+  return {
+    downs: box?.downsInflicted ?? s.downsInflicted,
+    downed: box?.downsSuffered ?? s.downsSuffered,
+    damageDone: box?.damageDone ?? s.damageDealt,
+    damageReceived: box?.damageReceived ?? s.damageTaken,
+    healingDone: box?.healingDone ?? s.healingDone,
+    healingReceived: box ? (box.healingReceived ?? null) : (s.healingReceived ?? null),
+    shieldingDone: box?.shieldingDone ?? s.shieldingDone,
+    freshBefore: box?.freshnessBefore ?? info.freshBefore,
+    freshAfter: box?.freshnessAfter ?? freshAfter(state, report, info.id),
+  };
+}
+
+export interface BoxTotals {
+  downs: number;
+  downed: number;
+  damageDone: number;
+  damageReceived: number;
+  healingDone: number;
+  /** Null when any of the lines could not count it (a team total never guesses). */
+  healingReceived: number | null;
+  shieldingDone: number;
+}
+
+/** A team's totals: the sum of the lines shown, so the total row always adds up from the column above it. */
+export function sumBoxLines(lines: readonly BoxLine[]): BoxTotals {
+  const sum = (pick: (l: BoxLine) => number) => lines.reduce((n, l) => n + pick(l), 0);
+  return {
+    downs: sum((l) => l.downs),
+    downed: sum((l) => l.downed),
+    damageDone: sum((l) => l.damageDone),
+    damageReceived: sum((l) => l.damageReceived),
+    healingDone: sum((l) => l.healingDone),
+    healingReceived: lines.length > 0 && lines.every((l) => l.healingReceived !== null) ? sum((l) => l.healingReceived!) : null,
+    shieldingDone: sum((l) => l.shieldingDone),
+  };
+}
+
+/**
  * Team totals of both sides: the report's own `totals` (the sum over everyone who started a round, the
  * reserves who came on included) when it has them, else summed here over the fighters listed.
  */
