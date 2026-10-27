@@ -76,9 +76,12 @@ describe('week processing order (leagues.json calendar.weekProcessingOrder)', ()
       'league.fixturesForWeek',
       'fighters.lineupLock',
       'economy.assignHiredBlades',
-      'sim.simulateMatch',
+      'sim.simulateRound',
+      'fighters.freshnessAfterRound',
+      'fighters.xpAfterRound',
+      'fighters.injuriesAfterRound',
       'league.recordResult',
-      'fighters.applyMatchLifecycle',
+      'fighters.matchEndProgression',
       'fighters.weeklyLifecycle',
       'economy.weeklyIncome',
       'economy.weeklyCosts',
@@ -88,10 +91,13 @@ describe('week processing order (leagues.json calendar.weekProcessingOrder)', ()
       'economy.topUpFreeAgentPool',
       'league.nextCalendar',
     ]);
-    // Every result is recorded after every match of the week is simulated (step 1 before step 2).
-    expect(calls.lastIndexOf('sim.simulateMatch')).toBeLessThan(calls.indexOf('league.recordResult'));
+    // Every result is recorded after every match of the week is simulated (step 1 before step 2); M1.1: round by round.
+    expect(calls.lastIndexOf('sim.simulateRound')).toBeLessThan(calls.indexOf('league.recordResult'));
     expect(calls).not.toContain('economy.releaseTrialsRookies');
-    expect(calls.filter((c) => c === 'sim.simulateMatch')).toHaveLength(24);
+    expect(calls).not.toContain('sim.simulateMatch');
+    expect(calls).not.toContain('fighters.applyMatchLifecycle');
+    expect(calls.filter((c) => c === 'fighters.matchEndProgression')).toHaveLength(24);
+    expect(calls.filter((c) => c === 'sim.simulateRound').length).toBeGreaterThanOrEqual(48);
     expect(calls.filter((c) => c === 'ai.planWeek')).toHaveLength(48);
   });
 
@@ -103,7 +109,7 @@ describe('week processing order (leagues.json calendar.weekProcessingOrder)', ()
     calls.length = 0;
     expect(engine.advanceWeek(w.value, content).ok).toBe(true);
     expectOrder(calls, ['ai.planSeasonEnd', 'economy.financialStatus', 'economy.releaseTrialsRookies', 'economy.resolveFreeAgentOffers', 'ai.planWeek']);
-    expect(calls).not.toContain('sim.simulateMatch');
+    expect(calls).not.toContain('sim.simulateRound');
   });
 
   it('seeds the Reckoning when the regular season ends', { timeout: 60_000 }, () => {

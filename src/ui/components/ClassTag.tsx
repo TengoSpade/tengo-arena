@@ -14,9 +14,11 @@ export interface ClassTagProps {
   /** Role display names in the same order (for the hybrid tooltip and screen readers). */
   roleNames?: readonly string[];
   tip?: Tip;
+  /** A starter class (beginner pick): a small star after the name. */
+  starter?: boolean;
 }
 
-export function ClassTag({ name, roles, roleNames, tip }: ClassTagProps) {
+export function ClassTag({ name, roles, roleNames, tip, starter }: ClassTagProps) {
   const names = roleNames ?? roles;
   const hybrid = roles.length > 1;
   const autoTip = hybrid ? t('class.hybridTip', { roles: names.join(t('common.and')) }) : undefined;
@@ -33,6 +35,12 @@ export function ClassTag({ name, roles, roleNames, tip }: ClassTagProps) {
       )}
       <span class="u-sr-only">{names.join(', ')}: </span>
       {name}
+      {starter && (
+        <span class="class-tag__star" {...tipAttrs(t('class.starterTip'))}>
+          <span aria-hidden="true">★</span>
+          <span class="u-sr-only"> {t('class.starter')}</span>
+        </span>
+      )}
     </span>
   );
 }

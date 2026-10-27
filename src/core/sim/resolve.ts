@@ -687,6 +687,7 @@ function applyHit(
     }
   }
   const hpDmg = rem;
+  if (pts > recv.largestHit) recv.largestHit = pts;
   f.touchedDamage = true;
   f.pendDmg[recv.index]! += hpDmg;
   f.dmgTotal[recv.index]! += pts;
@@ -789,6 +790,12 @@ export function fireTrigger(f: Fight, holder: Unit, k: number, triggerTarget: nu
   else if (tr.target === 'trigger_source') target = triggerSource;
   else target = lowestAllyWithin(f, holder, tr.target.withinMm, tr.target.includeSelf);
   if (target < 0 || !f.units[target]!.standing) return;
+  // M1.1 trigger `if`: checked when the event happens; target_* predicates read the trigger target.
+  if (tr.ifPred && !f.predVs(tr.ifPred, holder, f.units[triggerTarget >= 0 ? triggerTarget : holder.index]!)) return;
+  if (tr.perkId) {
+    holder.perkProcs.set(tr.perkId, (holder.perkProcs.get(tr.perkId) ?? 0) + 1);
+    if (f.rec) f.rec.emit('perk.proc', t, holder.index, target, { perk: tr.perkId });
+  }
   const rel = f.newRelease(holder.index, holder.cls.passive, { fromTrigger: true, triggerAmount: amount });
   const tg = f.units[target]!;
   f.schedule(t + f.tb.timing.triggerDelay, { kind: 'effects', seq: f.nextSeq(), source: holder.index, rel, effects: tr.effects, target, cx: tg.x, cy: tg.y });

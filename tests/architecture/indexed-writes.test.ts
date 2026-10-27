@@ -35,7 +35,7 @@ describe('architecture: indexed state is written through the model helpers', () 
     expect(files.length).toBeGreaterThan(0);
     const violations = files.flatMap((f) => indexedWriteViolations(f, readFileSync(join(ROOT, f), 'utf8')));
     expect(violations).toEqual([]);
-  });
+  }, 60_000); // reads every core source file: slow only while the machine is busy
 
   it('the checker catches each kind of write', () => {
     const p = 'src/core/economy/a.ts';

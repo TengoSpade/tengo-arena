@@ -81,8 +81,10 @@ export interface StorePlatform {
   files: FileIO;
   /** Words of entropy for a new root seed (crypto.getRandomValues). */
   entropy(): number[];
-  /** Raw content files of a theme (Vite glob in the browser). */
+  /** Raw content files of a theme (the browser loads them before the store is built; see platform/content-loader). */
   loadTheme(themeId: string): RawContentFiles;
+  /** Optional (additive): the hash of the theme's source files, when `loadTheme` returns them without their `_` doc keys (production build). */
+  contentHash?(themeId: string): string | undefined;
   /** package.json version. */
   gameVersion: string;
   /** Dev build: freeze committed states, expose window.__arena. */

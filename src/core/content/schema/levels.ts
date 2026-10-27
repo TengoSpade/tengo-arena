@@ -88,7 +88,14 @@ export const LevelsFileSchema = z
     pacing: z
       .object({ _doc: note(), presets: z.record(z.enum(LEVEL_UP_PACING), z.string()), default: z.enum(LEVEL_UP_PACING), _defaultNote: note() })
       .strict(),
-    levelEta: z.object({ _doc: note() }).strict(),
+    levelEta: z
+      .object({
+        _doc: note(),
+        /** Expected match XP before a fighter's first match of the season: hired blades (starters) and everyone else (bench). */
+        defaultStarterMatchXp: z.number().positive(),
+        defaultBenchMatchXp: z.number().positive(),
+      })
+      .strict(),
     stamina: z
       .object({
         _doc: note(),
@@ -116,6 +123,8 @@ export const LevelsFileSchema = z
         intensityMax: z.number(),
         youngHumanAgeBelow: z.number(),
         youngDrainMult: z.number().positive(),
+        /** Share of a round's drain paid by a fighter who starts it below `threshold` (a Tired fighter paces himself). Absent = 1: no taper. */
+        tiredDrainShare: z.number().min(0).max(1).optional(),
         restAt0: z.number(),
         restPerStaminaPoint: z.number(),
         squadReserveRestShare: z.number().min(0).max(1),

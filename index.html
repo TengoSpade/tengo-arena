@@ -5,9 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
     <title>Arena League</title>
+    <!-- First paint: shown until src/main.ts has the content chunk and mounts the app. Uses the design tokens once
+         the stylesheet is in (a production build links it here); the fallbacks cover dev, where it arrives with the script. -->
+    <style>
+      .boot {
+        min-height: 100vh;
+        display: grid;
+        place-content: center;
+        gap: 0.5rem;
+        text-align: center;
+        font-family: var(--font-ui, "Segoe UI", system-ui, sans-serif);
+        color: var(--c-text, #ebe6da);
+        background: var(--c-bg, #0e1013);
+      }
+      .boot__title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .boot__note {
+        font-size: 0.9rem;
+        opacity: 0.7;
+      }
+      @media (prefers-color-scheme: light) {
+        html:not([data-theme]) .boot {
+          color: #1d1c19;
+          background: #e9e5dc;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <main class="boot" role="status" aria-live="polite" aria-busy="true">
+        <p class="boot__title">Arena League</p>
+        <p class="boot__note">Loading game data…</p>
+      </main>
+    </div>
     <noscript>Arena League needs JavaScript to run.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>

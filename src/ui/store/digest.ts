@@ -213,8 +213,29 @@ const GROUP_TEMPLATES: Record<string, { title: string; text: string; action: [st
   'contract.minimum_raise': { title: '{n} wages rise to the new tier minimum', text: '{names}.', action: ['Finances', '#/finances'] },
 };
 
+/** M1.1: level-ups waiting for a choice (never block Continue; up to 3 per fighter, a 4th resolves the oldest). */
+export function levelUpDigest(state: GameState, clubId: ClubId): DigestItem | null {
+  const waiting = Object.values(state.fighters)
+    .filter((f) => f.clubId === clubId && f.status === 'active' && (f.pendingLevelUps?.length ?? 0) > 0)
+    .sort((a, b) => b.pendingLevelUps.length - a.pendingLevelUps.length || (a.id < b.id ? -1 : 1));
+  if (waiting.length === 0) return null;
+  const n = waiting.reduce((s, f) => s + f.pendingLevelUps.length, 0);
+  const first = waiting[0]!;
+  return {
+    id: 'level-ups',
+    kind: 'development',
+    title: n === 1 ? `${first.name.full} levelled up: choose a level-up` : `${n} level-ups to choose`,
+    text: waiting.map((f) => `${f.name.full} ${f.pendingLevelUps.length > 1 ? `(${f.pendingLevelUps.length})` : ''}`.trim()).join(' · ') + ' · each offers 3 options; up to 3 wait, a 4th resolves the oldest by his auto-pick policy.',
+    needsAction: false,
+    unread: true,
+    action: { label: 'Choose', href: `#/fighter/${first.id}?levelup=1` },
+    newsIds: [],
+  };
+}
+
 export function buildDigest(state: GameState, content: ContentDB, clubId: ClubId, blockers: readonly Blocker[]): DigestItem[] {
-  const items = [...digestBlockers(blockers).map((b, i) => blockerToDigest(b, i, state)), ...groupNews(digestNews(state, clubId), state, content)];
+  const levelUps = levelUpDigest(state, clubId);
+  const items = [...digestBlockers(blockers).map((b, i) => blockerToDigest(b, i, state)), ...(levelUps ? [levelUps] : []), ...groupNews(digestNews(state, clubId), state, content)];
   const rank = (d: DigestItem, i: number) => (d.id.startsWith('blocker-') ? 0 : d.needsAction ? 1 : ORDER[d.kind]) * 1000 + i;
   const sorted = items.map((d, i) => ({ d, r: rank(d, i) })).sort((a, b) => a.r - b.r).map((x) => x.d);
   // Notification budget: at most 2 "Needs action" (extra ones stay listed without the tag), at most 6 items.

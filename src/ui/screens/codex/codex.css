@@ -16,6 +16,11 @@
   gap: var(--sp-2);
 }
 
+/* The "Starter" tag sits at the right edge of the name line. */
+.codex-card__starter {
+  margin-left: auto;
+}
+
 .codex-card__glyphs {
   display: inline-flex;
 }
@@ -82,4 +87,51 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
+}
+
+/* M1.1: rank effects under each ability, the perk catalog. */
+.codex-ranks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  color: var(--c-text-muted);
+}
+
+.codex-ranks__n {
+  display: inline-block;
+  min-width: 1.6rem;
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  color: var(--c-accent-text);
+}
+
+.codex-perks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.codex-perks__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+}
+
+.codex-perk {
+  display: grid;
+  grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.15rem var(--sp-3);
+}
+
+.codex-perk > .u-xs {
+  grid-column: 2;
+}
+
+.codex-perks-wrap > summary {
+  cursor: pointer;
 }

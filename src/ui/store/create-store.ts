@@ -7,7 +7,11 @@
  *   shows a toast with the mapped text).
  * - advance() / finishSeason() are busy-guarded (no double advance), yield
  *   one task so the "Simulating" state paints, commit atomically, then
- *   autosave into the rotating slots auto-1..3 (oldest overwritten).
+ *   autosave: a finished week (and a season end, and a new career) rotates over
+ *   auto-1..3 (oldest overwritten); a match paused between rounds goes to its own
+ *   slot, auto-round, overwritten after every round. So three weekly slots survive
+ *   a whole match week and a bad week can be rolled back. The Autosave setting (Settings) switches the weekly
+ *   rotation off; the per-round auto-round save always runs (it is what makes "no rerolls" hold across a quit).
  * - Every thrown error from core (a stub, a broken invariant) becomes an
  *   EngineError, never an uncaught exception in a screen.
  * - Command log since the last save, plus the last 20 for the debug overlay.
@@ -35,20 +39,25 @@ import {
 import { isValidSeed, seedFromEntropy } from '../../core/rng';
 import { ENGINE_VERSION } from '../../core/sim';
 import { deepFreeze, engineError, err, hashString, NotImplementedError, ok, type EngineError, type Result } from '../../core/util';
-import { AUTOSAVE_SLOTS, MANUAL_SLOT_COUNT } from '../../platform/save-store';
+import { AUTOSAVE_ROUND_SLOT, AUTOSAVE_SLOTS, MANUAL_SLOT_COUNT } from '../../platform/save-store';
 import { showToast } from '../components/Toast';
 import { configureFormat } from '../format';
 import { t } from '../text';
 import type { GameStore, StorePlatform } from './contract';
 import { coreEngine, type GameEngine } from './engine';
+import { settings } from './settings';
+
+/** store.advance() result while the player's match waits between rounds (state.liveMatch): open the between-round screen. */
+export const MATCH_PAUSED = 'match.paused';
 
 /** Manual slot ids "manual-1" .. "manual-10" (TUNABLE (tech): 10). */
 export const MANUAL_SLOT_IDS: readonly string[] = Array.from({ length: MANUAL_SLOT_COUNT }, (_, i) => `manual-${i + 1}`);
-export { AUTOSAVE_SLOTS };
+export { AUTOSAVE_ROUND_SLOT, AUTOSAVE_SLOTS };
 
-/** Player-facing slot name: "slot 3", "autosave 2". */
+/** Player-facing slot name: "slot 3", "autosave 2", "mid-match autosave". */
 export function slotName(slotId: string): string {
   const n = slotId.slice(slotId.lastIndexOf('-') + 1);
+  if (slotId === AUTOSAVE_ROUND_SLOT) return t('save.slotAutoRound');
   if (slotId.startsWith('auto-')) return t('save.slotAuto', { n });
   if (slotId.startsWith('manual-')) return t('save.slotManual', { n });
   return slotId;
@@ -59,8 +68,9 @@ export function isTicketSlot(slotId: string | null | undefined): boolean {
   return typeof slotId === 'string' && slotId.startsWith('ticket-');
 }
 
+/** Any autosave slot: the three weekly ones and the mid-match one. */
 export function isAutosaveSlot(slotId: string): boolean {
-  return (AUTOSAVE_SLOTS as readonly string[]).includes(slotId);
+  return (AUTOSAVE_SLOTS as readonly string[]).includes(slotId) || slotId === AUTOSAVE_ROUND_SLOT;
 }
 
 /** Map anything thrown by core into an EngineError (05 §2: no uncaught errors for expected gaps). */
@@ -181,7 +191,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
       return err(issues);
     }
     // The 'fixture' theme (tests, dev) is a deliberate subset: validate it with the fixture profile.
-    const result = loadContent(themeId, raw, { profile: themeId === 'fixture' ? 'fixture' : 'theme' });
+    const result = loadContent(themeId, raw, { profile: themeId === 'fixture' ? 'fixture' : 'theme', hash: platform.contentHash?.(themeId) });
     if (!result.ok) {
       contentIssues.value = result.error;
       return result;
@@ -260,22 +270,32 @@ export function createGameStore(platform: StorePlatform): AppStore {
     try {
       await yieldToUi();
       const t0 = platform.clock.nowMs();
+      // M1.1: Continue is engine.advance (core/game AdvanceOutcome): the week, or the player's match
+      // pausing between rounds (state.liveMatch). Engines without it (test fakes) advance whole weeks.
       let result;
       try {
-        result = engine.advanceWeek(g, c);
+        if (engine.advance) result = engine.advance(g, c);
+        else {
+          const r = engine.advanceWeek(g, c);
+          result = r.ok ? ok({ state: r.value.state, week: r.value.report, pause: null }) : r;
+        }
       } catch (e) {
         return fail(engineErrorFrom(e));
       }
       if (!result.ok) return fail(result.error);
-      const { state, report } = result.value;
+      const { state, week } = result.value;
       batch(() => {
         commit(state);
-        lastWeekReport.value = report;
+        if (week) lastWeekReport.value = week;
         lastAdvanceMs.value = platform.clock.nowMs() - t0;
         dirty.value = true;
       });
-      await autosave();
-      return ok(report);
+      // Every round is committed (P-05): a reload resumes on the between-round screen. A paused match goes to its
+      // own slot; the weekly slots rotate only when the week is done.
+      await autosave(week ? 'week' : 'round');
+      // Paused between rounds: not an error to show; the frame opens the between-round screen.
+      if (!week) return err(engineError(MATCH_PAUSED, 'The match waits between rounds'));
+      return ok(week);
     } finally {
       busy.value = false;
     }
@@ -375,17 +395,28 @@ export function createGameStore(platform: StorePlatform): AppStore {
     }
   };
 
-  /** Rotate over auto-1..3: first empty slot, else the oldest. Never during a running write. */
-  const autosave = async (): Promise<void> => {
+  /**
+   * 'week' (a week boundary, a season end, a new career): rotate over auto-1..3, first empty slot, else the oldest;
+   * skipped when the Autosave setting is off. 'round' (the player's match waits between rounds): overwrite auto-round,
+   * which holds the match in progress. That one ignores the setting: it is the "no rerolls" safety save (a quit
+   * mid-match must not replay a round). Never during a running write.
+   */
+  const autosave = async (kind: 'week' | 'round' = 'week'): Promise<void> => {
     // A ticket reproduction never writes the shared autosave slots (they hold real careers).
     if (!game.value || isTicketSlot(loadedSlot.value)) return;
+    if (kind === 'round') {
+      const rounds = game.value.liveMatch?.rounds.length;
+      await writeSlot(AUTOSAVE_ROUND_SLOT, rounds ? `${defaultSaveLabel()} · ${t('save.afterRound', { n: rounds })}` : undefined, 'auto');
+      return;
+    }
+    if (!settings.value.autosave) return;
     let metas: SaveMeta[];
     try {
       metas = await platform.saves.list();
     } catch {
       metas = [];
     }
-    const autos = metas.filter((m) => isAutosaveSlot(m.slotId));
+    const autos = metas.filter((m) => (AUTOSAVE_SLOTS as readonly string[]).includes(m.slotId));
     const free = AUTOSAVE_SLOTS.find((id) => !autos.some((m) => m.slotId === id));
     const oldest = [...autos].sort((a, b) => (a.savedAt < b.savedAt ? -1 : a.savedAt > b.savedAt ? 1 : a.slotId < b.slotId ? -1 : 1))[0];
     const slot = free ?? oldest?.slotId ?? AUTOSAVE_SLOTS[0];

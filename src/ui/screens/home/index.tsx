@@ -40,6 +40,8 @@ import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
 import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
 import { TRIALS, trialsRookiesOf } from '../league/lib/trials';
 import { useStore, type AppStore } from '../../store';
+import { freshInfo } from '../../m11/model';
+import { FreshMeter, freshTip } from '../../m11/parts';
 import { settings } from '../../store/settings';
 import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
@@ -749,14 +751,18 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
   const { state, content, roster, engine } = ctx;
   const out = (f: Fighter) => !!f.injury && f.injury.weeksOut > 0;
   const injured = roster.filter(out);
-  const ending = roster.filter((f) => !injured.includes(f) && contractEnds(f.contract, state.calendar.season).final);
-  const list = [...injured, ...ending];
+  // M1.1: who is fit and fresh. Tired and Spent fighters start rounds with the Freshness penalty, so they are listed too.
+  const freshOf = new Map(roster.map((f) => [f.id, freshInfo(engine, state, content, f)] as const));
+  const worn = (f: Fighter) => !out(f) && (freshOf.get(f.id)?.label === 'tired' || freshOf.get(f.id)?.label === 'spent');
+  const tired = roster.filter(worn);
+  const ending = roster.filter((f) => !out(f) && !worn(f) && contractEnds(f.contract, state.calendar.season).final);
+  const list = [...injured, ...tired, ...ending];
   const role = (f: Fighter) => rolesOf(content.classes.require(f.classId))[0];
   return (
     <Panel
       title={T.availability}
       icon="injury"
-      subtitle={format(T.availabilitySub, { fit: roster.length - injured.length, inj: injured.length })}
+      subtitle={format(tired.length ? T.availabilitySubTired : T.availabilitySub, { fit: roster.length - injured.length, inj: injured.length, tired: tired.length })}
       subtitleTip={T.availabilityTip}
       body="flush"
       testId="availability"
@@ -782,12 +788,25 @@ function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
                           <Icon name="injury" size="sm" /> {injuryLabel(f.injury, content)}
                         </span>
                       ) : (
-                        <span class="u-warn" {...tipAttrs(T.expiresTip)}>
-                          <Icon name="contract" size="sm" /> {format(T.expires, { season: f.contract?.endSeason ?? state.calendar.season })}
-                        </span>
+                        <>
+                          {worn(f) && (
+                            <span class={freshOf.get(f.id)?.label === 'spent' ? 'u-bad' : 'u-warn'} {...tipAttrs(freshTip(freshOf.get(f.id)!, content))}>
+                              <Icon name="warning" size="sm" /> {format(T.tiredSub, { label: freshOf.get(f.id)!.labelText })}
+                            </span>
+                          )}
+                          {worn(f) && contractEnds(f.contract, state.calendar.season).final && ' · '}
+                          {contractEnds(f.contract, state.calendar.season).final && (
+                            <span class="u-warn" {...tipAttrs(T.expiresTip)}>
+                              <Icon name="contract" size="sm" /> {format(T.expires, { season: f.contract?.endSeason ?? state.calendar.season })}
+                            </span>
+                          )}
+                        </>
                       )
                     }
                   />
+                </td>
+                <td class="home-fresh" data-testid="availability-fresh">
+                  {out(f) ? <span class="u-faint">—</span> : <FreshMeter info={freshOf.get(f.id)!} content={content} compact />}
                 </td>
                 <td class={`cell-num${out(f) ? '' : ' u-muted'}`}>
                   {f.injury && out(f) ? (

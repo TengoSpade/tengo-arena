@@ -26,7 +26,16 @@ export interface FileIO {
   readText(file: Blob): Promise<string>;
 }
 
-/** Autosave slots rotate over these ids (TUNABLE (tech): 3). */
+/**
+ * Autosave slots rotate over these ids (TUNABLE (tech): 3), one write per week boundary (after a week is
+ * processed, after the season-end step, and when a career starts), so three of them cover the last
+ * three weeks and a bad week can be rolled back.
+ */
 export const AUTOSAVE_SLOTS = ['auto-1', 'auto-2', 'auto-3'] as const;
+/**
+ * The match in progress: its own slot, overwritten after every round of the player's match (a reload resumes
+ * on the same between-round screen without rerolling a round). It never takes a weekly slot.
+ */
+export const AUTOSAVE_ROUND_SLOT = 'auto-round';
 /** Manual slots (TUNABLE (tech): 10). */
 export const MANUAL_SLOT_COUNT = 10;

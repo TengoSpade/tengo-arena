@@ -74,6 +74,13 @@ export function continueModel(input: ContinueInput): ContinueModel {
     };
   }
 
+  // The player's match waits between rounds (M1.1): Continue goes back to it.
+  if (state.liveMatch) {
+    const next = state.liveMatch.rounds.length + 1;
+    if (routeId === 'between-rounds') return { main: t('continue.playRound', { n: next }), sub: t('continue.betweenSub'), state: 'ready', tip: t('continue.tipRound'), action: { kind: 'none' } };
+    return { main: t('continue.toMatch'), sub: t('continue.playRound', { n: next }), state: 'ready', tip: t('continue.tipRound'), action: { kind: 'navigate', to: '#/between-rounds' } };
+  }
+
   // On the report of the match just played: back to the hub of the new week.
   if (routeId === 'match-report' || routeId === 'season-review') {
     return {

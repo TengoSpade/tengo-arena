@@ -86,6 +86,11 @@ export interface GameEngine {
   levelUpView?: typeof game.levelUpView;
   freshnessOf?: typeof fighters.freshnessOf;
   freshnessLabel?: typeof fighters.freshnessLabel;
+  /** Freshness forecasts and the level ETA (WP-B; stubs until it merges, so screens fall back to the documented formula). */
+  typicalRoundDrain10?: typeof fighters.typicalRoundDrain10;
+  weeklyRest10?: typeof fighters.weeklyRest10;
+  levelEtaMatches?: typeof fighters.levelEtaMatches;
+  effectiveLevelUpMode?: typeof fighters.effectiveLevelUpMode;
   // saves (core/save)
   saveMetaFor: typeof save.saveMetaFor;
   createSave: typeof save.createSave;
@@ -127,6 +132,10 @@ export const coreEngine: GameEngine = {
   levelUpView: game.levelUpView,
   freshnessOf: fighters.freshnessOf,
   freshnessLabel: fighters.freshnessLabel,
+  typicalRoundDrain10: fighters.typicalRoundDrain10,
+  weeklyRest10: fighters.weeklyRest10,
+  levelEtaMatches: fighters.levelEtaMatches,
+  effectiveLevelUpMode: fighters.effectiveLevelUpMode,
   saveMetaFor: save.saveMetaFor,
   createSave: save.createSave,
   serializeSave: save.serializeSave,

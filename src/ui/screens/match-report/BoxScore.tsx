@@ -1,20 +1,24 @@
 /**
  * Box score (04 ui-report §4): both sides, ours first and theirs dimmed;
- * downs, downed, damage, taken, healed, control seconds, rules fired, XP;
- * sortable; every number has a breakdown tooltip. A round tab switches to a
- * round recap (downs that round, when each fighter fell, HP left).
+ * downs, downed, damage, taken, healed, control seconds, rules fired, Freshness
+ * (before → after, ours), XP; sortable; every number has a breakdown tooltip.
+ * Everyone who started a round has a row: a reserve who came in carries a "sub"
+ * mark with the round, so the side totals add up. Our bench (and reserves who
+ * never entered) follows with the bench XP (⅓ of a lineup slot). A round tab
+ * switches to a round recap (downs that round, when each fighter fell, HP left).
  */
 import type { ContentDB } from '../../../core/content';
-import type { FighterId, GameState, MatchReport, MatchResult } from '../../../core/model';
+import type { FighterId, GameState, MatchReport, MatchResult, SwapReason } from '../../../core/model';
 import { clubName } from '../league/lib/club';
 import { fmtInt, fmtSeconds1, fmtTicks } from '../league/lib/format';
 import { sortBy, SortTh, useSort } from '../league/lib/sort';
 import { ClassTag, Delta, FighterLink, Portrait } from '../league/lib/ui';
-import { abilityName, name, totals, type FighterInfo, type Perspective } from './analysis';
+import { FreshChange } from '../../m11/parts';
+import { abilityName, benchXpOf, freshAfter, name, startedRound, totals, type FighterInfo, type Perspective } from './analysis';
 import { weeksOutText } from '../../format/fighter';
 import { t } from './text';
 
-type Key = 'name' | 'downs' | 'downed' | 'damage' | 'taken' | 'healed' | 'control' | 'rules' | 'xp' | 'fell' | 'hp';
+type Key = 'name' | 'downs' | 'downed' | 'damage' | 'taken' | 'healed' | 'control' | 'rules' | 'fresh' | 'xp' | 'fell' | 'hp';
 
 function FighterCell({
   state,
@@ -47,7 +51,120 @@ function FighterCell({
         </span>
       )}
       {info.hiredBlade && <span class="tag tag--outline">{t('hired')}</span>}
+      {info.role !== 'starter' && <SubMark state={state} info={info} />}
     </span>
+  );
+}
+
+const ENTRY_HOW: Record<SwapReason, string> = { player: 'your swap', auto: 'auto-swap', injury: 'forced by an injury', emergency: 'emergency entrant' };
+
+/** "sub R2": came in from the reserves for round 2 (who he replaced and how, in the tooltip); "sub" when the round is not recorded. */
+export function SubMark({ state, info }: { state: GameState; info: FighterInfo }) {
+  const out = info.entry?.out;
+  const how = ENTRY_HOW[info.entry?.reason ?? (info.role === 'emergency' ? 'emergency' : 'auto')];
+  return (
+    <span
+      class="tag tag--info report-sub"
+      data-testid="sub-mark"
+      data-tip={
+        info.enteredRound !== null
+          ? t('tip.sub', { round: info.enteredRound, out: out ? name(state, out) : t('tip.subNobody'), how })
+          : t(info.role === 'emergency' ? 'tip.subEmergency' : 'tip.subNoRound')
+      }
+    >
+      {info.enteredRound !== null ? t('sub', { round: info.enteredRound }) : t('sub.noRound')}
+    </span>
+  );
+}
+
+/**
+ * Older matches between other clubs are compacted (core keeps only each fighter's rounds, downs, damage
+ * and healing): a short box score of what survives, the reserves who came on included.
+ */
+function SummaryBoxScore({ state, content, report, infos, persp }: { state: GameState; content: ContentDB; report: MatchReport; infos: FighterInfo[]; persp: Perspective }) {
+  const groups = [persp.usSide, persp.usSide === 'home' ? 'away' : 'home'] as const;
+  const tot = totals(infos, report);
+  return (
+    <section class="panel" aria-labelledby="h-box" data-testid="panel-box">
+      <header class="panel__header">
+        <h2 class="panel__title" id="h-box">
+          <span class="icon" data-icon="finances" aria-hidden="true" />
+          {t('box.title')}
+        </h2>
+        <span class="panel__subtitle">{t('box.subtitleSummary')}</span>
+      </header>
+      <div class="table-wrap">
+        <table class="data-table data-table--compact data-table--dense" data-testid="box-table">
+          <thead>
+            <tr>
+              <th scope="col">{t('col.fighter')}</th>
+              <th class="report-col-1900" scope="col">
+                {t('col.class')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.rounds')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.downs')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.downed')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.damage')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.healed')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((side) => {
+              const rows = infos.filter((f) => f.side === side).sort((a, b) => (b.recap?.stats.damageDealt ?? 0) - (a.recap?.stats.damageDealt ?? 0));
+              return [
+                <tr class="row-group" key={`g-${side}`}>
+                  <th colSpan={7} scope="colgroup">
+                    {clubName(state, report[side].clubId)}
+                    {persp.involved && side === persp.usSide ? ' · you' : ''}
+                  </th>
+                </tr>,
+                ...rows.map((f) => {
+                  const s = f.recap?.stats;
+                  const classId = f.classId || state.fighters[f.id]?.classId || '';
+                  return (
+                    <tr key={f.id}>
+                      <td class="cell-fill">
+                        <FighterCell state={state} content={content} report={report} info={f} />
+                      </td>
+                      <td class="report-col-1900">{classId && <ClassTag content={content} classId={classId} />}</td>
+                      <td class="cell-num">{s?.roundsPlayed ?? '—'}</td>
+                      <td class="cell-num">{s?.downsInflicted ?? '—'}</td>
+                      <td class="cell-num">{s?.downsSuffered ?? '—'}</td>
+                      <td class="cell-num">{s ? fmtInt(s.damageDealt) : '—'}</td>
+                      <td class="cell-num">{s ? fmtInt(s.healingDone) : '—'}</td>
+                    </tr>
+                  );
+                }),
+              ];
+            })}
+          </tbody>
+        </table>
+      </div>
+      <footer class="panel__footer">
+        <span>
+          {t('totals', {
+            us: persp.involved ? 'us' : clubName(state, report[persp.usSide].clubId),
+            usDowns: tot[persp.usSide].downs,
+            usDamage: fmtInt(tot[persp.usSide].damage),
+            usHeal: fmtInt(tot[persp.usSide].healing),
+            them: persp.involved ? 'them' : clubName(state, report[persp.usSide === 'home' ? 'away' : 'home'].clubId),
+            themDowns: tot[persp.usSide === 'home' ? 'away' : 'home'].downs,
+            themDamage: fmtInt(tot[persp.usSide === 'home' ? 'away' : 'home'].damage),
+            themHeal: fmtInt(tot[persp.usSide === 'home' ? 'away' : 'home'].healing),
+          })}
+        </span>
+      </footer>
+    </section>
   );
 }
 
@@ -73,6 +190,7 @@ export function BoxScore({
   onFocus: (id: FighterId | null) => void;
 }) {
   const { sort, toggle } = useSort<Key>({ key: 'damage', dir: 'desc' });
+  if (report.compacted) return <SummaryBoxScore state={state} content={content} report={report} infos={infos} persp={persp} />;
   const tickMs = content.combat.tick.tickMs;
   const groups = [persp.usSide, persp.usSide === 'home' ? 'away' : 'home'] as const;
   const roundResult = round !== null ? result?.rounds.find((r) => r.round === round) : undefined;
@@ -80,7 +198,7 @@ export function BoxScore({
   const downsInRound = (id: FighterId) =>
     infos.reduce((n, f) => n + (f.recap?.stats.downs.filter((d) => d.round === round && d.byFighterId === id).length ?? 0), 0);
   const fellAt = (info: FighterInfo) => info.recap?.stats.downs.find((d) => d.round === round) ?? null;
-  const hpLeft = (info: FighterInfo) => roundResult?.finalHp[info.unit] ?? null;
+  const hpLeft = (info: FighterInfo) => (round !== null ? roundResult?.finalHp[info.units.get(round) ?? -1] : undefined) ?? null;
 
   const keyOf = (f: FighterInfo): number | string => {
     const s = f.recap?.stats;
@@ -101,6 +219,8 @@ export function BoxScore({
         return s?.ccAppliedTicks ?? 0;
       case 'rules':
         return s?.ruleFires.reduce((a, b) => a + b, 0) ?? 0;
+      case 'fresh':
+        return freshAfter(state, report, f.id) ?? f.freshBefore ?? 0;
       case 'xp':
         return report.aftermath.xp[f.id] ?? 0;
       case 'fell':
@@ -114,8 +234,14 @@ export function BoxScore({
     if (effectiveSort.key !== sort.key) return hpLeft(f) ?? 0;
     return keyOf(f);
   };
-  const tot = totals(infos);
-  const cols = round === null ? 11 : 6;
+  const tot = totals(infos, report);
+  const cols = round === null ? 12 : 6;
+  // Our bench: fighters who started no round (and the unused match reserves) with the XP they earned.
+  const bench = round === null ? benchXpOf(report, persp, state) : [];
+  const showFresh = (f: FighterInfo) => f.freshBefore !== null && (f.us || !persp.involved);
+  // The report's own XP totals (the sum over everyone who played); else summed over the rows shown.
+  const xpTotal = report.totals?.[persp.usSide]?.xp ?? infos.filter((f) => f.us && report.aftermath.xp[f.id] !== undefined).reduce((n, f) => n + (report.aftermath.xp[f.id] ?? 0), 0);
+  const benchTotal = bench.reduce((n, b) => n + b.xp, 0);
 
   return (
     <section class="panel" aria-labelledby="h-box" data-testid="panel-box">
@@ -131,10 +257,10 @@ export function BoxScore({
           <thead>
             <tr>
               <SortTh label={t('col.fighter')} sortKey="name" sort={effectiveSort} onSort={toggle} firstDir="asc" />
-              <th class="col-wide" scope="col">
+              <th class="report-col-1900" scope="col">
                 {t('col.class')}
               </th>
-              <th class="col-mid" scope="col">
+              <th class="report-col-1440" scope="col">
                 {t('col.row')}
               </th>
               <SortTh label={t('col.downs')} sortKey="downs" sort={effectiveSort} onSort={toggle} num tip={t('tip.downs')} />
@@ -144,8 +270,9 @@ export function BoxScore({
                   <SortTh label={t('col.damage')} sortKey="damage" sort={effectiveSort} onSort={toggle} num />
                   <SortTh label={t('col.taken')} sortKey="taken" sort={effectiveSort} onSort={toggle} num />
                   <SortTh label={t('col.healed')} sortKey="healed" sort={effectiveSort} onSort={toggle} num />
-                  <SortTh label={t('col.control')} sortKey="control" sort={effectiveSort} onSort={toggle} num tip={t('tip.control')} class="col-mid" />
-                  <SortTh label={t('col.rules')} sortKey="rules" sort={effectiveSort} onSort={toggle} num tip={t('tip.rules')} class="col-wide" />
+                  <SortTh label={t('col.control')} sortKey="control" sort={effectiveSort} onSort={toggle} num tip={t('tip.control')} class="report-col-2000" />
+                  <SortTh label={t('col.rules')} sortKey="rules" sort={effectiveSort} onSort={toggle} num tip={t('tip.rules')} class="report-col-2100" />
+                  <SortTh label={t('col.fresh')} sortKey="fresh" sort={effectiveSort} onSort={toggle} num tip={t('tip.fresh')} />
                   <SortTh label={t('col.xp')} sortKey="xp" sort={effectiveSort} onSort={toggle} num tip={t('tip.xp')} />
                 </>
               ) : (
@@ -160,7 +287,7 @@ export function BoxScore({
             {groups.map((side) => {
               const clubId = report[side].clubId;
               const rows = sortBy(
-                infos.filter((f) => f.side === side),
+                infos.filter((f) => f.side === side && (round === null || startedRound(f, round))),
                 sortKeyFn,
                 effectiveSort.dir,
               );
@@ -237,18 +364,21 @@ export function BoxScore({
                             {fmtInt(s.healingDone + s.shieldingDone)}
                           </td>
                           <td
-                            class={s.ccAppliedTicks > 0 ? 'cell-num col-mid' : 'cell-num col-mid cell-muted'}
+                            class={s.ccAppliedTicks > 0 ? 'cell-num report-col-2000' : 'cell-num report-col-2000 cell-muted'}
                             data-tip={t('tipcell.control', { applied: fmtSeconds1(s.ccAppliedTicks, tickMs), received: fmtSeconds1(s.ccReceivedTicks, tickMs) })}
                           >
                             {fmtSeconds1(s.ccAppliedTicks, tickMs)}
                           </td>
                           <td
-                            class="cell-num col-wide"
+                            class="cell-num report-col-2100"
                             data-tip={t('tipcell.rules', {
                               list: s.ruleFires.map((n, i) => (i === s.ruleFires.length - 1 ? `Stance ${n}` : `R${i + 1} ${n}`)).join(' · '),
                             })}
                           >
                             {s.ruleFires.reduce((a, b) => a + b, 0)}
+                          </td>
+                          <td class="cell-num" data-testid="cell-fresh">
+                            {showFresh(f) ? <FreshChange before={f.freshBefore!} after={freshAfter(state, report, f.id)} content={content} /> : <span class="cell-muted">—</span>}
                           </td>
                           <td class="cell-num">
                             {ours || !persp.involved ? (
@@ -263,7 +393,7 @@ export function BoxScore({
                           </td>
                         </>
                       ) : (
-                        <td colSpan={8} class="cell-muted">
+                        <td colSpan={9} class="cell-muted">
                           {t('cell.notPlayed')}
                         </td>
                       )
@@ -287,8 +417,8 @@ export function BoxScore({
                       <td class="cell-fill">
                         <FighterCell state={state} content={content} report={report} info={f} />
                       </td>
-                      <td class="col-wide">{f.classId && <ClassTag content={content} classId={f.classId} />}</td>
-                      <td class="col-mid">
+                      <td class="report-col-1900">{f.classId && <ClassTag content={content} classId={f.classId} />}</td>
+                      <td class="report-col-1440">
                         <span class="row-mark" data-row={f.row}>
                           {f.row === 'front' ? t('row.front') : t('row.back')}
                         </span>
@@ -297,6 +427,40 @@ export function BoxScore({
                     </tr>
                   );
                 }),
+                ...(ours && bench.length > 0
+                  ? [
+                      <tr class="row-group" key="g-bench">
+                        <th colSpan={cols} scope="colgroup" data-tip={t('tip.bench')}>
+                          {t('bench.title')}
+                        </th>
+                      </tr>,
+                      ...bench.map((b) => {
+                        const f = state.fighters[b.id];
+                        const klass = f ? content.classes.get(f.classId) : undefined;
+                        return (
+                          <tr key={`b-${b.id}`} class="is-bench" data-testid="bench-row">
+                            <td class="cell-fill">
+                              <span class="entity">
+                                <Portrait content={content} fighter={f ?? null} size="xs" />
+                                <FighterLink state={state} id={b.id} />
+                              </span>
+                            </td>
+                            <td class="report-col-1900">{f && klass && <ClassTag content={content} classId={f.classId} />}</td>
+                            <td class="report-col-1440" />
+                            <td colSpan={8} class="cell-muted">
+                              <span class="tag tag--info report-bench" data-tip={t('tip.bench')}>
+                                {t('bench.tag')}
+                              </span>
+                              {b.reserve ? t('cell.reserveUnused') : t('cell.notPlayed')}
+                            </td>
+                            <td class="cell-num" data-testid="bench-xp">
+                              <Delta value={b.xp} tip={t('tip.bench')} />
+                            </td>
+                          </tr>
+                        );
+                      }),
+                    ]
+                  : []),
               ];
             })}
           </tbody>
@@ -316,6 +480,11 @@ export function BoxScore({
               themHeal: fmtInt(tot[persp.usSide === 'home' ? 'away' : 'home'].healing),
             })}
           </span>
+          {persp.involved && xpTotal + benchTotal > 0 && (
+            <span class="l-push" data-testid="xp-total">
+              {bench.length > 0 ? t('xpTotal.bench', { starters: xpTotal, bench: benchTotal, total: xpTotal + benchTotal }) : t('xpTotal', { starters: xpTotal })}
+            </span>
+          )}
         </footer>
       )}
     </section>

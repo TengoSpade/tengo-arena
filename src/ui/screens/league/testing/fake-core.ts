@@ -140,7 +140,6 @@ export function fighterView(state: GameState, fighterId: FighterId, content: Con
   const race = content.races.get(fighter.raceId);
   const cq = 30 + (hashNum(`cq${fighterId}`) % 60);
   const grade = content.development.captaincy.grades.find((g) => cq >= g.minCq) ?? content.development.captaincy.grades.at(-1)!;
-  const trends = content.development.trend.levels;
   return {
     fighter,
     stats: fakeStats(fighter),
@@ -148,7 +147,6 @@ export function fighterView(state: GameState, fighterId: FighterId, content: Con
     potential: Math.max(rating, Math.min(99, fighter.potentialRoll + 10)),
     humanAge: Math.round((fighter.age * 80) / (race?.lifespan ?? 80)),
     captaincy: { cq, gradeId: grade.id, letter: grade.letter },
-    trend: trends[hashNum(`t${fighterId}`) % trends.length]!.id,
     injuryChanceBp: 300 + (hashNum(`i${fighterId}`) % 400),
     retirementChanceBp: fighter.age > 30 ? (fighter.age - 30) * 400 : 0,
     marketWage: marketWage(state, fighterId),

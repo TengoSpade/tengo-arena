@@ -1,0 +1,164 @@
+/* M1.1 parts (WP-D): Freshness meter, level chip, XP bar, perk badges, level-up cards.
+   Built on the design system's tokens and marks (.condition, .meter, .progress, .pips, .tag). */
+
+/* Freshness: .condition (meter + number); the label word optional. */
+.fresh {
+  grid-template-columns: 3.2rem 1.6rem auto;
+  cursor: help;
+}
+
+.fresh[data-label="tired"] .fresh__value,
+.fresh[data-label="tired"] .fresh__label {
+  color: var(--c-warn);
+}
+
+.fresh[data-label="spent"] .fresh__value,
+.fresh[data-label="spent"] .fresh__label {
+  color: var(--c-bad);
+}
+
+.fresh__value {
+  text-align: right;
+  color: var(--c-text);
+}
+
+.fresh__label {
+  font-weight: var(--fw-medium, 500);
+}
+
+/* Compact Freshness (lists, side columns): a shorter bar. */
+.fresh--compact {
+  grid-template-columns: 2.2rem 1.5rem;
+  gap: var(--sp-1);
+}
+
+/* Freshness across a match: the bar ends at the value he finished on; the part he spent is shaded. */
+.fresh-change {
+  display: inline-grid;
+  grid-template-columns: 2.2rem auto;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* The box score at 1280 px has little room: a shorter gauge, the numbers stay. */
+@media (max-width: 1399px) {
+  .fresh-change {
+    grid-template-columns: 1.3rem auto;
+    gap: var(--sp-1);
+  }
+}
+
+.fresh-change__spent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--from) * 100%);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--meter-c) 32%, transparent);
+}
+
+.fresh-change__nums {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2em;
+}
+
+.fresh-change__arrow {
+  color: var(--c-text-faint);
+}
+
+.fresh-change__after {
+  color: var(--c-text);
+}
+
+.fresh-change[data-label="tired"] .fresh-change__after {
+  color: var(--c-warn);
+}
+
+.fresh-change[data-label="spent"] .fresh-change__after {
+  color: var(--c-bad);
+}
+
+/* Level chip and the waiting level-ups. */
+.lvl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.lvl-pending {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.35rem;
+  border-radius: var(--r-pill);
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  line-height: 1.35;
+}
+
+/* XP bar (profile, level-up card). */
+.xpbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 12rem;
+}
+
+.xpbar__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+/* Perk badge: tier numeral + name. */
+.perk {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0.1rem var(--sp-2) 0.1rem 0.15rem;
+  border: 1px solid var(--c-accent-line);
+  border-radius: var(--r-pill);
+  background: var(--c-accent-soft);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.perk__tier {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.35rem;
+  height: 1.1rem;
+  padding: 0 0.2rem;
+  border-radius: var(--r-pill);
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+}
+
+.perk--muted {
+  border-color: var(--c-border);
+  background: transparent;
+  color: var(--c-text-muted);
+}
+
+.perk--muted .perk__tier {
+  background: var(--c-surface-4);
+  color: var(--c-text-muted);
+}

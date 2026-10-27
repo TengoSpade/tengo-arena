@@ -9,7 +9,7 @@ const content: ContentDB = fixtureContent();
 const fid = (n: number): FighterId => asId<FighterId>(`f-${n}`);
 
 /** Test doubles for the read-only module functions the AI uses. */
-function fakePorts(opts: { ratings?: Map<string, number>; cqs?: Map<string, number>; ask?: (id: FighterId) => number; checks?: Command[] } = {}): AiPorts {
+function fakePorts(opts: { ratings?: Map<string, number>; cqs?: Map<string, number>; ask?: (id: FighterId) => number; checks?: Command[]; drain10?: number } = {}): AiPorts {
   const grade = content.development.captaincy.grades[2]!;
   return {
     fighters: {
@@ -18,6 +18,7 @@ function fakePorts(opts: { ratings?: Map<string, number>; cqs?: Map<string, numb
       humanAge100: (f) => Math.trunc((f.age * 8000) / content.races.require(f.raceId).lifespan),
       isFit: (f) => f.injury === null || f.injury.weeksOut === 0,
       captaincy: (_s, id) => ({ cq: opts.cqs?.get(id) ?? 50, grade }),
+      typicalRoundDrain10: () => opts.drain10 ?? 42,
     },
     economy: {
       ask: (_s, id) => opts.ask?.(id) ?? 100,
@@ -232,5 +233,78 @@ describe('valueFighter and planWeek', () => {
     const state = world();
     const plan = createAi(fakePorts()).planSeasonEnd(state, NINTH_OAR, content);
     for (const c of plan) expect((c as { clubId?: ClubId }).clubId).toBe(NINTH_OAR);
+  });
+});
+
+describe('M1.1 squads: rotation at the lock and reserves (progression.md §5, levels.json aiRotation)', () => {
+  // As le-025: starters f-12, f-13 (front), f-9, f-14, f-10 (back); bench f-11 (tank+melee), f-15 (rimebinder 45), f-16 (30).
+  const ratings = new Map<string, number>([
+    ['f-9', 50],
+    ['f-10', 44],
+    ['f-11', 41],
+    ['f-12', 48],
+    ['f-13', 47],
+    ['f-14', 46],
+    ['f-15', 45],
+    ['f-16', 30],
+  ]);
+  /** A world whose next match is a league match (the rotation's league rule), with Freshness per fighter. */
+  function leagueWorld(fresh: Record<number, number> = {}, phase: 'regular' | 'tournament' = 'regular'): GameState {
+    const state = world();
+    const weeks = content.leagues.calendar.weeks;
+    const i = weeks.findIndex((w, k) => w.phase === phase && weeks[k + 1]?.phase === phase);
+    state.calendar = { season: 1, weekIndex: i + 1, weekId: asId<WeekId>(weeks[i]!.id), phase: phase === 'regular' ? 'regular' : 'tournament' };
+    for (const [n, v] of Object.entries(fresh)) state.fighters[fid(Number(n))]!.freshness10 = Math.round(v * 10);
+    return state;
+  }
+  const ids = (c: { fighters: { fighterId: FighterId }[] }) => new Set(c.fighters.map((e) => e.fighterId));
+
+  it('ai-001: a starter at F 62 with a typical drain of 4.2 (62 < 64.2) is rested for a fit fighter of his family within the gap', () => {
+    const ai = createAi(fakePorts({ ratings, drain10: 42 }));
+    const choice = ai.chooseLineup(leagueWorld({ 9: 62, 15: 90 }), NINTH_OAR, content);
+    expect(ids(choice)).toEqual(new Set([fid(12), fid(10), fid(15), fid(13), fid(14)]));
+    // Rested, but at F >= 60 he is still among the best fit fighters for the bench (levels.json aiRotation rule 3).
+    expect(choice.reserves).toEqual([fid(9), fid(11)]);
+  });
+
+  it('ai-002: the same starter at F 66.5 plays (66.5 >= 64.2)', () => {
+    const ai = createAi(fakePorts({ ratings, drain10: 42 }));
+    expect(ids(ai.chooseLineup(leagueWorld({ 9: 66.5, 15: 90 }), NINTH_OAR, content))).toEqual(new Set([fid(12), fid(10), fid(9), fid(13), fid(14)]));
+  });
+
+  it('the substitute must be within 6 + 0.25 per point below 60 of the starter, at F >= 60; the Reckoning rests only below 40 within 3', () => {
+    const ai = createAi(fakePorts({ ratings, drain10: 42 }));
+    // f-9 50 at F 62: gap 6 -> f-15 needs >= 44; at 43 he is too weak.
+    const weak = new Map(ratings).set('f-15', 43);
+    expect(ids(createAi(fakePorts({ ratings: weak, drain10: 42 })).chooseLineup(leagueWorld({ 9: 62, 15: 90 }), NINTH_OAR, content)).has(fid(9))).toBe(true);
+    // At F 50 the gap is 6 + 2.5: a 43 now qualifies.
+    expect(ids(createAi(fakePorts({ ratings: weak, drain10: 42 })).chooseLineup(leagueWorld({ 9: 50, 15: 90 }), NINTH_OAR, content)).has(fid(15))).toBe(true);
+    // A tired substitute (F 59) is never used.
+    expect(ids(ai.chooseLineup(leagueWorld({ 9: 50, 15: 59 }), NINTH_OAR, content)).has(fid(9))).toBe(true);
+    // Reckoning: 50 is not below 40, so he plays; at 35 he rests only for someone within 3 (45 is 5 below 50).
+    expect(ids(ai.chooseLineup(leagueWorld({ 9: 50, 15: 90 }, 'tournament'), NINTH_OAR, content)).has(fid(9))).toBe(true);
+    expect(ids(ai.chooseLineup(leagueWorld({ 9: 35, 15: 90 }, 'tournament'), NINTH_OAR, content)).has(fid(9))).toBe(true);
+    const close = new Map(ratings).set('f-15', 47);
+    expect(ids(createAi(fakePorts({ ratings: close, drain10: 42 })).chooseLineup(leagueWorld({ 9: 35, 15: 90 }, 'tournament'), NINTH_OAR, content)).has(fid(15))).toBe(true);
+  });
+
+  it('spent floor: a starter below 30 with no family substitute gives way to the best fit fighter at F >= 40', () => {
+    const state = leagueWorld({ 12: 25, 15: 45 });
+    state.fighters[fid(11)]!.injury = { severity: 'minor', weeksOut: 2, fixtureId: null, round: null, causeFighterId: null, damageBp: 0, since: { season: 1, weekIndex: 1 } };
+    const choice = createAi(fakePorts({ ratings, drain10: 42 })).chooseLineup(state, NINTH_OAR, content);
+    expect(ids(choice).has(fid(12))).toBe(false);
+    expect(ids(choice).has(fid(15))).toBe(true);
+  });
+
+  it('reserves: one front-line and one back-line fit fighter at F >= 60, then by rating; squad.set when the squad changes', () => {
+    const ai = createAi(fakePorts({ ratings }));
+    const state = leagueWorld();
+    const choice = ai.chooseLineup(state, NINTH_OAR, content);
+    expect(choice.reserves).toEqual([fid(15), fid(11)]);
+    for (const id of choice.reserves) expect(choice.tactics[id]).toBeDefined();
+    expect(ai.chooseLineup(leagueWorld({ 15: 59 }), NINTH_OAR, content).reserves).toEqual([fid(11), fid(16)]);
+    const cmds = ai.planRoster(state, NINTH_OAR, content);
+    const squad = cmds.find((c) => c.type === 'squad.set');
+    expect(squad).toMatchObject({ type: 'squad.set', clubId: NINTH_OAR, reserves: [fid(15), fid(11)] });
   });
 });

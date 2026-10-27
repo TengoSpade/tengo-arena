@@ -230,7 +230,7 @@
       "inSeasonFloor": 60,
       "roleFloor": 5,
       "topUpGenerator": "journeyman",
-      "_unsignedRetirement": "development.json retirement.unsignedSeasonEndsBeforeLeaving (2)"
+      "_unsignedRetirement": "development.json retirement.unsignedSeasonEndsBeforeLeaving (3)"
     },
     "releasedFighterBlockedFromSameClubThisSeason": true
   },

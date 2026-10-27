@@ -16,6 +16,11 @@ export function rolesOf(klass: ClassDef): string[] {
   return [...klass.archetypes];
 }
 
+/** A beginner-friendly class (role tag "starter", design 03 ★): shown as a small mark wherever classes are picked from. */
+export function isStarterClass(klass: Pick<ClassDef, 'roleTags'> | undefined): boolean {
+  return !!klass?.roleTags.includes('starter');
+}
+
 export function roleNames(klass: ClassDef, content: ContentDB): string[] {
   return klass.archetypes.map((a) => content.combat.archetypes.find((x) => x.id === a)?.name ?? a);
 }
@@ -128,14 +133,6 @@ export function injuryTip(injury: Injury, content: ContentDB): string {
   const where = injury.round ? `, round ${injury.round}` : '';
   if (isCareerEnding(injury)) return `${label}${where}. He will not fight again and retires at season end.`;
   return `${label}${where}. Out for ${injury.weeksOut} more ${injury.weeksOut === 1 ? 'week' : 'weeks'}.`;
-}
-
-export function trendInfo(trendId: string, content: ContentDB): { label: string; dir: number } {
-  const levels = content.development.trend.levels;
-  const i = levels.findIndex((l) => l.id === trendId);
-  const level = levels[i];
-  if (!level) return { label: trendId, dir: 0 };
-  return { label: level.label, dir: level.minDelta > 0 ? 1 : level.minDelta < 0 ? -1 : 0 };
 }
 
 export function trainingOptions(content: ContentDB): { id: 'balanced' | 'body' | 'mind'; label: string }[] {

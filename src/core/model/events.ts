@@ -77,6 +77,13 @@ export interface UnitSpawn {
   hp: number;
   maxHp: number;
   focus: number;
+  // ---- M1.1 (engine 2; absent in engine-1 logs) ----
+  /** Freshness 0-100 at the round start and the resulting penalty severity (bp). */
+  freshness?: number;
+  fatigueBp?: number;
+  abilityRanks?: { a1: number; a2: number; passive: number };
+  perkIds?: string[];
+  enteredThisRound?: boolean;
 }
 
 /** [x cm, y cm, hp, stateBits]. stateBits: 1 casting, 2 stunned/asleep, 4 rooted, 8 silenced, 16 downed. */
@@ -118,6 +125,16 @@ export interface RoundRecap {
   ruleCommittedTicks: number[];
   ruleSkips: Partial<Record<RuleSkipReason, number>>[];
   stanceTicks: number;
+  // ---- M1.1 (engine 2; absent in engine-1 logs) ----
+  freshness?: number;
+  /** levels.json freshness label id at the round start. */
+  freshnessLabel?: string;
+  /** 'tired' / 'spent' when the round started below the threshold (report tag "Tired (52)"). */
+  fatigueTag?: 'tired' | 'spent' | null;
+  fatigueBp?: number;
+  /** Trigger fires per perk this round. */
+  perkProcs?: Record<string, number>;
+  enteredThisRound?: boolean;
 }
 
 /** Every event type, keyed by `type`, with its data. Level: S = summary and full, F = full only. */
@@ -171,6 +188,7 @@ export interface FightEventData {
   /** S */ 'captain.rally': { composure: number };
   /** S */ 'captain.down': Record<string, never>;
   /** S */ 'captain.handover': { newCaptain: UnitIndex; cq: number };
+  /** S (M1.1) A perk's trigger fired (unit = holder, target = the effect target). */ 'perk.proc': { perk: string };
   /** S */ 'overtime.start': Record<string, never>;
   /** S */ 'unit.down': { by: UnitIndex | null; ability: AbilityId | null; hit: number; overkill: number; assists: UnitIndex[] };
   /** S */ 'fight.end': { winner: Side; reason: 'elimination' | 'time-limit'; tiebreakStep: RoundTiebreakStep | null };
@@ -190,6 +208,7 @@ export const SUMMARY_EVENT_TYPES: readonly FightEventType[] = [
   'captain.rally',
   'captain.down',
   'captain.handover',
+  'perk.proc',
   'overtime.start',
   'unit.down',
   'fight.end',

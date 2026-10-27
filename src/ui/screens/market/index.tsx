@@ -16,11 +16,15 @@ import type { GameStore } from '../../store';
 import { useWp7Engine, type Wp7Engine } from '../league/lib/engine';
 import { fmtMoney } from '../league/lib/format';
 import { formatInt } from '../../format';
+import { isStarterClass } from '../../format/fighter';
 import { rosterOf } from '../league/lib/season';
 import { useCareer, type Career } from '../league/lib/store';
 import { Callout, ClassTag, Empty, FighterLink, NoCareer, Portrait, RatingPill, Segmented, Stars, TraitDots, classRoles, roleNames } from '../league/lib/ui';
 import { TRIALS, isTrialsWeek, trialsRookiesOf } from '../league/lib/trials';
 import { tryView } from '../league/lib/views';
+import { freshInfo } from '../../m11/model';
+import { FreshMeter } from '../../m11/parts';
+import { useEngine } from '../../store/engine';
 import { CompareDialog } from './CompareDialog';
 import { clubMarket, marketRow, termsCheck, willingLevel, type ClubMarket, type MarketRow } from './model';
 import { OfferDialog, type OfferTarget } from './OfferDialog';
@@ -359,6 +363,7 @@ function FilterRail({
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                  {isStarterClass(c) ? ' ★' : ''}
                   {c.archetypes.length > 1 ? ` (${roleNames(content, c.archetypes).join(' / ')})` : ''}
                 </option>
               ))}
@@ -481,6 +486,7 @@ function AgentsTable({
   const excessOf = (r: MarketRow) => r.ask - (market.wageRoom + (r.pending?.wagePerWeek ?? 0));
   const isOverRoom = (r: MarketRow) => market.wageRoom > 0 && excessOf(r) > 0;
   const overRoomTip = (r: MarketRow) => (isOverRoom(r) ? t('disabled.roomRoom', { n: fmtMoney(excessOf(r), content) }) : null);
+  const freshEngine = useEngine();
   const columns: Column<MarketRow>[] = [
     {
       id: 'compare',
@@ -538,7 +544,7 @@ function AgentsTable({
       header: t('col.class'),
       sortValue: (r) => content.classes.get(r.fighter.classId)?.name ?? '',
       firstDir: 'asc',
-      cell: (r) => <ClassTag content={content} classId={r.fighter.classId} />,
+      cell: (r) => <ClassTag content={content} classId={r.fighter.classId} starter />,
     },
     {
       id: 'race',
@@ -558,6 +564,8 @@ function AgentsTable({
     },
     { id: 'rating', header: t('col.rating'), align: 'num', sortValue: (r) => r.rating, cell: (r) => <RatingPill value={r.rating} /> },
     { id: 'potential', header: t('col.potential'), sortValue: (r) => r.potential, cell: (r) => <Stars potential={r.potential} /> },
+    // M1.1 Freshness (free agents rest every week, so most are Fresh).
+    { id: 'fresh', header: t('col.fresh'), class: 'market-col-fresh', sortValue: (r) => r.fighter.freshness10 ?? 1000, cell: (r) => <FreshMeter info={freshInfo(freshEngine, game, content, r.fighter)} content={content} compact /> },
     // Traits need the room of a wide screen; below it they are one hover away in Compare and the profile.
     { id: 'traits', header: t('col.traits'), class: 'col-wide', cell: (r) => <TraitDots content={content} traitIds={r.fighter.traits.map((x) => x.id)} /> },
     {
@@ -821,7 +829,7 @@ function TrialsCard({
             );
           })}
         </ul>
-        <p class="u-xs u-faint">{t('trials.agentsNote')}</p>
+        <p class="u-xs u-faint">{t(rookies.length > 1 ? 'trials.agentsNoteMany' : 'trials.agentsNote')}</p>
       </div>
     </Panel>
   );

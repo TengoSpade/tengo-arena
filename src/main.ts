@@ -1,7 +1,10 @@
 /**
- * App entry. Loads the UI designer's stylesheets in cascade order, builds
- * the browser platform (IndexedDB saves, file download/upload, clock,
- * entropy), the store, validates the content theme, then mounts the app.
+ * App entry. Loads the UI designer's stylesheets in cascade order, starts
+ * fetching the content chunk (the theme JSON is not part of this bundle; index.html
+ * shows a loading state meanwhile), builds the browser platform (IndexedDB saves,
+ * file download/upload, clock, entropy), the store, validates the content theme
+ * once the chunk is in, then mounts the app. A chunk that cannot be loaded ends
+ * on the content-error screen like invalid content does.
  *
  * Dev builds: the dev engine (real core first, provisional stand-ins for
  * unfinished core functions), `?dev-world=<weekIndex>&club=<clubId>`
@@ -13,12 +16,13 @@
 import { h, render } from 'preact';
 import { version as gameVersion } from '../package.json';
 import { browserClock, browserEntropy, browserFileIO } from './platform/browser';
-import { loadThemeFiles } from './platform/content-loader';
+import { loadBundledTheme } from './platform/content-loader';
 import { createIdbSaveStore } from './platform/save-store.idb';
 import { createMemorySaveStore } from './platform/save-store.memory';
 import { App } from './ui/app/App';
+import type { RawContentFiles } from './core/content';
 import type { GameState, SeasonEndReport } from './core/model';
-import { createGameStore, settings, type GameEngine } from './ui/store';
+import { applySettingsToDocument, createGameStore, settings, type GameEngine } from './ui/store';
 import { installConsoleCapture } from './ui/tickets/console-capture';
 
 import './ui/styles/tokens.css';
@@ -29,6 +33,14 @@ import './ui/app/shell.css';
 // First: playtest tickets record the last console errors and warnings from here on.
 installConsoleCapture();
 
+// Next: the content chunk downloads while the rest of this module runs. The rejection is caught here, so it
+// is never reported as unhandled; initContent below turns it into the content-error screen.
+const THEME_ID = 'default';
+const themeLoad = loadBundledTheme(THEME_ID).then(
+  (theme): { raw: RawContentFiles; hash?: string } => ({ raw: theme.raw, hash: theme.hash }),
+  (e: unknown): { error: Error } => ({ error: new Error(`The content bundle could not be loaded: ${e instanceof Error ? e.message : String(e)}`) }),
+);
+
 const root = document.getElementById('app');
 if (!root) throw new Error('index.html is missing <div id="app">');
 
@@ -37,8 +49,12 @@ const query = new URLSearchParams(location.search);
 // Review hooks (like the mockups' ?theme=): not persisted.
 const themeParam = query.get('theme');
 if (themeParam === 'light' || themeParam === 'dark') settings.value = { ...settings.value, theme: themeParam };
+// The player's theme and scale apply now, so the loading state of index.html already wears them.
+applySettingsToDocument();
 let engine: GameEngine | undefined;
 if (dev) engine = (await import('./ui/debug/dev-engine')).createDevEngine();
+
+const theme = await themeLoad;
 
 const saves = typeof indexedDB !== 'undefined' ? createIdbSaveStore() : createMemorySaveStore();
 const store = createGameStore({
@@ -46,13 +62,17 @@ const store = createGameStore({
   clock: browserClock,
   files: browserFileIO,
   entropy: browserEntropy,
-  loadTheme: (themeId) => loadThemeFiles(themeId).raw,
+  loadTheme: () => {
+    if ('error' in theme) throw theme.error;
+    return theme.raw;
+  },
+  contentHash: () => ('error' in theme ? undefined : theme.hash),
   gameVersion,
   dev,
   engine,
   userAgent: navigator.userAgent,
 });
-store.initContent('default');
+store.initContent(THEME_ID);
 
 if (dev) {
   const week = query.get('dev-world');
@@ -89,4 +109,6 @@ if (dev) {
   }
 }
 
+// The static loading state of index.html goes; the app takes the page.
+root.replaceChildren();
 render(h(App, { store }), root);

@@ -34,3 +34,20 @@
 .settings-grid .field > .segmented {
   align-self: flex-start;
 }
+
+/* Match day (M1.1): three columns of career settings. */
+.matchday {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-6);
+}
+
+.matchday-num input[type="range"] {
+  width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .matchday {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

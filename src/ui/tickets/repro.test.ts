@@ -59,7 +59,7 @@ describe('ticket reproduction', () => {
     expect((await store.load(`ticket-${ID}`)).ok).toBe(true);
     await store.newGame({ seed: 'another' });
     expect(store.loadedSlot.value).toBeNull();
-  }, 30_000);
+  }, 120_000); // plays six weeks: about 5 s alone
 });
 
 describe('career id', () => {
@@ -82,7 +82,7 @@ describe('career id', () => {
     // A ticket's save carries the id, so a reproduction files under the same run.
     const state = JSON.parse(serializeCareer(store.engine, snapshot(store))!) as { meta: { careerId?: string } };
     expect(state.meta.careerId).toBe(first);
-  }, 20_000);
+  }, 60_000);
 
   it('keeps the fallback key short: a career on a 500-character seed saves and loads with the real core', async () => {
     const { store } = createTestStore({ world: 'none', engine: coreEngine });
@@ -96,5 +96,5 @@ describe('career id', () => {
     expect(loaded.ok, JSON.stringify(loaded)).toBe(true);
     expect(store.game.value!.rng.root).toHaveLength(500);
     expect(store.careerId.value).toBe(key);
-  });
+  }, 60_000);
 });

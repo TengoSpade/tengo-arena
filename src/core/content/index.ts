@@ -5,6 +5,7 @@
  *   parseContentFiles(raw)                 -> Result<ContentFiles, ContentIssue[]>
  *   validateContentFiles(files, profile)   -> ContentIssue[]
  *   hashContent(raw), formatContentIssues(issues)
+ *   stripDocKeys(json), isDocKey(key)      -> "_"-prefixed documentation keys (never read; stripped from production builds)
  *   units: secondsToTicks, metresToCm, metresToMm, mpsToMmPerTick, fractionToBp, mulBp
  *
  * Content types are inferred from the zod schemas in ./schema; closed
@@ -13,6 +14,7 @@
  */
 export { loadContent, parseContentFiles, hashContent, CONTENT_FILE_NAMES } from './load';
 export type { RawContentFiles, LoadContentOptions } from './load';
+export { isDocKey, stripDocKeys } from './doc-keys';
 export { validateContentFiles, THEME_RULES } from './validate';
 export type { ValidationProfile } from './validate';
 export { formatContentIssues } from './issues';
@@ -20,6 +22,8 @@ export type { ContentIssue } from './issues';
 export { buildContentDB, createRegistry } from './db';
 export { combatRating } from './rating';
 export { autoSwapRulesFor, clubMatchDefaults } from './match-defaults';
+export { SAVE_BOUNDS } from './save-bounds';
+export type { SaveBounds } from './save-bounds';
 export type { ClubMatchDefaults } from './match-defaults';
 export type { ContentDB, Registry } from './db';
 export * from './types';

@@ -28,6 +28,13 @@ const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set([
   'pacing.set',
 ]);
 
+/**
+ * Commands allowed while the player's match waits between rounds (GameState.liveMatch): the swap
+ * itself, settings and news. Everything that could change a squad, a roster or money waits until
+ * the match (and so the week) is over; level-up picks too (levelup.choose, 05 M1.1 addendum).
+ */
+const LIVE_MATCH_ALLOWED: ReadonlySet<Command['type']> = new Set(['match.swap', 'news.markRead', 'news.setRead', 'shortlist.toggle', 'levelup.policy', 'autoswap.set', 'pacing.set']);
+
 function clubCheck(state: GameState, clubId: ClubId): EngineError | null {
   return getOwn(state.clubs, clubId) ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };
 }
@@ -45,6 +52,10 @@ function rosterFighter(state: GameState, clubId: ClubId, fighterId: FighterId, c
 export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, content: ContentDB): Result<OfferResponse | null, EngineError> {
   if (draft.calendar.phase === 'season-end' && !SEASON_END_ALLOWED.has(cmd.type)) {
     return fail('phase.season-end', 'Club decisions wait until the season-end step has run');
+  }
+  if (draft.liveMatch !== null && !LIVE_MATCH_ALLOWED.has(cmd.type)) {
+    if (cmd.type === 'levelup.choose') return fail('levelup.match-in-progress', 'Level-up picks wait until the match is over');
+    return fail('match.in-progress', 'Club decisions wait until the match in progress is over', { fixtureId: draft.liveMatch.fixtureId });
   }
   if (cmd.type !== 'club.choose' && cmd.type !== 'news.markRead' && cmd.type !== 'news.setRead') {
     const e = clubCheck(draft, cmd.clubId);
@@ -128,6 +139,11 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
     }
 
     case 'match.swap': {
+      // Only the player decides swaps (blind decisions): every other club, the AI opponent included, decides by its own
+      // auto-swap rules inside the orchestrator and never through a command.
+      if (draft.playerClubId === null || cmd.clubId !== draft.playerClubId) {
+        return fail('match.not-player-club', `"${cmd.clubId}" is not the player's club: only the player's club takes swap decisions`, { clubId: cmd.clubId });
+      }
       const ms = draft.liveMatch;
       if (ms === null || ms.fixtureId !== cmd.fixtureId) return fail('match.not-live', 'That match is not waiting between rounds', { fixtureId: cmd.fixtureId });
       if (ms.phase !== 'between_rounds' || ms.rounds.length !== cmd.afterRound) {

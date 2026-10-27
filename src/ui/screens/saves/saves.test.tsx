@@ -54,6 +54,23 @@ describe('Saves screen', () => {
     expect(autos[0]!.textContent).toContain('Autosave 1');
   });
 
+  it('shows the mid-match autosave first, tagged, apart from the weekly slots and not counted as a manual slot', async () => {
+    renderSaves({ saves: [...SAVES, meta('auto-round', { label: 'Varrow Lanternguard · S2 MW7 · after round 1', savedAt: '2026-10-24T18:00:00.000Z' })] });
+    const manual = await screen.findByTestId('saves-manual');
+    await waitFor(() => expect(within(manual).getAllByRole('row').slice(1)).toHaveLength(2));
+    const autos = within(screen.getByTestId('saves-auto')).getAllByRole('row').slice(1);
+    expect(autos).toHaveLength(3);
+    // The round slot leads even though a weekly slot is newer; the weekly ones follow, newest first.
+    expect(autos[0]!.textContent).toContain('Mid-match autosave');
+    expect(autos[0]!.textContent).toContain('after round 1');
+    expect(within(autos[0] as HTMLElement).getByTestId('auto-round-tag').getAttribute('data-tip')).toMatch(/resume the match/);
+    expect(autos[1]!.textContent).toContain('Autosave 1');
+    expect(autos[2]!.textContent).toContain('Autosave 2');
+    expect(screen.getByTestId('saves-auto').textContent).toMatch(/overwritten after every round/);
+    // It loads like any save.
+    expect(within(autos[0] as HTMLElement).getByTestId('load-auto-round')).toBeTruthy();
+  });
+
   it('lists ticket reproductions apart: not counted as manual slots, deletable', async () => {
     const ticket = meta('ticket-AL-R001-T001_20261025-193412', { label: 'Ticket AL-R001-T001_20261025-193412' });
     const store = renderSaves({ saves: [...SAVES, ticket] });

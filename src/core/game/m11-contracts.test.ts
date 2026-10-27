@@ -155,6 +155,30 @@ describe('swap legality (checkSwaps) and match.swap', () => {
     expect(code(s, { type: 'match.swap', clubId: c, fixtureId: ms.fixtureId, afterRound: 2, swaps: [] })).toBe('match.not-between-rounds');
     expect(code(world(), { type: 'match.swap', clubId: c, fixtureId: ms.fixtureId, afterRound: 1, swaps: [] })).toBe('match.not-live');
   });
+
+  it("match.swap is the player's alone: the opponent's club, a club that does not play, and any club without a player are refused with match.not-player-club", () => {
+    const { s, c } = between();
+    const ms = s.liveMatch!;
+    const opponent = ms.away.clubId;
+    const bystander = Object.keys(s.clubs).find((x) => x !== c && x !== opponent) as ClubId;
+    // A legal swap for the opponent's side: it would be accepted if the command did not check who sends it.
+    const theirs = { out: ms.away.active[0]!, in: ms.away.unusedReserves[0]! };
+    expect(checkSwaps(ms, 'away', [theirs], 2).accepted).toHaveLength(1);
+    for (const clubId of [opponent, bystander]) {
+      const r = engine.applyCommand(s, { type: 'match.swap', clubId, fixtureId: ms.fixtureId, afterRound: 1, swaps: clubId === opponent ? [theirs] : [] }, content);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toMatchObject({ code: 'match.not-player-club', details: { clubId } });
+    }
+    // The refused command changed nothing: the player's decision slot is still empty.
+    expect(s.liveMatch!.playerDecisions).toBeNull();
+    // No player club (a headless or spectated match): nobody may send swaps.
+    const headless = cloneJson(s);
+    headless.playerClubId = null;
+    expect(code(headless, { type: 'match.swap', clubId: c, fixtureId: ms.fixtureId, afterRound: 1, swaps: [] })).toBe('match.not-player-club');
+    // The player's own club still works, and the check comes before the match state is looked at.
+    expect(code(s, { type: 'match.swap', clubId: c, fixtureId: ms.fixtureId, afterRound: 1, swaps: [] })).toBeNull();
+    expect(code(world(), { type: 'match.swap', clubId: opponent, fixtureId: ms.fixtureId, afterRound: 1, swaps: [] })).toBe('match.not-player-club');
+  });
 });
 
 describe('replay record (roundInputOf)', () => {

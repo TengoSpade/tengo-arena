@@ -568,7 +568,7 @@ Rules never skip, reorder or misfire because of stats or traits (P-06). Only vis
 | Elf | 120 | 0.667 | 28–33 | 42 (42–46) | 47 | 90 | 1.25 | 1.20 | 87 |
 | Dwarf | 72 | 1.111 | 16–19 | 25 (26–27) | 28 | 54 | 0.80 | 0.90 | 52.2 |
 | Orc | 64 | 1.250 | 16–18 | 22 (23–24) | 25 | 48 | 0.75 | 0.80 | 46.4 |
-| Ashkin (original race) | 52 | 1.538 | 16–17 | 18 (19–20) | 21 | 39 | 0.85 | 0.80 | 37.7 |
+| Ashkin (original race) | 52 | 1.538 | 16–17 | 18 (19–20) | 21 | 39 | 0.82 | 0.80 | 37.7 |
 
 The last column is the real age at human-age 58 (58 × lifespan ÷ 80). Career length now depends on the class as well as the race (D-T): after the polish-round recalibration the median retirement human-age is 38.8 for physically weighted classes, 42.0 for mixed and 46.1 for mentally weighted (§8.3); for a physically weighted class that is real age 39 for a human, 58 for an elf, 35 for a dwarf, 31 for an orc and 25 for an Ashkin.
 

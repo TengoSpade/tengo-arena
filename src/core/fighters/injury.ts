@@ -3,7 +3,8 @@
  *
  *   p = (base + damagePerMaxHp × min(2, damageTaken ÷ maxHp) + downedAdd × [downed])
  *       × clamp(1 + (10 − tgh) × 0.05, 0.6, 1.4) × race.chanceMult × ageMult(human-age)
- *       × trait and status injuryChance multipliers (Still tender ×1.25 is a status effect), capped at 15%
+ *       × trait and status injuryChance multipliers (Still tender ×1.25 is a status effect)
+ *       × the M1.1 Freshness multiplier min(1.4, 1 + 0.006 × (60 − F)) for a round started at F < 60, capped at 15%
  *
  * Integer basis points; the product truncates once at its end.
  */
@@ -13,6 +14,7 @@ import type { Rng } from '../rng';
 import { effectSources, multFactorsBp } from './effects';
 import { BP, bp, roundN, stepLookup, truncN } from './fixed';
 import { scarCount } from './traits';
+import { freshnessInjuryMultBp, freshnessOf } from './levels';
 import { effectiveStatsOf, fighterHumanAge100 } from './stats';
 
 export type Severity = Injury['severity'];
@@ -30,6 +32,8 @@ export interface RoundExposure {
   /** damage taken ÷ max HP in basis points (uncapped). */
   damageRatioBp: number;
   downed: boolean;
+  /** M1.1: Freshness 0-100 at the round's start (default: the fighter's current value). */
+  freshness?: number;
 }
 
 function durabilityMultBp(tgh: number, content: ContentDB): number {
@@ -40,8 +44,8 @@ function durabilityMultBp(tgh: number, content: ContentDB): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-/** Proneness factors (bp): durability, race, age, traits and statuses. */
-export function pronenessFactorsBp(fighter: Fighter, content: ContentDB, tgh?: number): number[] {
+/** Proneness factors (bp): durability, race, age, traits and statuses, and Freshness (frs-009; default the current value). */
+export function pronenessFactorsBp(fighter: Fighter, content: ContentDB, tgh?: number, freshness?: number): number[] {
   const race = content.races.require(fighter.raceId);
   const inj = content.development.injury;
   const ha = Math.floor(fighterHumanAge100(fighter, content) / 100);
@@ -52,6 +56,7 @@ export function pronenessFactorsBp(fighter: Fighter, content: ContentDB, tgh?: n
     bp(race.injury.chanceMult),
     bp(stepLookup(inj.ageMultByHumanAge, ha)),
     ...multFactorsBp(effectSources(fighter, content), 'injuryChance'),
+    freshnessInjuryMultBp(freshness ?? freshnessOf(fighter), content),
   ];
 }
 
@@ -75,7 +80,7 @@ export function roundInjuryChanceBp(fighter: Fighter, content: ContentDB, exposu
   const capRatio = bp(pr.damageRatioCap);
   const ratio = exposure.damageRatioBp > capRatio ? capRatio : exposure.damageRatioBp < 0 ? 0 : exposure.damageRatioBp;
   let p = bp(pr.base) + (bp(pr.damagePerMaxHp) * ratio) / BP + (exposure.downed ? bp(pr.downedAdd) : 0);
-  for (const f of pronenessFactorsBp(fighter, content, tgh)) p = (p * f) / BP;
+  for (const f of pronenessFactorsBp(fighter, content, tgh, exposure.freshness)) p = (p * f) / BP;
   const v = truncN(p);
   const cap = bp(pr.cap);
   return v > cap ? cap : v;

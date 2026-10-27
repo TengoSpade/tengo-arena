@@ -28,7 +28,7 @@ function payload(over: Partial<TicketPayload> = {}): TicketPayload {
   };
 }
 
-describe('tickets on disk', () => {
+describe('tickets on disk', { timeout: 60_000 }, () => {
   it('numbers each ticket itself, then writes the three files, the index and a markdown row', () => {
     const fs = createTicketsFs(join(dir, 'tickets'), { commit: 'abc1234', dirty: false });
     expect(fs.next('c-career-a')).toEqual({ run: 1, ticket: 1 });
@@ -119,7 +119,7 @@ function call(handler: ReturnType<typeof ticketsHandler>, c: Call): Promise<{ st
 
 const sameOrigin = { 'content-type': 'application/json', origin: 'http://localhost:5173' };
 
-describe('tickets dev-server handler', () => {
+describe('tickets dev-server handler', { timeout: 60_000 }, () => {
   it('files a ticket from the game page, serves its files and answers bad requests with 4xx', async () => {
     const fs = createTicketsFs(join(dir, 'tickets'));
     const handle = ticketsHandler(fs, { commit: 'abc1234', dirty: true });

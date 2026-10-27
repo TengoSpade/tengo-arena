@@ -224,6 +224,10 @@ export default function ClubSelectScreen(_props: ScreenProps) {
                     aria-controls="club-preview"
                     data-previewed={club.id === previewId ? 'true' : undefined}
                     onFocus={() => setFocused(club.id)}
+                    // Focus leaving the cards (to Start career, the tier tabs...): the preview goes back to the picked club.
+                    onBlur={(e) => {
+                      if (!gridRef.current?.contains(e.relatedTarget as Node | null)) setFocused(null);
+                    }}
                     onClick={() => setPicked(club.id)}
                   >
                     <span class="club-card__head">

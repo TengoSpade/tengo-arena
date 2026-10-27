@@ -1,5 +1,6 @@
 import type { StandingRow } from './competition';
 import type { ClubId, FighterId, StatId, TierId, WingId } from './ids';
+import type { ResolvedLevelUp } from './progression';
 
 /**
  * Archive of a finished season, written once by the season-end step
@@ -34,6 +35,8 @@ export interface FighterDevelopment {
   potentialChange?: number;
   /** He retired at this season end. */
   retired?: boolean;
+  /** M1.1: the level-ups resolved this season, oldest first (in-season picks, policies, and those auto-resolved at the season end). */
+  picks?: ResolvedLevelUp[];
 }
 
 export interface WageRaise {

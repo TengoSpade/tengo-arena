@@ -417,7 +417,7 @@ describe('match preparation and reports', () => {
     expect(view.available).toBe(true);
     expect(view.captaincy.letter).not.toBe('');
     const cmd = engine.suggestLineup(s, clubId, content);
-    expect(cmd.type).toBe('lineup.set');
+    expect(cmd.type).toBe('squad.set');
     expect(engine.applyCommand(s, cmd, content).ok).toBe(true);
     expect(() => engine.fighterView(s, asId<FighterId>('f-0'), content)).toThrow();
   });

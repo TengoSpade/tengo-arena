@@ -11,9 +11,12 @@ import {
   reckoningCompetitionId,
   type ClubId,
   type ClubSeasonRow,
+  type CompactFighterTotals,
+  type FighterId,
   type GameState,
   type LeagueRecordsView,
   type MatchResult,
+  type MatchSquad,
   type SeasonRecord,
   type StandingRow,
   type TierId,
@@ -200,15 +203,36 @@ export function isCompactedResult(result: MatchResult): boolean {
   return result.input.home.fighters.length === 0 && result.input.away.fighters.length === 0;
 }
 
-/** A compacted copy (results are write-once and shared between states: never edit one in place). */
+/**
+ * A compacted copy (results are write-once and shared between states: never edit one in place).
+ *
+ * Kept: the score, winner, MVP and hired blades, the round summaries (without final HP), the sides' squads without
+ * their row maps (a summary of who was named), the emergency entrants, and `fighterTotals`: for every fighter who
+ * started a round the side, rounds started, downs inflicted and suffered, damage dealt and healing done, so an old
+ * report still attributes every fighter to his club, emergency entrants and swapped-in reserves included.
+ * Dropped: the sim fighters, per-fighter stats, `reserveInputs`, `roundLineups` and `betweenRounds` (together about
+ * 0.7 MB a season; they only serve re-simulating and the round-by-round timeline, which a compacted result no
+ * longer offers).
+ */
 export function compactedResult(result: MatchResult): MatchResult {
   const side = (s: MatchResult['input']['home']): MatchResult['input']['home'] => ({ ...s, fighters: [], captainIndex: 0, viceCaptainIndex: null });
-  return {
+  const squad = (q: MatchSquad): MatchSquad => ({ ...q, rows: {} });
+  const fighterTotals: Record<FighterId, CompactFighterTotals> = {};
+  for (const [id, st] of Object.entries(result.fighterStats)) {
+    fighterTotals[id as FighterId] = [st.clubId === result.homeClubId ? 0 : 1, st.roundsPlayed, st.downsInflicted, st.downsSuffered, st.damageDealt, st.healingDone];
+  }
+  const out: MatchResult = {
     ...result,
     input: { ...result.input, home: side(result.input.home), away: side(result.input.away) },
     rounds: result.rounds.map((r) => ({ ...r, finalHp: [] })),
     fighterStats: {},
+    fighterTotals: result.fighterTotals ?? fighterTotals,
   };
+  delete out.reserveInputs;
+  delete out.roundLineups;
+  delete out.betweenRounds;
+  if (result.squads) out.squads = { home: squad(result.squads.home), away: squad(result.squads.away) };
+  return out;
 }
 
 /**

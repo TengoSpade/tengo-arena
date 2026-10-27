@@ -73,8 +73,6 @@
   "developmentClock": {
     "_doc": "M1.1: used only when a fighter is created (world generation, intake, free agents, hired blades) and by the save migration. D_physical and D_mental are set from pre-career usage as in M1 (preCareerUsage, maxAheadOfHumanAge, bloomRangeHumanYears), then frozen: they are stored but never advanced. train100_i = cap100_i * M_g(D_g + bloom_i) at creation; after that a stat grows only through level-up picks (levels.json). The M1 season-end development step is removed.",
     "startHumanAge": 16,
-    "usageFloor": 0,
-    "maxDeltaPerSeason": 2.5,
     "bloomRangeHumanYears": 2,
     "preCareerUsage": { "min": 0.65, "max": 1.0 },
     "maxAheadOfHumanAge": 4
@@ -125,22 +123,7 @@
       { "id": "mind", "label": "Mind" }
     ],
     "default": "balanced",
-    "emphasisBonus": 0.2,
-    "offEmphasisPenalty": 0.2,
-    "bodyWearReduction": 0,
     "formulas": { "a": "product of trainingEmphasis effect mults (human Adaptable 1.5, Regimented 1.5, Set in Their Ways 0); clamp a to [0, 2]", "offerWeight": "Body: physical stats x (1 + perStrength * a), mental stats / (1 + perStrength * a); Mind: the reverse; Balanced: x1 (levels.json offers.emphasisWeight.perStrength)" }
-  },
-
-  "trend": {
-    "_doc": "Live development trend = projected rating change at season end if the fighter's XP per matchweek so far continues (projected seasonXp = seasonXp * 19 / weeksElapsed).",
-    "levels": [
-      { "id": "surging", "label": "Surging", "icon": "trend_up2", "minDelta": 3 },
-      { "id": "improving", "label": "Improving", "icon": "trend_up", "minDelta": 1 },
-      { "id": "holding", "label": "Holding", "icon": "trend_flat", "minDelta": 0 },
-      { "id": "slipping", "label": "Slipping", "icon": "trend_down", "minDelta": -2 },
-      { "id": "fading", "label": "Fading", "icon": "trend_down2", "minDelta": -999 }
-    ],
-    "_rounding": "projected delta is an integer rating difference; pick the first level whose minDelta <= delta"
   },
 
   "retirement": {
@@ -164,8 +147,8 @@
     "modifierOrder": "multiply (usage, contract, trait mults), then add (scars, heavy wear), then clamp",
     "finalSeasonAnnounceAtLeast": 0.6,
     "_finalSeasonNote": "At preseason week P1, a fighter whose chance (computed with usage 1.0) is >= 60% announces a final season: status final_season, retirement certain at season end.",
-    "unsignedSeasonEndsBeforeLeaving": 2,
-    "_leavingNote": "A free agent unsigned at two consecutive season ends leaves the league (removed like a retirement but not counted as one for intake).",
+    "unsignedSeasonEndsBeforeLeaving": 3,
+    "_leavingNote": "A free agent unsigned at three consecutive season ends leaves the league (removed like a retirement but not counted as one for intake). M1.1 soak tuning: 2 -> 3 so the preseason pool stays inside the 100-300 band.",
     "_usageDoc": "M1.1: usage for the retirement modifiers (usageHighAtLeast, usageLowAtMost) = min(1, season round XP / xp.seasonTarget). Round XP only: bench XP (levels.json benchXp) does not count, so a fighter who mostly sits out still reads as low usage."
   },
 
@@ -288,7 +271,7 @@
     },
     "intake": {
       "_doc": "TUNABLE; coordinate with the league/economy designer (trials day, P-18). rookies = clamp(round(clubs * basePerClub) + retirementsThisSeason, round(clubs * minPerClub), round(clubs * maxPerClub)). retirementsThisSeason counts retirements and career-ending injuries, not unsigned fighters who left the league (that would feed back into itself). Race by race.intakeWeight; age uniform in race.debutAge.",
-      "basePerClub": 0.75,
+      "basePerClub": 0.8,
       "minPerClub": 0.5,
       "maxPerClub": 1.6
     },

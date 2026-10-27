@@ -28,7 +28,6 @@ export interface GamePorts {
     | 'isFit'
     | 'injuryChanceBp'
     | 'retirementChanceBp'
-    | 'trend'
     | 'lineupCaptain'
     | 'captainChangeConsequences'
     | 'lineupLock'
@@ -51,6 +50,10 @@ export interface GamePorts {
     | 'freshnessBetweenRounds'
     | 'matchEndProgression'
     | 'resolveLevelUp'
+    // M1.1 reads for levelUpView and policy picks (WP-B)
+    | 'levelOptionLegal'
+    | 'levelEtaMatches'
+    | 'offerContextOf'
   >;
   league: Pick<
     typeof league,
@@ -122,7 +125,6 @@ export const realGamePorts: GamePorts = {
     isFit: fighters.isFit,
     injuryChanceBp: fighters.injuryChanceBp,
     retirementChanceBp: fighters.retirementChanceBp,
-    trend: fighters.trend,
     lineupCaptain: fighters.lineupCaptain,
     captainChangeConsequences: fighters.captainChangeConsequences,
     lineupLock: fighters.lineupLock,
@@ -137,6 +139,7 @@ export const realGamePorts: GamePorts = {
     freshnessLabel: fighters.freshnessLabel,
     effectiveLevelUpMode: fighters.effectiveLevelUpMode,
     autoPickChoice: fighters.autoPickChoice,
+    offerContextOf: fighters.offerContextOf,
     typicalRoundDrain10: fighters.typicalRoundDrain10,
     freshnessAfterRound: fighters.freshnessAfterRound,
     xpAfterRound: fighters.xpAfterRound,
@@ -144,6 +147,8 @@ export const realGamePorts: GamePorts = {
     freshnessBetweenRounds: fighters.freshnessBetweenRounds,
     matchEndProgression: fighters.matchEndProgression,
     resolveLevelUp: fighters.resolveLevelUp,
+    levelOptionLegal: fighters.levelOptionLegal,
+    levelEtaMatches: fighters.levelEtaMatches,
   },
   league: {
     nextCalendar: league.nextCalendar,
@@ -208,6 +213,7 @@ export function aiPortsOf(ports: GamePorts): AiPorts {
       humanAge100: ports.fighters.humanAge100,
       isFit: ports.fighters.isFit,
       captaincy: ports.fighters.captaincy,
+      typicalRoundDrain10: ports.fighters.typicalRoundDrain10,
     },
     economy: {
       ask: ports.economy.ask,

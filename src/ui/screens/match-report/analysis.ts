@@ -8,6 +8,7 @@
 import type { ContentDB } from '../../../core/content';
 import type {
   ClubId,
+  FightFighterInput,
   FighterId,
   FighterRecap,
   FixtureId,
@@ -16,6 +17,7 @@ import type {
   MatchResult,
   ReportEvent,
   StartingRow,
+  SwapReason,
   TacticsAssignment,
 } from '../../../core/model';
 import { personName } from '../../../core/model';
@@ -55,8 +57,9 @@ export interface FighterInfo {
   id: FighterId;
   side: SideKey;
   us: boolean;
+  /** Slot of his first round (slot order breaks ties). */
   slot: number;
-  /** Unit index in round results (0-4 home, 5-9 away). */
+  /** Unit index in round results at his first round (0-4 home, 5-9 away). */
   unit: number;
   row: StartingRow;
   classId: string;
@@ -64,34 +67,158 @@ export interface FighterInfo {
   isCaptain: boolean;
   hiredBlade: boolean;
   recap: FighterRecap | null;
+  /** How he came to play (core FighterRecap.role): a starter, a squad reserve who came on, an emergency entrant. */
+  role: 'starter' | 'reserve' | 'emergency';
+  /** Rounds he started, each with the unit he fought as (a reserve takes the unit of the slot he enters). */
+  units: ReadonlyMap<number, number>;
+  /** Round he came in for (a swap, injury cover or an emergency entrant); null for a round-1 starter. */
+  enteredRound: number | null;
+  /** Who he replaced and why (the between-round record); null for a round-1 starter. */
+  entry: { out: FighterId | null; reason: SwapReason } | null;
+  /** Freshness 0-100 at the start of his first round (recorded lineups); null when not recorded. */
+  freshBefore: number | null;
 }
 
-/** Fielded fighters in slot order (home then away), from the stored sim input. */
+/** Did he start this round? (Results without recorded lineups: the five, in every round.) */
+export function startedRound(info: FighterInfo, round: number): boolean {
+  return info.units.has(round);
+}
+
+interface RoundStart {
+  slot: number;
+  row: StartingRow;
+  fresh: number | null;
+  entered: boolean;
+}
+
+/**
+ * Everyone who started a round, home then away: the round-1 five in slot order, then those who came
+ * in (by round, then slot): reserves swapped in, injury cover, emergency entrants. The report's
+ * `ReportSide.appearedIds`, `FighterRecap.role` and `roundsStarted` lead when it has them; the recorded
+ * round lineups fill in the rest (and older reports without those fields). Team totals come from the
+ * report's own `totals` (see `totals`), never from the round-1 five alone.
+ */
 export function fighterInfos(report: MatchReport, result: MatchResult | null, persp: Perspective): FighterInfo[] {
   const out: FighterInfo[] = [];
   const recapOf = new Map(report.fighters.map((f) => [f.fighterId, f]));
+  const lineups = result?.roundLineups ?? [];
+  const reportRounds = report.rounds.map((r) => r.round);
   for (const side of ['home', 'away'] as const) {
+    const base = side === 'home' ? 0 : 5;
     const input = result?.input[side];
-    const ids = input ? input.fighters.map((f) => f.fighterId) : report[side].fighterIds;
-    ids.forEach((id, slot) => {
-      const fin = input?.fighters[slot];
+    const inputOf = new Map<FighterId, FightFighterInput>();
+    for (const f of input?.fighters ?? []) inputOf.set(f.fighterId, f);
+    for (const f of result?.reserveInputs?.[side] ?? []) if (!inputOf.has(f.fighterId)) inputOf.set(f.fighterId, f);
+    // Who started which round, from the recorded lineups.
+    const starts = new Map<FighterId, Map<number, RoundStart>>();
+    for (const rl of lineups) {
+      rl[side].fighterIds.forEach((id, slot) => {
+        const m = starts.get(id) ?? new Map<number, RoundStart>();
+        m.set(rl.round, { slot, row: rl[side].rows[slot] ?? 'front', fresh: rl[side].freshness[slot] ?? null, entered: Boolean(rl[side].entered[slot]) });
+        starts.set(id, m);
+      });
+    }
+    const firstRoundOf = (id: FighterId) => Math.min(...(starts.get(id)?.keys() ?? [99]));
+    const firstSlotOf = (id: FighterId) => starts.get(id)?.get(firstRoundOf(id))?.slot ?? 9;
+    // Order: the round-1 five (stored input, else the report's list), then entrants as they came in.
+    const five = input && input.fighters.length > 0 ? input.fighters.map((f) => f.fighterId) : report[side].fighterIds.slice(0, 5);
+    const rest: FighterId[] = [];
+    const known = new Set<FighterId>(five);
+    const addRest = (ids: Iterable<FighterId>) => {
+      for (const id of ids) {
+        if (known.has(id)) continue;
+        known.add(id);
+        rest.push(id);
+      }
+    };
+    addRest(report[side].appearedIds ?? []);
+    addRest([...starts.keys()].sort((a, b) => firstRoundOf(a) - firstRoundOf(b) || firstSlotOf(a) - firstSlotOf(b)));
+    // The report lists everyone who started a round; this also covers results without recorded lineups.
+    addRest(report[side].fighterIds);
+    addRest(report.fighters.filter((f) => f.clubId === report[side].clubId).map((f) => f.fighterId));
+    [...five, ...rest].forEach((id, i) => {
+      const fin = inputOf.get(id);
       const recap = recapOf.get(id) ?? null;
+      const mine = starts.get(id);
+      const units = new Map<number, number>();
+      if (mine) for (const [round, st] of mine) units.set(round, base + st.slot);
+      else if (i < five.length) reportRounds.forEach((round) => units.set(round, base + i));
+      const first = mine ? firstRoundOf(id) : null;
+      const st = first !== null ? mine!.get(first) : undefined;
+      // From the lineups; else from the recap (role and the rounds he started) for results without lineups.
+      const startedAt = recap?.roundsStarted?.[0];
+      const enteredRound =
+        first !== null && st && (first > 1 || st.entered)
+          ? first
+          : !mine && recap?.role && recap.role !== 'starter' && startedAt !== undefined && (startedAt > 1 || recap.role === 'emergency')
+            ? startedAt
+            : null;
+      const swap = enteredRound !== null ? result?.betweenRounds?.find((b) => b.afterRound === enteredRound - 1)?.[side].find((w) => w.in === id) : undefined;
+      const slot = st?.slot ?? (i < five.length ? i : 9);
+      const role: FighterInfo['role'] = recap?.role ?? (enteredRound !== null ? (swap?.reason === 'emergency' ? 'emergency' : 'reserve') : 'starter');
       out.push({
         id,
         side,
         us: side === persp.usSide,
         slot,
-        unit: (side === 'home' ? 0 : 5) + slot,
-        row: fin?.row ?? 'front',
+        unit: base + (i < five.length || st ? slot : 0),
+        row: st?.row ?? fin?.row ?? 'front',
         classId: fin?.classId ?? '',
         tactics: fin?.tactics,
         isCaptain: recap?.isCaptain ?? report[side].captainId === id,
         hiredBlade: Boolean(result?.hiredBladeIds.includes(id)),
         recap,
+        role,
+        units,
+        enteredRound,
+        entry: enteredRound !== null || role !== 'starter' ? { out: swap?.out ?? null, reason: swap?.reason ?? (role === 'emergency' ? 'emergency' : 'auto') } : null,
+        freshBefore: st?.fresh ?? null,
       });
     });
   }
   return out;
+}
+
+/**
+ * Freshness a fighter finished this match on (0-100), or null when it can no longer be told. The record
+ * keeps round-start values only, so this reads his Freshness now: it is the match's own while no later
+ * week was processed (a fighter who starts a round does not rest that week).
+ */
+export function freshAfter(state: GameState, report: MatchReport, id: FighterId): number | null {
+  const f = state.fighters[id];
+  const fixture = state.fixtures[report.fixtureId];
+  if (!f || !fixture || fixture.season !== state.calendar.season || state.calendar.weekIndex > fixture.weekIndex + 1) return null;
+  if (typeof f.freshness10 !== 'number') return null;
+  return Math.max(0, Math.min(100, Math.floor(f.freshness10 / 10)));
+}
+
+/** A fit club fighter who started no round and earned bench XP (⅓ of a lineup slot, progression.md bxp-001). */
+export interface BenchXpEntry {
+  id: FighterId;
+  xp: number;
+  /** Named a match reserve and never came in (the rest of the bench is just the bench). */
+  reserve: boolean;
+}
+
+/**
+ * Bench XP of our club's non-starters: the report's `bench` lines (unused reserves first, then the rest of
+ * the fit bench), else the `aftermath.benchXp` map; none for a report that did not record it. Nothing
+ * for a match we did not play.
+ */
+export function benchXpOf(report: MatchReport, persp: Perspective, state: GameState): BenchXpEntry[] {
+  if (!persp.involved) return [];
+  const started = new Set(report.fighters.map((f) => f.fighterId));
+  const reserves = new Set<FighterId>([...(report[persp.usSide].unusedReserveIds ?? []), ...(state.results[report.fixtureId]?.squads?.[persp.usSide].reserves ?? [])]);
+  let entries: BenchXpEntry[];
+  if (report.bench) {
+    entries = report.bench.filter((b) => b.clubId === persp.usClubId).map((b) => ({ id: b.fighterId, xp: b.xp, reserve: b.role === 'reserve' }));
+  } else {
+    const map = report.aftermath.benchXp ?? {};
+    entries = Object.entries(map)
+      .filter(([id]) => state.fighters[id as FighterId]?.clubId === persp.usClubId)
+      .map(([id, xp]) => ({ id: id as FighterId, xp, reserve: reserves.has(id as FighterId) }));
+  }
+  return entries.filter((b) => !started.has(b.id)).sort((a, b) => Number(b.reserve) - Number(a.reserve) || b.xp - a.xp || (a.id < b.id ? -1 : 1));
 }
 
 /** 04 ui-report MVP contribution: damage + healing + shielding + 250 × downs inflicted. */
@@ -110,8 +237,17 @@ function sideTotals(infos: FighterInfo[], side: SideKey) {
   };
 }
 
-export function totals(infos: FighterInfo[]) {
-  return { home: sideTotals(infos, 'home'), away: sideTotals(infos, 'away') };
+/**
+ * Team totals of both sides: the report's own `totals` (the sum over everyone who started a round, the
+ * reserves who came on included) when it has them, else summed here over the fighters listed.
+ */
+export function totals(infos: FighterInfo[], report?: MatchReport) {
+  const side = (s: SideKey) => {
+    const t = report?.totals?.[s];
+    if (t) return { downs: t.downsInflicted, downed: t.downsSuffered, damage: t.damageDealt, healing: t.healingDone };
+    return sideTotals(infos, s);
+  };
+  return { home: side('home'), away: side('away') };
 }
 
 /** A fighter's name, also for one who has left the league since (alumni, personName). */
@@ -159,7 +295,7 @@ export function firstDownRounds(report: MatchReport, infos: FighterInfo[], fight
 // ---- summary ---------------------------------------------------------------------------------------
 
 export function summary(report: MatchReport, persp: Perspective, infos: FighterInfo[], state: GameState): { title: string; text: string } {
-  const tot = totals(infos);
+  const tot = totals(infos, report);
   const us = tot[persp.usSide];
   const them = tot[other(persp.usSide)];
   const winnerSide: SideKey = report.winnerClubId === report.home.clubId ? 'home' : 'away';
@@ -413,6 +549,9 @@ function momentFor(e: ReportEvent, round: number, i: number, infos: FighterInfo[
         text: t('ev.overtimeText', { cap: content.combat.overtime.hardCapS }),
         focusId: null,
       };
+    case 'perk_proc':
+      // M1.1 perk procs (core report kind 'perk_proc'); not listed as key moments yet (WP-D decides their display).
+      return { ...base, event: 'rule', title: e.perkId ?? '', text: '', focusId: e.actorId };
   }
 }
 
@@ -426,7 +565,7 @@ export function moments(report: MatchReport, result: MatchResult | null, infos: 
   let hw = 0;
   let aw = 0;
   report.rounds.forEach((round) => {
-    const list = round.keyEvents.map((e, i) => momentFor(e, round.round, i, infos, persp, state, content, injured));
+    const list = round.keyEvents.filter((e) => e.kind !== 'perk_proc').map((e, i) => momentFor(e, round.round, i, infos, persp, state, content, injured));
     if (round.winner === 'home') hw++;
     else aw++;
     const rr = result?.rounds.find((x) => x.round === round.round);

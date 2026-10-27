@@ -26,12 +26,13 @@ import {
   type RetirementRecord,
   type SeasonEndReport,
   type SeasonRecord,
+  type ResolvedLevelUp,
   type StatId,
 } from '../model';
 import { RESULT_RETENTION_SEASONS } from '../league';
 import { NotImplementedError, cloneJson, engineError, err, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
-import { clubsInOrder, newsSince, rosterOf, tidyAll } from './shared';
+import { clubsInOrder, compareIds, newsSince, rosterOf, tidyAll } from './shared';
 import { runAiPhase, type PhaseLog } from './week';
 
 export interface SeasonEndOutcome {
@@ -83,13 +84,38 @@ interface Snapshot {
   rating: number;
   potential: number;
   stats: Record<StatId, number>;
+  picks: ResolvedLevelUp[];
+}
+
+/**
+ * Season-end step 6.1 ahead of the aging step: every pending level-up is resolved by the fighter's policy
+ * (manual reads as auto), oldest first, with the same choice core/fighters' Aging would make
+ * (autoPickChoice with offerContextOf, how 'season_end'), so the season's picks are still in the level log
+ * when the development rows are taken (developmentSummary picks). Anything refused stays for the aging step.
+ */
+function resolvePendingLevelUps(ports: GamePorts, draft: GameState, content: ContentDB): void {
+  for (const f of Object.values(draft.fighters).sort((a, b) => compareIds(a.id, b.id))) {
+    if (f.status === 'retired' || f.pendingLevelUps.length === 0) continue;
+    const mode = ports.fighters.effectiveLevelUpMode(draft, f);
+    const policy = mode === 'manual' ? 'auto' : mode;
+    for (const offer of [...f.pendingLevelUps]) {
+      const choice = ports.fighters.autoPickChoice(f, offer, policy, content, ports.fighters.offerContextOf(draft, f, content));
+      if (!ports.fighters.resolveLevelUp(draft, f.id, offer.level, choice, 'season_end', content).ok) break;
+    }
+  }
 }
 
 function snapshotRostered(ports: GamePorts, draft: GameState, content: ContentDB): Map<FighterId, Snapshot> {
   const out = new Map<FighterId, Snapshot>();
   for (const club of clubsInOrder(draft, content)) {
     for (const f of rosterOf(draft, club.id)) {
-      out.set(f.id, { age: f.age, rating: ports.fighters.rating(f, content), potential: ports.fighters.potential(f, content), stats: ports.fighters.effectiveStats(f, content) });
+      out.set(f.id, {
+        age: f.age,
+        rating: ports.fighters.rating(f, content),
+        potential: ports.fighters.potential(f, content),
+        stats: ports.fighters.effectiveStats(f, content),
+        picks: f.season.levelLog.filter((l) => l.season === draft.calendar.season).map((l) => ({ ...l })),
+      });
     }
   }
   return out;
@@ -119,6 +145,7 @@ function recordDevelopment(
     const potential = ports.fighters.potential(f, content) - b.potential;
     if (potential !== 0) row.potentialChange = potential;
     if (retired.has(id)) row.retired = true;
+    if (b.picks.length > 0) row.picks = b.picks;
     rows.push(row);
   }
   record.development = rows;
@@ -189,6 +216,7 @@ export function processSeasonEnd(ports: GamePorts, state: GameState, content: Co
     writeClubRows(ports, draft, record, content);
     // 6. Aging and development (every rostered fighter's before/after goes on the record: developmentSummary).
     if (player !== null) developedIds = rosterOf(draft, player).map((f) => f.id);
+    resolvePendingLevelUps(ports, draft, content);
     const before = snapshotRostered(ports, draft, content);
     ports.fighters.seasonEndDevelopment(draft, content);
     // 7. Retirements (core/fighters appends them to the archived record).

@@ -5,10 +5,10 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { combatRating } from '../content';
-import { SUMMARY_EVENT_TYPES, hashEventStream, type MatchInput } from '../model';
+import { SUMMARY_EVENT_TYPES, asId, hashEventStream, type MatchInput, type PerkId, type RoundInput } from '../model';
 import { deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
-import { ENGINE_VERSION, combatProfile, fighterInput, sideInput, simulateFight, simulateMatch } from './index';
+import { ENGINE_VERSION, combatProfile, fighterInput, sideInput, simulateFight, simulateMatch, simulateRound } from './index';
 
 const content = fixtureContent();
 const HOME = ['oathguard', 'gutterknife', 'longeye', 'rimebinder', 'chirurgeon'];
@@ -16,6 +16,23 @@ const AWAY = ['siegebreaker', 'oathguard', 'longeye', 'chirurgeon', 'rimebinder'
 
 function match(seed = 'a1b2c3d4e5f60718', bestOf = 3): MatchInput {
   return { seed, bestOf, home: sideInput(content, 'home', HOME, 0, 1), away: sideInput(content, 'away', AWAY, 1, 0) };
+}
+
+/** M1.1 round input: ability ranks, perks, Freshness and a fresh entry on the home side. */
+function m11Round(): RoundInput {
+  const home = sideInput(content, 'home', HOME, 0, 1);
+  const kit: [number, 1 | 2 | 3, 1 | 2 | 3, 1 | 2 | 3, string[], boolean][] = [
+    [100, 2, 3, 1, ['g_banner_voice', 't_thick_plating'], false],
+    [45, 3, 1, 2, ['m_keen_edge', 'g_second_breath'], false],
+    [70, 1, 2, 1, ['r_steady_aim'], false],
+    [30, 2, 2, 3, ['c_ready_mind', 'c_overload'], false],
+    [90, 3, 3, 3, ['h_gentle_hands'], true],
+  ];
+  home.fighters = home.fighters.map((f, i) => {
+    const [freshness, a1, a2, passive, perkIds, entered] = kit[i]!;
+    return { ...f, freshness, abilityRanks: { a1, a2, passive }, perkIds: perkIds.map((id) => asId<PerkId>(id)), enteredThisRound: entered };
+  });
+  return { round: 2, home, away: sideInput(content, 'away', AWAY, 1, 0) };
 }
 
 describe('determinism (acc-det-01, acc-det-02)', () => {
@@ -54,9 +71,11 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
 
   // The round checksums pin the fight itself. The event hash also covers the fight header (content hash):
   // re-pinned 2026-10 when the fixture content gained the D-P/D-T keys; checksums unchanged, no engine change.
+  // Re-derived at the M1.1 integration: fixture orc injury values (chanceMult 0.75, recoveryMult 0.8, scarMult 0.9), levelEta defaults as data, the six development.json
+  // removals (the header's content hash moved); round checksums unchanged.
   it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
     const out = simulateMatch(match(), content, { record: 'full' });
-    expect(ENGINE_VERSION).toBe(1);
+    expect(ENGINE_VERSION).toBe(2);
     expect({ score: out.score, rounds: out.rounds.map((r) => [r.winner, r.durationTicks, r.checksum, r.eventHash]) }).toMatchInlineSnapshot(`
       {
         "rounds": [
@@ -64,13 +83,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "c2ac7d119f06c267a452c57af1c5dfae",
+            "85d5d9ff74c93ebbeb1534d8a6705a9d",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "cda8cb1d631a749f2ed47bae0832768c",
+            "286a84d292a9ec0a450a82d5d4df5bd7",
           ],
         ],
         "score": {
@@ -78,6 +97,22 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
           "home": 0,
         },
       }
+    `);
+  });
+
+  // M1.1 round API golden (approved with ENGINE_VERSION 2): ranks, perks and Freshness on the fixture.
+  // Event hash re-pinned at the M1.1 integration (WP-C): the summary-level perk.proc event joined the stream; checksum unchanged.
+  it('golden: the pinned M1.1 round (ranks, perks, Freshness)', () => {
+    const runs = [0, 1].map(() => simulateRound(m11Round(), 'r-golden', content, { record: 'full' }));
+    expect(runs[1]!.result).toEqual(runs[0]!.result);
+    const out = runs[0]!;
+    expect([out.result.winner, out.result.durationTicks, out.result.checksum, out.log!.hash]).toMatchInlineSnapshot(`
+      [
+        "home",
+        896,
+        "128648c2c01315596ceda6c8db45ee69",
+        "bc7b91445f9ffe98200c8549c5919000",
+      ]
     `);
   });
 });

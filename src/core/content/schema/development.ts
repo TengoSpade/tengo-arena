@@ -84,8 +84,6 @@ export const DevelopmentFileSchema = z.object({
   developmentClock: z.object({
     _doc: z.string().optional(),
     startHumanAge: z.number(),
-    usageFloor: z.number(),
-    maxDeltaPerSeason: z.number(),
     bloomRangeHumanYears: z.number(),
     preCareerUsage: z.object({
       min: z.number(),
@@ -134,21 +132,8 @@ export const DevelopmentFileSchema = z.object({
       label: z.string(),
     }).strict()),
     default: z.enum(TRAINING_EMPHASES),
-    emphasisBonus: z.number(),
-    offEmphasisPenalty: z.number(),
-    bodyWearReduction: z.number(),
     /** Formula notes (designer text; M1.1: a and offerWeight). Never read by code. */
     formulas: z.record(z.string(), z.string()),
-  }).strict(),
-  trend: z.object({
-    _doc: z.string().optional(),
-    levels: z.array(z.object({
-      id: id(),
-      label: z.string(),
-      icon: z.string(),
-      minDelta: z.number(),
-    }).strict()),
-    _rounding: z.string().optional(),
   }).strict(),
   retirement: z.object({
     _doc: z.string().optional(),

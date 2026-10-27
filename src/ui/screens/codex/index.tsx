@@ -14,13 +14,14 @@ import type { Fighter, GameState } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
 import { useShortcuts } from '../../app/shortcuts';
-import { Empty, FighterName, Icon, Meter, PageHeader, Panel, Pips, Rating, RoleBadge, RoleGlyph, RowMark, RuleLine, Tag, tipAttrs } from '../../components';
+import { Empty, FighterName, Icon, Meter, PageHeader, Panel, Pips, Rating, RoleBadge, RoleGlyph, RowMark, RuleLine, Segmented, Tag, tipAttrs } from '../../components';
 import { presetLines, ruleParts, stanceName } from '../../format/rules';
-import { roleNames, rolesOf } from '../../format/fighter';
+import { isStarterClass, roleNames, rolesOf } from '../../format/fighter';
 import { useStore } from '../../store';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf } from '../../store/views';
-import { format } from '../../text';
+import { format, t } from '../../text';
+import { PerkCatalog, RankLines } from './Perks';
 import './codex.css';
 
 const T = {
@@ -72,6 +73,9 @@ function matches(k: ClassDef, content: ContentDB, needle: string): boolean {
   return Object.values(k.abilities).some((id) => content.abilities.get(id)?.name.toLowerCase().includes(n));
 }
 
+/** Classes or the perk catalog (M1.1). */
+const codexView = signal<'classes' | 'perks'>('classes');
+
 export default function CodexScreen({ params }: ScreenProps) {
   const store = useStore();
   const engine = useEngine();
@@ -121,7 +125,27 @@ export default function CodexScreen({ params }: ScreenProps) {
 
   return (
     <section class="page" data-testid="screen-codex">
-      <PageHeader eyebrow={T.eyebrow} title={T.title} meta={[format(T.meta, { n: content.classes.list.length, h: hybrids }), T.meta2]} />
+      <PageHeader
+        eyebrow={T.eyebrow}
+        title={T.title}
+        meta={[format(T.meta, { n: content.classes.list.length, h: hybrids }), T.meta2]}
+        actions={
+          <Segmented<'classes' | 'perks'>
+            label="Codex view"
+            value={codexView.value}
+            onChange={(v) => (codexView.value = v)}
+            options={[
+              { id: 'classes', label: 'Classes' },
+              { id: 'perks', label: `Perks (${content.perks.list.length})` },
+            ]}
+          />
+        }
+      />
+      {codexView.value === 'perks' ? (
+        <Panel title="Perk catalog" icon="star" subtitle="By archetype and tier" testId="codex-perks">
+          <PerkCatalog content={content} />
+        </Panel>
+      ) : (
       <div class="l-grid">
         <Panel span={3} title={T.filters} icon="filter" bodyClass="l-stack" class="codex-rail">
           <span class="input-icon">
@@ -192,6 +216,7 @@ export default function CodexScreen({ params }: ScreenProps) {
           </div>
         )}
       </div>
+      )}
     </section>
   );
 }
@@ -216,6 +241,11 @@ function ClassCard({ k, content, selected }: { k: ClassDef; content: ContentDB; 
           ))}
         </span>
         <span class="codex-card__name">{k.name}</span>
+        {isStarterClass(k) && (
+          <Tag kind="accent" class="codex-card__starter" tip={t('class.starterTip')}>
+            {t('class.starter')}
+          </Tag>
+        )}
       </span>
       <span class="codex-card__meta">
         <span class="u-xs u-muted">{names.join(' · ')}</span>
@@ -232,7 +262,7 @@ function ClassCard({ k, content, selected }: { k: ClassDef; content: ContentDB; 
   );
 }
 
-function AbilityRow({ a, label }: { a: AbilityDef; label: string }) {
+function AbilityRow({ a, label, content }: { a: AbilityDef; label: string; content: ContentDB }) {
   const facts = [a.cooldownS ? format(T.cooldown, { s: a.cooldownS }) : null, a.focusCost ? format(T.focus, { n: a.focusCost }) : null, a.rangeM ? format(T.range, { m: a.rangeM }) : null].filter(Boolean);
   return (
     <div class="codex-ability">
@@ -242,6 +272,7 @@ function AbilityRow({ a, label }: { a: AbilityDef; label: string }) {
       </div>
       {facts.length > 0 && <div class="u-xs u-faint u-num">{facts.join(' · ')}</div>}
       <p class="u-sm u-muted">{a.description}</p>
+      <RankLines content={content} abilityId={a.id} />
     </div>
   );
 }
@@ -278,7 +309,7 @@ function ClassDetail({ k, content, state, engine }: { k: ClassDef; content: Cont
       <p class="u-sm">{k.description}</p>
       <div>
         <div class="panel-section__title">{T.kit}</div>
-        {kit.map(({ slot, a }) => (a ? <AbilityRow key={slot} a={a} label={slot === 'basic' ? T.basic : slot === 'passive' ? T.passive : `${T.active} ${slot.toUpperCase()}`} /> : null))}
+        {kit.map(({ slot, a }) => (a ? <AbilityRow key={slot} a={a} content={content} label={slot === 'basic' ? T.basic : slot === 'passive' ? T.passive : `${T.active} ${slot.toUpperCase()}`} /> : null))}
       </div>
       <div>
         <div class="panel-section__title" {...tipAttrs(T.emphasisTip)}>
@@ -296,6 +327,10 @@ function ClassDetail({ k, content, state, engine }: { k: ClassDef; content: Cont
             ))}
         </div>
       </div>
+      <details class="codex-perks-wrap" data-testid="class-perks">
+        <summary class="panel-section__title">Perks for a {k.name}</summary>
+        <PerkCatalog content={content} archetypes={k.archetypes} testId="class-perk-catalog" />
+      </details>
       <div>
         <div class="panel-section__title">{T.presets}</div>
         {presets.map((p) => (

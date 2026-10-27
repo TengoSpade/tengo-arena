@@ -57,11 +57,17 @@ export const en = {
   'trait.negative': 'Negative trait:',
   'trait.storied': 'Storied trait:',
   'class.hybridTip': 'Hybrid: {roles}',
+  'class.starter': 'Starter',
+  'class.starterTip': 'Starter class: a low-complexity kit with an instantly recognisable job, a clear first pick for new players.',
 
   // ---- lineup -------------------------------------------------------------------------------------
   'lineup.front': 'Front',
   'lineup.back': 'Back',
-  'lineup.reserve': 'Reserve',
+  'lineup.bench': 'Bench',
+  'lineup.matchReserve': 'Match reserve',
+  'lineup.reserveShort': 'Reserve',
+  'lineup.benchTip': 'On the roster but not in the match squad: earns a third of a lineup slot’s XP and can be named a match reserve.',
+  'lineup.matchReserveTip': 'One of the 2 match reserves: travels with the five, covers injuries and can be swapped in between rounds.',
   'lineup.frontRow': 'Front row',
   'lineup.backRow': 'Back row',
 
@@ -143,6 +149,10 @@ export const en = {
 
   // ---- Continue (04 §6.1) --------------------------------------------------------------------------
   'continue.main': 'Continue',
+  'continue.toMatch': 'Back to the match',
+  'continue.playRound': 'Round {n}',
+  'continue.betweenSub': 'Between rounds · Enter plays on',
+  'continue.tipRound': 'Your match waits between rounds: check Freshness and swaps, then play the next round.',
   'continue.toLineup': 'Lineup {where} {club}',
   'continue.at': 'at',
   'continue.vs': 'vs',
@@ -223,6 +233,8 @@ export const en = {
   'save.loaded': 'Loaded {label}',
   'save.slotManual': 'slot {n}',
   'save.slotAuto': 'autosave {n}',
+  'save.slotAutoRound': 'mid-match autosave',
+  'save.afterRound': 'after round {n}',
   'save.labelDefault': '{club} · S{season} {week}',
 
   // ---- content error screen ------------------------------------------------------------------------------
