@@ -124,7 +124,20 @@ export interface MatchResult {
   /** One record per between-round step that was played. */
   betweenRounds?: BetweenRoundRecord[];
   emergencyEntrants?: FighterId[];
+  /**
+   * Present on compacted results only (league compactHistory drops `fighterStats`, `reserveInputs`, `roundLineups`
+   * and `betweenRounds`): what an old report still knows about every fighter who started a round, starters,
+   * reserves and emergency entrants alike. See CompactFighterTotals.
+   */
+  fighterTotals?: Record<FighterId, CompactFighterTotals>;
 }
+
+/**
+ * One fighter's totals in a compacted result: [side (0 = home, 1 = away; the club is the fixture's
+ * home or away club), rounds started, downs inflicted, downs suffered, damage dealt, healing done].
+ * A tuple keeps a season of compacted results small (about 30 bytes a fighter).
+ */
+export type CompactFighterTotals = readonly [side: 0 | 1, roundsPlayed: number, downsInflicted: number, downsSuffered: number, damageDealt: number, healingDone: number];
 
 // ---- M1.1 squads, swaps and the between-round step (combat-skills.md sys-match) ----------------
 

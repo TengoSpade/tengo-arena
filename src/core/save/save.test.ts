@@ -389,6 +389,45 @@ describe('structure bounds come from SAVE_BOUNDS (the same constants the content
     expect(structureIssues(state).some((p) => p.startsWith('liveMatch.home.active'))).toBe(true);
   });
 
+  it('a compacted result (fighterTotals, squads without row maps, no per-round records) is a valid saved result; a malformed tuple is not', () => {
+    const state = world();
+    const [home, away] = Object.keys(state.clubs) as ClubId[];
+    const ms = fixtureMatchState(state, home!, away!, content);
+    const emptied = (side: typeof ms.input.home): typeof ms.input.home => ({ ...side, fighters: [], captainIndex: 0, viceCaptainIndex: null });
+    const first = ms.home.squad.starters[0]!;
+    const result: GameState['results'][keyof GameState['results']] = {
+      fixtureId: asId('lg:1:compacted'),
+      competitionId: asId('lg:1'),
+      stage: 'league',
+      season: 1,
+      weekIndex: 2,
+      weekId: asId('MW1'),
+      homeClubId: home!,
+      awayClubId: away!,
+      engineVersion: 2,
+      contentHash: 'abc',
+      input: { ...ms.input, home: emptied(ms.input.home), away: emptied(ms.input.away) },
+      rounds: [],
+      score: { home: 2, away: 1 },
+      winnerClubId: home!,
+      fighterStats: {},
+      mvpFighterId: null,
+      hiredBladeIds: [],
+      squads: { home: { ...ms.home.squad, rows: {} }, away: { ...ms.away.squad, rows: {} } },
+      emergencyEntrants: [],
+      fighterTotals: { [first]: [0, 3, 2, 1, 300, 10] },
+    };
+    const resultIssues = (): string[] => {
+      const r = GameStateSchema.safeParse({ ...state, results: { [result.fixtureId]: result } });
+      return r.success ? [] : r.error.issues.filter((i) => i.path[0] === 'results').map((i) => i.path.join('.'));
+    };
+    expect(resultIssues()).toEqual([]);
+    result.fighterTotals = { [first]: [2 as never, 3, 2, 1, 300, 10] };
+    expect(resultIssues().some((p) => p.includes('fighterTotals'))).toBe(true);
+    result.fighterTotals = { [first]: [0, 3, 2, 1, 300] as never };
+    expect(resultIssues().some((p) => p.includes('fighterTotals'))).toBe(true);
+  });
+
   it('the bounds are the documented values (changing one is a save-format change)', () => {
     expect(SAVE_BOUNDS).toEqual({ squadStarters: 5, squadReserves: 2, swapsPerMatch: 2, pendingLevelUps: 3, levelUpOptions: 3, perksPerFighter: 4 });
   });

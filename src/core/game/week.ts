@@ -250,16 +250,16 @@ function runPlayerMatch(ports: GamePorts, draft: GameState, ms: MatchState, cont
   return null;
 }
 
-/** XP (round XP of the rounds started, or bench XP) and the injuries the round hooks set, for one match's news items. */
+/** Round XP of the rounds started, the bench XP of the fighters who started none, and the injuries the round hooks set, for one match's news items. */
 function matchNewsOutcome(draft: GameState, result: MatchResult, outcome: ReturnType<GamePorts['fighters']['matchEndProgression']>) {
   const xp: Record<FighterId, number> = { ...(outcome.xp ?? {}) };
-  for (const [id, n] of Object.entries(outcome.benchXp)) if (xp[id as FighterId] === undefined) xp[id as FighterId] = n;
+  const benchXp: Record<FighterId, number> = { ...outcome.benchXp };
   const injuries: { fighterId: FighterId; severity: string; weeksOut: number }[] = [];
   for (const id of Object.keys(result.fighterStats) as FighterId[]) {
     const inj = draft.fighters[id]?.injury;
     if (inj && inj.fixtureId === result.fixtureId) injuries.push({ fighterId: id, severity: inj.severity, weeksOut: inj.weeksOut });
   }
-  return { xp, injuries };
+  return { xp, benchXp, injuries };
 }
 
 /**

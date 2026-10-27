@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ContentDB } from '../content';
-import { asId, type ClubId, type Fighter, type FighterId, type Fixture, type GameState, type MatchState, type RoundInput, type SwapDecision } from '../model';
+import { compactHistory, isCompactedResult } from '../league';
+import { asId, putResult, type ClubId, type Fighter, type FighterId, type Fixture, type GameState, type MatchState, type RoundInput, type SwapDecision } from '../model';
 import { buildFixtureWorld, fixtureContent, fixturePendingLevelUp, withFreshness } from '../testkit';
 import { cloneJson, hashString, stableStringify } from '../util';
 import {
@@ -25,6 +26,7 @@ import {
   type GameEngine,
   type GamePorts,
 } from './index';
+import { buildMatchReport } from './match';
 import { squadOf } from './week';
 
 const content: ContentDB = fixtureContent();
@@ -637,5 +639,241 @@ describe('season summary picks and report perk procs (M1.1 integration)', () => 
       const row = rows.find((r) => r.fighterId === id);
       if (row) expect(row.picks!.some((p) => p.how === 'season_end')).toBe(true);
     }
+  });
+});
+
+// ---- the match report covers everyone who started a round; compaction keeps the attribution -----------------
+
+/** A match with a swap by the player, a forced reserve and an emergency entrant (the sw-003 script), played out with auto decisions. */
+function playedWithEntrants(perClub = 8): { s: GameState; fx: Fixture; home: ClubId; away: ClubId; ports: GamePorts; result: ReturnType<typeof finishMatch>; entrant: FighterId; swappedIn: FighterId[] } {
+  const { s, fx, home, away } = setup({ bestOf: 5, perClub });
+  const injured = s.clubs[home]!.lineup.fighters[3]!.fighterId;
+  // The real sim, so downs and damage are credited as in the game (the stand-in sim does not credit downs).
+  const ports = scripted({ sim: realGamePorts.sim, winners: ['away', 'home', 'away', 'home', 'home'], injure: { 3: [injured] } });
+  const ms = start(ports, s, fx);
+  const swappedIn: FighterId[] = [];
+  playRound(ports, s, ms, content);
+  swappedIn.push(ms.home.unusedReserves[0]!);
+  applyBetweenRound(ports, s, ms, { home: [{ out: ms.home.active[0]!, in: ms.home.unusedReserves[0]! }], away: [] }, content);
+  playRound(ports, s, ms, content);
+  swappedIn.push(ms.home.unusedReserves[0]!);
+  applyBetweenRound(ports, s, ms, { home: [{ out: ms.home.active[1]!, in: ms.home.unusedReserves[0]! }], away: [] }, content);
+  playRound(ports, s, ms, content);
+  applyBetweenRound(ports, s, ms, none, content);
+  const entrant = ms.home.emergencyEntrants[0]!;
+  playRound(ports, s, ms, content);
+  while (ms.phase !== 'done') {
+    applyBetweenRound(ports, s, ms, none, content);
+    playRound(ports, s, ms, content);
+  }
+  const result = finishMatch(ports, s, ms, content);
+  putResult(s, result);
+  fx.status = 'played';
+  return { s, fx, home, away, ports, result, entrant, swappedIn };
+}
+
+describe('match report: every fighter who started a round (QA: "us 8 downs" against 10 inflicted)', () => {
+  it('lists the round-1 five, both swapped-in reserves and the emergency entrant, with stats and a total that is their sum', () => {
+    const { s, fx, home, away, ports, result, entrant, swappedIn } = playedWithEntrants();
+    const r = buildMatchReport(ports, s, fx.id, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const report = r.value;
+    const five = result.input.home.fighters.map((f) => f.fighterId);
+    // appearedIds: the five in slot order, then the entrants as they came on.
+    expect(report.home.fighterIds).toEqual(five);
+    expect(report.home.appearedIds).toEqual(expect.arrayContaining([...five, ...swappedIn, entrant]));
+    expect(report.home.appearedIds!.slice(0, 5)).toEqual(five);
+    expect(report.home.appearedIds).toHaveLength(five.length + swappedIn.length + 1);
+    expect(report.home.unusedReserveIds).toEqual([]);
+    expect(report.away.appearedIds).toEqual(report.away.fighterIds);
+    // Every one of them has a line (stats, roles, rounds started), attributed to the right club.
+    const line = (id: FighterId) => report.fighters.find((f) => f.fighterId === id)!;
+    for (const id of report.home.appearedIds!) expect(line(id).clubId).toBe(home);
+    for (const id of report.away.appearedIds!) expect(line(id).clubId).toBe(away);
+    expect(report.fighters).toHaveLength(report.home.appearedIds!.length + report.away.appearedIds!.length);
+    for (const id of swappedIn) {
+      expect(line(id).role).toBe('reserve');
+      expect(line(id).stats.roundsPlayed).toBe(line(id).roundsStarted!.length);
+      expect(line(id).roundsStarted![0]).toBeGreaterThan(1);
+    }
+    expect(line(entrant).role).toBe('emergency');
+    expect(line(entrant).roundsStarted).toEqual([4, 5].slice(0, result.rounds.length - 3));
+    expect(line(five[0]!).role).toBe('starter');
+    expect(line(five[0]!).roundsStarted).toEqual([1]); // swapped out after round 1
+    // Team totals equal the sum of the fighters, and the two sides mirror each other.
+    for (const side of ['home', 'away'] as const) {
+      const mine = report.fighters.filter((f) => f.clubId === report[side].clubId);
+      const sum = (k: 'downsInflicted' | 'downsSuffered' | 'damageDealt' | 'healingDone' | 'damageTaken' | 'shieldingDone') => mine.reduce((n, f) => n + f.stats[k], 0);
+      expect(report.totals![side]).toMatchObject({
+        downsInflicted: sum('downsInflicted'),
+        downsSuffered: sum('downsSuffered'),
+        damageDealt: sum('damageDealt'),
+        healingDone: sum('healingDone'),
+        damageTaken: sum('damageTaken'),
+        shieldingDone: sum('shieldingDone'),
+      });
+      expect(report.totals![side].xp).toBe(mine.reduce((n, f) => n + (report.aftermath.xp[f.fighterId] ?? 0), 0));
+    }
+    expect(report.totals!.home.downsInflicted).toBe(report.totals!.away.downsSuffered);
+    expect(report.totals!.away.downsInflicted).toBe(report.totals!.home.downsSuffered);
+    // The five alone (what a screen that only reads the round-1 lineup sums) fall short of the team total when a reserve scored.
+    const fiveOnly = report.fighters.filter((f) => five.includes(f.fighterId)).reduce((n, f) => n + f.stats.damageDealt, 0);
+    expect(report.totals!.home.damageDealt).toBeGreaterThanOrEqual(fiveOnly);
+    expect(report.totals!.home.damageDealt).toBe(report.fighters.filter((f) => f.clubId === home).reduce((n, f) => n + f.stats.damageDealt, 0));
+  });
+
+  it('unused reserves are listed apart; a whole-match (M1) result lists its five', () => {
+    const { s, fx, home } = setup({ bestOf: 3 });
+    const p = scripted();
+    const ms = start(p, s, fx);
+    while (ms.phase !== 'done') {
+      if (ms.phase === 'between_rounds') applyBetweenRound(p, s, ms, none, content);
+      playRound(p, s, ms, content);
+    }
+    const result = finishMatch(p, s, ms, content);
+    putResult(s, result);
+    const r = buildMatchReport(p, s, fx.id, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const reserves = s.clubs[home]!.lineup.reserves;
+    expect(r.value.home.appearedIds).toEqual(r.value.home.fighterIds);
+    expect(r.value.home.unusedReserveIds).toEqual(reserves);
+    expect(r.value.fighters.every((f) => f.role === 'starter')).toBe(true);
+    // M1: no squads, no round lineups.
+    const m1 = cloneJson(result);
+    delete m1.squads;
+    delete m1.reserveInputs;
+    delete m1.roundLineups;
+    delete m1.betweenRounds;
+    delete m1.emergencyEntrants;
+    const t = cloneJson(s);
+    t.results[fx.id] = m1;
+    const old = buildMatchReport(p, t, fx.id, content);
+    if (!old.ok) throw new Error(old.error.message);
+    expect(old.value.home.appearedIds).toEqual(old.value.home.fighterIds);
+    expect(old.value.home.unusedReserveIds).toEqual([]);
+    expect(old.value.fighters.every((f) => f.roundsStarted === undefined)).toBe(true);
+    expect(old.value.totals!.home.downsInflicted).toBe(old.value.fighters.filter((f) => f.clubId === home).reduce((n, f) => n + f.stats.downsInflicted, 0));
+  });
+
+  it('bench XP: every non-starter of both clubs (unused reserves first) earns a third, stored with the match and listed in the report', { timeout: 120_000 }, () => {
+    const engine = createGameEngine(createStandInPorts());
+    let s = careerAt(engine, 'bench-xp-1', 'MW1');
+    for (let guard = 0; guard < 6; guard++) {
+      if (engine.getBlockers(s, content).length > 0) {
+        const fixed = engine.applyCommand(s, engine.suggestLineup(s, s.playerClubId!, content), content);
+        if (!fixed.ok) throw new Error(fixed.error.message);
+        s = fixed.value.state;
+      }
+      const r = engine.advanceWeek(s, content);
+      if (!r.ok) throw new Error(r.error.message);
+      s = r.value.state;
+    }
+    const mine = Object.values(s.results).find((r) => r.roundLineups !== undefined && (r.homeClubId === s.playerClubId || r.awayClubId === s.playerClubId))!;
+    const rep = engine.buildMatchReport(s, mine.fixtureId, content);
+    if (!rep.ok) throw new Error(rep.error.message);
+    const report = rep.value;
+    expect(report.bench).toBeDefined();
+    expect(report.aftermath.benchXp).toBeDefined();
+    const appeared = new Set([...report.home.appearedIds!, ...report.away.appearedIds!]);
+    for (const line of report.bench!) {
+      expect(appeared.has(line.fighterId)).toBe(false); // started no round
+      expect(report.aftermath.benchXp![line.fighterId]).toBe(line.xp);
+      expect(s.fighters[line.fighterId]?.clubId).toBe(line.clubId);
+      expect(line.xp).toBeGreaterThan(0);
+    }
+    // A squad reserve who never came on is on the list as a 'reserve', before the rest of his club's bench.
+    for (const side of ['home', 'away'] as const) {
+      const lines = report.bench!.filter((b) => b.clubId === report[side].clubId);
+      expect(lines.map((b) => b.fighterId)).toEqual(expect.arrayContaining(report[side].unusedReserveIds!));
+      expect(lines.filter((b) => b.role === 'reserve').map((b) => b.fighterId)).toEqual(report[side].unusedReserveIds);
+      const roles = lines.map((b) => b.role);
+      expect(roles).toEqual([...roles].sort((a, b) => (a === b ? 0 : a === 'reserve' ? -1 : 1)));
+      expect(report.totals![side].benchXp).toBe(lines.reduce((n, b) => n + b.xp, 0));
+    }
+    // The bench is both clubs' fit non-starters: nobody who started appears, nobody twice.
+    expect(new Set(report.bench!.map((b) => b.fighterId)).size).toBe(report.bench!.length);
+    // And the same XP landed on the fighters (season counters), not just in the report.
+    const sample = report.bench![0]!;
+    expect(s.fighters[sample.fighterId]!.season.benchXp).toBeGreaterThanOrEqual(sample.xp);
+  });
+});
+
+describe('compaction keeps the attribution of every fighter (QA: emergency entrants vanished from old reports)', () => {
+  it('drops the per-round records and per-fighter stats, keeps score, squads summary and per-fighter totals with the club', () => {
+    const { s, fx, home, away, ports, result, entrant, swappedIn } = playedWithEntrants();
+    expect(result.reserveInputs!.home.length).toBeGreaterThan(0);
+    const full = buildMatchReport(ports, s, fx.id, content);
+    if (!full.ok) throw new Error(full.error.message);
+    s.playerClubId = null; // no exempt club: everything of the previous season compacts
+    s.calendar = { ...s.calendar, season: 2 };
+    compactHistory(s, content);
+    const c = s.results[fx.id]!;
+    expect(isCompactedResult(c)).toBe(true);
+    expect(c.reserveInputs).toBeUndefined();
+    expect(c.roundLineups).toBeUndefined();
+    expect(c.betweenRounds).toBeUndefined();
+    expect(c.fighterStats).toEqual({});
+    expect(c.score).toEqual(result.score);
+    expect(c.emergencyEntrants).toEqual([entrant]);
+    expect(c.squads!.home.starters).toEqual(result.squads!.home.starters);
+    expect(c.squads!.home.reserves).toEqual(result.squads!.home.reserves);
+    expect(c.squads!.home.rows).toEqual({});
+    // One tuple per fighter who started a round, club by side.
+    expect(Object.keys(c.fighterTotals!).sort()).toEqual(Object.keys(result.fighterStats).sort());
+    expect(c.fighterTotals![entrant]).toEqual([0, result.fighterStats[entrant]!.roundsPlayed, result.fighterStats[entrant]!.downsInflicted, result.fighterStats[entrant]!.downsSuffered, result.fighterStats[entrant]!.damageDealt, result.fighterStats[entrant]!.healingDone]);
+    // The report of the compacted match still attributes every fighter correctly and its totals match the full report's.
+    const old = buildMatchReport(ports, s, fx.id, content);
+    if (!old.ok) throw new Error(old.error.message);
+    const report = old.value;
+    expect(report.compacted).toBe(true);
+    expect(report.timelineAvailable).toBe(false);
+    expect(report.timeline).toBeNull();
+    expect(report.score).toEqual(full.value.score);
+    for (const side of ['home', 'away'] as const) expect([...report[side].appearedIds!].sort()).toEqual([...full.value[side].appearedIds!].sort());
+    expect(report.home.appearedIds).toEqual(expect.arrayContaining([entrant, ...swappedIn]));
+    for (const f of report.fighters) {
+      expect(f.clubId).toBe(report.home.appearedIds!.includes(f.fighterId) ? home : away);
+      const before = full.value.fighters.find((x) => x.fighterId === f.fighterId)!;
+      expect(f.clubId).toBe(before.clubId);
+      expect(f.role).toBe(before.role);
+      expect(f.stats).toMatchObject({
+        roundsPlayed: before.stats.roundsPlayed,
+        downsInflicted: before.stats.downsInflicted,
+        downsSuffered: before.stats.downsSuffered,
+        damageDealt: before.stats.damageDealt,
+        healingDone: before.stats.healingDone,
+      });
+    }
+    expect(report.fighters.find((f) => f.fighterId === entrant)!.role).toBe('emergency');
+    for (const side of ['home', 'away'] as const) {
+      const { damageTaken, shieldingDone, ...kept } = full.value.totals![side];
+      void damageTaken;
+      void shieldingDone;
+      expect(report.totals![side]).toMatchObject({ downsInflicted: kept.downsInflicted, downsSuffered: kept.downsSuffered, damageDealt: kept.damageDealt, healingDone: kept.healingDone });
+      expect(report.totals![side].damageTaken).toBeUndefined();
+    }
+    // Compacting twice changes nothing.
+    const once = cloneJson(s.results[fx.id]);
+    compactHistory(s, content);
+    expect(s.results[fx.id]).toEqual(once);
+  });
+
+  it('timelineOf attributes emergency entrants without per-fighter stats (results compacted by an earlier build kept the lineups but emptied fighterStats)', () => {
+    const { s, fx, home, ports, result, entrant } = playedWithEntrants();
+    const legacy = cloneJson(result);
+    legacy.fighterStats = {};
+    legacy.input.home.fighters = [];
+    legacy.input.away.fighters = [];
+    s.results[fx.id] = legacy;
+    const r = buildMatchReport(ports, s, fx.id, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const tl = r.value.timeline!;
+    expect(tl).not.toBeNull();
+    expect(tl.emergencyEntrants).toEqual([entrant]);
+    expect(tl.fighters[entrant]).toMatchObject({ side: 'home', role: 'emergency', enteredHow: 'emergency' });
+    expect(s.clubs[home]!.id).toBe(home);
+    // The sides' appeared lists still come out right from the round lineups.
+    expect(r.value.home.appearedIds).toContain(entrant);
+    expect(r.value.away.appearedIds).not.toContain(entrant);
   });
 });
