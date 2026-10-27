@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { ClubId, GameState, SaveError } from '../../core/model';
 import { NotImplementedError, engineError, err } from '../../core/util';
 import { createDevEngine } from '../debug/dev-engine';
@@ -8,6 +8,7 @@ import { blockerText, distinctBlockers, errorText } from './messages';
 import { resetToasts, toasts } from '../components/Toast';
 import { AUTOSAVE_ROUND_SLOT, AUTOSAVE_SLOTS, MATCH_PAUSED, MAX_IMPORT_BYTES, isAutosaveSlot, slotName } from './create-store';
 import { buildDigest, newsToDigest } from './digest';
+import { DEFAULT_SETTINGS, updateSettings } from './settings';
 import { needsActionNow } from './digest-flags';
 import type { NewsItem } from '../../core/model';
 
@@ -239,6 +240,54 @@ describe('store: mid-match autosave (auto-round) and the weekly rotation', () =>
     expect(isAutosaveSlot('manual-1')).toBe(false);
     expect((AUTOSAVE_SLOTS as readonly string[]).includes(AUTOSAVE_ROUND_SLOT)).toBe(false);
   });
+});
+
+describe('store: the Autosave setting', () => {
+  afterEach(() => updateSettings({ autosave: DEFAULT_SETTINGS.autosave }));
+
+  it('off: a finished week writes no weekly slot; on again: it rotates as before', async () => {
+    const { store, saves, clock } = createTestStore({ world: 'dev', weekIndex: 11 });
+    updateSettings({ autosave: false });
+    clock.advance(1000);
+    expect((await store.advance()).ok).toBe(true);
+    expect(await saves.list()).toEqual([]);
+    updateSettings({ autosave: true });
+    if (store.blockers.value.length > 0) store.dispatch(coreEngine.suggestLineup(store.game.value!, store.playerClubId.value!, store.content.value!));
+    clock.advance(1000);
+    expect((await store.advance()).ok).toBe(true);
+    expect((await saves.list()).map((m) => m.slotId)).toEqual(['auto-1']);
+  }, 30_000);
+
+  it('off: the mid-match safety save (auto-round) still runs after every round, so a quit cannot replay a result', async () => {
+    const { store, saves, clock } = createTestStore({ world: 'dev', weekIndex: 11, pauseBetweenRounds: 'always' });
+    updateSettings({ autosave: false });
+    clock.advance(1000);
+    const first = await store.advance();
+    expect(first.ok).toBe(false);
+    if (first.ok) return;
+    expect(first.error.code).toBe(MATCH_PAUSED);
+    const live = structuredClone(store.game.value!.liveMatch)!;
+    let metas = await saves.list();
+    expect(metas.map((m) => m.slotId)).toEqual([AUTOSAVE_ROUND_SLOT]);
+    expect(metas[0]!.label).toMatch(/after round 1$/);
+    // The rest of the match, then the week: still no weekly slot, and the round slot holds the last pause.
+    for (let i = 0; i < 6; i++) {
+      clock.advance(1000);
+      const r = await store.advance();
+      if (r.ok) break;
+      expect(r.error.code).toBe(MATCH_PAUSED);
+      metas = await saves.list();
+      expect(metas.map((m) => m.slotId)).toEqual([AUTOSAVE_ROUND_SLOT]);
+    }
+    expect(store.game.value!.liveMatch).toBeNull();
+    expect((await saves.list()).filter((m) => (AUTOSAVE_SLOTS as readonly string[]).includes(m.slotId))).toEqual([]);
+    // The round slot resumes the match where it waited (the same rounds already played).
+    const loaded = await store.load(AUTOSAVE_ROUND_SLOT);
+    expect(loaded.ok).toBe(true);
+    expect(store.game.value!.liveMatch).not.toBeNull();
+    expect(store.game.value!.liveMatch!.fixtureId).toBe(live.fixtureId);
+    expect(store.game.value!.liveMatch!.rounds.slice(0, live.rounds.length)).toEqual(live.rounds);
+  }, 60_000);
 });
 
 describe('store: saves', () => {

@@ -10,7 +10,8 @@
  *   autosave: a finished week (and a season end, and a new career) rotates over
  *   auto-1..3 (oldest overwritten); a match paused between rounds goes to its own
  *   slot, auto-round, overwritten after every round. So three weekly slots survive
- *   a whole match week and a bad week can be rolled back.
+ *   a whole match week and a bad week can be rolled back. The Autosave setting (Settings) switches the weekly
+ *   rotation off; the per-round auto-round save always runs (it is what makes "no rerolls" hold across a quit).
  * - Every thrown error from core (a stub, a broken invariant) becomes an
  *   EngineError, never an uncaught exception in a screen.
  * - Command log since the last save, plus the last 20 for the debug overlay.
@@ -44,6 +45,7 @@ import { configureFormat } from '../format';
 import { t } from '../text';
 import type { GameStore, StorePlatform } from './contract';
 import { coreEngine, type GameEngine } from './engine';
+import { settings } from './settings';
 
 /** store.advance() result while the player's match waits between rounds (state.liveMatch): open the between-round screen. */
 export const MATCH_PAUSED = 'match.paused';
@@ -394,8 +396,10 @@ export function createGameStore(platform: StorePlatform): AppStore {
   };
 
   /**
-   * 'week' (a week boundary): rotate over auto-1..3, first empty slot, else the oldest. 'round' (the player's match
-   * waits between rounds): overwrite auto-round, which holds the match in progress. Never during a running write.
+   * 'week' (a week boundary, a season end, a new career): rotate over auto-1..3, first empty slot, else the oldest;
+   * skipped when the Autosave setting is off. 'round' (the player's match waits between rounds): overwrite auto-round,
+   * which holds the match in progress. That one ignores the setting: it is the "no rerolls" safety save (a quit
+   * mid-match must not replay a round). Never during a running write.
    */
   const autosave = async (kind: 'week' | 'round' = 'week'): Promise<void> => {
     // A ticket reproduction never writes the shared autosave slots (they hold real careers).
@@ -405,6 +409,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
       await writeSlot(AUTOSAVE_ROUND_SLOT, rounds ? `${defaultSaveLabel()} · ${t('save.afterRound', { n: rounds })}` : undefined, 'auto');
       return;
     }
+    if (!settings.value.autosave) return;
     let metas: SaveMeta[];
     try {
       metas = await platform.saves.list();

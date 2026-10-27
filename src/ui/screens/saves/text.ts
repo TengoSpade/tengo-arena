@@ -6,7 +6,7 @@ export const SAVES_TEXT = {
   'title': 'Save and load',
   'meta.manual': 'Manual slots {used} of {max}',
   'meta.auto': '{n} weekly autosaves rotate after every week and the season-end step; a mid-match slot is saved after every round',
-  'meta.autoOff': 'Autosave is off (Settings)',
+  'meta.autoOff': 'Weekly autosaves are off (Settings); the mid-match slot is still saved after every round',
   'save': 'Save',
   'saveTip': 'Save to {slot} (Ctrl S)',
   'saveTipChoose': 'This career has no save slot yet: choose one (Save as)',
