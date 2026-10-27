@@ -26,13 +26,60 @@ export interface MatchReport {
   /** False when the timeline could not be rebuilt (engine or content changed since the match). */
   timelineAvailable: boolean;
   aftermath: MatchAftermath;
+  /**
+   * M1.1 (additive): the team totals of each side, always the sum of its fighters' lines in `fighters`
+   * (the starters who left, the reserves who came on and the emergency entrants included). Absent on
+   * reports built before this field.
+   */
+  totals?: { home: ReportTotals; away: ReportTotals };
+  /**
+   * M1.1 (additive): the bench XP (a third of a lineup slot) every fighter who started no round earned
+   * in this match: unused squad reserves first, then the rest of the fit roster, home club then away club.
+   * Absent when the match left no record of it (matches played before bench XP was stored, news older than two seasons).
+   */
+  bench?: BenchXpLine[];
+  /** M1.1 (additive): the result was compacted (an older season's match between other clubs): `fighters[].stats` holds only the totals (see FighterRecap). */
+  compacted?: boolean;
 }
 
 export interface ReportSide {
   clubId: ClubId;
   captainId: FighterId | null;
   chemistry: number;
+  /** The five who start round 1, in slot order (unchanged). Use `appearedIds` for everyone who played. */
   fighterIds: FighterId[];
+  /**
+   * M1.1 (additive): every fighter who started at least one round, in the order they first took the field:
+   * the round-1 five in slot order, then reserves and emergency entrants as they came on. Equals `fighterIds`
+   * for whole-match (M1) results. Each id has a line in `MatchReport.fighters`.
+   */
+  appearedIds?: FighterId[];
+  /** M1.1 (additive): squad reserves who never started a round (they earn bench XP: see `MatchReport.bench`). */
+  unusedReserveIds?: FighterId[];
+}
+
+/** One side's totals: the sum over `ReportSide.appearedIds` of the lines in `MatchReport.fighters`, plus XP. */
+export interface ReportTotals {
+  downsInflicted: number;
+  downsSuffered: number;
+  damageDealt: number;
+  healingDone: number;
+  /** Absent on a compacted report (the counters are not kept). */
+  damageTaken?: number;
+  shieldingDone?: number;
+  /** Round XP of the fighters who played (`aftermath.xp`). */
+  xp: number;
+  /** Bench XP of the side's non-starters (`bench`). */
+  benchXp: number;
+}
+
+/** A non-starter's bench XP in one match. */
+export interface BenchXpLine {
+  fighterId: FighterId;
+  clubId: ClubId;
+  /** 'reserve': named in the match squad and never came on; 'bench': the rest of the fit roster. */
+  role: 'reserve' | 'bench';
+  xp: number;
 }
 
 export interface ReportRound {
@@ -61,6 +108,7 @@ export interface FighterRecap {
   fighterId: FighterId;
   clubId: ClubId;
   isCaptain: boolean;
+  /** Compacted reports (`MatchReport.compacted`): only clubId, roundsPlayed, downsInflicted, downsSuffered, damageDealt and healingDone are kept; every other counter is 0 or empty. */
   stats: FighterMatchStats;
   /** Rule lines of the fighter's preset, with fire counts (the stance last). */
   rules: { index: number; isStance: boolean; fires: number; committedTicks: number; neverFired: boolean }[];
@@ -68,10 +116,16 @@ export interface FighterRecap {
   downs: { round: number; tick: number; byFighterId: FighterId | null; abilityId: AbilityId | null; hit: number }[];
   /** M1.1: trigger fires per perk over the match (from the re-simulated round recaps); absent when the timeline is unavailable. */
   perkProcs?: Record<PerkId, number>;
+  /** M1.1 (additive): how he came to play: a starter, a squad reserve who came on, an emergency entrant. */
+  role?: 'starter' | 'reserve' | 'emergency';
+  /** M1.1 (additive): the rounds he started (1-based). Absent for whole-match (M1) and compacted results. */
+  roundsStarted?: number[];
 }
 
 export interface MatchAftermath {
   xp: Record<FighterId, number>;
+  /** M1.1 (additive): bench XP of the fighters who started no round (squad reserves included), when the match recorded it. */
+  benchXp?: Record<FighterId, number>;
   injuries: { fighterId: FighterId; severity: 'knock' | 'minor' | 'moderate' | 'serious'; weeksOut: number }[];
   gold: { clubId: ClubId; amount: Gold; reason: 'gate' | 'winBonus' }[];
 }

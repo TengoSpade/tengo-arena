@@ -119,7 +119,13 @@ export function fighterView(ports: GamePorts, state: GameState, fighterId: Fight
   };
 }
 
-/** The squad the AI would pick for a club (player "auto-pick" button) as a ready command: squad.set with 5 starters and up to 2 reserves (M1.1). */
+/**
+ * The squad the AI would pick for a club (player "auto-pick" button) as a ready command: squad.set with 5 starters and up to 2 reserves (M1.1).
+ * It is the AI's own lineup rule (ai.chooseLineup: best five by role and rating, then the Freshness rotation of
+ * levels.json aiRotation: Tired starters rested where a comparable fighter of their role family is rested, Spent ones
+ * replaced by any rested fighter, reserves = rested fighters), so the player's suggestion and an AI club's pick never
+ * disagree about Freshness. `game/auto-pick.test.ts` pins it.
+ */
 export function suggestLineup(ports: GamePorts, state: GameState, clubId: ClubId, content: ContentDB): Command {
   const choice = ports.ai.chooseLineup(state, clubId, content);
   return { type: 'squad.set', clubId, fighters: choice.fighters, reserves: [...choice.reserves], matchCaptainId: choice.matchCaptainId };

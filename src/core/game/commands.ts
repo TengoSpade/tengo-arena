@@ -139,6 +139,11 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
     }
 
     case 'match.swap': {
+      // Only the player decides swaps (blind decisions): every other club, the AI opponent included, decides by its own
+      // auto-swap rules inside the orchestrator and never through a command.
+      if (draft.playerClubId === null || cmd.clubId !== draft.playerClubId) {
+        return fail('match.not-player-club', `"${cmd.clubId}" is not the player's club: only the player's club takes swap decisions`, { clubId: cmd.clubId });
+      }
       const ms = draft.liveMatch;
       if (ms === null || ms.fixtureId !== cmd.fixtureId) return fail('match.not-live', 'That match is not waiting between rounds', { fixtureId: cmd.fixtureId });
       if (ms.phase !== 'between_rounds' || ms.rounds.length !== cmd.afterRound) {

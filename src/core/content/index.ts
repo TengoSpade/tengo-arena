@@ -22,6 +22,8 @@ export type { ContentIssue } from './issues';
 export { buildContentDB, createRegistry } from './db';
 export { combatRating } from './rating';
 export { autoSwapRulesFor, clubMatchDefaults } from './match-defaults';
+export { SAVE_BOUNDS } from './save-bounds';
+export type { SaveBounds } from './save-bounds';
 export type { ClubMatchDefaults } from './match-defaults';
 export type { ContentDB, Registry } from './db';
 export * from './types';

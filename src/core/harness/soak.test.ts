@@ -4,7 +4,29 @@ import { asId, type ClubId, type GameState, type SeasonRecord, type TierId } fro
 import { checksumState, createSave, parseSave, saveMetaFor, serializeSave } from '../save';
 import { fixtureContent } from '../testkit';
 import { NotImplementedError, cloneJson } from '../util';
-import { SOAK_CHECKS, ageMatchedBenchRatio, checkStatus, dynastyFlags, freshnessStarts, ledgerMismatches, levelAgeBands, lineupProblems, overCap, parseCohort, runSoak, scheduleProblems, squadRecordProblems, swapCounts, type AgeBandLevels } from './soak';
+import {
+  COHORT_NOISE_Z,
+  MIN_COHORT_GATE,
+  SOAK_CHECKS,
+  ageMatchedBenchRatio,
+  checkStatus,
+  dynastyFlags,
+  freshnessStarts,
+  judgeCohort,
+  ledgerMismatches,
+  levelAgeBands,
+  levelUpsCheck,
+  lineupProblems,
+  overCap,
+  parseCohort,
+  runSoak,
+  scheduleProblems,
+  squadRecordProblems,
+  swapCounts,
+  type AgeBandLevels,
+  type CohortTally,
+  type SoakSeasonSummary,
+} from './soak';
 
 const content = fixtureContent();
 
@@ -24,6 +46,8 @@ describe('runSoak on stand-ins', () => {
     expect(report.finalChecksum).toMatch(/^[0-9a-f]{32}$/);
     // The age-matched bench ratio's tallies: one entry per human-age band, every season.
     for (const season of report.seasons) expect(Object.keys(season.levels.ageBands)).toEqual(levelAgeBands(content).map((b) => b.key));
+    // Every cohort tally carries the sum of squared per-fighter levels (the spread behind the gate's noise margin).
+    for (const season of report.seasons) for (const row of Object.values(season.levels.cohorts)) expect(row.levelsSq).toBeGreaterThanOrEqual(row.levels);
   });
 
   it('reports blocked checks as pending when a module is a stub', () => {
@@ -238,5 +262,91 @@ describe('level-ups: the age-matched bench ratio', () => {
     expect(ageMatchedBenchRatio([good, band([50, 100], [0, 0])])!.ratio).toBe(base);
     expect(ageMatchedBenchRatio([band([3, 30], [50, 500])])).toBeNull();
     expect(ageMatchedBenchRatio([])).toBeNull();
+  });
+});
+
+describe('level-ups: the cohort mean gate (minimum sample and noise margin)', () => {
+  const key = '18-20 potential>=70';
+  const band = content.levels.soakTargets.starterLevelsPerSeasonByHumanAge[key]!; // [4, 6.5]
+  /** A tally of n fighters whose per-fighter levels have this mean and standard deviation. */
+  const tally = (n: number, mean: number, sd: number): Pick<CohortTally, 'fighters' | 'levels' | 'levelsSq'> => ({
+    fighters: n,
+    levels: n * mean,
+    levelsSq: (n - 1) * sd * sd + n * mean * mean,
+  });
+
+  it('skips a cohort below MIN_COHORT_GATE fighters, however far outside its band (reported, not gated)', () => {
+    expect(MIN_COHORT_GATE).toBe(20);
+    const v = judgeCohort(tally(MIN_COHORT_GATE - 1, 1.5, 1.2), band);
+    expect(v.status).toBe('skipped');
+    expect(v.mean).toBeCloseTo(1.5, 12);
+    expect(v.outside).toBeCloseTo(band[0]! - 1.5, 12);
+    expect(judgeCohort(tally(0, 0, 0), band)).toMatchObject({ status: 'skipped', fighters: 0, mean: 0 });
+  });
+
+  it('passes the seed bal-c reading: 32 fighters at 3.91 against 4-6.5 is within the sampling noise of its cohort', () => {
+    const v = judgeCohort(tally(32, 3.906, 1.6), band);
+    expect(v.status).toBe('pass');
+    expect(v.outside).toBeCloseTo(band[0]! - 3.906, 12);
+    expect(v.stderr).toBeCloseTo(1.6 / Math.sqrt(32), 6);
+    expect(v.outside).toBeLessThan(COHORT_NOISE_Z * v.stderr!);
+  });
+
+  it('stays a real gate: the same mean on an adequate sample, or a real shift on a small one, fails', () => {
+    // 400 fighters at 3.91: stderr 0.08, so the 0.09 shortfall is inside the 0.2 margin; at 3.7 the 0.3 shortfall is not.
+    expect(judgeCohort(tally(400, 3.906, 1.6), band).status).toBe('pass');
+    expect(judgeCohort(tally(400, 3.7, 1.6), band).status).toBe('fail');
+    // A cohort that is really a point low fails from about 25 fighters.
+    expect(judgeCohort(tally(25, 3.0, 1.6), band).status).toBe('fail');
+    expect(judgeCohort(tally(32, 3.0, 1.6), band).status).toBe('fail');
+    // Above the band the same rule applies.
+    expect(judgeCohort(tally(100, 7.4, 1.6), band).status).toBe('fail');
+  });
+
+  it('inside the band is a pass at any size; without spread (all the same) the band is exact', () => {
+    expect(judgeCohort(tally(30, 4.9, 1.5), band)).toMatchObject({ status: 'pass', outside: 0 });
+    expect(judgeCohort(tally(30, 3.99, 0), band).status).toBe('fail');
+    expect(judgeCohort(tally(30, 4.0, 0), band).status).toBe('pass');
+  });
+
+  /** A season summary with the given cohort tallies; every other tally is a pass. */
+  function season(n: number, cohorts: Record<string, Pick<CohortTally, 'fighters' | 'levels' | 'levelsSq'>>): SoakSeasonSummary {
+    const base = (k: string): CohortTally => {
+      const b = content.levels.soakTargets.starterLevelsPerSeasonByHumanAge[k]!;
+      const mean = (b[0]! + b[1]!) / 2;
+      return { ...tally(100, mean, 0.5), matches: k.startsWith('24-26') ? Math.round(100 * mean * 5) : 100 };
+    };
+    const rows: Record<string, CohortTally> = {};
+    for (const k of Object.keys(content.levels.soakTargets.starterLevelsPerSeasonByHumanAge)) rows[k] = { ...base(k), ...(cohorts[k] ?? {}) };
+    const bandKeys = levelAgeBands(content).map((b) => b.key);
+    const ageBands = Object.fromEntries(bandKeys.map((k) => [k, { starters: { fighters: 100, levels: 300 }, bench: { fighters: 100, levels: 120 } }]));
+    return {
+      season: n,
+      levels: { cohorts: rows, starters: { fighters: 600, levels: 1800 }, bench: { fighters: 600, levels: 720 }, total: 3000, ageBands },
+      starterStaminaMedian: 12,
+    } as unknown as SoakSeasonSummary;
+  }
+
+  it('levelUpsCheck: the flaky cohort (32 fighters, 3.91) passes; the sample-size note and the noise margin are explained in the detail', () => {
+    const measured = [season(3, { [key]: tally(32, 3.906, 1.6) })];
+    const r = levelUpsCheck(measured, content);
+    expect(r.status).toBe('pass');
+    expect(r.detail).toContain(`${key}: 3.91 (n 32, outside 4-6.5 by 0.09, within noise ±`);
+  });
+
+  it('levelUpsCheck: a small cohort is reported "not gated"; an adequate one still fails with its numbers', () => {
+    const small = levelUpsCheck([season(3, { [key]: tally(12, 1.0, 0.8) })], content);
+    expect(small.status).toBe('pass');
+    expect(small.detail).toContain(`${key}: 1.00 (n 12, below ${MIN_COHORT_GATE}: not gated)`);
+    const real = levelUpsCheck([season(3, { [key]: tally(200, 3.0, 1.2) })], content);
+    expect(real.status).toBe('fail');
+    expect(real.detail).toContain(`${key} 3.00 (band 4-6.5, n 200, outside by 1.00 >`);
+  });
+
+  it('levelUpsCheck pools the measured seasons before it judges (many small seasons make an adequate cohort)', () => {
+    const rows = [3, 4, 5, 6, 7, 8, 9, 10].map((n) => season(n, { [key]: tally(4, 2.5, 0.9) }));
+    const r = levelUpsCheck(rows, content);
+    expect(r.status).toBe('fail'); // 32 fighters pooled at 2.5, a real shortfall
+    expect(r.detail).toContain('n 32');
   });
 });

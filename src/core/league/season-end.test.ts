@@ -4,6 +4,7 @@ import {
   leagueCompetitionId,
   reckoningCompetitionId,
   type ClubId,
+  type FighterId,
   type GameState,
   type SeasonRecord,
   type TierId,
@@ -257,6 +258,47 @@ describe('result compaction', () => {
     expect(Object.keys(state.results)).toHaveLength(0);
     expect(Object.values(state.fixtures).filter((f) => f.season === 1)).toHaveLength(0);
     expect(Object.values(state.competitions).filter((c) => c.season === 1)).toHaveLength(0);
+  });
+});
+
+describe('result compaction: the M1.1 per-round records go, the attribution stays', () => {
+  it('drops reserveInputs, roundLineups, betweenRounds and fighterStats; keeps squads (without rows), emergency entrants and per-fighter totals with the side', () => {
+    const state = seasonWithReckoningHero(tierLeader);
+    const id = (Object.keys(state.results) as (keyof GameState['results'])[]).find((x) => state.results[x]!.homeClubId !== state.playerClubId && state.results[x]!.awayClubId !== state.playerClubId)!;
+    const r = cloneJson(state.results[id]!);
+    const stats = (clubId: ClubId, n: number) => ({
+      clubId, roundsPlayed: n, roundsSurvived: 1, ticksOnArena: 90, damageDealt: 100 * n, damageToShields: 1, damageTaken: 50, healingDone: 7 * n, shieldingDone: 2, overheal: 0,
+      ccAppliedTicks: 3, ccReceivedTicks: 4, downsInflicted: n, downsSuffered: 1, assists: 0, focusSpent: 10, casts: {}, ruleFires: [1, 2], ruleCommittedTicks: [3, 4], rulesNeverFired: [], downs: [], opponentIds: [],
+    });
+    const [a, b, e, x] = ['f-901', 'f-902', 'f-903', 'f-904'].map((f) => asId<FighterId>(f));
+    r.fighterStats = { [a!]: stats(r.homeClubId, 3), [b!]: stats(r.homeClubId, 1), [e!]: stats(r.homeClubId, 2), [x!]: stats(r.awayClubId, 3) };
+    const squad = (starters: FighterId[]) => ({ starters, reserves: [], rows: { [a!]: 'front' as const }, captainId: null, viceCaptainId: null });
+    r.squads = { home: squad([a!, b!]), away: squad([x!]) };
+    r.emergencyEntrants = [e!];
+    r.reserveInputs = { home: [], away: [] };
+    r.roundLineups = [];
+    r.betweenRounds = [];
+    state.results[id] = r;
+    state.calendar = seasonStartCalendar(2, content);
+    state.playerClubId = null;
+    compactHistory(state, content);
+    const c = state.results[id]!;
+    expect(isCompactedResult(c)).toBe(true);
+    for (const dropped of ['reserveInputs', 'roundLineups', 'betweenRounds'] as const) expect(c[dropped]).toBeUndefined();
+    expect(c.fighterStats).toEqual({});
+    expect(c.emergencyEntrants).toEqual([e]);
+    expect(c.squads!.home.starters).toEqual([a, b]);
+    expect(c.squads!.home.rows).toEqual({});
+    expect(c.fighterTotals).toEqual({
+      [a!]: [0, 3, 3, 1, 300, 21],
+      [b!]: [0, 1, 1, 1, 100, 7],
+      [e!]: [0, 2, 2, 1, 200, 14],
+      [x!]: [1, 3, 3, 1, 300, 21],
+    });
+    // About 30 bytes a fighter.
+    expect(JSON.stringify(c.fighterTotals![a!]).length).toBeLessThan(30);
+    // The original result is untouched (results are write-once).
+    expect(r.reserveInputs).toBeDefined();
   });
 });
 

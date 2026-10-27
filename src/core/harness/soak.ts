@@ -87,8 +87,18 @@ export interface AgeBandLevels {
   bench: LevelTally;
 }
 
+/** One levels.json cohort over some seasons: fighters counted, levels they gained, the sum of the squared per-fighter levels, matches they started. */
+export interface CohortTally {
+  fighters: number;
+  levels: number;
+  /** Sum over the fighters of (levels gained)^2: with `fighters` and `levels` it gives the spread of the per-fighter levels. */
+  levelsSq: number;
+  matches: number;
+}
+
 export interface SoakLevelSummary {
-  cohorts: Record<string, { fighters: number; levels: number; matches: number }>;
+  /** Per levels.json cohort: fighters, levels gained, their sum of squares (the spread behind the gate's noise margin) and matches started. */
+  cohorts: Record<string, CohortTally>;
   starters: LevelTally;
   bench: LevelTally;
   total: number;
@@ -146,8 +156,52 @@ export const PROVISIONAL_BENCH_MAX_MATCHES = 3;
  */
 export const PROVISIONAL_RATIO_STARTER_MIN_MATCHES = 10;
 export const PROVISIONAL_RATIO_BENCH_MAX_MATCHES = 2;
-/** Cohorts with fewer fighters than this are reported but not checked. */
+/** Reference groups (age-matched bench ratio) with fewer fighters than this are left out. */
 const MIN_COHORT = 8;
+/**
+ * The cohort mean gate (level-ups, starter levels per season by human-age): a cohort with fewer fighters than this,
+ * pooled over the measured seasons, is reported but not gated. The "18-20 potential>=70" cohort holds only about
+ * 25-35 fighters in ten measured seasons (a handful per season), so a flat band on its mean flaked by seed
+ * (bal-c: 3.91 against a band of 4-6.5 on 32 fighters, other seeds 4.4-4.9). PROVISIONAL.
+ */
+export const MIN_COHORT_GATE = 20;
+/**
+ * A cohort mean fails its band only when it lies outside the band by more than this many standard errors of the
+ * mean (the cohort's own spread over its size): a small cohort is allowed noise in proportion to its size, a large
+ * one is held almost exactly to the band. At 2.5 a cohort whose true mean sits inside the band fails about once in
+ * 150 soaks, while a real shift of a point or more is caught from about 25 fighters. PROVISIONAL.
+ */
+export const COHORT_NOISE_Z = 2.5;
+
+/** The verdict on one cohort's mean levels per season against its levels.json band. */
+export interface CohortVerdict {
+  /** 'pass': inside the band, or outside by no more than the noise margin; 'fail': outside by more; 'skipped': too few fighters to gate. */
+  status: 'pass' | 'fail' | 'skipped';
+  fighters: number;
+  mean: number;
+  /** Standard error of the mean from the cohort's spread (null when it has fewer than 2 fighters). */
+  stderr: number | null;
+  /** How far the mean lies outside the band (0 inside it). */
+  outside: number;
+}
+
+/**
+ * Gate one cohort: skipped below MIN_COHORT_GATE fighters; otherwise it fails when its mean lies outside `band`
+ * by more than COHORT_NOISE_Z standard errors. The spread comes from the tally (sum of squared per-fighter levels).
+ */
+export function judgeCohort(tally: Pick<CohortTally, 'fighters' | 'levels' | 'levelsSq'>, band: readonly number[]): CohortVerdict {
+  const n = tally.fighters;
+  const mean = n ? tally.levels / n : 0;
+  const outside = mean < band[0]! ? band[0]! - mean : mean > band[1]! ? mean - band[1]! : 0;
+  let stderr: number | null = null;
+  if (n >= 2) {
+    const variance = Math.max(0, (tally.levelsSq - n * mean * mean) / (n - 1));
+    stderr = Math.sqrt(variance / n);
+  }
+  if (n < MIN_COHORT_GATE) return { status: 'skipped', fighters: n, mean, stderr, outside };
+  const margin = COHORT_NOISE_Z * (stderr ?? 0);
+  return { status: outside > margin ? 'fail' : 'pass', fighters: n, mean, stderr, outside };
+}
 
 /**
  * wage-inflation band: |median wage growth| per season after the warm-up.
@@ -458,7 +512,7 @@ function levelSummary(state: GameState, start: Map<FighterId, LevelStart>, ports
   const cohorts = Object.keys(content.levels.soakTargets.starterLevelsPerSeasonByHumanAge).map(parseCohort);
   const ageBands = levelAgeBands(content);
   const levels: SoakLevelSummary = { cohorts: {}, starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 }, total: 0, ageBands: {} };
-  for (const c of cohorts) levels.cohorts[c.key] = { fighters: 0, levels: 0, matches: 0 };
+  for (const c of cohorts) levels.cohorts[c.key] = { fighters: 0, levels: 0, levelsSq: 0, matches: 0 };
   for (const b of ageBands) levels.ageBands[b.key] = { starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 } };
   const stamina: number[] = [];
   const hasStamina = content.stats.list.some((s) => s.id === 'stamina');
@@ -478,6 +532,7 @@ function levelSummary(state: GameState, start: Map<FighterId, LevelStart>, ports
         const row = levels.cohorts[c.key]!;
         row.fighters++;
         row.levels += gained;
+        row.levelsSq += gained * gained;
         row.matches += matches;
       }
     } else if (matches <= PROVISIONAL_BENCH_MAX_MATCHES) {
@@ -664,6 +719,63 @@ export function checkStatus(id: string, ok: boolean): SoakCheckStatus {
   return SOAK_CHECKS.find((c) => c.id === id)?.severity === 'warn' ? 'warn' : 'fail';
 }
 
+/**
+ * The level-ups check over the measured seasons (levels.json soakTargets): starter levels per season by human-age
+ * cohort (each cohort judged by `judgeCohort`: skipped when small, noise margin otherwise), matches per level of the
+ * mid cohort, the age-matched bench ratio and the starter Stamina median. Pure: exported for tests.
+ */
+export function levelUpsCheck(measured: readonly SoakSeasonSummary[], content: ContentDB): Pick<SoakCheck, 'status' | 'detail'> {
+  const lt = content.levels.soakTargets;
+  const total = measured.reduce((n, s) => n + s.levels.total, 0);
+  if (total === 0) return { status: 'pending', detail: 'no level-ups observed (in-season leveling not active)' };
+  const bad: string[] = [];
+  const parts: string[] = [];
+  for (const [key, band] of Object.entries(lt.starterLevelsPerSeasonByHumanAge)) {
+    // Pooled over the measured seasons; judged against the band with the cohort's own sampling noise (judgeCohort).
+    const tally = measured.reduce(
+      (a, s) => {
+        const row = s.levels.cohorts[key];
+        return row ? { fighters: a.fighters + row.fighters, levels: a.levels + row.levels, levelsSq: a.levelsSq + row.levelsSq } : a;
+      },
+      { fighters: 0, levels: 0, levelsSq: 0 },
+    );
+    const v = judgeCohort(tally, band);
+    const note = v.status === 'skipped' ? `, below ${MIN_COHORT_GATE}: not gated` : v.outside > 0 ? `, outside ${band.join('-')} by ${v.outside.toFixed(2)}, within noise ±${(COHORT_NOISE_Z * (v.stderr ?? 0)).toFixed(2)}` : '';
+    parts.push(`${key}: ${v.mean.toFixed(2)} (n ${v.fighters}${note})`);
+    if (v.status === 'fail') bad.push(`${key} ${v.mean.toFixed(2)} (band ${band.join('-')}, n ${v.fighters}, outside by ${v.outside.toFixed(2)} > ${(COHORT_NOISE_Z * (v.stderr ?? 0)).toFixed(2)} noise margin)`);
+  }
+  const midKey = Object.keys(lt.starterLevelsPerSeasonByHumanAge).find((k) => k.startsWith('24-26'));
+  const mid = midKey ? measured.reduce((a, s) => ({ l: a.l + (s.levels.cohorts[midKey]?.levels ?? 0), m: a.m + (s.levels.cohorts[midKey]?.matches ?? 0) }), { l: 0, m: 0 }) : { l: 0, m: 0 };
+  const perLevel = mid.l ? mid.m / mid.l : 0;
+  if (mid.l > 0 && !inBand(perLevel, lt.matchesPerLevelMidCohort)) bad.push(`matches per level (mid) ${perLevel.toFixed(2)} (band ${lt.matchesPerLevelMidCohort.join('-')})`);
+  const st = measured.reduce((a, s) => ({ f: a.f + s.levels.starters.fighters, l: a.l + s.levels.starters.levels }), { f: 0, l: 0 });
+  const be = measured.reduce((a, s) => ({ f: a.f + s.levels.bench.fighters, l: a.l + s.levels.bench.levels }), { f: 0, l: 0 });
+  // Pooled over all ages the bench reads high (it skews young); the check compares within human-age bands.
+  const pooled = st.l && be.f ? be.l / be.f / (st.l / st.f) : 0;
+  const bands: Record<string, AgeBandLevels> = {};
+  for (const s of measured) {
+    for (const [key, b] of Object.entries(s.levels.ageBands)) {
+      const t = (bands[key] ??= { starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 } });
+      t.starters.fighters += b.starters.fighters;
+      t.starters.levels += b.starters.levels;
+      t.bench.fighters += b.bench.fighters;
+      t.bench.levels += b.bench.levels;
+    }
+  }
+  const matched = ageMatchedBenchRatio(Object.values(bands));
+  const ratio = matched?.ratio ?? 0;
+  if (matched && matched.benchFighters >= MIN_COHORT && !inBand(ratio, lt.benchLevelsToStarterLevelsRatio)) bad.push(`bench/starter levels, age-matched ${ratio.toFixed(2)} (band ${lt.benchLevelsToStarterLevelsRatio.join('-')}; pooled ${pooled.toFixed(2)})`);
+  const sta = measured.map((s) => s.starterStaminaMedian).filter((x): x is number => x !== null);
+  const staMed = sta.length ? median(sta) : null;
+  if (staMed !== null && !inBand(staMed, lt.starterStaminaMedian)) bad.push(`starter Stamina median ${staMed} (band ${lt.starterStaminaMedian.join('-')})`);
+  return {
+    status: checkStatus('level-ups', bad.length === 0),
+    detail: bad.length
+      ? bad.slice(0, 4).join('; ')
+      : `starter levels/season ${parts.join(', ')}; matches per level (mid) ${perLevel.toFixed(2)}; bench/starter ${matched ? ratio.toFixed(2) : 'n/a'} age-matched (${pooled.toFixed(2)} pooled); starter Stamina median ${staMed ?? 'n/a'}`,
+  };
+}
+
 function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | null): SoakCheck[] {
   const { content } = options;
   const st = content.development.soakTargets;
@@ -775,52 +887,7 @@ function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | nul
     }
   }
   // level-ups (measured seasons)
-  if (needSeasons('level-ups')) {
-    const total = measured.reduce((n, s) => n + s.levels.total, 0);
-    if (total === 0) result.set('level-ups', { status: 'pending', detail: 'no level-ups observed (in-season leveling not active)' });
-    else {
-      const bad: string[] = [];
-      const parts: string[] = [];
-      for (const [key, band] of Object.entries(lt.starterLevelsPerSeasonByHumanAge)) {
-        const f = measured.reduce((n, s) => n + (s.levels.cohorts[key]?.fighters ?? 0), 0);
-        const l = measured.reduce((n, s) => n + (s.levels.cohorts[key]?.levels ?? 0), 0);
-        const mean = f ? l / f : 0;
-        parts.push(`${key}: ${mean.toFixed(2)} (n ${f})`);
-        if (f >= MIN_COHORT && !inBand(mean, band)) bad.push(`${key} ${mean.toFixed(2)} (band ${band.join('-')})`);
-      }
-      const midKey = Object.keys(lt.starterLevelsPerSeasonByHumanAge).find((k) => k.startsWith('24-26'));
-      const mid = midKey ? measured.reduce((a, s) => ({ l: a.l + (s.levels.cohorts[midKey]?.levels ?? 0), m: a.m + (s.levels.cohorts[midKey]?.matches ?? 0) }), { l: 0, m: 0 }) : { l: 0, m: 0 };
-      const perLevel = mid.l ? mid.m / mid.l : 0;
-      if (mid.l > 0 && !inBand(perLevel, lt.matchesPerLevelMidCohort)) bad.push(`matches per level (mid) ${perLevel.toFixed(2)} (band ${lt.matchesPerLevelMidCohort.join('-')})`);
-      const st = measured.reduce((a, s) => ({ f: a.f + s.levels.starters.fighters, l: a.l + s.levels.starters.levels }), { f: 0, l: 0 });
-      const be = measured.reduce((a, s) => ({ f: a.f + s.levels.bench.fighters, l: a.l + s.levels.bench.levels }), { f: 0, l: 0 });
-      // Pooled over all ages the bench reads high (it skews young); the check compares within human-age bands.
-      const pooled = st.l && be.f ? be.l / be.f / (st.l / st.f) : 0;
-      const bands: Record<string, AgeBandLevels> = {};
-      for (const s of measured) {
-        for (const [key, b] of Object.entries(s.levels.ageBands)) {
-          const t = (bands[key] ??= { starters: { fighters: 0, levels: 0 }, bench: { fighters: 0, levels: 0 } });
-          t.starters.fighters += b.starters.fighters;
-          t.starters.levels += b.starters.levels;
-          t.bench.fighters += b.bench.fighters;
-          t.bench.levels += b.bench.levels;
-        }
-      }
-      const matched = ageMatchedBenchRatio(Object.values(bands));
-      const ratio = matched?.ratio ?? 0;
-      if (matched && matched.benchFighters >= MIN_COHORT && !inBand(ratio, lt.benchLevelsToStarterLevelsRatio)) bad.push(`bench/starter levels, age-matched ${ratio.toFixed(2)} (band ${lt.benchLevelsToStarterLevelsRatio.join('-')}; pooled ${pooled.toFixed(2)})`);
-      const sta = measured.map((s) => s.starterStaminaMedian).filter((x): x is number => x !== null);
-      const staMed = sta.length ? median(sta) : null;
-      if (staMed !== null && !inBand(staMed, lt.starterStaminaMedian)) bad.push(`starter Stamina median ${staMed} (band ${lt.starterStaminaMedian.join('-')})`);
-      set(
-        'level-ups',
-        bad.length === 0,
-        bad.length
-          ? bad.slice(0, 4).join('; ')
-          : `starter levels/season ${parts.join(', ')}; matches per level (mid) ${perLevel.toFixed(2)}; bench/starter ${matched ? ratio.toFixed(2) : 'n/a'} age-matched (${pooled.toFixed(2)} pooled); starter Stamina median ${staMed ?? 'n/a'}`,
-      );
-    }
-  }
+  if (needSeasons('level-ups')) result.set('level-ups', levelUpsCheck(measured, content));
   // match-squads (all seasons)
   if (needSeasons('match-squads') || obs.squads.length > 0) {
     const m = main.summaries.reduce((n, s) => n + s.matches, 0);

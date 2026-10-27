@@ -311,7 +311,11 @@ export interface BetweenRoundSideView {
   swapsLeft: number;
   /** Injured active fighters who must be replaced (forced). */
   forced: FighterId[];
-  /** Auto-swap suggestions (pre-filled on the player's screen). */
+  /**
+   * Auto-swap suggestions (pre-filled on the player's screen). Blind: only the player's own side carries them; the
+   * other side's pending decision is never computed for the player's view, so it is `[]` there (combat sys-match
+   * "Simultaneous and blind"). With no player club (a spectated or headless match) both sides carry them.
+   */
   suggestions: SwapDecision[];
 }
 
@@ -341,7 +345,7 @@ function thresholdFor(state: GameState, ms: MatchState, side: MatchSide, content
   return below + (last && last.winner !== side ? (rules?.lostRoundBonus ?? 0) : 0);
 }
 
-function sideView(ports: GamePorts, state: GameState, ms: MatchState, side: MatchSide, content: ContentDB): BetweenRoundSideView {
+function sideView(ports: GamePorts, state: GameState, ms: MatchState, side: MatchSide, content: ContentDB, withSuggestions: boolean): BetweenRoundSideView {
   const s = ms[side];
   const n = ms.rounds.length;
   const last = ms.roundLineups[ms.roundLineups.length - 1]?.[side];
@@ -365,16 +369,20 @@ function sideView(ports: GamePorts, state: GameState, ms: MatchState, side: Matc
     withdrawn: [...s.withdrawn],
     swapsLeft: swapsLeft(ms, side, content),
     forced: s.active.filter((id) => s.injured.includes(id)),
-    suggestions: autoSwapDecisions(ports, state, ms, side, content),
+    suggestions: withSuggestions ? autoSwapDecisions(ports, state, ms, side, content) : [],
   };
 }
 
-/** Screen data and auto-swap suggestions for both sides after a non-deciding round. */
+/**
+ * Screen data and auto-swap suggestions after a non-deciding round, as the player sees it. Decisions are blind:
+ * the opponent's pending auto-swap decisions are not part of this view (its `suggestions` is `[]`; they are not
+ * even computed here), so nothing the UI receives, stores or logs from this call reveals what the AI side will do.
+ */
 export function betweenRounds(ports: GamePorts, state: GameState, ms: MatchState, content: ContentDB): BetweenRoundView {
   if (ms.phase !== 'between_rounds') throw new InvariantError(`betweenRounds: ${ms.fixtureId} is ${ms.phase}`);
   const playerSide = playerSideOf(state, ms);
-  const home = sideView(ports, state, ms, 'home', content);
-  const away = sideView(ports, state, ms, 'away', content);
+  const home = sideView(ports, state, ms, 'home', content, playerSide !== 'away');
+  const away = sideView(ports, state, ms, 'away', content, playerSide !== 'home');
   let urgent = false;
   if (playerSide !== null) {
     const v = playerSide === 'home' ? home : away;
