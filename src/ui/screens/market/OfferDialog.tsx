@@ -16,7 +16,7 @@ import type { Wp7Engine } from '../league/lib/engine';
 import { fmtMoney, fmtPctBp } from '../league/lib/format';
 import { Callout, ClassTag, Portrait, Segmented } from '../league/lib/ui';
 import { tryView } from '../league/lib/views';
-import { greedLabel, notCounted, termsCheck, type ClubMarket, type OfferKind } from './model';
+import { greedLabel, notCounted, starterBonusText, termsCheck, type ClubMarket, type OfferKind } from './model';
 import { t } from './text';
 
 export interface OfferTarget {
@@ -309,7 +309,7 @@ export function OfferDialog({
             </Callout>
           ) : terms.verdict === 'acceptable' ? (
             <Callout kind="good" title={t('offer.terms.acceptable')}>
-              {kind === 'free-agent' ? t('offer.terms.acceptableText', { rivals }) : t('offer.terms.acceptableRenew')}
+              {kind === 'free-agent' ? t('offer.terms.acceptableText', { bonus: starterBonusText(content), rivals }) : t('offer.terms.acceptableRenew')}
             </Callout>
           ) : terms.verdict === 'counter' ? (
             <Callout kind="warn" title={t('offer.terms.counter', { counter: fmtMoney(terms.counter ?? 0, content) })}>

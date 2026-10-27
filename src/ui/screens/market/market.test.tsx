@@ -9,7 +9,7 @@ import { createFakeStore, type FakeStoreOptions } from '../league/testing/fake-s
 import { Providers } from '../league/testing/providers';
 import { makeSampleWorld } from '../league/testing/worlds';
 import type { SampleStage } from '../league/testing/sample-season';
-import { termsCheck, willingLevel, type ClubMarket } from './model';
+import { starterBonusText, termsCheck, willingLevel, type ClubMarket } from './model';
 import { offerErrorText } from './OfferDialog';
 import MarketScreen from './index';
 
@@ -165,6 +165,49 @@ describe('Market screen', () => {
     const dialog = screen.getByTestId('compare-dialog');
     expect(dialog.querySelectorAll('.compare__head')).toHaveLength(3);
     expect(dialog.querySelectorAll('.is-best').length).toBeGreaterThan(0);
+  });
+});
+
+describe('starter bonus copy (KI-16)', () => {
+  /** The fixture content with its starter bonus replaced. */
+  function withBonus(bonusBp: number) {
+    const base = fixtureContent();
+    return { ...base, economy: { ...base.economy, market: { ...base.economy.market, starterBonusBp: bonusBp } } };
+  }
+
+  it('writes the bonus from content.economy.market.starterBonusBp, signed, with thousands separators', () => {
+    expect(starterBonusText(withBonus(1000))).toBe('+1,000');
+    expect(starterBonusText(withBonus(500))).toBe('+500');
+    expect(starterBonusText(withBonus(2500))).toBe('+2,500');
+  });
+
+  it('shows the content value in the starter tooltip and follows a changed value', () => {
+    const tips = () =>
+      Array.from(screen.getByTestId('market-agents').querySelectorAll('[data-tip]'))
+        .map((el) => el.getAttribute('data-tip') ?? '')
+        .filter((tip) => tip.includes('offer score'));
+    const fixtureBonus = fixtureContent().economy.market.starterBonusBp;
+    renderMarket();
+    expect(tips().length).toBeGreaterThan(0);
+    for (const tip of tips()) expect(tip).toBe(`His rating beats your fifth-best fighter: clubs where he would start get ${starterBonusText(fixtureContent())} on their offer score.`);
+    cleanup();
+    const changed = fixtureBonus === 3250 ? 4750 : 3250;
+    renderMarket('mid', undefined, { content: withBonus(changed) });
+    expect(tips().length).toBeGreaterThan(0);
+    for (const tip of tips()) {
+      expect(tip).toContain(`get ${starterBonusText(withBonus(changed))} on their offer score`);
+      expect(tip).not.toContain('{bonus}');
+    }
+    expect(tips()[0]).toContain('+3,250');
+  });
+
+  it('shows the content value in the offer dialog terms and follows a changed value', () => {
+    renderMarket('mid', undefined, { content: withBonus(3250) });
+    const row = agentRows().find((r) => !r.classList.contains('is-dimmed'))!;
+    fireEvent.click(within(row).getByTestId('offer-button'));
+    const terms = within(screen.getByTestId('offer-dialog')).getByTestId('offer-terms').textContent ?? '';
+    expect(terms).toContain('clubs where he would start get +3,250 on their score');
+    expect(terms).not.toContain('{bonus}');
   });
 });
 

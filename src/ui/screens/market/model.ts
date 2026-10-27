@@ -12,6 +12,7 @@ import type { FighterView } from '../../../core/game';
 import type { ClubId, Fighter, FighterId, GameState } from '../../../core/model';
 import type { EngineError, Result } from '../../../core/util';
 import type { Wp7Engine } from '../league/lib/engine';
+import { fmtSigned } from '../league/lib/format';
 import { rosterOf } from '../league/lib/season';
 import { tryView } from '../league/lib/views';
 
@@ -187,6 +188,14 @@ export function greedLabel(content: ContentDB, greedBp: number): { label: string
   const labels = content.economy.ask.greed.labels;
   const found = labels.find((l) => greedBp <= l.maxBp) ?? labels[labels.length - 1];
   return { label: found?.label ?? '', flexBp: found?.flexBp ?? 1000 };
+}
+
+/**
+ * The bonus clubs get on an offer's score when the fighter would start for them (economy.json
+ * market.starterBonusBp), written the way the market writes scores: signed basis points, "+1,000".
+ */
+export function starterBonusText(content: ContentDB): string {
+  return fmtSigned(content.economy.market.starterBonusBp);
 }
 
 export function termsCheck(content: ContentDB, fighter: Fighter, offer: number, ask: number): Terms {
