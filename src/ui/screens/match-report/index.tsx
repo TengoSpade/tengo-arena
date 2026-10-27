@@ -56,7 +56,8 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
   const [round, setRound] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<FighterId | null>(null);
   const result = game.results[fixtureId] ?? null;
-  const compacted = result !== null && isCompactedResult(result);
+  // An older match between other clubs: core keeps only the totals (report.compacted), shown as a summary.
+  const compacted = report.compacted === true || (result !== null && isCompactedResult(result));
   const fixture = game.fixtures[fixtureId];
   const persp = perspective(report, club.id);
   const infos = useMemo(() => fighterInfos(report, result, persp), [report, result, persp.usSide]);
@@ -138,7 +139,7 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
 
       <Scoreboard state={game} content={content} report={report} result={result} fixture={fixture} persp={persp} infos={infos} />
 
-      <div class="report-tabs">
+      <div class="report-tabs" hidden={compacted}>
         <Tabs
           label={t('tabs.label')}
           idPrefix="report-round"
@@ -150,12 +151,14 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
       </div>
 
       {compacted && (
-        // Last season's matches between other clubs keep only the score (core results retention).
+        // Older matches between other clubs keep a summary only (core results retention).
         <Callout kind="info" title={t('compacted.title')}>
           {t('compacted.text')}
         </Callout>
       )}
-      <div class="l-grid report-grid" hidden={compacted}>
+      {compacted && <BoxScore state={game} content={content} report={report} result={result} infos={infos} persp={persp} round={null} focusId={focusId} onFocus={setFocusId} />}
+      {!compacted && (
+      <div class="l-grid report-grid">
         <div class="span-8 l-stack">
           {report.timelineAvailable ? (
             <Traces state={game} content={content} report={report} infos={infos} persp={persp} focusId={focusId} />
@@ -176,6 +179,7 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
           <Aftermath state={game} content={content} report={report} infos={infos} persp={persp} />
         </div>
       </div>
+      )}
     </section>
   );
 }

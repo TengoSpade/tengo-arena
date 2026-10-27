@@ -12,6 +12,7 @@ import { fmtInt, fmtMoney, fmtTicks } from '../league/lib/format';
 import { href } from '../league/lib/store';
 import { Callout, Delta } from '../league/lib/ui';
 import { benchXpOf, downSummaries, name, type FighterInfo, type Moment, type Perspective } from './analysis';
+import { SubMark } from './BoxScore';
 import { isCareerEnding, weeksOutText } from '../../format/fighter';
 import { t } from './text';
 
@@ -187,8 +188,9 @@ export function Aftermath({
   const sevLabel = (id: string) => content.development.injury.severityLadder.find((s) => s.id === id)?.label ?? id;
   const weekIndex = state.fixtures[report.fixtureId]?.weekIndex ?? state.calendar.weekIndex;
   const bench = benchXpOf(report, persp, state);
-  const benchTotal = bench.reduce((n, b) => n + b.xp, 0);
-  const starterXp = ours.reduce((n, f) => n + (report.aftermath.xp[f.id] ?? 0), 0);
+  // The report's own totals (everyone who played, the bench XP of the rest); else summed over what is listed.
+  const benchTotal = report.totals?.[persp.usSide]?.benchXp ?? bench.reduce((n, b) => n + b.xp, 0);
+  const starterXp = report.totals?.[persp.usSide]?.xp ?? ours.reduce((n, f) => n + (report.aftermath.xp[f.id] ?? 0), 0);
   return (
     <section class="panel" aria-labelledby="h-after" data-testid="panel-after">
       <header class="panel__header">
@@ -245,11 +247,7 @@ export function Aftermath({
               <div key={f.id} data-testid="xp-row">
                 <dt>
                   {name(state, f.id)}
-                  {f.enteredRound !== null && (
-                    <span class="tag tag--info report-sub" data-tip={t('tip.sub', { round: f.enteredRound, out: f.entry?.out ? name(state, f.entry.out) : t('tip.subNobody'), how: f.entry?.reason === 'injury' ? 'forced by an injury' : f.entry?.reason === 'player' ? 'your swap' : f.entry?.reason === 'emergency' ? 'emergency entrant' : 'auto-swap' })}>
-                      {t('sub', { round: f.enteredRound })}
-                    </span>
-                  )}
+                  {f.role !== 'starter' && <SubMark state={state} info={f} />}
                 </dt>
                 <dd>
                   <Delta value={report.aftermath.xp[f.id]!} /> XP

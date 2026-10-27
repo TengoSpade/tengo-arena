@@ -51,24 +51,120 @@ function FighterCell({
         </span>
       )}
       {info.hiredBlade && <span class="tag tag--outline">{t('hired')}</span>}
-      {info.enteredRound !== null && <SubMark state={state} info={info} />}
+      {info.role !== 'starter' && <SubMark state={state} info={info} />}
     </span>
   );
 }
 
 const ENTRY_HOW: Record<SwapReason, string> = { player: 'your swap', auto: 'auto-swap', injury: 'forced by an injury', emergency: 'emergency entrant' };
 
-/** "sub R2": came in from the reserves for round 2 (who he replaced and how, in the tooltip). */
-function SubMark({ state, info }: { state: GameState; info: FighterInfo }) {
+/** "sub R2": came in from the reserves for round 2 (who he replaced and how, in the tooltip); "sub" when the round is not recorded. */
+export function SubMark({ state, info }: { state: GameState; info: FighterInfo }) {
   const out = info.entry?.out;
+  const how = ENTRY_HOW[info.entry?.reason ?? (info.role === 'emergency' ? 'emergency' : 'auto')];
   return (
     <span
       class="tag tag--info report-sub"
       data-testid="sub-mark"
-      data-tip={t('tip.sub', { round: info.enteredRound ?? 0, out: out ? name(state, out) : t('tip.subNobody'), how: ENTRY_HOW[info.entry?.reason ?? 'auto'] })}
+      data-tip={
+        info.enteredRound !== null
+          ? t('tip.sub', { round: info.enteredRound, out: out ? name(state, out) : t('tip.subNobody'), how })
+          : t(info.role === 'emergency' ? 'tip.subEmergency' : 'tip.subNoRound')
+      }
     >
-      {t('sub', { round: info.enteredRound ?? 0 })}
+      {info.enteredRound !== null ? t('sub', { round: info.enteredRound }) : t('sub.noRound')}
     </span>
+  );
+}
+
+/**
+ * Older matches between other clubs are compacted (core keeps only each fighter's rounds, downs, damage
+ * and healing): a short box score of what survives, the reserves who came on included.
+ */
+function SummaryBoxScore({ state, content, report, infos, persp }: { state: GameState; content: ContentDB; report: MatchReport; infos: FighterInfo[]; persp: Perspective }) {
+  const groups = [persp.usSide, persp.usSide === 'home' ? 'away' : 'home'] as const;
+  const tot = totals(infos, report);
+  return (
+    <section class="panel" aria-labelledby="h-box" data-testid="panel-box">
+      <header class="panel__header">
+        <h2 class="panel__title" id="h-box">
+          <span class="icon" data-icon="finances" aria-hidden="true" />
+          {t('box.title')}
+        </h2>
+        <span class="panel__subtitle">{t('box.subtitleSummary')}</span>
+      </header>
+      <div class="table-wrap">
+        <table class="data-table data-table--compact data-table--dense" data-testid="box-table">
+          <thead>
+            <tr>
+              <th scope="col">{t('col.fighter')}</th>
+              <th class="report-col-1900" scope="col">
+                {t('col.class')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.rounds')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.downs')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.downed')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.damage')}
+              </th>
+              <th class="cell-num" scope="col">
+                {t('col.healed')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((side) => {
+              const rows = infos.filter((f) => f.side === side).sort((a, b) => (b.recap?.stats.damageDealt ?? 0) - (a.recap?.stats.damageDealt ?? 0));
+              return [
+                <tr class="row-group" key={`g-${side}`}>
+                  <th colSpan={7} scope="colgroup">
+                    {clubName(state, report[side].clubId)}
+                    {persp.involved && side === persp.usSide ? ' · you' : ''}
+                  </th>
+                </tr>,
+                ...rows.map((f) => {
+                  const s = f.recap?.stats;
+                  const classId = f.classId || state.fighters[f.id]?.classId || '';
+                  return (
+                    <tr key={f.id}>
+                      <td class="cell-fill">
+                        <FighterCell state={state} content={content} report={report} info={f} />
+                      </td>
+                      <td class="report-col-1900">{classId && <ClassTag content={content} classId={classId} />}</td>
+                      <td class="cell-num">{s?.roundsPlayed ?? '—'}</td>
+                      <td class="cell-num">{s?.downsInflicted ?? '—'}</td>
+                      <td class="cell-num">{s?.downsSuffered ?? '—'}</td>
+                      <td class="cell-num">{s ? fmtInt(s.damageDealt) : '—'}</td>
+                      <td class="cell-num">{s ? fmtInt(s.healingDone) : '—'}</td>
+                    </tr>
+                  );
+                }),
+              ];
+            })}
+          </tbody>
+        </table>
+      </div>
+      <footer class="panel__footer">
+        <span>
+          {t('totals', {
+            us: persp.involved ? 'us' : clubName(state, report[persp.usSide].clubId),
+            usDowns: tot[persp.usSide].downs,
+            usDamage: fmtInt(tot[persp.usSide].damage),
+            usHeal: fmtInt(tot[persp.usSide].healing),
+            them: persp.involved ? 'them' : clubName(state, report[persp.usSide === 'home' ? 'away' : 'home'].clubId),
+            themDowns: tot[persp.usSide === 'home' ? 'away' : 'home'].downs,
+            themDamage: fmtInt(tot[persp.usSide === 'home' ? 'away' : 'home'].damage),
+            themHeal: fmtInt(tot[persp.usSide === 'home' ? 'away' : 'home'].healing),
+          })}
+        </span>
+      </footer>
+    </section>
   );
 }
 
@@ -94,6 +190,7 @@ export function BoxScore({
   onFocus: (id: FighterId | null) => void;
 }) {
   const { sort, toggle } = useSort<Key>({ key: 'damage', dir: 'desc' });
+  if (report.compacted) return <SummaryBoxScore state={state} content={content} report={report} infos={infos} persp={persp} />;
   const tickMs = content.combat.tick.tickMs;
   const groups = [persp.usSide, persp.usSide === 'home' ? 'away' : 'home'] as const;
   const roundResult = round !== null ? result?.rounds.find((r) => r.round === round) : undefined;
@@ -137,12 +234,13 @@ export function BoxScore({
     if (effectiveSort.key !== sort.key) return hpLeft(f) ?? 0;
     return keyOf(f);
   };
-  const tot = totals(infos);
+  const tot = totals(infos, report);
   const cols = round === null ? 12 : 6;
   // Our bench: fighters who started no round (and the unused match reserves) with the XP they earned.
   const bench = round === null ? benchXpOf(report, persp, state) : [];
   const showFresh = (f: FighterInfo) => f.freshBefore !== null && (f.us || !persp.involved);
-  const xpTotal = infos.filter((f) => f.us && report.aftermath.xp[f.id] !== undefined).reduce((n, f) => n + (report.aftermath.xp[f.id] ?? 0), 0);
+  // The report's own XP totals (the sum over everyone who played); else summed over the rows shown.
+  const xpTotal = report.totals?.[persp.usSide]?.xp ?? infos.filter((f) => f.us && report.aftermath.xp[f.id] !== undefined).reduce((n, f) => n + (report.aftermath.xp[f.id] ?? 0), 0);
   const benchTotal = bench.reduce((n, b) => n + b.xp, 0);
 
   return (
@@ -172,7 +270,7 @@ export function BoxScore({
                   <SortTh label={t('col.damage')} sortKey="damage" sort={effectiveSort} onSort={toggle} num />
                   <SortTh label={t('col.taken')} sortKey="taken" sort={effectiveSort} onSort={toggle} num />
                   <SortTh label={t('col.healed')} sortKey="healed" sort={effectiveSort} onSort={toggle} num />
-                  <SortTh label={t('col.control')} sortKey="control" sort={effectiveSort} onSort={toggle} num tip={t('tip.control')} class="report-col-1600" />
+                  <SortTh label={t('col.control')} sortKey="control" sort={effectiveSort} onSort={toggle} num tip={t('tip.control')} class="report-col-2000" />
                   <SortTh label={t('col.rules')} sortKey="rules" sort={effectiveSort} onSort={toggle} num tip={t('tip.rules')} class="report-col-2100" />
                   <SortTh label={t('col.fresh')} sortKey="fresh" sort={effectiveSort} onSort={toggle} num tip={t('tip.fresh')} />
                   <SortTh label={t('col.xp')} sortKey="xp" sort={effectiveSort} onSort={toggle} num tip={t('tip.xp')} />
@@ -266,7 +364,7 @@ export function BoxScore({
                             {fmtInt(s.healingDone + s.shieldingDone)}
                           </td>
                           <td
-                            class={s.ccAppliedTicks > 0 ? 'cell-num report-col-1600' : 'cell-num report-col-1600 cell-muted'}
+                            class={s.ccAppliedTicks > 0 ? 'cell-num report-col-2000' : 'cell-num report-col-2000 cell-muted'}
                             data-tip={t('tipcell.control', { applied: fmtSeconds1(s.ccAppliedTicks, tickMs), received: fmtSeconds1(s.ccReceivedTicks, tickMs) })}
                           >
                             {fmtSeconds1(s.ccAppliedTicks, tickMs)}

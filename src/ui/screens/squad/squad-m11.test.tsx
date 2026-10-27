@@ -66,6 +66,22 @@ describe('Squad: match squad of 5 + 2 and Freshness (M1.1)', () => {
     expect(marks(bench[2]!.id).getAttribute('data-row')).toBe('bench');
   });
 
+  it('says why a Spent starter stays in the lineup when nobody rested can take his place', () => {
+    const { store } = createTestStore();
+    const next = structuredClone(store.game.value!) as GameState;
+    const club = next.clubs[next.playerClubId!]!;
+    const starter = club.lineup.fighters[0]!.fighterId;
+    const starters = new Set(club.lineup.fighters.map((e) => e.fighterId as string));
+    next.fighters[starter]!.freshness10 = 250; // Spent
+    for (const f of Object.values(next.fighters)) if (f.clubId === club.id && !starters.has(f.id)) f.freshness10 = 300; // nobody rested on the bench
+    store.replaceWorld(next);
+    mount(store);
+    const hint = screen.getByTestId('spent-no-cover');
+    expect(hint.textContent).toContain(next.fighters[starter]!.name.full);
+    expect(hint.textContent).toMatch(/no rested .+ on the roster\. Consider signing depth/);
+    expect(screen.queryByTestId(`rotate-${starter}`)).toBeNull();
+  });
+
   it('naming a third reserve replaces the one named first and the toast says who was dropped, with Undo', async () => {
     const { store } = createTestStore();
     const next = structuredClone(store.game.value!) as GameState;

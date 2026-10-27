@@ -2111,8 +2111,8 @@ a.card:hover {
   display: none;
 }
 
-/* Under 1400 px the roster has no room for "Match reserve": "Reserve", still apart from "Bench". */
-@media (max-width: 1399px) {
+/* Under 1800 px the roster has no room for "Match reserve": "Reserve", still apart from "Bench". */
+@media (max-width: 1799px) {
   .row-mark__short {
     display: inline;
   }

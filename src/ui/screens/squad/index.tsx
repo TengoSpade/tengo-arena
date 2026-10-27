@@ -390,6 +390,10 @@ function LineupBoard(props: BoardProps) {
   // One-click fix for an unfit starter: the best fit reserves, highest rating first, one per unfit place.
   const fitReserves = rows.filter((r) => !r.entry && engineFit(engine, r.f)).sort((a, b) => (b.view?.rating ?? 0) - (a.view?.rating ?? 0));
   const name = (id: FighterId | null) => (id ? (state.fighters[id]?.name.full ?? id) : '');
+  // A Spent starter (Freshness below 40) with no rested fighter of his role to rest him for: Auto-pick keeps him, so say why.
+  const tips = rotationTips(state, content, engine, club);
+  const covered = new Set(tips.map((tp) => tp.out as string));
+  const spentNoCover = lineupRows.filter((r) => engineFit(engine, r.f) && freshInfo(engine, state, content, r.f).label === 'spent' && !covered.has(r.f.id));
 
   const zone = (label: string, list: readonly LineupEntry[], row: 'front' | 'back', empties: number) => (
     <div
@@ -503,6 +507,11 @@ function LineupBoard(props: BoardProps) {
                 </li>
               );
             })}
+            {spentNoCover.map((r) => (
+              <li key={`spent-${r.f.id}`} data-state="warn" data-testid="spent-no-cover">
+                {format(T.checkSpentNoCover, { name: r.f.name.full, role: (roleNames(r.klass, content)[0] ?? T.checkSpentRoleFallback).toLowerCase() })}
+              </li>
+            ))}
             {injuredReserves.slice(0, 2).map((r) => (
               <li key={r.f.id} data-state="warn">
                 {format(T.checkInjured, { name: r.f.name.full, weeks: weeksOutText(r.f.injury!) })}
@@ -549,7 +558,7 @@ function LineupBoard(props: BoardProps) {
         </div>
       </div>
       <ReservesZone state={state} content={content} engine={engine} club={club} store={props.store} selected={selected} onSelect={props.onSelect} dragId={props.dragId} setDragId={props.setDragId} />
-      <RotationStrip tips={rotationTips(state, content, engine, club)} state={state} onRotate={(tip) => props.actions.moveTo(tip.in, tip.row, tip.out)} />
+      <RotationStrip tips={tips} state={state} onRotate={(tip) => props.actions.moveTo(tip.in, tip.row, tip.out)} />
     </Panel>
   );
 }

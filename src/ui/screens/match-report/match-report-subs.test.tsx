@@ -129,17 +129,17 @@ describe('Match report: reserves who came in', () => {
     renderReport(state, world.content, id);
     const table = screen.getByTestId('box-table');
     expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(11);
-    const subRow = screen.getByTestId('sub-mark').closest('tr')!;
+    const subRow = within(table).getByTestId('sub-mark').closest('tr')!;
     expect(subRow.textContent).toContain(state.fighters[reserve]!.name.full);
     expect(subRow.textContent).toMatch(/sub R2/);
     // Freshness: the value at his first round start → the value he ended on.
     expect(within(subRow as HTMLElement).getByTestId('cell-fresh').textContent).toMatch(/100\s*→\s*76/);
     // His rounds only: the round 1 tab leaves him out, the round 2 tab has him and not the fighter he replaced.
     fireEvent.click(screen.getByRole('tab', { name: /Round 1/ }));
-    expect(screen.queryByTestId('sub-mark')).toBeNull();
+    expect(within(table).queryByTestId('sub-mark')).toBeNull();
     expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(10);
     fireEvent.click(screen.getByRole('tab', { name: /Round 2/ }));
-    expect(screen.getByTestId('sub-mark').closest('tr')!.textContent).toContain(state.fighters[reserve]!.name.full);
+    expect(within(table).getByTestId('sub-mark').closest('tr')!.textContent).toContain(state.fighters[reserve]!.name.full);
     expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(10);
   });
 
@@ -179,23 +179,104 @@ describe('Match report: bench XP', () => {
     expect(total).toBe(starters + 9);
   });
 
-  it('accepts a list of { fighterId, xp } and leaves a report without bench XP as it was', () => {
+  it('reads core’s bench lines (reserve / bench) first, falls back to aftermath.benchXp, and leaves a report without bench XP as it was', () => {
     const { world, state, id, benchIds } = worldWithSwap();
     const built = buildMatchReport(state, id, world.content);
     if (!built.ok) throw new Error('no report');
     const persp = perspective(built.value, state.playerClubId);
+    const me = state.playerClubId!;
     expect(benchXpOf(built.value, persp, state)).toEqual([]);
-    const listed = { ...built.value, aftermath: { ...built.value.aftermath, benchXp: [{ fighterId: benchIds[1], xp: 5 }] } } as MatchReport;
-    expect(benchXpOf(listed, persp, state)).toEqual([{ id: benchIds[1], xp: 5, reserve: false }]);
-    // Never for the other club's fighters, and never in a match we did not play.
-    const foreign = Object.values(state.fighters).find((f) => f.clubId !== state.playerClubId && f.clubId)!;
-    const mixed = { ...built.value, aftermath: { ...built.value.aftermath, benchXp: { [foreign.id]: 3 } } } as MatchReport;
-    expect(benchXpOf(mixed, persp, state)).toEqual([]);
-    expect(benchXpOf(listed, { ...persp, involved: false }, state)).toEqual([]);
+    // Core's lines: both clubs' non-starters; only ours count, unused reserves first.
+    const foreign = Object.values(state.fighters).find((f) => f.clubId !== me && f.clubId)!;
+    const lines = {
+      ...built.value,
+      bench: [
+        { fighterId: benchIds[1], clubId: me, role: 'bench' as const, xp: 5 },
+        { fighterId: benchIds[0], clubId: me, role: 'reserve' as const, xp: 4 },
+        { fighterId: foreign.id, clubId: foreign.clubId!, role: 'bench' as const, xp: 3 },
+      ],
+    } as MatchReport;
+    expect(benchXpOf(lines, persp, state)).toEqual([
+      { id: benchIds[0], xp: 4, reserve: true },
+      { id: benchIds[1], xp: 5, reserve: false },
+    ]);
+    // The map is the same data when there are no lines (and the other club's fighters are left out).
+    const mapped = { ...built.value, aftermath: { ...built.value.aftermath, benchXp: { [benchIds[1]!]: 5, [foreign.id]: 3 } } } as MatchReport;
+    expect(benchXpOf(mapped, persp, state)).toEqual([{ id: benchIds[1], xp: 5, reserve: false }]);
+    // Never in a match we did not play.
+    expect(benchXpOf(lines, { ...persp, involved: false }, state)).toEqual([]);
     cleanup();
     renderReport(state, world.content, id);
     expect(screen.queryAllByTestId('bench-row')).toHaveLength(0);
     expect(screen.getByTestId('xp-total').textContent).not.toContain('bench');
+  });
+
+  it('uses the report’s own team totals and XP totals (core totals), not a sum of the five', () => {
+    const { world, state, id } = worldWithSwap();
+    const base = (side: 'home' | 'away') => ({ downsInflicted: side === 'home' ? 11 : 12, downsSuffered: side === 'home' ? 12 : 11, damageDealt: 4321, healingDone: 1234, xp: 150, benchXp: 24 });
+    renderReport(state, world.content, id, (r) => ({ ...r, totals: { home: base('home'), away: base('away') } }));
+    const footer = screen.getByTestId('panel-box').querySelector('.panel__footer')!.textContent!;
+    expect(footer).toMatch(/4,321 damage/);
+    expect(footer).toMatch(/1,234 healed/);
+    expect(footer).toMatch(/(11|12) downs/);
+    // Round 1 view leaves them out; the XP line quotes the report's totals.
+    expect(within(screen.getByTestId('panel-box')).getByTestId('xp-total').textContent).toContain('150');
+  });
+
+  it('marks a reserve who came on from the recap alone (role and roundsStarted), without recorded lineups', () => {
+    const { world, state, id, reserve, side } = worldWithSwap();
+    const result = state.results[id]!;
+    delete result.roundLineups;
+    delete result.betweenRounds;
+    const built = buildMatchReport(state, id, world.content);
+    if (!built.ok) throw new Error('no report');
+    const report: MatchReport = {
+      ...built.value,
+      [side]: { ...built.value[side], appearedIds: [...built.value[side].fighterIds, reserve] },
+      fighters: built.value.fighters.map((f) => (f.fighterId === reserve ? { ...f, role: 'reserve' as const, roundsStarted: [2, 3] } : { ...f, role: 'starter' as const })),
+    };
+    const persp = perspective(report, state.playerClubId);
+    const infos = fighterInfos(report, result, persp);
+    const sub = infos.find((f) => f.id === reserve)!;
+    expect(infos.filter((f) => f.us)).toHaveLength(6);
+    expect(sub).toMatchObject({ role: 'reserve', enteredRound: 2 });
+    expect(infos.filter((f) => f.us && f.role === 'starter')).toHaveLength(5);
+  });
+
+  it('shows a short summary-only box score for a compacted match: note, every fighter who played, no round tabs', () => {
+    const { world, state, id, reserve, side } = worldWithSwap();
+    const built = buildMatchReport(state, id, world.content);
+    if (!built.ok) throw new Error('no report');
+    const other = side === 'home' ? 'away' : 'home';
+    // Compaction keeps the totals only; the result's sim input has no fighters.
+    const result = state.results[id]!;
+    result.input.home.fighters = [];
+    result.input.away.fighters = [];
+    delete result.roundLineups;
+    delete result.betweenRounds;
+    delete result.reserveInputs;
+    delete result.squads;
+    renderReport(state, world.content, id, (r) => ({
+      ...r,
+      compacted: true,
+      timelineAvailable: false,
+      [side]: { ...r[side], appearedIds: [...r[side].fighterIds, reserve] },
+      [other]: { ...r[other], appearedIds: [...r[other].fighterIds] },
+      fighters: r.fighters.map((f) => ({
+        ...f,
+        role: f.fighterId === reserve ? ('reserve' as const) : ('starter' as const),
+        stats: { ...f.stats, damageTaken: 0, healingDone: f.stats.healingDone, ccAppliedTicks: 0, ruleFires: [], downs: [] },
+        downs: [],
+        rules: [],
+      })),
+    }));
+    expect(screen.getByText('Summary only')).toBeTruthy();
+    const table = screen.getByTestId('box-table');
+    expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(11);
+    expect(within(table).getAllByTestId('sub-mark')).toHaveLength(1);
+    expect(table.querySelector('thead')!.textContent).toContain('Rounds');
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByTestId('panel-moments')).toBeNull();
   });
 
   it('shows bench XP in the squads and swaps list for a reserve who never came in', () => {

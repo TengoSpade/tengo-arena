@@ -39,6 +39,8 @@ export const T = {
   checkPresets: 'Every fighter has a preset',
   checkPresetsMissing: '{n} {n?fighter|fighters} without a preset',
   checkInjured: '{name} injured, back in {weeks}',
+  checkSpentNoCover: '{name} is Spent and starts rounds with the Freshness penalty: no rested {role} on the roster. Consider signing depth.',
+  checkSpentRoleFallback: 'fighter',
   checkInjuredInLineup: '{name} is injured and cannot play',
   bringIn: 'Bring in {name}',
   bringInTip: '{name} (rating {rating}) takes {out}’s place in the {row}. Ctrl Z undoes it.',

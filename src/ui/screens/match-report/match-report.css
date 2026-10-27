@@ -269,9 +269,9 @@ tr.is-bench td {
 }
 
 /* The box score now carries Freshness, so its two least-needed columns wait for more room (the Rule recaps below
-   hold every rule's fires): Control seconds from 1600 px, Rules fired from 2100 px. The names stay readable. */
-@media (max-width: 1599px) {
-  .report-col-1600 {
+   hold every rule's fires): Control seconds from 2000 px, Rules fired from 2100 px. The names stay readable. */
+@media (max-width: 1999px) {
+  .report-col-2000 {
     display: none;
   }
 }

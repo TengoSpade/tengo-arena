@@ -67,6 +67,8 @@ export interface FighterInfo {
   isCaptain: boolean;
   hiredBlade: boolean;
   recap: FighterRecap | null;
+  /** How he came to play (core FighterRecap.role): a starter, a squad reserve who came on, an emergency entrant. */
+  role: 'starter' | 'reserve' | 'emergency';
   /** Rounds he started, each with the unit he fought as (a reserve takes the unit of the slot he enters). */
   units: ReadonlyMap<number, number>;
   /** Round he came in for (a swap, injury cover or an emergency entrant); null for a round-1 starter. */
@@ -91,8 +93,10 @@ interface RoundStart {
 
 /**
  * Everyone who started a round, home then away: the round-1 five in slot order, then those who came
- * in (by round, then slot): reserves swapped in, injury cover, emergency entrants. Totals over these
- * add up to the side's totals.
+ * in (by round, then slot): reserves swapped in, injury cover, emergency entrants. The report's
+ * `ReportSide.appearedIds`, `FighterRecap.role` and `roundsStarted` lead when it has them; the recorded
+ * round lineups fill in the rest (and older reports without those fields). Team totals come from the
+ * report's own `totals` (see `totals`), never from the round-1 five alone.
  */
 export function fighterInfos(report: MatchReport, result: MatchResult | null, persp: Perspective): FighterInfo[] {
   const out: FighterInfo[] = [];
@@ -117,7 +121,7 @@ export function fighterInfos(report: MatchReport, result: MatchResult | null, pe
     const firstRoundOf = (id: FighterId) => Math.min(...(starts.get(id)?.keys() ?? [99]));
     const firstSlotOf = (id: FighterId) => starts.get(id)?.get(firstRoundOf(id))?.slot ?? 9;
     // Order: the round-1 five (stored input, else the report's list), then entrants as they came in.
-    const five = input ? input.fighters.map((f) => f.fighterId) : report[side].fighterIds.slice(0, 5);
+    const five = input && input.fighters.length > 0 ? input.fighters.map((f) => f.fighterId) : report[side].fighterIds.slice(0, 5);
     const rest: FighterId[] = [];
     const known = new Set<FighterId>(five);
     const addRest = (ids: Iterable<FighterId>) => {
@@ -127,6 +131,7 @@ export function fighterInfos(report: MatchReport, result: MatchResult | null, pe
         rest.push(id);
       }
     };
+    addRest(report[side].appearedIds ?? []);
     addRest([...starts.keys()].sort((a, b) => firstRoundOf(a) - firstRoundOf(b) || firstSlotOf(a) - firstSlotOf(b)));
     // The report lists everyone who started a round; this also covers results without recorded lineups.
     addRest(report[side].fighterIds);
@@ -140,9 +145,17 @@ export function fighterInfos(report: MatchReport, result: MatchResult | null, pe
       else if (i < five.length) reportRounds.forEach((round) => units.set(round, base + i));
       const first = mine ? firstRoundOf(id) : null;
       const st = first !== null ? mine!.get(first) : undefined;
-      const enteredRound = first !== null && st && (first > 1 || st.entered) ? first : null;
+      // From the lineups; else from the recap (role and the rounds he started) for results without lineups.
+      const startedAt = recap?.roundsStarted?.[0];
+      const enteredRound =
+        first !== null && st && (first > 1 || st.entered)
+          ? first
+          : !mine && recap?.role && recap.role !== 'starter' && startedAt !== undefined && (startedAt > 1 || recap.role === 'emergency')
+            ? startedAt
+            : null;
       const swap = enteredRound !== null ? result?.betweenRounds?.find((b) => b.afterRound === enteredRound - 1)?.[side].find((w) => w.in === id) : undefined;
       const slot = st?.slot ?? (i < five.length ? i : 9);
+      const role: FighterInfo['role'] = recap?.role ?? (enteredRound !== null ? (swap?.reason === 'emergency' ? 'emergency' : 'reserve') : 'starter');
       out.push({
         id,
         side,
@@ -155,9 +168,10 @@ export function fighterInfos(report: MatchReport, result: MatchResult | null, pe
         isCaptain: recap?.isCaptain ?? report[side].captainId === id,
         hiredBlade: Boolean(result?.hiredBladeIds.includes(id)),
         recap,
+        role,
         units,
         enteredRound,
-        entry: enteredRound !== null ? { out: swap?.out ?? null, reason: swap?.reason ?? 'auto' } : null,
+        entry: enteredRound !== null || role !== 'starter' ? { out: swap?.out ?? null, reason: swap?.reason ?? (role === 'emergency' ? 'emergency' : 'auto') } : null,
         freshBefore: st?.fresh ?? null,
       });
     });
@@ -187,28 +201,24 @@ export interface BenchXpEntry {
 }
 
 /**
- * Bench XP of the match from the report (core: `aftermath.benchXp`, fighter id → XP). Read through one
- * guard so an older report, or one built before the field existed, simply has none. Accepts a record,
- * or a list of { fighterId, xp }.
+ * Bench XP of our club's non-starters: the report's `bench` lines (unused reserves first, then the rest of
+ * the fit bench), else the `aftermath.benchXp` map; none for a report that did not record it. Nothing
+ * for a match we did not play.
  */
 export function benchXpOf(report: MatchReport, persp: Perspective, state: GameState): BenchXpEntry[] {
   if (!persp.involved) return [];
-  const raw = (report.aftermath as unknown as { benchXp?: unknown } | undefined)?.benchXp;
-  const pairs: [FighterId, number][] = [];
-  if (Array.isArray(raw)) {
-    for (const e of raw as { fighterId?: FighterId; id?: FighterId; xp?: number }[]) {
-      const id = e.fighterId ?? e.id;
-      if (id && typeof e.xp === 'number') pairs.push([id, e.xp]);
-    }
-  } else if (raw && typeof raw === 'object') {
-    for (const [id, xp] of Object.entries(raw as Record<string, unknown>)) if (typeof xp === 'number') pairs.push([id as FighterId, xp]);
-  }
   const started = new Set(report.fighters.map((f) => f.fighterId));
-  const reserves = new Set<FighterId>(state.results[report.fixtureId]?.squads?.[persp.usSide].reserves ?? []);
-  return pairs
-    .filter(([id]) => !started.has(id) && state.fighters[id]?.clubId === persp.usClubId)
-    .map(([id, xp]) => ({ id, xp, reserve: reserves.has(id) }))
-    .sort((a, b) => Number(b.reserve) - Number(a.reserve) || b.xp - a.xp || (a.id < b.id ? -1 : 1));
+  const reserves = new Set<FighterId>([...(report[persp.usSide].unusedReserveIds ?? []), ...(state.results[report.fixtureId]?.squads?.[persp.usSide].reserves ?? [])]);
+  let entries: BenchXpEntry[];
+  if (report.bench) {
+    entries = report.bench.filter((b) => b.clubId === persp.usClubId).map((b) => ({ id: b.fighterId, xp: b.xp, reserve: b.role === 'reserve' }));
+  } else {
+    const map = report.aftermath.benchXp ?? {};
+    entries = Object.entries(map)
+      .filter(([id]) => state.fighters[id as FighterId]?.clubId === persp.usClubId)
+      .map(([id, xp]) => ({ id: id as FighterId, xp, reserve: reserves.has(id as FighterId) }));
+  }
+  return entries.filter((b) => !started.has(b.id)).sort((a, b) => Number(b.reserve) - Number(a.reserve) || b.xp - a.xp || (a.id < b.id ? -1 : 1));
 }
 
 /** 04 ui-report MVP contribution: damage + healing + shielding + 250 × downs inflicted. */
@@ -227,8 +237,17 @@ function sideTotals(infos: FighterInfo[], side: SideKey) {
   };
 }
 
-export function totals(infos: FighterInfo[]) {
-  return { home: sideTotals(infos, 'home'), away: sideTotals(infos, 'away') };
+/**
+ * Team totals of both sides: the report's own `totals` (the sum over everyone who started a round, the
+ * reserves who came on included) when it has them, else summed here over the fighters listed.
+ */
+export function totals(infos: FighterInfo[], report?: MatchReport) {
+  const side = (s: SideKey) => {
+    const t = report?.totals?.[s];
+    if (t) return { downs: t.downsInflicted, downed: t.downsSuffered, damage: t.damageDealt, healing: t.healingDone };
+    return sideTotals(infos, s);
+  };
+  return { home: side('home'), away: side('away') };
 }
 
 /** A fighter's name, also for one who has left the league since (alumni, personName). */
@@ -276,7 +295,7 @@ export function firstDownRounds(report: MatchReport, infos: FighterInfo[], fight
 // ---- summary ---------------------------------------------------------------------------------------
 
 export function summary(report: MatchReport, persp: Perspective, infos: FighterInfo[], state: GameState): { title: string; text: string } {
-  const tot = totals(infos);
+  const tot = totals(infos, report);
   const us = tot[persp.usSide];
   const them = tot[other(persp.usSide)];
   const winnerSide: SideKey = report.winnerClubId === report.home.clubId ? 'home' : 'away';
