@@ -151,7 +151,7 @@
       "growthMult": { "physical": 1.0, "mental": 0.85 },
       "declineMult": { "physical": 1.0, "mental": 1.0 },
       "statTendencies": { "str": 0.8, "agi": 0.4, "pac": 1.2, "tgh": 0, "pre": 0, "stamina": -1.2, "arc": 0.6, "spi": -0.4, "wil": 0, "cmp": -1.2, "ldr": -0.4, "awr": 0, "dis": -0.6 },
-      "injury": { "chanceMult": 0.85, "recoveryMult": 0.8, "scarMult": 1.0 },
+      "injury": { "chanceMult": 0.82, "recoveryMult": 0.8, "scarMult": 1.0 },
       "classAffinity": { "frontline": 0.8, "skirmisher": 1.6, "ranged": 1.0, "caster": 1.3, "support": 0.6 },
       "racialFeature": {
         "id": "ready_made",

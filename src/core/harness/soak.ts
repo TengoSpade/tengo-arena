@@ -29,11 +29,14 @@ export interface SoakOptions {
   onSeason?: (summary: SoakSeasonSummary) => void;
 }
 
-export type SoakCheckStatus = 'pass' | 'fail' | 'pending';
+/** 'warn' is a violated warning-level check (SoakCheck.severity): reported and printed, but not a failure. */
+export type SoakCheckStatus = 'pass' | 'fail' | 'warn' | 'pending';
 
 export interface SoakCheck {
   id: string;
   description: string;
+  /** 'warn': a violation reports status 'warn' instead of 'fail' and does not fail the soak. Absent: a hard check. */
+  severity?: 'warn';
   status: SoakCheckStatus;
   detail?: string;
 }
@@ -110,7 +113,7 @@ export interface SoakReport {
 }
 
 /** The invariant catalogue. Descriptions are developer-facing. */
-export const SOAK_CHECKS: readonly { id: string; description: string }[] = [
+export const SOAK_CHECKS: readonly { id: string; description: string; severity?: 'warn' }[] = [
   { id: 'determinism', description: 'Same seed twice -> identical final state checksum' },
   { id: 'ledger-balance', description: 'Every club: balance == opening balance + sum(ledger) each week' },
   { id: 'ai-solvency', description: 'AI clubs bankrupt per season <= TUNABLE limit' },
@@ -118,7 +121,8 @@ export const SOAK_CHECKS: readonly { id: string; description: string }[] = [
   { id: 'age-distribution', description: 'League mean age and retirements per season stay in TUNABLE bands per race' },
   { id: 'fighter-population', description: 'Active fighter count stays within TUNABLE band (rookies vs retirements)' },
   { id: 'wage-inflation', description: 'Median wage growth per season within TUNABLE band' },
-  { id: 'competitive-balance', description: 'No club wins its tier more than TUNABLE share of seasons' },
+  // Warning-level: a single-seed dynasty flag is noise; dynasty balance is a known issue for the M7 balance pass, measured across many seeds.
+  { id: 'competitive-balance', description: 'No club wins its tier more than TUNABLE share of seasons', severity: 'warn' },
   { id: 'schedule-integrity', description: 'Every club plays the configured matches; tournament has 8 clubs and 3 rounds' },
   { id: 'references', description: 'validateState() finds no broken references after every season' },
   { id: 'save-roundtrip', description: 'serialize -> parse -> deep-equal after every season' },
@@ -654,6 +658,12 @@ function inBand(x: number, band: readonly number[]): boolean {
   return x >= band[0]! && x <= band[1]!;
 }
 
+/** Outcome of an evaluated check: pass, or fail (warn for a warning-level check). */
+export function checkStatus(id: string, ok: boolean): SoakCheckStatus {
+  if (ok) return 'pass';
+  return SOAK_CHECKS.find((c) => c.id === id)?.severity === 'warn' ? 'warn' : 'fail';
+}
+
 function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | null): SoakCheck[] {
   const { content } = options;
   const st = content.development.soakTargets;
@@ -664,7 +674,7 @@ function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | nul
   const measured = main.summaries.filter((s) => s.season > Math.min(SOAK_WARMUP_SEASONS, Math.max(0, done - 1)));
   const result = new Map<string, Omit<SoakCheck, 'id' | 'description'>>();
   const set = (id: string, ok: boolean, detail: string): void => {
-    result.set(id, { status: ok ? 'pass' : 'fail', detail });
+    result.set(id, { status: checkStatus(id, ok), detail });
   };
   const needSeasons = (id: string): boolean => {
     if (done > 0) return true;

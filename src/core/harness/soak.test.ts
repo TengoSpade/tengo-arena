@@ -4,7 +4,7 @@ import { asId, type ClubId, type GameState, type SeasonRecord, type TierId } fro
 import { checksumState, createSave, parseSave, saveMetaFor, serializeSave } from '../save';
 import { fixtureContent } from '../testkit';
 import { NotImplementedError, cloneJson } from '../util';
-import { SOAK_CHECKS, ageMatchedBenchRatio, dynastyFlags, freshnessStarts, ledgerMismatches, levelAgeBands, lineupProblems, overCap, parseCohort, runSoak, scheduleProblems, squadRecordProblems, swapCounts, type AgeBandLevels } from './soak';
+import { SOAK_CHECKS, ageMatchedBenchRatio, checkStatus, dynastyFlags, freshnessStarts, ledgerMismatches, levelAgeBands, lineupProblems, overCap, parseCohort, runSoak, scheduleProblems, squadRecordProblems, swapCounts, type AgeBandLevels } from './soak';
 
 const content = fixtureContent();
 
@@ -19,6 +19,7 @@ describe('runSoak on stand-ins', () => {
     // Engine invariants (stand-in rules do not decide these):
     for (const id of ['determinism', 'ledger-balance', 'roster-size', 'schedule-integrity', 'references', 'save-roundtrip']) expect(status[id], id).toBe('pass');
     for (const c of report.checks) expect(c.status).not.toBe('pending');
+    expect(['pass', 'warn']).toContain(status['competitive-balance']); // warning-level: never 'fail'
     expect(report.seasons).toHaveLength(2);
     expect(report.finalChecksum).toMatch(/^[0-9a-f]{32}$/);
     // The age-matched bench ratio's tallies: one entry per human-age band, every season.
@@ -111,6 +112,14 @@ describe('individual checks', () => {
     expect(dynastyFlags(dynasty, content).some((f) => f.includes('Reckoning titles'))).toBe(true);
     const shields = Array.from({ length: 10 }, (_, i) => rec(i + 1, `c${i}`, i < 6 ? 'y' : `s${i}`));
     expect(dynastyFlags(shields, content).some((f) => f.includes('Shields'))).toBe(true);
+  });
+
+  it('competitive-balance is warning-level: a dynasty flag reports WARN, not a failure; every other check stays hard', () => {
+    expect(SOAK_CHECKS.filter((c) => c.severity === 'warn').map((c) => c.id)).toEqual(['competitive-balance']);
+    expect(checkStatus('competitive-balance', true)).toBe('pass');
+    expect(checkStatus('competitive-balance', false)).toBe('warn');
+    expect(checkStatus('determinism', false)).toBe('fail');
+    expect(checkStatus('determinism', true)).toBe('pass');
   });
 
   it('save-roundtrip and resume: save -> parse -> advance equals advance', () => {
