@@ -49,6 +49,36 @@ describe('loadContent: fixture content', () => {
     (list(a['clubs']!, 'clubs')[0]!)['startPrestige'] = 13;
     expect(hashContent(a as RawContentFiles)).not.toBe(hashContent(raw() as RawContentFiles));
   });
+
+  it('hashContent ignores leagues.matchRecords (it changes only how soon a save compacts a match), so tuning it keeps every stored match re-simulable', () => {
+    const without = hashContent(raw() as RawContentFiles);
+    const withIt = raw();
+    withIt['leagues']!['matchRecords'] = { _doc: 'x', compactAiMatchesAfterWeeks: 3 };
+    expect(hashContent(withIt as RawContentFiles)).toBe(without);
+    (withIt['leagues']!['matchRecords'] as Mutable)['compactAiMatchesAfterWeeks'] = 1;
+    expect(hashContent(withIt as RawContentFiles)).toBe(without);
+    expect(loadContent('t', withIt as RawContentFiles, { profile: 'fixture' }).ok).toBe(true);
+    // Anything else in the file still counts.
+    (withIt['leagues']!['calendar'] as Mutable)['weekProcessingOrder'] = ['x'];
+    expect(hashContent(withIt as RawContentFiles)).not.toBe(without);
+  });
+
+  it('leagues.matchRecords: whole weeks from 1 to 99; absent is allowed (the frozen fixture); the validator warns when no match would be compacted in season', () => {
+    const base = raw();
+    const with_ = (value: unknown): Record<string, Mutable> => {
+      const f = raw();
+      f['leagues']!['matchRecords'] = value;
+      return f;
+    };
+    expect(errorsOf(base)).toEqual([]);
+    expect(errorsOf(with_({ compactAiMatchesAfterWeeks: 3 }))).toEqual([]);
+    for (const bad of [0, -1, 2.5, 100, '3']) expect(errorsOf(with_({ compactAiMatchesAfterWeeks: bad })).length).toBeGreaterThan(0);
+    expect(errorsOf(with_({}))).not.toEqual([]);
+    const long = loadContent('t', with_({ compactAiMatchesAfterWeeks: 99 }) as RawContentFiles, { profile: 'fixture' });
+    expect(long.ok && long.value.warnings.some((w) => w.path === 'matchRecords.compactAiMatchesAfterWeeks')).toBe(true);
+    const short = loadContent('t', with_({ compactAiMatchesAfterWeeks: 3 }) as RawContentFiles, { profile: 'fixture' });
+    expect(short.ok && short.value.warnings.some((w) => w.path === 'matchRecords.compactAiMatchesAfterWeeks')).toBe(false);
+  });
 });
 
 describe('loadContent: errors are precise and collected', () => {
