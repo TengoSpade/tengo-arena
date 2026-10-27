@@ -36,5 +36,5 @@ describe('routes', () => {
       expect(getByTestId(`screen-${route.id}`)).toBeTruthy();
       unmount();
     }
-  });
+  }, 60_000); // imports and renders every screen: well under a second alone, seconds on a busy machine
 });

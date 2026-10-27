@@ -19,11 +19,12 @@ db.classes.require('oathguard'); db.classAbility('oathguard', 'a1'); db.tierByLe
 | `validate.ts` | cross-file rules: references, unique ids, closed lists match, O8 class structure (6 per archetype, 2 per hybrid pair, 42 total), mutual trait opposites, rule params vs vocabulary (type, range, step, required), selector pool vs action/ability target, O2 caps, calendar and schedule coverage, economy integers, exact unit conversion |
 | `units.ts` | authoring units -> engine integers (`S` ticks, `M` cm / mm, `Mps` mm per tick, fractions -> bp) |
 | `db.ts` | `ContentDB` registries and lookups |
-| `load.ts` | `loadContent`, `parseContentFiles`, `hashContent` |
+| `load.ts` | `loadContent` (option `hash`: the production build ships the files without their doc keys and passes the source files' hash), `parseContentFiles`, `hashContent` (over the files as written) |
+| `doc-keys.ts` | `isDocKey`, `stripDocKeys`: `_`-prefixed keys are documentation for designers. No code reads them (the validator skips them, the schemas only declare them optional), so the production build drops them (`scripts/vite/strip-doc-keys.ts`) and `tests/content` checks the stripped files validate the same. |
 
 Profiles: `'theme'` (default; full shipped-theme rules) and `'fixture'` (skips count rules, for core/testkit).
 
-Designers: `npm run validate-content` prints every issue as `file › path: message`.
+Designers: `npm run validate-content` prints every issue as `file › path: message`. A key that starts with `_` is a note to yourself: it has no effect in the game and is removed from the production build, so never put data there.
 
 Adding a vocabulary entry (status, effect type, rule condition, ...) is a code change: the owning module must implement it, then the architect adds it to `schema/common.ts`.
 

@@ -18,7 +18,7 @@ Milestone: **M1 "Season MVP"** (tag `m1-season-mvp`): new career, club choice, 1
 ```sh
 npm ci               # once, and after package-lock.json changes (exact, clean install)
 npm run dev          # dev server at http://localhost:5173 (hot reload, including content JSON edits)
-npm run build        # production bundle in dist/ (static, works offline)
+npm run build        # production bundle in dist/ (static, works offline; the content JSON is a separate chunk without its `_` doc keys)
 npm run preview      # serve the built dist/ at http://localhost:4173
 ```
 
@@ -49,7 +49,7 @@ Open http://localhost:5173, choose **New career**, pick a club (Muster Circuit c
 npm test             # Vitest: unit tests + architecture/purity checks (npm run test:watch to watch)
 npm run typecheck    # tsc: core with no DOM/Node types, then the whole project
 npm run lint         # ESLint (editor feedback for the architecture rules)
-npm run check        # all three; must be green before a merge
+npm run check        # all three; must be green before a merge (tests/build/bundle.test.ts builds the app in memory and holds the startup JS to 250 KB gzip)
 ```
 
 ## Content

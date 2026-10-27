@@ -13,9 +13,21 @@ export type RawContentFiles = Partial<Record<ContentFileName, unknown>>;
 export interface LoadContentOptions {
   /** 'theme' (default) enforces the shipped-theme count rules; 'fixture' is for small test sets. */
   profile?: ValidationProfile;
+  /**
+   * The content hash to record, when `raw` is not the source as written: a production build ships
+   * the files without their `_` doc keys (core/content/doc-keys.ts) and carries the hash of the
+   * source files from build time. Defaults to hashContent(raw).
+   */
+  hash?: string;
 }
 
-/** Content hash stored in saves, fight headers and GameState.content: hash of the raw files. */
+/**
+ * Content hash stored in saves, fight headers and GameState.content: hash of the raw files as written, doc
+ * keys included. It is part of the content's identity (a stored match result re-simulates for its report
+ * only under the same hash), so every way of loading the same files must give the same value; the
+ * production build, which ships the files without their doc keys, passes the source hash in
+ * `LoadContentOptions.hash`.
+ */
 export function hashContent(raw: RawContentFiles): string {
   return hashString(stableStringify(raw));
 }
@@ -59,5 +71,5 @@ export function loadContent(
   const errors = issues.filter((i) => i.severity === 'error');
   if (errors.length > 0) return err(issues);
   const files = deepFreeze(parsed.value);
-  return ok(buildContentDB({ id: themeId, hash: hashContent(raw) }, files, issues));
+  return ok(buildContentDB({ id: themeId, hash: options.hash ?? hashContent(raw) }, files, issues));
 }
