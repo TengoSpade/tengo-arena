@@ -1007,7 +1007,7 @@
       "tags": [
         "defense"
       ],
-      "text": "Once per round, on first dropping below 25% HP: a shield worth 12% of max HP for 4 s.",
+      "text": "Once per round, on first dropping below 25% HP: a shield worth 8% of max HP for 4 s.",
       "requires": {
         "minPerksHeld": 2,
         "anyPerks": [
@@ -1034,7 +1034,7 @@
                   "scale": [
                     {
                       "stat": "maxHp",
-                      "coef": 0.12
+                      "coef": 0.08
                     }
                   ]
                 },

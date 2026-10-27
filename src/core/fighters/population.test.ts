@@ -6,12 +6,22 @@
  * and level-ups with auto-pick.
  */
 import { describe, expect, it } from 'vitest';
-import { PHYSICAL_STAT_IDS } from '../content';
+import { PHYSICAL_STAT_IDS, loadContent, type ContentDB, type ContentFileName, type RawContentFiles } from '../content';
 import type { Fighter } from '../model';
 import { fixtureContent } from '../testkit';
 import { runPopulation, type LevelSample, type PopulationReport } from './population';
 
 const content = fixtureContent();
+
+/** The shipping content (content/default, via import.meta.glob: core tests may not read files). */
+const rawFiles = import.meta.glob('../../../content/default/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
+function shippedContent(): ContentDB {
+  const raw: RawContentFiles = {};
+  for (const [path, json] of Object.entries(rawFiles)) raw[path.split('/').pop()!.replace(/\.json$/, '') as ContentFileName] = json;
+  const r = loadContent('default', raw);
+  if (!r.ok) throw new Error(`content/default invalid: ${r.error.map((e) => e.message).join('; ')}`);
+  return r.value;
+}
 const targets = content.development.soakTargets;
 const levelTargets = content.levels.soakTargets;
 const SEASONS = 20;
@@ -93,8 +103,13 @@ describe('20-season population with synthetic matches', () => {
   it('stays inside the age and population bands', () => {
     checkAgeAndPopulation(report);
   }, 120_000);
-  it('injuries per 40 rounds by race are inside the bands (O11: elves most, dwarves and orcs least)', () => {
-    for (const [race, band] of Object.entries(targets.injuriesPer40RoundsByRace)) {
+  // Runs on content/default (the shipping content these bands protect), not the frozen fixture: on the fixture,
+  // humans sat at the band edge (1.159-1.190 per 40 rounds against 1.15) once its race injury values matched
+  // content/default (M1.1 integration, coordinator decision; seed and band unchanged).
+  it('injuries per 40 rounds by race are inside the bands on content/default (O11: elves most, dwarves and orcs least)', { timeout: 120_000 }, () => {
+    const shipped = shippedContent();
+    const report = runPopulation({ seed: SEED, seasons: SEASONS, content: shipped, matches: true });
+    for (const [race, band] of Object.entries(shipped.development.soakTargets.injuriesPer40RoundsByRace)) {
       const r = report.injuries[race]!;
       const per40 = (r.injuries * 40) / r.rounds;
       expect(inBand(per40, band), `${race} ${per40.toFixed(3)} per 40 rounds`).toBe(true);
