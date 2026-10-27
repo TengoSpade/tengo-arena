@@ -157,3 +157,55 @@
     row-gap: 0;
   }
 }
+
+/* Renewals: next season's wage room (AL-R002-T006). */
+.room {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1.1fr) minmax(16rem, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .room {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.room__total dt,
+.room__total dd {
+  font-weight: var(--fw-bold);
+}
+
+.room__total {
+  border-top: 1px solid var(--c-border-strong);
+}
+
+.room__h {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+.room__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-2);
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+
+.room__list > li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  max-width: 22rem;
+}
+
+.offer-next__verdict {
+  font-weight: var(--fw-semibold);
+}

@@ -187,3 +187,10 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+/* "R1" / "R2" in the # column: the two match reserves, set apart from the five's 1-5. */
+.squad-slot-r {
+  color: var(--c-accent-text);
+  font-weight: var(--fw-semibold, 600);
+  letter-spacing: 0.02em;
+}

@@ -400,6 +400,11 @@ export function standInFighters(): Port {
     // ---- M1.1: reads as the real module; hooks are stubs until WP-C needs them in stand-in runs ----
     freshnessOf: (f) => Math.floor((f.freshness10 ?? 1000) / 10),
     freshnessLabel: (v) => (v >= 80 ? 'fresh' : v >= 60 ? 'ready' : v >= 40 ? 'tired' : 'spent'),
+    // Stand-in rating: no Freshness penalty on the displayed rating.
+    ratingAtFreshness: (f, freshness, content) => {
+      const r = rating(f, content);
+      return { freshness, severityBp: 0, rating: r, effectiveRating: r, delta: 0, deltaExact: 0, parts: { attackSpeed: 0, moveSpeed: 0, power: 0, support: 0, reaction: 0 } };
+    },
     effectiveLevelUpMode,
     autoPickChoice: autoPick,
     offerContextOf: () => ({ captainOrVice: false, trainingEnabled: false }),

@@ -17,15 +17,15 @@ import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
 import { useShortcuts } from '../../app/shortcuts';
 import { Callout, ConfirmButton, Empty, Icon, Kbd, PageHeader, Panel, Pips, RoleGlyph, Segmented, Tag, tipAttrs } from '../../components';
-import { freshInfo } from '../../m11/model';
-import { FreshMeter } from '../../m11/parts';
+import { freshInfo, ratingNow } from '../../m11/model';
+import { FreshMeter, RatingEff } from '../../m11/parts';
 import { MATCH_PAUSED, useStore, type AppStore } from '../../store';
 import { useEngine } from '../../store/engine';
 import { useMatchDay } from '../../store/match-day';
 import { Crest, clubName } from '../league/lib/club';
 import { fmtInt, fmtTicks } from '../league/lib/format';
-import { ClassTag, Portrait, RatingPill } from '../league/lib/ui';
-import { cycleSwap, matchXpSoFar, reserveCoverage, sameDecisions, setSwap } from './model';
+import { ClassTag, Portrait } from '../league/lib/ui';
+import { cycleSwap, matchLineSoFar, matchXpSoFar, reserveCoverage, sameDecisions, setSwap } from './model';
 import { t } from './text';
 import './between-rounds.css';
 
@@ -193,22 +193,56 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
       )}
 
       <div class="l-grid">
-        <div class="span-12 span-8@wide l-stack">
+        <div class="br-main l-stack">
           <Panel title={t('yourFive')} icon="squad" subtitle={t('yourFiveSub')} body="flush" testId="br-five">
             <div class="table-wrap">
-            <table class="data-table br-table">
+            <table class="data-table data-table--compact data-table--dense br-table" data-testid="br-table">
               <thead>
                 <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">{t('colFighter')}</th>
-                  <th scope="col">{t('colFresh')}</th>
-                  <th scope="col" class="cell-num" {...tipAttrs(t('colDamageTip'))}>
-                    {t('colDamage')}
+                  <th scope="col" rowSpan={2}>
+                    #
                   </th>
-                  <th scope="col" class="cell-num" {...tipAttrs(t('colXpTip'))}>
+                  <th scope="col" rowSpan={2}>
+                    {t('colFighter')}
+                  </th>
+                  <th scope="col" rowSpan={2} {...tipAttrs(t('colRatingTip'))}>
+                    {t('colRating')}
+                  </th>
+                  <th scope="col" rowSpan={2}>
+                    {t('colFresh')}
+                  </th>
+                  <th scope="colgroup" colSpan={2} class="cell-num br-group" {...tipAttrs(t('colDamageTip'))}>
+                    {t('groupDamage')}
+                  </th>
+                  <th scope="colgroup" colSpan={2} class="cell-num br-group" {...tipAttrs(t('colHealingTip'))}>
+                    {t('groupHealing')}
+                  </th>
+                  <th scope="col" rowSpan={2} class="cell-num" {...tipAttrs(t('colDownsTip'))}>
+                    {t('colDowns')}
+                  </th>
+                  <th scope="col" rowSpan={2} class="cell-num" {...tipAttrs(t('colRoundsTip'))}>
+                    {t('colRounds')}
+                  </th>
+                  <th scope="col" rowSpan={2} class="cell-num" {...tipAttrs(t('colXpTip'))}>
                     {t('colXp')}
                   </th>
-                  <th scope="col">{t('colSwap')}</th>
+                  <th scope="col" rowSpan={2}>
+                    {t('colSwap')}
+                  </th>
+                </tr>
+                <tr class="br-subhead">
+                  <th scope="col" class="cell-num">
+                    {t('subDone')}
+                  </th>
+                  <th scope="col" class="cell-num">
+                    {t('subReceived')}
+                  </th>
+                  <th scope="col" class="cell-num">
+                    {t('subDone')}
+                  </th>
+                  <th scope="col" class="cell-num">
+                    {t('subReceived')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -216,6 +250,8 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
                   const f = state.fighters[a.fighterId];
                   if (!f) return null;
                   const info = freshInfo(engine, state, content, f);
+                  const line = matchLineSoFar(ms, a.fighterId);
+                  const now = ratingNow(engine, state, content, f);
                   const change = a.freshness - a.freshnessBefore;
                   const swap = plan.find((d) => d.out === a.fighterId);
                   const suggested = mine.suggestions.some((d) => d.out === a.fighterId && d.in === swap?.in);
@@ -232,31 +268,36 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
                         <span class="entity">
                           <Portrait content={content} fighter={f} size="xs" injured={a.injured} />
                           <span class="entity__stack">
-                            <span class="entity__name">{f.name.full}</span>
+                            <span class="br-nameline">
+                              <span class="entity__name">{f.name.full}</span>
+                              {(a.injured || a.downed || levelDue) && (
+                                <span class="br-tags">
+                                  {a.injured && (
+                                    <Tag kind="bad" icon="injury" tip={t('injuredTip')}>
+                                      {t('injured')}
+                                    </Tag>
+                                  )}
+                                  {a.downed && !a.injured && <Tag kind="outline">{t('downed')}</Tag>}
+                                  {levelDue && (
+                                    <Tag kind="accent" icon="level-up" tip={t('levelDueTip')}>
+                                      {t('levelDue')}
+                                    </Tag>
+                                  )}
+                                </span>
+                              )}
+                            </span>
                             <span class="entity__sub">
                               <ClassTag content={content} classId={f.classId} /> · {a.row === 'front' ? t('front') : t('back')}
                             </span>
                           </span>
                         </span>
-                        {(a.injured || a.downed || levelDue) && (
-                          <span class="br-tags">
-                            {a.injured && (
-                              <Tag kind="bad" icon="injury" tip={t('injuredTip')}>
-                                {t('injured')}
-                              </Tag>
-                            )}
-                            {a.downed && !a.injured && <Tag kind="outline">{t('downed')}</Tag>}
-                            {levelDue && (
-                              <Tag kind="accent" icon="level-up" tip={t('levelDueTip')}>
-                                {t('levelDue')}
-                              </Tag>
-                            )}
-                          </span>
-                        )}
+                      </td>
+                      <td class="br-rating" data-testid={`br-rating-${a.fighterId}`}>
+                        {now ? <RatingEff now={now} content={content} testId={`br-eff-${a.fighterId}`} /> : '—'}
                       </td>
                       <td>
                         <span class="br-fresh">
-                          <FreshMeter info={info} content={content} label testId={`br-fresh-${a.fighterId}`} />
+                          <FreshMeter info={info} content={content} label={info.label === 'tired' || info.label === 'spent'} testId={`br-fresh-${a.fighterId}`} />
                           {change !== 0 && (
                             <span class="u-xs u-muted u-num" {...tipAttrs(t('changeTip', { from: a.freshnessBefore, to: a.freshness }))} data-testid={`br-change-${a.fighterId}`}>
                               {`${change > 0 ? '+' : '−'}${Math.abs(change)}`}
@@ -264,7 +305,29 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
                           )}
                         </span>
                       </td>
-                      <td class="cell-num u-num">{fmtInt(Math.round(a.damageTaken))}</td>
+                      <td class="cell-num u-num br-stat" data-testid={`br-dmg-${a.fighterId}`}>
+                        {fmtInt(Math.round(line.damageDone))}
+                      </td>
+                      <td class="cell-num u-num br-stat" data-testid={`br-taken-${a.fighterId}`} {...tipAttrs(t('lastRoundTip', { n: fmtInt(Math.round(a.damageTaken)) }))}>
+                        {fmtInt(Math.round(line.damageReceived))}
+                      </td>
+                      <td
+                        class={`cell-num u-num br-stat${line.healingDone > 0 ? '' : ' cell-muted'}`}
+                        data-testid={`br-heal-${a.fighterId}`}
+                        {...tipAttrs(t('healTip', { healing: fmtInt(Math.round(line.healingDone)), shielding: fmtInt(Math.round(line.shieldingDone)) }))}
+                      >
+                        {fmtInt(Math.round(line.healingDone))}
+                      </td>
+                      <td class={`cell-num u-num br-stat${line.healingReceived ? '' : ' cell-muted'}`} data-testid={`br-healed-${a.fighterId}`}>
+                        {line.healingReceived === null ? '—' : fmtInt(Math.round(line.healingReceived))}
+                      </td>
+                      <td class="cell-num u-num br-stat" data-testid={`br-downs-${a.fighterId}`} {...tipAttrs(t('downsTip', { inflicted: line.downs, suffered: line.downed }))}>
+                        {line.downs}
+                        {line.downed > 0 && <span class="u-faint"> / {line.downed}</span>}
+                      </td>
+                      <td class="cell-num u-num br-stat" data-testid={`br-rounds-${a.fighterId}`}>
+                        {line.rounds}
+                      </td>
                       <td class="cell-num u-num">{gained > 0 ? `≈${gained}` : '—'}</td>
                       <td>
                         <span class="br-swap">
@@ -314,7 +377,7 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
           </Panel>
         </div>
 
-        <div class="span-12 span-4@wide br-side">
+        <div class="br-side">
           <Panel title={t('reserves')} icon="refresh" subtitle={t('reservesSub')} testId="br-reserves">
             <div class="l-stack l-stack--sm">
               {mine.reserves.length === 0 && <p class="u-sm u-muted">{t('noReserves')}</p>}
@@ -322,6 +385,7 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
                 const f = state.fighters[r.fighterId];
                 if (!f) return null;
                 const entering = plan.find((d) => d.in === r.fighterId);
+                const rNow = ratingNow(engine, state, content, f);
                 return (
                   <div key={r.fighterId} class={`br-reserve${entering ? ' is-in' : ''}`} data-testid={`br-reserve-${r.fighterId}`}>
                     <span class="entity">
@@ -334,8 +398,8 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
                       </span>
                     </span>
                     <span class="br-reserve__stats">
-                      <RatingPill value={r.rating} />
-                      <FreshMeter info={freshInfo(engine, state, content, f)} content={content} />
+                      {rNow ? <RatingEff now={rNow} content={content} testId={`br-reserve-eff-${r.fighterId}`} /> : <span class="u-faint">{r.rating}</span>}
+                      <FreshMeter info={freshInfo(engine, state, content, f)} content={content} label />
                     </span>
                     {entering && <span class="u-xs br-reserve__for">→ {nameOf(entering.out)}</span>}
                   </div>

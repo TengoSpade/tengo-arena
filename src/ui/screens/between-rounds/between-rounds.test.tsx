@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContentDB } from '../../../core/content';
-import { asId, type ClubId, type FighterId, type GameState, type MatchState, type RoundResult, type WeekReport } from '../../../core/model';
+import { asId, type ClubId, type FighterId, type FighterMatchStats, type GameState, type MatchState, type RoundResult, type WeekReport } from '../../../core/model';
 import { buildFixtureWorld, fixtureContent, fixtureMatchState } from '../../../core/testkit';
 import { ok } from '../../../core/util';
 import { installShortcuts } from '../../app/shortcuts';
@@ -22,6 +22,35 @@ afterEach(() => {
   dispose = null;
 });
 
+/** A complete FighterMatchStats with nothing done yet. */
+function blankStats(clubId: ClubId): FighterMatchStats {
+  return {
+    clubId,
+    roundsPlayed: 0,
+    roundsSurvived: 0,
+    ticksOnArena: 0,
+    damageDealt: 0,
+    damageToShields: 0,
+    damageTaken: 0,
+    healingDone: 0,
+    healingReceived: 0,
+    shieldingDone: 0,
+    overheal: 0,
+    ccAppliedTicks: 0,
+    ccReceivedTicks: 0,
+    downsInflicted: 0,
+    downsSuffered: 0,
+    assists: 0,
+    focusSpent: 0,
+    casts: {},
+    ruleFires: [],
+    ruleCommittedTicks: [],
+    rulesNeverFired: [],
+    downs: [],
+    opponentIds: [],
+  };
+}
+
 function round(n: number, winner: 'home' | 'away'): RoundResult {
   return {
     round: n,
@@ -39,7 +68,7 @@ function round(n: number, winner: 'home' | 'away'): RoundResult {
 }
 
 /** The player's (home) match waiting after round 1, his first starter Spent. */
-function liveWorld(content: ContentDB, opts: { spentFirst?: boolean } = {}): { state: GameState; ms: MatchState; home: ClubId } {
+function liveWorld(content: ContentDB, opts: { spentFirst?: boolean; prepare?: (state: GameState, ms: MatchState) => void } = {}): { state: GameState; ms: MatchState; home: ClubId } {
   const state = buildFixtureWorld({ squadReserves: 2 });
   const [home, away] = Object.keys(state.clubs) as ClubId[];
   state.playerClubId = home!;
@@ -58,11 +87,12 @@ function liveWorld(content: ContentDB, opts: { spentFirst?: boolean } = {}): { s
   });
   ms.roundLineups = [{ round: 1, home: lineup('home'), away: lineup('away') }];
   if (opts.spentFirst) state.fighters[ms.home.active[0]!]!.freshness10 = 300;
+  opts.prepare?.(state, ms);
   state.liveMatch = ms;
   return { state, ms, home: home! };
 }
 
-function setup(opts: { spentFirst?: boolean; pauseAgain?: boolean } = {}) {
+function setup(opts: { spentFirst?: boolean; pauseAgain?: boolean; prepare?: (state: GameState, ms: MatchState) => void } = {}) {
   const content = fixtureContent();
   const { state, ms, home } = liveWorld(content, opts);
   const report = { season: 1, weekIndex: 1, playerFixtureId: null } as unknown as WeekReport;
@@ -176,6 +206,58 @@ describe('Between-round screen', () => {
     expect(screen.getByTestId('br-score').textContent).toContain('1–1');
     expect(screen.getByTestId('br-result').textContent).toContain('Lost round 2');
     expect((screen.getByTestId(`br-swap-${out}`) as HTMLSelectElement).value).toBe('');
+  });
+
+  it('AL-R002-T004: each starter shows his rating (and what it is worth at his Freshness) and this match’s stats so far; the reserves show rating, Freshness and the effective rating', () => {
+    const { ms, content } = setup({
+      spentFirst: true,
+      prepare: (state, live) => {
+        const [a, b] = [live.home.active[0]!, live.home.active[1]!];
+        live.fighterStats[a] = { ...blankStats(state.fighters[a]!.clubId!), roundsPlayed: 1, damageDealt: 1234, damageTaken: 2051, healingDone: 321, healingReceived: 654, shieldingDone: 90, downsInflicted: 2, downsSuffered: 1 };
+        live.fighterStats[b] = { ...blankStats(state.fighters[b]!.clubId!), roundsPlayed: 2, damageDealt: 99, damageTaken: 12, healingDone: 0, healingReceived: 0, shieldingDone: 0, downsInflicted: 0, downsSuffered: 0 };
+        // A tired reserve: his effective rating shows beside his rating.
+        state.fighters[live.home.unusedReserves[0]!]!.freshness10 = 350;
+      },
+    });
+    const [a, b] = [ms.home.active[0]!, ms.home.active[1]!];
+    const head = screen.getByTestId('br-table').querySelector('thead')!.textContent!;
+    for (const word of ['Rating', 'Freshness', 'Damage', 'Healing', 'Done', 'Taken', 'Downs', 'Rds', 'XP']) expect(head).toContain(word);
+    // Numbers so far in this match.
+    expect(screen.getByTestId(`br-dmg-${a}`).textContent).toBe('1,234');
+    expect(screen.getByTestId(`br-taken-${a}`).textContent).toBe('2,051');
+    expect(screen.getByTestId(`br-heal-${a}`).textContent).toBe('321');
+    expect(screen.getByTestId(`br-healed-${a}`).textContent).toBe('654');
+    expect(screen.getByTestId(`br-downs-${a}`).textContent).toMatch(/^2\s*\/\s*1$/);
+    expect(screen.getByTestId(`br-rounds-${a}`).textContent).toBe('1');
+    expect(screen.getByTestId(`br-rounds-${b}`).textContent).toBe('2');
+    expect(screen.getByTestId(`br-healed-${b}`).textContent).toBe('0');
+    // Rating: a Spent starter reads "rating → effective" (core's effective rating), a rested one just the rating.
+    const spent = screen.getByTestId(`br-eff-${a}`);
+    const base = Number(spent.querySelector('.rating-eff__base')!.textContent);
+    const effective = Number(spent.querySelector('.rating')!.textContent);
+    expect(effective).toBeLessThan(base);
+    expect(spent.getAttribute('data-tip-rich')).toContain('Freshness penalty');
+    expect(screen.queryByTestId(`br-eff-${b}`)).toBeNull();
+    expect(within(screen.getByTestId(`br-rating-${b}`)).getByText(/^\d+$/)).toBeTruthy();
+    // Reserves: rating, Freshness and the effective rating of a tired one.
+    const reserve = ms.home.unusedReserves[0]!;
+    const card = screen.getByTestId(`br-reserve-${reserve}`);
+    expect(within(card).getByTestId(`br-reserve-eff-${reserve}`)).toBeTruthy();
+    expect(card.textContent).toMatch(/Tired|Spent/);
+    const other = ms.home.unusedReserves[1]!;
+    expect(within(screen.getByTestId(`br-reserve-${other}`)).getByLabelText(/^Freshness \d+/)).toBeTruthy();
+    void content;
+  });
+
+  it('keeps Enter = play with the wider table', async () => {
+    const { advance } = setup();
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: 'Enter' });
+    });
+    await vi.waitFor(() => expect(advance).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
   });
 
   it('says so when no match waits', () => {

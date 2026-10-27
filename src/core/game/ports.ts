@@ -41,6 +41,7 @@ export interface GamePorts {
     // ---- M1.1 (WP-B contract; 05 M1.1 addendum) ----
     | 'freshnessOf'
     | 'freshnessLabel'
+    | 'ratingAtFreshness'
     | 'effectiveLevelUpMode'
     | 'autoPickChoice'
     | 'typicalRoundDrain10'
@@ -137,6 +138,7 @@ export const realGamePorts: GamePorts = {
     announceFinalSeasons: fighters.announceFinalSeasons,
     freshnessOf: fighters.freshnessOf,
     freshnessLabel: fighters.freshnessLabel,
+    ratingAtFreshness: fighters.ratingAtFreshness,
     effectiveLevelUpMode: fighters.effectiveLevelUpMode,
     autoPickChoice: fighters.autoPickChoice,
     offerContextOf: fighters.offerContextOf,

@@ -162,3 +162,32 @@
   background: var(--c-surface-4);
   color: var(--c-text-muted);
 }
+
+/* Rating at his Freshness now: "45 → [41]" (the base figure quiet, the effective one in the pill). */
+.rating-eff {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.rating-eff__base {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-faint);
+}
+
+.rating-eff__arrow {
+  font-size: var(--fs-xs);
+  color: var(--c-text-faint);
+}
+
+.rating-eff[data-label="tired"] .rating {
+  box-shadow: 0 0 0 1px var(--c-warn);
+}
+
+.rating-eff[data-label="spent"] .rating {
+  box-shadow: 0 0 0 1px var(--c-bad);
+}

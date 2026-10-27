@@ -428,6 +428,62 @@ describe('structure bounds come from SAVE_BOUNDS (the same constants the content
     expect(resultIssues().some((p) => p.includes('fighterTotals'))).toBe(true);
   });
 
+  it('R2 box score: healingReceived (fighter stats) and freshnessAfter (round lineups) are optional, bounded fields', () => {
+    const state = world();
+    const [home, away] = Object.keys(state.clubs) as ClubId[];
+    const ms = fixtureMatchState(state, home!, away!, content);
+    const lineup = (side: typeof ms.home) => ({
+      fighterIds: [...side.active],
+      rows: [...side.rows],
+      captainIndex: 0,
+      viceCaptainIndex: null,
+      captainQuality: 50,
+      freshness: side.active.map(() => 100),
+      entered: side.active.map(() => false),
+    });
+    ms.roundLineups = [{ round: 1, home: lineup(ms.home), away: lineup(ms.away) }];
+    const first = ms.home.active[0]!;
+    ms.fighterStats[first] = {
+      clubId: home!,
+      roundsPlayed: 1,
+      roundsSurvived: 1,
+      ticksOnArena: 600,
+      damageDealt: 100,
+      damageToShields: 0,
+      damageTaken: 50,
+      healingDone: 0,
+      shieldingDone: 0,
+      overheal: 0,
+      ccAppliedTicks: 0,
+      ccReceivedTicks: 0,
+      downsInflicted: 0,
+      downsSuffered: 0,
+      assists: 0,
+      focusSpent: 0,
+      casts: {},
+      ruleFires: [0],
+      ruleCommittedTicks: [0],
+      rulesNeverFired: [],
+      downs: [],
+      opponentIds: [],
+    };
+    state.liveMatch = ms;
+    // Without the new fields (a save from the previous build): valid.
+    expect(structureIssues(state)).toEqual([]);
+    // With them: valid, and they survive a JSON round trip.
+    ms.fighterStats[first]!.healingReceived = 30;
+    ms.roundLineups[0]!.home.freshnessAfter = ms.home.active.map(() => 93);
+    expect(structureIssues(state)).toEqual([]);
+    const back = JSON.parse(JSON.stringify(state)) as GameState;
+    expect(back.liveMatch!.fighterStats[first]!.healingReceived).toBe(30);
+    expect(back.liveMatch!.roundLineups[0]!.home.freshnessAfter).toEqual([93, 93, 93, 93, 93]);
+    // Bounded like the Freshness next to it.
+    ms.roundLineups[0]!.home.freshnessAfter = [101, 93, 93, 93, 93];
+    expect(structureIssues(state).some((p) => p.includes('freshnessAfter'))).toBe(true);
+    ms.roundLineups[0]!.home.freshnessAfter = [93, 93, 93, 93];
+    expect(structureIssues(state).some((p) => p.includes('freshnessAfter'))).toBe(true);
+  });
+
   it('the bounds are the documented values (changing one is a save-format change)', () => {
     expect(SAVE_BOUNDS).toEqual({ squadStarters: 5, squadReserves: 2, swapsPerMatch: 2, pendingLevelUps: 3, levelUpOptions: 3, perksPerFighter: 4 });
   });

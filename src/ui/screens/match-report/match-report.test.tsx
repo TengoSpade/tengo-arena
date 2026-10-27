@@ -87,7 +87,7 @@ describe('Match report screen', () => {
     const groups = table.querySelectorAll('tr.row-group');
     expect(groups).toHaveLength(2);
     expect(groups[0]!.textContent).toContain('· you');
-    expect(table.querySelectorAll('tbody tr:not(.row-group)')).toHaveLength(10);
+    expect(table.querySelectorAll('tbody tr:not(.row-group):not(.row-total)')).toHaveLength(10);
     const downs = within(table).getByRole('button', { name: 'Downs' });
     fireEvent.click(downs);
     expect(downs.closest('th')!.getAttribute('aria-sort')).toBe('descending');
@@ -115,7 +115,7 @@ describe('Match report screen', () => {
     cleanup();
     renderReport(id);
     fireEvent.click(screen.getByRole('tab', { name: /Round 2/ }));
-    expect(screen.getByTestId('panel-box').textContent).toContain('Round 2 · downs, falls and HP left');
+    expect(screen.getByTestId('panel-box').textContent).toContain('Round 2 · this round’s counters, falls and HP left');
     const momentsPanel = screen.getByTestId('panel-moments');
     expect(momentsPanel.querySelectorAll('.timeline__round')).toHaveLength(1);
     fireEvent.keyDown(document.body, { key: '0', altKey: true });

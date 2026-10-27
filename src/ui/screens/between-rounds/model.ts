@@ -71,3 +71,31 @@ export function reserveCoverage(state: GameState, content: ContentDB, side: Betw
   for (const a of side.active) for (const role of roles(a.fighterId)) needed.add(role);
   return { covered: [...covered], uncovered: [...needed].filter((r) => !covered.has(r)) };
 }
+
+/** What a fighter has done so far in this match (the live counters), for the between-round table. */
+export interface MatchLine {
+  rounds: number;
+  damageDone: number;
+  damageReceived: number;
+  healingDone: number;
+  /** Null when core does not count it for this match (older records). */
+  healingReceived: number | null;
+  shieldingDone: number;
+  /** Downs he inflicted / times he was downed. */
+  downs: number;
+  downed: number;
+}
+
+export function matchLineSoFar(ms: MatchState, id: FighterId): MatchLine {
+  const s = ms.fighterStats[id];
+  return {
+    rounds: s?.roundsPlayed ?? 0,
+    damageDone: s?.damageDealt ?? 0,
+    damageReceived: s?.damageTaken ?? 0,
+    healingDone: s?.healingDone ?? 0,
+    healingReceived: s?.healingReceived ?? null,
+    shieldingDone: s?.shieldingDone ?? 0,
+    downs: s?.downsInflicted ?? 0,
+    downed: s?.downsSuffered ?? 0,
+  };
+}

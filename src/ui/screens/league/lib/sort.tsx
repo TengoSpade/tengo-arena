@@ -41,6 +41,7 @@ export function SortTh<K extends string>({
   firstDir = 'desc',
   tip,
   class: cls,
+  rowSpan,
 }: {
   label: ComponentChildren;
   sortKey: K;
@@ -50,11 +51,13 @@ export function SortTh<K extends string>({
   firstDir?: SortDir;
   tip?: string;
   class?: string;
+  /** A header that stands over a second header row (grouped columns). */
+  rowSpan?: number;
 }) {
   const active = sort.key === sortKey;
   const classes = [num ? 'cell-num' : '', cls ?? ''].filter(Boolean).join(' ') || undefined;
   return (
-    <th class={classes} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined} scope="col">
+    <th class={classes} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined} scope="col" rowSpan={rowSpan}>
       <button class="th-sort" type="button" data-tip={tip} onClick={() => onSort(sortKey, firstDir)}>
         {label}
       </button>

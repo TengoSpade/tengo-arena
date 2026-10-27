@@ -32,7 +32,6 @@ import {
   Panel,
   PageHeader,
   Portrait,
-  Rating,
   RowMark,
   Segmented,
   Chip,
@@ -68,8 +67,8 @@ import { clubActions } from '../../store/actions';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from '../../store/views';
 import { format, t } from '../../text';
-import { freshInfo, levelInfo } from '../../m11/model';
-import { FreshMeter, LevelChip, freshTip } from '../../m11/parts';
+import { freshInfo, levelInfo, ratingFromView, type RatingNow } from '../../m11/model';
+import { FreshMeter, LevelChip, RatingEff, freshTip } from '../../m11/parts';
 import { ReservesZone, RotationStrip, applySuggestedSquad, rotationTips, toggleReserve } from './MatchSquad';
 import { T } from './text';
 import './squad.css';
@@ -84,21 +83,30 @@ const squadView = signal<View>('overview');
 interface Row {
   f: Fighter;
   view: FighterView | null;
+  /** His rating and what it is worth at his Freshness now (the Freshness penalty). */
+  now: RatingNow | null;
   klass: ClassDef;
   entry: LineupEntry | null;
+  /** Lineup slot 0-4, -1 when not in the five. */
   slot: number;
+  /** Place among the match reserves in the order they were named (0 or 1), -1 when not a reserve. */
+  reserveSlot: number;
 }
 
 function buildRows(ctx: ClubContext, engine: GameEngine): Row[] {
   const { state, content, club, roster } = ctx;
   return roster.map((f) => {
     const slot = club.lineup.fighters.findIndex((e) => e.fighterId === f.id);
+    const reserveSlot = slot < 0 ? (club.lineup.reserves ?? []).indexOf(f.id) : -1;
+    const view = fighterViewOf(engine, state, content, f.id);
     return {
       f,
-      view: fighterViewOf(engine, state, content, f.id),
+      view,
+      now: view ? ratingFromView(content, view, f) : null,
       klass: content.classes.require(f.classId),
       entry: slot >= 0 ? club.lineup.fighters[slot]! : null,
       slot,
+      reserveSlot,
     };
   });
 }
@@ -120,6 +128,7 @@ export default function SquadScreen(_props: ScreenProps) {
         back: T.toastBack,
         reserve: T.toastReserve,
         replace: T.toastReplace,
+        replaceReserveSub: T.toastReplaceReserve,
         captain: T.toastCaptain,
         vice: T.toastVice,
         captainSub: T.toastCaptainSub,
@@ -374,6 +383,10 @@ function LineupBoard(props: BoardProps) {
   const lineupRows = entries.map((e) => byId.get(e.fighterId)).filter((r): r is Row => !!r);
   const ratings = lineupRows.map((r) => r.view?.rating ?? null).filter((v): v is number => v !== null);
   const mean = ratings.length ? ratings.reduce((s, v) => s + v, 0) / ratings.length : null;
+  // What the five are worth at their Freshness now (core's effective rating); only shown when it differs.
+  const effective = lineupRows.map((r) => r.now?.effective).filter((v): v is number => v !== undefined);
+  const effMean = effective.length === ratings.length && effective.length ? effective.reduce((s, v) => s + v, 0) / effective.length : null;
+  const effShown = mean !== null && effMean !== null && effMean.toFixed(1) !== mean.toFixed(1) ? effMean : null;
   const opponentMean = props.opponent ? opponentLineupMean(state, props.opponent) : null;
   const wages = lineupRows.reduce((s, r) => s + (r.f.contract?.wagePerWeek ?? 0), 0);
   const chemistry = safeView<number | null>(
@@ -529,12 +542,18 @@ function LineupBoard(props: BoardProps) {
               tabIndex={0}
               {...tipAttrs(
                 format(T.meanRatingTip, {
-                  list: lineupRows.map((r) => `${r.f.name.given} ${r.view?.rating ?? '—'}`).join(', '),
+                  list: lineupRows.map((r) => `${r.f.name.given} ${r.now && r.now.drop > 0 ? `${r.now.rating} → ${r.now.effective}` : (r.view?.rating ?? '—')}`).join(', '),
                   vs: opponentMean !== null && props.opponent ? format(T.meanRatingVs, { club: props.opponent.shortName, mean: opponentMean.toFixed(1) }) : '',
                 }),
               )}
             >
               {T.meanRating} <strong>{mean.toFixed(1)}</strong>
+              {effShown !== null && (
+                <span class="u-warn" data-testid="mean-effective">
+                  {' '}
+                  → {effShown.toFixed(1)}
+                </span>
+              )}
               {opponentMean !== null && (
                 <span class="u-faint">
                   {' '}
@@ -557,7 +576,18 @@ function LineupBoard(props: BoardProps) {
           {T.enemySide}
         </div>
       </div>
-      <ReservesZone state={state} content={content} engine={engine} club={club} store={props.store} selected={selected} onSelect={props.onSelect} dragId={props.dragId} setDragId={props.setDragId} />
+      <ReservesZone
+        state={state}
+        content={content}
+        engine={engine}
+        club={club}
+        store={props.store}
+        selected={selected}
+        onSelect={props.onSelect}
+        dragId={props.dragId}
+        setDragId={props.setDragId}
+        onSwapStarter={(starterId, reserveId) => props.actions.moveTo(reserveId, entries.find((e) => e.fighterId === starterId)?.row ?? 'back', starterId)}
+      />
       <RotationStrip tips={tips} state={state} onRotate={(tip) => props.actions.moveTo(tip.in, tip.row, tip.out)} />
     </Panel>
   );
@@ -640,7 +670,7 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
             ))}
           </select>
         </span>
-        {r.view ? <Rating value={r.view.rating} tip={ratingTip(r.view, r.klass, content, tier)} /> : <span class="u-faint">—</span>}
+        {r.view && r.now ? <RatingEff now={r.now} content={content} tip={ratingTip(r.view, r.klass, content, tier)} testId={`rating-${r.f.id}`} /> : <span class="u-faint">—</span>}
       </div>
       <div class="lineup-card__foot lineup-card__meta">
         <FreshMeter info={fresh} content={content} testId={`fresh-${r.f.id}`} />
@@ -718,7 +748,24 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       />
     ),
   };
-  const slot: Column<Row> = { id: 'slot', header: '#', headerLabel: 'Lineup order', class: 'cell-tight u-faint', sortValue: (r) => (r.slot < 0 ? 99 : r.slot), cell: (r) => (r.slot >= 0 ? <span {...tipAttrs(format(T.slotTip, { n: r.slot + 1 }))}>{r.slot + 1}</span> : '') };
+  // 1-5 for the five in slot order; R1 / R2 for the two match reserves in the order they were named (they sort after the five, before the bench).
+  const slot: Column<Row> = {
+    id: 'slot',
+    header: '#',
+    headerLabel: 'Lineup order',
+    class: 'cell-tight u-faint',
+    sortValue: (r) => (r.slot >= 0 ? r.slot : r.reserveSlot >= 0 ? 5 + r.reserveSlot : 99),
+    cell: (r) =>
+      r.slot >= 0 ? (
+        <span {...tipAttrs(format(T.slotTip, { n: r.slot + 1 }))}>{r.slot + 1}</span>
+      ) : r.reserveSlot >= 0 ? (
+        <span class="squad-slot-r" data-testid={`slot-r-${r.f.id}`} {...tipAttrs(format(T.slotReserveTip, { n: r.reserveSlot + 1 }))}>
+          {format(T.slotReserve, { n: r.reserveSlot + 1 })}
+        </span>
+      ) : (
+        ''
+      ),
+  };
   const klass: Column<Row> = {
     id: 'class',
     header: T.colClass,
@@ -739,8 +786,9 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
     id: 'rating',
     header: T.colRating,
     align: 'num',
-    sortValue: (r) => r.view?.rating ?? 0,
-    cell: (r) => (r.view ? <Rating value={r.view.rating} tip={ratingTip(r.view, r.klass, content, tier)} /> : '—'),
+    // Sorted by what he is worth now (the effective rating), the rested rating breaking ties.
+    sortValue: (r) => (r.now ? r.now.effective + r.now.rating / 1000 : 0),
+    cell: (r) => (r.view && r.now ? <RatingEff now={r.now} content={content} tip={ratingTip(r.view, r.klass, content, tier)} testId={`rating-${r.f.id}`} /> : '—'),
   };
   const potential: Column<Row> = {
     id: 'potential',
@@ -810,11 +858,17 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       );
     },
   };
+  // Meter and number; the word only when it is a state to act on (Tired, Spent). Sorts by the number.
   const freshness: Column<Row> = {
     id: 'freshness',
     header: T.colFresh,
+    headerTip: T.colFreshTip,
+    class: 'squad-fresh',
     sortValue: (r) => r.f.freshness10 ?? 1000,
-    cell: (r) => <FreshMeter info={freshInfo(engine, state, content, r.f)} content={content} />,
+    cell: (r) => {
+      const info = freshInfo(engine, state, content, r.f);
+      return <FreshMeter info={info} content={content} label={info.label === 'tired' || info.label === 'spent'} testId={`fresh-col-${r.f.id}`} />;
+    },
   };
   // Below 1400 px the traits give way to the names (they stay on the profile and Attributes view).
   const traits: Column<Row> = {
@@ -870,7 +924,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
         );
       },
     }));
-    return [slot, fighter, { ...klass, class: 'col-mid' }, rating, ...stats];
+    return [slot, fighter, { ...klass, class: 'col-mid' }, rating, freshness, ...stats];
   }
   if (view === 'contracts') {
     const market: Column<Row> = {
@@ -887,7 +941,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       sortValue: (r) => contractEnds(r.f.contract, season).seasonsLeft,
       cell: (r) => <span {...tipAttrs('Seasons after this one')}>{contractEnds(r.f.contract, season).seasonsLeft}</span>,
     };
-    return [slot, fighter, klass, rating, lineup, wage, market, contract, left];
+    return [slot, fighter, klass, rating, freshness, lineup, wage, market, contract, left];
   }
   if (view === 'season') {
     const num = (id: string, header: string, get: (r: Row) => number, tip: (r: Row) => string): Column<Row> => ({
@@ -902,6 +956,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
       fighter,
       klass,
       rating,
+      freshness,
       lineup,
       num('apps', T.colApps, (r) => r.f.season.matchesStarted, (r) => `Matches started this season: ${r.f.season.matchesStarted}`),
       num('rounds', T.colRounds, (r) => r.f.season.roundsStarted, (r) => `Rounds started this season: ${r.f.season.roundsStarted}`),

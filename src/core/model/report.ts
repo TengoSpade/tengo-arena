@@ -64,6 +64,8 @@ export interface ReportTotals {
   downsSuffered: number;
   damageDealt: number;
   healingDone: number;
+  /** R2 box score (additive): effective healing received (overheal excluded); absent when a fighter's line cannot say (a result played before it was counted, no timeline to rebuild it from) and on a compacted report. */
+  healingReceived?: number;
   /** Absent on a compacted report (the counters are not kept). */
   damageTaken?: number;
   shieldingDone?: number;
@@ -90,6 +92,49 @@ export interface ReportRound {
   durationTicks: number;
   /** Key-event timeline (summary-level events re-simulated from the stored seed and inputs). */
   keyEvents: ReportEvent[];
+  /** R2 box score (additive): each side's totals for this round (the sum of its fighters' `FighterBox.rounds` lines); absent when the rounds could not be re-simulated (`timelineAvailable` false). */
+  totals?: { home: BoxScoreLine; away: BoxScoreLine };
+}
+
+/**
+ * R2 box score (additive): the counters of one fighter over a match or one round, all in points. Damage is HP
+ * damage (shield absorption is not in it); healing is effective (overheal excluded); shielding is the shield
+ * points granted. Self-heals (regeneration, leech) count as healing done and healing received.
+ */
+export interface BoxScoreLine {
+  damageDone: number;
+  damageReceived: number;
+  healingDone: number;
+  /** Absent when it cannot be known (see `ReportTotals.healingReceived`). */
+  healingReceived?: number;
+  shieldingDone: number;
+  downsInflicted: number;
+  downsSuffered: number;
+}
+
+/** One round of a fighter's box score: the counters of that round and his Freshness (0-100, whole points) around it. */
+export interface FighterBoxRound extends BoxScoreLine {
+  /** 1-based; one entry per round he started. */
+  round: number;
+  /** At the start of the round (what the sim fought with). */
+  freshnessBefore: number | null;
+  /** Right after the round's drain, before the between-round rest; null for results played before it was recorded. */
+  freshnessAfter: number | null;
+}
+
+/**
+ * R2 box score (additive): a fighter's whole match and, when the rounds could be re-simulated, each round he
+ * started. `FighterRecap.stats` stays the raw counters; this is the table-ready view of them.
+ */
+export interface FighterBox extends BoxScoreLine {
+  /** Rounds he started (`FighterRecap.roundsStarted.length`, or `stats.roundsPlayed`). */
+  roundsStarted: number;
+  /** Freshness at the start of his first round: what he took the field with (a reserve who came on: when he entered). Null when no lineup record exists (whole-match M1 results). */
+  freshnessBefore: number | null;
+  /** Freshness after his last round's drain: where the match left him. Null for results played before it was recorded. */
+  freshnessAfter: number | null;
+  /** One line per round he started, in order; empty when the rounds could not be re-simulated (`MatchReport.timelineAvailable` false) and for whole-match (M1) results. */
+  rounds: FighterBoxRound[];
 }
 
 export interface ReportEvent {
@@ -120,6 +165,8 @@ export interface FighterRecap {
   role?: 'starter' | 'reserve' | 'emergency';
   /** M1.1 (additive): the rounds he started (1-based). Absent for whole-match (M1) and compacted results. */
   roundsStarted?: number[];
+  /** R2 box score (additive): the match and per-round counters with Freshness before and after. Absent on a compacted report (`stats` keeps the few totals it has). */
+  box?: FighterBox;
 }
 
 export interface MatchAftermath {

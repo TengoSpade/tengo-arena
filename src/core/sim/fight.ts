@@ -820,6 +820,7 @@ export class Fight {
         if (this.rec && this.rec.full) this.rec.emit('heal', t, h.src, u.index, { ability: h.ability, amount: eff, overheal: h.amount - eff });
         if (eff > 0) u.lastSupportTick = t;
       }
+      u.tally.healingReceived += total;
       const hp = Math.min(u.maxHp, base + total);
       if (hp !== u.hp && u.hpMods) u.modsDirty = true;
       u.hp = hp;
@@ -837,6 +838,7 @@ export class Fight {
       u.modsDirty = true;
       removeStatusInst(this, u, ward, 'consumed');
       if (ward.source >= 0) this.units[ward.source]!.tally.healingDone += healed;
+      u.tally.healingReceived += Math.min(healed, u.maxHp - 1);
       if (this.rec) this.rec.emit('deathward.save', t, u.index, ward.source >= 0 ? ward.source : undefined, { by: ward.source >= 0 ? ward.source : null, healed });
     }
 

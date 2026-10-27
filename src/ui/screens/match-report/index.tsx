@@ -167,7 +167,7 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
               {t('missing.text')}
             </Callout>
           )}
-          <BoxScore state={game} content={content} report={report} result={result} infos={infos} persp={persp} round={round} focusId={focusId} onFocus={setFocusId} />
+          <BoxScore state={game} content={content} report={report} result={result} infos={infos} persp={persp} round={round} onRound={setRound} focusId={focusId} onFocus={setFocusId} />
           <Recaps state={game} content={content} infos={infos} persp={persp} focusId={focusId} />
         </div>
         <div class="span-4 l-stack">

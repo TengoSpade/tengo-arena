@@ -538,3 +538,63 @@ describe('round API: parity and determinism', () => {
     expect(none.result.checksum).toBe(runs[0]!.result.checksum);
   });
 });
+
+describe('healing received (R2-T001 box score: a counter, in no event and no checksum)', () => {
+  it('a heal lands as healingDone on the healer and healingReceived on the target, both effective', () => {
+    const f = arena(['chirurgeon', 'oathguard'], ['bloodhowler']);
+    f.units[1]!.hp = Math.trunc((f.units[1]!.maxHp * 30) / 100);
+    prep(f);
+    const ab = f.units[0]!.cls.a1;
+    applyAbility(f, f.newRelease(0, ab), ab, 1);
+    const queued = f.heals[1]![0]!.amount;
+    expect(queued).toBeGreaterThan(0);
+    f.commit();
+    const [healer, target] = [f.units[0]!, f.units[1]!];
+    expect(target.tally.healingReceived).toBe(queued);
+    expect(healer.tally.healingDone).toBe(queued);
+    expect(healer.tally.healingReceived).toBe(0);
+    expect(target.tally.healingDone).toBe(0);
+  });
+
+  it('overheal is not counted: a heal on a nearly full ally counts only the room he had', () => {
+    const f = arena(['chirurgeon', 'oathguard'], ['bloodhowler']);
+    const target = f.units[1]!;
+    target.hp = target.maxHp - 10;
+    prep(f);
+    const ab = f.units[0]!.cls.a1;
+    applyAbility(f, f.newRelease(0, ab), ab, 1);
+    const queued = f.heals[1]![0]!.amount;
+    expect(queued).toBeGreaterThan(10);
+    f.commit();
+    expect(target.hp).toBe(target.maxHp);
+    expect(target.tally.healingReceived).toBe(10);
+    expect(f.units[0]!.tally.healingDone).toBe(10);
+    expect(f.units[0]!.tally.overheal).toBe(queued - 10);
+  });
+
+  it('over a whole round every unit\'s healingReceived equals the effective heal events aimed at him, and no hash moves with the counter', () => {
+    const home = side('h', ['chirurgeon', 'oathguard', 'chirurgeon', 'rimebinder', 'longeye']);
+    const away = side('a', ['oathguard', 'gutterknife', 'longeye', 'rimebinder', 'chirurgeon']);
+    let healed = 0;
+    for (const seed of ['hr-1', 'hr-2', 'hr-3']) {
+      const out = simulateRound({ round: 1, home, away }, seed, content, { record: 'full' });
+      const log = out.log!;
+      const byUnit = new Map<number, number>();
+      for (const ev of log.events) if (ev.type === 'heal') byUnit.set(ev.target!, (byUnit.get(ev.target!) ?? 0) + ev.data!.amount);
+      let done = 0;
+      let received = 0;
+      for (const u of log.header.units) {
+        const st = out.fighterStats[u.fighterId]!;
+        expect(st.healingReceived, `${seed} unit ${u.index}`).toBe(byUnit.get(u.index) ?? 0);
+        done += st.healingDone;
+        received += st.healingReceived!;
+      }
+      // Every heal here is aimed at an ally and counted on both ends, so the sides' books agree (no Deathward in these kits).
+      expect(received).toBe(done);
+      healed += received;
+      // Same checksum at every record level (the counter is outside the hash).
+      expect(simulateRound({ round: 1, home, away }, seed, content, { record: 'none' }).result.checksum).toBe(out.result.checksum);
+    }
+    expect(healed).toBeGreaterThan(0);
+  });
+});

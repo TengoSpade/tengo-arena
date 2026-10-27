@@ -15,6 +15,7 @@ import { fighterIsFit } from './fighter-values';
 import { postAt } from './ledger';
 import { floorTo, mulDiv } from './math';
 import { addClubNews, pushNews } from './news';
+import { nextSeasonCommitmentsOf } from './next-season';
 import {
   agreedRenewal,
   committedBillOf,
@@ -55,7 +56,10 @@ export interface OfferRequest {
 
 export interface OfferCheckResult {
   signingCost: number;
+  /** Wage room left after the offer: next season's for a renewal or a signing that starts next season (`basis`), else this season's. */
   wageRoomAfter: number;
+  /** Which wage room the commitment rule judged: 'next-season' (renewals; signings that start next season) or 'this-season'. */
+  basis: 'this-season' | 'next-season';
 }
 
 type Key = { clubId: ClubId; fighterId: FighterId };
@@ -226,14 +230,36 @@ export function evaluateOffer(
     }
   }
 
-  // ---- hard commitment rule: bill + pending + new − replaced <= WB, or the change does not raise the bill
-  const bill = committedBillOf(state, req.clubId);
-  const pendingWages = pending.reduce((s, o) => s + o.wagePerWeek, 0);
-  const replaced = req.kind === 'renewal' ? (f.contract?.wagePerWeek ?? 0) : 0;
-  const committed = bill + pendingWages + req.wagePerWeek - replaced;
+  // ---- hard commitment rule: bill + pending + new − replaced <= WB, or the change does not raise the bill.
+  // R2-T006: a renewal's terms start next season, and so do the signings made while the season-end step is pending, so
+  // they are judged on next season's wage room (economy/next-season.ts: the projected wage budget less what continues,
+  // what renewals agreed and what pending offers would add; contracts ending unrenewed do not count). Everything that
+  // starts this season keeps this season's room.
   const wb = club.finance.wageBudgetPerWeek;
-  if (req.wagePerWeek > replaced && committed > wb) {
-    return fail('budget.wage', `Over wage budget by ${committed - wb} per week`, { over: committed - wb, wageBudget: wb, committed });
+  const replaced = req.kind === 'renewal' ? (f.contract?.wagePerWeek ?? 0) : 0;
+  const nextBasis = req.kind === 'renewal' || at.season > state.calendar.season;
+  let committed: number;
+  let held: number;
+  if (nextBasis) {
+    held = nextSeasonCommitmentsOf(state, req.clubId, pending).commitments;
+    committed = held + req.wagePerWeek;
+    if (req.wagePerWeek > replaced && committed > wb) {
+      return fail('budget.wage', `Over next season's wage budget by ${committed - wb} per week`, {
+        over: committed - wb,
+        wageBudget: wb,
+        committed,
+        basis: 'next-season',
+        nextSeasonWageRoom: wb - held,
+      });
+    }
+  } else {
+    const bill = committedBillOf(state, req.clubId);
+    const pendingWages = pending.reduce((s, o) => s + o.wagePerWeek, 0);
+    held = bill + pendingWages;
+    committed = held + req.wagePerWeek - replaced;
+    if (req.wagePerWeek > replaced && committed > wb) {
+      return fail('budget.wage', `Over wage budget by ${committed - wb} per week`, { over: committed - wb, wageBudget: wb, committed, basis: 'this-season' });
+    }
   }
 
   // ---- signing cost against cash: balance − pending signing costs >= cost
@@ -248,7 +274,7 @@ export function evaluateOffer(
       return fail('budget.cash', `Signing cost ${signingCost} exceeds available ${available}`, { signingCost, available });
     }
   }
-  return ok({ signingCost, wageRoomAfter: wb - Math.max(committed, bill + pendingWages) });
+  return ok({ signingCost, wageRoomAfter: wb - Math.max(committed, held), basis: nextBasis ? 'next-season' : 'this-season' });
 }
 
 /** floor5(ask × offerCap ÷ 10,000): the most a fighter will be paid. */

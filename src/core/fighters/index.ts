@@ -273,6 +273,9 @@ export type { RoundLoad } from './freshness';
 export { eligiblePerks, eligibleRanks, generateOffer, offerContextOf, optionScore, perkEligible, statOfferWeight } from './offers';
 export type { OfferContext, RankStep } from './offers';
 export { STAMINA, staminaCap100 } from './generation';
+// R2-T002: effective rating at a Freshness (the sim's penalty curve priced at the class rating weights).
+export { fatigueResistOf, freshnessSeverityBp, ratingAtFreshness } from './freshness-rating';
+export type { FreshnessRating, FreshnessRatingParts } from './freshness-rating';
 
 /** v2 -> v3 save migration of every fighter (core/save migrateV2ToV3; progression.md §6). */
 export function migrateFightersToV3(state: GameState, content: ContentDB): void {

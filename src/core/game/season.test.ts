@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { nextSeasonWage } from '../economy';
 import { asId, personName, type ClubId, type FighterId, type GameState } from '../model';
 import { STREAM, deriveSeed } from '../rng';
 import { fixtureContent } from '../testkit';
@@ -172,6 +173,31 @@ describe('renewals until expiry (real modules)', () => {
     const next = engine.runSeasonEnd(r.value.state, content);
     expect(next.ok).toBe(true);
     if (next.ok) expect(next.value.state.fighters[f.id]).toMatchObject({ clubId, contract: { endSeason: 1 + seasons, wagePerWeek: wage } });
+  });
+
+  it("R2-T006: one rulebook: an AI club's renewal is judged on next season's wage room too (a raise that fits next season but not this one)", () => {
+    const other = Object.keys(end.clubs).sort().filter((id) => id !== clubId)[3] as ClubId;
+    const base = JSON.parse(JSON.stringify(end)) as GameState;
+    const f = engine.roster(base, other).find((x) => x.contract?.endSeason === 1 && !x.contract.next && !x.finalSeason)!;
+    expect(f).toBeDefined();
+    const seasons = 2;
+    const wage = engine.ports.economy.ask(base, f.id, other, seasons, content);
+    const club = base.clubs[other]!;
+    club.finance.balance += 1_000_000;
+    // Wage budget exactly what next season needs: what continues + this renewal. This season's bill still has every expiring wage in it.
+    const view = nextSeasonWage(base, other);
+    expect(view.expiring.fighterIds).toContain(f.id);
+    club.finance.wageBudgetPerWeek = view.commitments + wage;
+    const raise = wage - f.contract!.wagePerWeek;
+    // Not a no-raise renewal, and the old accounting (this season's bill + the raise) would have been over budget.
+    expect(raise).toBeGreaterThan(0);
+    expect(engine.ports.economy.committedWageBill(base, other) + raise).toBeGreaterThan(club.finance.wageBudgetPerWeek);
+    const ok = engine.applyCommand(base, { type: 'contract.renew', clubId: other, fighterId: f.id, wagePerWeek: wage, seasons }, content);
+    expect(ok.ok ? ok.value.response : ok.error).toMatchObject({ kind: 'accepted' });
+    // One gold less of next-season room and the same command is refused, for the AI club as for the player.
+    club.finance.wageBudgetPerWeek -= 5;
+    const no = engine.applyCommand(base, { type: 'contract.renew', clubId: other, fighterId: f.id, wagePerWeek: wage, seasons }, content);
+    expect(no).toMatchObject({ ok: false, error: { code: 'budget.wage', details: { basis: 'next-season' } } });
   });
 
   it('developmentSummary: each rostered fighter: age, rating and attributes before and after; titles for the champions', () => {

@@ -137,6 +137,11 @@ export interface Tally {
   damageToShields: number;
   damageTaken: number;
   healingDone: number;
+  /**
+   * Effective healing this unit received (overheal excluded; a Deathward heal above the 1 HP floor counts). A counter
+   * only: it is in no event and not in the round checksum, so adding it moved no hash.
+   */
+  healingReceived: number;
   shieldingDone: number;
   overheal: number;
   ccAppliedTicks: number;
@@ -330,6 +335,7 @@ export function newTally(ruleCount: number): Tally {
     damageToShields: 0,
     damageTaken: 0,
     healingDone: 0,
+    healingReceived: 0,
     shieldingDone: 0,
     overheal: 0,
     ccAppliedTicks: 0,

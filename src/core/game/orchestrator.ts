@@ -277,6 +277,8 @@ export function playRound(ports: GamePorts, draft: GameState, ms: MatchState, co
   ms.away.entering = [];
   const outcome: RoundOutcome = { result, aftermath: out.aftermath };
   ports.fighters.freshnessAfterRound(draft, ms, outcome, content);
+  // Box score: the Freshness each of the ten finished the round on (the drain is in; the between-round rest is not).
+  for (const side of SIDES) lineups[side].freshnessAfter = lineups[side].fighterIds.map((id) => freshness(ports, draft, id));
   ports.fighters.xpAfterRound(draft, ms, outcome, content);
   const hurt = ports.fighters.injuriesAfterRound(draft, ms, outcome, content);
   for (const id of hurt) {

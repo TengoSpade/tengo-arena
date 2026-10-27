@@ -294,3 +294,68 @@ tr.is-bench td {
     display: none;
   }
 }
+
+/* Box score (AL-R002-T001): grouped columns (Offense / Defense / Support), a team total row per side. */
+.report-box thead .box-group {
+  text-align: center;
+  border-bottom: 1px solid var(--c-divider);
+  color: var(--c-text-muted);
+}
+
+.report-box thead .box-subhead th {
+  white-space: normal;
+}
+
+/* "Damage received" and "Healing received" take two lines instead of a wide column. */
+.report-box thead .th-sort {
+  white-space: normal;
+  line-height: 1.15;
+  text-align: inherit;
+}
+
+.report-box thead th.cell-num {
+  min-width: 3.2rem;
+  vertical-align: bottom;
+}
+
+.report-box tr.row-total th,
+.report-box tr.row-total td {
+  border-top: 1px solid var(--c-border-strong);
+  background: var(--c-surface-2);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-box tr.row-total th {
+  text-align: left;
+  color: var(--c-text-muted);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.report-box .panel__actions .segmented {
+  flex: none;
+}
+
+/* The subtitle gives way to the Match / R1 / R2 toggle on a narrow panel. */
+@media (max-width: 1439px) {
+  .report-box .panel__subtitle {
+    display: none;
+  }
+}
+
+/* Below 1800 px (the design system's wide breakpoint) the box score needs the whole width (grouped columns, Freshness,
+   a team total row): the report stacks, with the key moments, downs and aftermath under the recaps. */
+@media (max-width: 1799px) {
+  .report-grid > .span-8,
+  .report-grid > .span-4 {
+    grid-column: 1 / -1;
+  }
+}
+
+.report-box__note {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--c-divider);
+}
