@@ -102,10 +102,11 @@ function statics(spec: Spec) {
 }
 
 describe('ability ranks (rk-001 to rk-005)', () => {
-  it('rk-001: Knight Shield Bash rank 3: cooldown 8 s, focus 15, coefficient 1.54 (117.04 at Power 76), stun still 0.8 s', () => {
+  it('rk-001: Knight Shield Bash rank 3: cooldown 6 s, focus 15, coefficient 1.54 (117.04 at Power 76), stun still 0.8 s', () => {
     const r1 = kitFor(tb, 'oathguard', R(1, 1, 1)).a2;
     const r3 = kitFor(tb, 'oathguard', R(1, 3, 1)).a2;
-    expect([r3.cooldownTicks, r3.focusMilli]).toEqual([160, 15_000]);
+    // Balance pass: control cooldown steps 9 -> 7.5 -> 6 s (rank 3 = 6 s x 20 ticks = 120).
+    expect([r3.cooldownTicks, r3.focusMilli]).toEqual([120, 15_000]);
     const f = arena([{ classId: 'oathguard', stats: KNIGHT, abilityRanks: R(1, 3, 1) }], ['bloodhowler']);
     prep(f);
     expect(f.power(f.units[0]!)).toBe(76);
@@ -121,14 +122,16 @@ describe('ability ranks (rk-001 to rk-005)', () => {
     expect(stun(r1)).toMatchObject({ durationTicks: 16 });
   });
 
-  it('rk-002: Chirurgeon Suture rank 2 heals 2.46 x 100 x 1.3 = 319 on an ally at 30%; rank 3 cooldown 4.5 s', () => {
+  it('rk-002: Chirurgeon Suture rank 2 heals 2.46 x 100 x 1.3 = 319 on an ally at 30%; rank 3 keeps the 5 s cooldown and costs 15 focus', () => {
     const f = arena([{ classId: 'chirurgeon', abilityRanks: R(2, 1, 1) }, 'oathguard'], ['bloodhowler']);
     f.units[1]!.hp = Math.trunc((f.units[1]!.maxHp * 30) / 100);
     prep(f);
     const ab = f.units[0]!.cls.a1;
     applyAbility(f, f.newRelease(0, ab), ab, 1);
     expect(f.heals[1]![0]!.amount).toBe(319);
-    expect(kitFor(tb, 'chirurgeon', R(3, 1, 1)).a1.cooldownTicks).toBe(90);
+    // Balance pass: rank 3 trimmed from a 4.5 s cooldown to a focus-cost step (20 -> 15): cooldown stays 5 s = 100 ticks.
+    const suture3 = kitFor(tb, 'chirurgeon', R(3, 1, 1)).a1;
+    expect([suture3.cooldownTicks, suture3.focusMilli]).toEqual([100, 15_000]);
   });
 
   it('rk-003: Wizard Firebloom rank 3: radius 3.0 m (rank 1: 2.5 m), coefficient 1.32', () => {
@@ -192,13 +195,16 @@ describe('ability ranks (rk-001 to rk-005)', () => {
 });
 
 describe('Freshness penalty (fr-001 to fr-004)', () => {
-  it('fr-001: worked-example Knight at F 45 (s = 3,000 bp): interval 1.376 s, Power 74, move 160 mm/tick, reaction 6 ticks, Tired (45)', () => {
+  it('fr-001: worked-example Knight at F 45 (s = 3,000 bp): interval 1.367 s, Power 74, move 160 mm/tick, reaction 6 ticks, Tired (45)', () => {
     expect(fatigueSeverityBp(tb, 45, 0)).toBe(3000);
     const f = arena([{ classId: 'oathguard', stats: KNIGHT, freshness: 45 }], ['bloodhowler']);
     prep(f);
     const u = f.units[0]!;
-    expect(f.attackSpeedBp(u)).toBe(9450);
-    expect(Math.round(((u.intervalTicks * BP) / f.attackSpeedBp(u)) * 50)).toBe(1376);
+    // Penalty at full (balance pass x0.8): attack speed -8%, move -4.8%, Power -6.4%, reaction +20%; x 0.3 at F 45.
+    // Attack speed 0.975 - 0.08 x 0.3 = 0.951; interval 1.3 / 0.951 = 1.367 s; Power trunc(76.03 x (1 - 0.064 x 0.3)) = trunc(74.57) = 74;
+    // move trunc(163.2 x (1 - 0.048 x 0.3)) = trunc(160.85) = 160; reaction 305 ms x 1.06 = 323 ms = 6.5 ticks -> 6.
+    expect(f.attackSpeedBp(u)).toBe(9510);
+    expect(Math.round(((u.intervalTicks * BP) / f.attackSpeedBp(u)) * 50)).toBe(1367);
     expect(f.power(u)).toBe(74);
     expect(f.speedMm(u)).toBe(160);
     expect(f.reactionTicks(u).ticks).toBe(6);
@@ -211,7 +217,7 @@ describe('Freshness penalty (fr-001 to fr-004)', () => {
     expect(spawn).toMatchObject({ freshness: 45, fatigueBp: 3000, abilityRanks: { a1: 1, a2: 1, passive: 1 }, perkIds: [], enteredThisRound: false });
   });
 
-  it('fr-001 in the engine: the swing accumulator keeps its sub-tick overshoot, so F 45 swings every 1.376 s on average', () => {
+  it('fr-001 in the engine: the swing accumulator keeps its sub-tick overshoot, so F 45 swings every 1.367 s on average', () => {
     const swingsOver = (freshness: number, ticks: number): number => {
       const f = arena([{ classId: 'oathguard', stats: KNIGHT, freshness }], ['bloodhowler']);
       prep(f);
@@ -227,8 +233,8 @@ describe('Freshness penalty (fr-001 to fr-004)', () => {
       }
       return swings;
     };
-    // 2750 ticks x 9450 / 260000 = 99.95 swings (engine 1 quantized every swing to 28 ticks: 98).
-    expect(swingsOver(45, 2750)).toBe(99);
+    // 2750 ticks x 9510 / 260000 = 100.59 swings (engine 1 quantized every swing to 28 ticks: 98).
+    expect(swingsOver(45, 2750)).toBe(100);
     // Fresh (Agility 9: attack speed 9750): 2600 x 9750 / 260000 = 97.5 (engine 1: every 27 ticks, 96).
     expect(swingsOver(100, 2600)).toBe(97);
   });
@@ -245,13 +251,15 @@ describe('Freshness penalty (fr-001 to fr-004)', () => {
     expect(f.power(u)).toBe(Math.trunc((raw * (BP - 10)) / BP));
   });
 
-  it('fr-002: F 10: interval 1.486 s, Power 69, move 153, reaction 7 ticks, Spent (10)', () => {
+  it('fr-002: F 10: interval 1.453 s, Power 71, move 155, reaction 7 ticks, Spent (10)', () => {
     const f = arena([{ classId: 'oathguard', stats: KNIGHT, freshness: 10 }], ['bloodhowler']);
     prep(f);
     const u = f.units[0]!;
-    expect(f.attackSpeedBp(u)).toBe(8750);
-    expect(Math.round(((u.intervalTicks * BP) / f.attackSpeedBp(u)) * 50)).toBe(1486);
-    expect([f.power(u), f.speedMm(u), f.reactionTicks(u).ticks]).toEqual([69, 153, 7]);
+    // Full penalty (s = 1): attack speed 0.975 - 0.08 = 0.895; interval 1.3 / 0.895 = 1.4525 s -> 1453; Power trunc(76.03 x 0.936) = 71;
+    // move trunc(163.2 x 0.952) = 155; reaction 305 ms x 1.2 = 366 ms = 7.3 ticks -> 7.
+    expect(f.attackSpeedBp(u)).toBe(8950);
+    expect(Math.round(((u.intervalTicks * BP) / f.attackSpeedBp(u)) * 50)).toBe(1453);
+    expect([f.power(u), f.speedMm(u), f.reactionTicks(u).ticks]).toEqual([71, 155, 7]);
     const out = simulateRound({ round: 1, home: side('h', [{ classId: 'oathguard', stats: KNIGHT, freshness: 10 }]), away: side('a', []) }, 'fr', content, { record: 'summary' });
     const recap = out.log!.events.find((e) => e.type === 'round.summary')!.data!.units[0] as RoundRecapM11;
     expect([recap.fatigueTag, recap.freshnessLabel]).toEqual(['spent', 'spent']);
@@ -270,16 +278,17 @@ describe('Freshness penalty (fr-001 to fr-004)', () => {
     const s = statics({ classId: 'oathguard', freshness: 56 });
     expect(s.fatigueBp).toBe(800);
     const m = s.staticMods;
-    expect([m[ST.attackSpeed], m[ST.moveSpeed], m[ST.power], m[ST.support], m[ST.reactionDelay]]).toEqual([-80, -48, -64, -64, 200]);
+    // s = 0.08 of the (x0.8) full penalty: -0.08, -0.048, -0.064, -0.064, +0.20 -> -64, -38.4 (trunc -38), -51.2 (-51), -51, +160 bp.
+    expect([m[ST.attackSpeed], m[ST.moveSpeed], m[ST.power], m[ST.support], m[ST.reactionDelay]]).toEqual([-64, -38, -51, -51, 160]);
   });
 });
 
 describe('perks (pk-001 to pk-005)', () => {
-  it('pk-001: F 28 with Long Wind: severity 3,840 bp: -3.84% attack speed, -2.30% move, -3.07% Power and Support, +9.6% reaction', () => {
+  it('pk-001: F 28 with Long Wind: severity 3,840 bp: -3.07% attack speed, -1.84% move, -2.46% Power and Support, +7.7% reaction', () => {
     const s = statics({ classId: 'oathguard', freshness: 28, perkIds: perks('g_long_wind') });
     expect(s.fatigueBp).toBe(3840);
     const m = s.staticMods;
-    expect([m[ST.attackSpeed], m[ST.moveSpeed], m[ST.power], m[ST.support], m[ST.reactionDelay]]).toEqual([-384, -230, -307, -307, 960]);
+    expect([m[ST.attackSpeed], m[ST.moveSpeed], m[ST.power], m[ST.support], m[ST.reactionDelay]]).toEqual([-307, -184, -245, -245, 768]);
   });
 
   it('pk-002: Second Breath fires once per round on first dropping below 35%: heals trunc(0.10 x 1475) = 147', () => {
@@ -478,7 +487,8 @@ describe('new predicates, triggers and extensions', () => {
     nextTick(f);
     resolution(f);
     f.commit();
-    expect(u.shields.reduce((a, s) => a + s.amount, 0)).toBe(Math.trunc(u.maxHp * 0.2));
+    // Balance pass: Last Wall shield 20% -> 12% of max HP.
+    expect(u.shields.reduce((a, s) => a + s.amount, 0)).toBe(Math.trunc(u.maxHp * 0.12));
     expect(u.perkProcs.get('t_last_wall')).toBe(1);
     expect(f.units[1]!.perkProcs.get('h_warding_lantern')).toBe(1);
     // Lamplight (30%) fired too, from its own memory.
