@@ -11,9 +11,39 @@
   border-color: var(--c-accent-line);
 }
 
+/* Risk, Freshness, projection and level wrap onto a second line instead of spilling out of the card
+   (a "Still tender" word and a 3-digit level do not fit beside the meter at 1280 px). Each item stays whole. */
 .lineup-card__meta {
-  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: var(--sp-1) var(--sp-2);
   white-space: nowrap;
+}
+
+.lineup-card__meta .lineup-card__lvl {
+  margin-left: auto;
+}
+
+/* The card is the container: the "→ 62 after" projection is for wider cards; it stays in the Freshness tooltip. */
+.lineup__slots > .lineup-card {
+  container-type: inline-size;
+}
+
+@container (max-width: 15rem) {
+  .lineup-card__proj {
+    display: none;
+  }
+
+  /* Narrow card (1280 px): a shorter Freshness bar, and the risk word under the meter line, whole. */
+  .lineup-card__meta .fresh {
+    grid-template-columns: 2.2rem 1.5rem;
+    gap: var(--sp-1);
+  }
+
+  .lineup-card__risk--notable {
+    order: 5;
+    flex: 1 0 100%;
+  }
 }
 
 .lineup-card__xp {

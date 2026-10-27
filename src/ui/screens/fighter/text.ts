@@ -7,7 +7,6 @@ export const T = {
   notFoundText: 'This fighter no longer exists in the world.',
   roleTip: 'Role: {role}. Rules that name "our {role}" select this fighter.',
   row: 'row',
-  reserve: 'Reserve',
   preset: 'Preset',
   sinceClub: 'At the club since',
   sinceTip: 'Signed with the club in season {season}',

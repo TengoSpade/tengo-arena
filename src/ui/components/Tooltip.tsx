@@ -160,6 +160,13 @@ export function TooltipLayer() {
       setOpen(null);
       return;
     }
+    // A tooltip opened from inside a modal dialog must show above it: the dialog sits in the browser's top layer,
+    // where no z-index reaches. A manual popover joins the top layer too (and later, so above the dialog).
+    try {
+      if (typeof el.showPopover === 'function' && !el.matches(':popover-open')) el.showPopover();
+    } catch {
+      /* no popover support: the tooltip shows as before */
+    }
     const r = open.target.getBoundingClientRect();
     const tr = el.getBoundingClientRect();
     const gap = 8;
@@ -182,6 +189,7 @@ export function TooltipLayer() {
       ref={ref}
       id="al-tooltip"
       role="tooltip"
+      popover="manual"
       class={plain ? 'tooltip tooltip--plain' : 'tooltip'}
       data-open={shown ? '' : undefined}
       style={{ top: '-9999px', left: '0px' }}

@@ -9,6 +9,7 @@
  */
 import type { ContentDB } from '../../core/content';
 import type { AbilityId, Fighter, FreshnessLabel, GameState, LevelOption, PerkId, RankableSlot, StatId } from '../../core/model';
+import type { TipContent } from '../components';
 import { safeView, type GameEngine } from '../store/engine';
 import { fighterViewOf } from '../store/views';
 
@@ -266,18 +267,73 @@ export function perkRequiresText(content: ContentDB, perkId: PerkId | string): s
 export interface OptionText {
   kind: LevelOption['kind'];
   title: string;
-  /** current → new ("12 → 13"), the rank step ("II → III") or the perk tier. */
+  /** current → new with the real effect ("10.4 → 11.3 (+0.9)" for a stat), the rank step ("II → III") or the perk tier. */
   change: string;
   detail: string;
   /** Why this option was offered. */
   why: string;
+  /** Stat picks: what the pick really does and why it can be less than +1 (the whole-number stat only moves when the fraction crosses a point). */
+  tip?: TipContent;
+}
+
+/**
+ * What a stat pick really does to the shown stat. The trained value is kept in hundredths (train100): a
+ * pick adds +1.00, or only the room left under his ceiling (cap100 = his potential in that stat), and
+ * the stat shown everywhere is the whole-number part (10.4 shows as 10). Age wear is subtracted
+ * from the trained value, so it moves the fraction too. Centipoints on the shown scale (traits and
+ * statuses included as whole points).
+ */
+export interface StatPickEffect {
+  now100: number;
+  after100: number;
+  /** What the pick adds to the shown value (≤ 100). */
+  gain100: number;
+  /** Room under his ceiling before the pick. */
+  room100: number;
+  wear100: number;
+  wholeNow: number;
+  wholeAfter: number;
+  /** The shown whole-number stat rises. */
+  crosses: boolean;
+}
+
+export function statPickEffect(fighter: Fighter, stats: Record<string, number>, stat: StatId | string, gain100: number, statMax = 20): StatPickEffect {
+  const train = fighter.train100[stat as StatId] ?? 0;
+  const cap = fighter.cap100[stat as StatId] ?? 0;
+  const wear = fighter.wear100?.[stat as StatId] ?? 0;
+  const room = Math.max(0, cap - train);
+  const gain = Math.min(gain100, room);
+  const base = Math.max(100, train - wear);
+  const baseAfter = Math.max(100, train + gain - wear);
+  const shown = stats[stat];
+  // Whole points from traits and statuses sit on top of the trained value.
+  const extra = shown === undefined ? 0 : shown - Math.floor(base / 100);
+  const now100 = base + 100 * extra;
+  const after100 = baseAfter + 100 * extra;
+  const wholeNow = shown ?? Math.floor(now100 / 100);
+  const wholeAfter = Math.min(statMax, Math.max(wholeNow, Math.floor(after100 / 100)));
+  return { now100, after100, gain100: after100 - now100, room100: room, wear100: wear, wholeNow, wholeAfter, crosses: wholeAfter > wholeNow };
+}
+
+/** One decimal of a centipoint value, never showing a whole number the stat has not reached ("10.96" reads "10.9"). */
+export function fmtPoints(v100: number): string {
+  const whole = Math.floor(v100 / 100);
+  const tenth = Math.round(v100 / 10) / 10;
+  return (tenth >= whole + 1 ? whole + 0.9 : tenth).toFixed(1);
+}
+
+/** "+0.9": the difference of the two shown values, so the numbers on the card always add up. */
+export function fmtGain(now100: number, after100: number): string {
+  const d = Math.round((Number(fmtPoints(after100)) - Number(fmtPoints(now100))) * 10) / 10;
+  // A sliver (under 0.05) would read "+0.0": say it in hundredths.
+  return d === 0 && after100 > now100 ? `+${((after100 - now100) / 100).toFixed(2)}` : `+${d.toFixed(1)}`;
 }
 
 /** Words for one level-up option (the dialog, the digest and the season review). */
 export function optionText(content: ContentDB, fighter: Fighter, stats: Record<string, number>, option: LevelOption): OptionText {
   if (option.kind === 'stat') {
-    const now = stats[option.stat] ?? Math.floor((fighter.train100[option.stat] ?? 0) / 100);
-    const gain = Math.max(1, Math.round(option.gain100 / 100));
+    const eff = statPickEffect(fighter, stats, option.stat, option.gain100, content.development.scale.statMax);
+    const now = eff.wholeNow;
     const klass = content.classes.get(fighter.classId);
     const weight = (klass?.ratingWeights as Record<string, number> | undefined)?.[option.stat] ?? 0;
     // On the shown scale (traits and race included): the shown value plus the trainable room left.
@@ -291,7 +347,29 @@ export function optionText(content: ContentDB, fighter: Fighter, stats: Record<s
     ]
       .filter(Boolean)
       .join(' · ');
-    return { kind: 'stat', title: statName(content, option.stat), change: `${now} → ${now + gain}`, detail: `+${gain} ${statName(content, option.stat)}`, why };
+    const name = statName(content, option.stat);
+    const gain = fmtGain(eff.now100, eff.after100);
+    const partial = eff.gain100 < 100;
+    const detail = eff.crosses
+      ? `${name} rises to ${eff.wholeAfter}`
+      : eff.wholeNow >= (content.development.scale.statMax ?? 20)
+        ? `${name} is at the top of the scale`
+        : `${name} stays ${eff.wholeNow}: ${gain} toward ${eff.wholeNow + 1}`;
+    const tip: TipContent = {
+      kicker: 'Stat pick',
+      title: `${name} ${fmtPoints(eff.now100)} → ${fmtPoints(eff.after100)} (${gain})`,
+      body: partial
+        ? `A stat pick adds +1.0 to his trained value, but never past his ceiling for ${name} (his potential in it, fixed when he was generated). Only ${(eff.room100 / 100).toFixed(2)} was left, so this pick adds ${(eff.gain100 / 100).toFixed(2)} and ${name} is then at its ceiling. ${eff.crosses ? 'That still crosses the next whole point.' : `The shown ${name} stays ${eff.wholeNow} until the fraction reaches ${eff.wholeNow + 1}.0.`}`
+        : `A stat pick adds +1.0 to his trained value, so the shown ${name} rises by one whole point.`,
+      rows: [
+        { label: 'Shown now', value: fmtPoints(eff.now100) },
+        { label: 'Pick adds', value: `${(eff.gain100 / 100).toFixed(2)} of a possible 1.00` },
+        { label: 'Room under his ceiling', value: (eff.room100 / 100).toFixed(2) },
+        ...(eff.wear100 > 0 ? [{ label: 'Age wear, already taken off', value: `−${(eff.wear100 / 100).toFixed(2)}` }] : []),
+      ],
+      meta: 'The stat shown everywhere is the whole-number part: 10.4 shows as 10.',
+    };
+    return { kind: 'stat', title: name, change: `${fmtPoints(eff.now100)} → ${fmtPoints(eff.after100)} (${gain})`, detail, why: partial ? `${why} · only ${(eff.room100 / 100).toFixed(2)} under his ceiling` : why, tip };
   }
   if (option.kind === 'rank') {
     const from = option.toRank - 1;
@@ -317,7 +395,8 @@ export function optionText(content: ContentDB, fighter: Fighter, stats: Record<s
 /** One line for a resolved pick ("+1 Power", "Shield Bash II", "perk Quick Hands"). */
 export function pickLine(content: ContentDB, option: LevelOption | null): string {
   if (!option) return 'empty level';
-  if (option.kind === 'stat') return `+${Math.max(1, Math.round(option.gain100 / 100))} ${statName(content, option.stat)}`;
+  // A pick at the ceiling adds only the room left: "+0.87 Strength" (a full pick reads "+1 Strength").
+  if (option.kind === 'stat') return `${option.gain100 >= 100 ? '+1' : `+${(option.gain100 / 100).toFixed(2)}`} ${statName(content, option.stat)}`;
   if (option.kind === 'rank') return abilityName(content, option.abilityId, option.toRank);
   return `perk ${content.perks.get(option.perkId)?.name ?? option.perkId}`;
 }

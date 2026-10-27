@@ -24,15 +24,22 @@ export function squadCommand(club: Club, fighters: LineupEntry[], reserves: Figh
   return { type: 'squad.set', clubId: club.id, fighters, reserves, matchCaptainId: keep };
 }
 
-/** Name (or drop) a fighter as a match reserve; with both places taken he replaces the second. */
+/**
+ * Name (or drop) a fighter as a match reserve. With both places taken, the one named longest ago goes back
+ * to the bench: no question to answer, and the toast says who was dropped with Undo (Ctrl Z) to bring him back.
+ */
 export function toggleReserve(store: GameStore, state: GameState, club: Club, id: FighterId): boolean {
   if (club.lineup.fighters.some((e) => e.fighterId === id)) return false;
   const now = club.lineup.reserves ?? [];
-  const next = now.includes(id) ? now.filter((x) => x !== id) : now.length >= RESERVES_MAX ? [now[0]!, id] : [...now, id];
-  const name = state.fighters[id]?.name.full ?? id;
-  const title = now.includes(id) ? format(T.reserveOff, { name }) : format(T.reserveOn, { name });
+  const adding = !now.includes(id);
+  const full = adding && now.length >= RESERVES_MAX;
+  const dropped = full ? now[0]! : null;
+  const next = !adding ? now.filter((x) => x !== id) : full ? [...now.slice(1), id] : [...now, id];
+  const nameOf = (x: FighterId) => state.fighters[x]?.name.full ?? x;
+  const title = adding ? format(T.reserveOn, { name: nameOf(id) }) : format(T.reserveOff, { name: nameOf(id) });
+  const sub = dropped ? format(T.reserveDropped, { name: nameOf(dropped), max: RESERVES_MAX }) : undefined;
   const fighters = club.lineup.fighters.map((e) => ({ ...e }));
-  return runUndoable(store, squadCommand(club, fighters, next), squadCommand(club, fighters, [...now]), title);
+  return runUndoable(store, squadCommand(club, fighters, next), squadCommand(club, fighters, [...now]), title, sub);
 }
 
 /**

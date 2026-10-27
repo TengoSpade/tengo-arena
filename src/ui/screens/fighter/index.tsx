@@ -94,7 +94,7 @@ export default function FighterScreen({ params }: ScreenProps) {
       ? clubActions(store, state, content, ctx.club, {
           front: '{name} to the front row',
           back: '{name} to the back row',
-          reserve: '{name} to the reserves',
+          reserve: '{name} to the bench',
           replace: '{name} replaces {other}',
           captain: '{name} is captain',
           vice: '{name} is vice-captain',
@@ -248,14 +248,14 @@ function ProfileHeader(props: {
             <span {...tipAttrs(view ? `Human-age equivalent ${view.humanAge}` : null)}>
               {raceName(f, content)} · <strong>{f.age}</strong>
             </span>
-            {club && (
+            {club && f.clubId === club.id && (
               <span>
                 {entry ? (
                   <>
                     <RowMark row={entry.row} /> {T.row}
                   </>
                 ) : (
-                  <RowMark row="bench" label={T.reserve} />
+                  <RowMark row={(club.lineup.reserves ?? []).includes(f.id) ? 'reserve' : 'bench'} />
                 )}
               </span>
             )}

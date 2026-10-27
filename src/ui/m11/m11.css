@@ -26,6 +26,64 @@
   font-weight: var(--fw-medium, 500);
 }
 
+/* Compact Freshness (lists, side columns): a shorter bar. */
+.fresh--compact {
+  grid-template-columns: 2.2rem 1.5rem;
+  gap: var(--sp-1);
+}
+
+/* Freshness across a match: the bar ends at the value he finished on; the part he spent is shaded. */
+.fresh-change {
+  display: inline-grid;
+  grid-template-columns: 2.2rem auto;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* The box score at 1280 px has little room: a shorter gauge, the numbers stay. */
+@media (max-width: 1399px) {
+  .fresh-change {
+    grid-template-columns: 1.3rem auto;
+    gap: var(--sp-1);
+  }
+}
+
+.fresh-change__spent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--from) * 100%);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--meter-c) 32%, transparent);
+}
+
+.fresh-change__nums {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2em;
+}
+
+.fresh-change__arrow {
+  color: var(--c-text-faint);
+}
+
+.fresh-change__after {
+  color: var(--c-text);
+}
+
+.fresh-change[data-label="tired"] .fresh-change__after {
+  color: var(--c-warn);
+}
+
+.fresh-change[data-label="spent"] .fresh-change__after {
+  color: var(--c-bad);
+}
+
 /* Level chip and the waiting level-ups. */
 .lvl {
   display: inline-flex;

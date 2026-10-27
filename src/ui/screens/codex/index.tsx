@@ -16,11 +16,11 @@ import { navigate } from '../../app/router';
 import { useShortcuts } from '../../app/shortcuts';
 import { Empty, FighterName, Icon, Meter, PageHeader, Panel, Pips, Rating, RoleBadge, RoleGlyph, RowMark, RuleLine, Segmented, Tag, tipAttrs } from '../../components';
 import { presetLines, ruleParts, stanceName } from '../../format/rules';
-import { roleNames, rolesOf } from '../../format/fighter';
+import { isStarterClass, roleNames, rolesOf } from '../../format/fighter';
 import { useStore } from '../../store';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf } from '../../store/views';
-import { format } from '../../text';
+import { format, t } from '../../text';
 import { PerkCatalog, RankLines } from './Perks';
 import './codex.css';
 
@@ -241,6 +241,11 @@ function ClassCard({ k, content, selected }: { k: ClassDef; content: ContentDB; 
           ))}
         </span>
         <span class="codex-card__name">{k.name}</span>
+        {isStarterClass(k) && (
+          <Tag kind="accent" class="codex-card__starter" tip={t('class.starterTip')}>
+            {t('class.starter')}
+          </Tag>
+        )}
       </span>
       <span class="codex-card__meta">
         <span class="u-xs u-muted">{names.join(' · ')}</span>

@@ -163,6 +163,27 @@ describe('Home', () => {
     expect(wing.querySelectorAll('tbody tr[data-zone="qualify"]')).toHaveLength(4);
   });
 
+  it('lists Tired and Spent fighters in the availability panel with the compact Freshness meter', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const next = structuredClone(store.game.value!) as GameState;
+    const roster = Object.values(next.fighters).filter((f) => f.clubId === next.playerClubId && !(f.injury && f.injury.weeksOut > 0));
+    next.fighters[roster[0]!.id]!.freshness10 = 450; // Tired (40–59)
+    next.fighters[roster[1]!.id]!.freshness10 = 300; // Spent (below 40)
+    store.replaceWorld(next);
+    mount(<HomeScreen params={{}} />, store);
+    const panel = screen.getByTestId('availability');
+    expect(panel.textContent).toMatch(/2 tired/);
+    const rows = within(panel).getAllByRole('row');
+    const tired = rows.find((r) => r.textContent!.includes(roster[0]!.name.full))!;
+    const spent = rows.find((r) => r.textContent!.includes(roster[1]!.name.full))!;
+    expect(within(tired).getByLabelText('Freshness 45, Tired')).toBeTruthy();
+    expect(within(spent).getByLabelText('Freshness 30, Spent')).toBeTruthy();
+    expect(tired.querySelector('.fresh--compact')).toBeTruthy();
+    expect(tired.textContent).toContain('Tired');
+    // Every row in the panel shows his Freshness (injured fighters show a dash).
+    for (const r of rows) expect(r.querySelector('[data-testid="availability-fresh"]')).toBeTruthy();
+  });
+
   it('does not tick the lineup with 4 of 5 places or an empty roster', () => {
     const { store } = createTestStore({ weekIndex: 1 });
     const state = structuredClone(store.game.value!);

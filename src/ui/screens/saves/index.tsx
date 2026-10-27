@@ -12,7 +12,7 @@ import { useShortcuts } from '../../app/shortcuts';
 import { STATE_SCHEMA_VERSION, type SaveError, type SaveMeta } from '../../../core/model';
 import { ConfirmButton, DataTable, Icon, Modal, PageHeader, Panel, showToast, type Column } from '../../components';
 import { formatDateTime, formatPlaytime } from '../../format';
-import { AUTOSAVE_SLOTS, MANUAL_SLOT_IDS, isAutosaveSlot, isTicketSlot, settings, type AppStore, type GameStore } from '../../store';
+import { AUTOSAVE_ROUND_SLOT, AUTOSAVE_SLOTS, MANUAL_SLOT_IDS, isAutosaveSlot, isTicketSlot, settings, type AppStore, type GameStore } from '../../store';
 import { go, useOptionalStore } from '../league/lib/store';
 import { Callout, Empty } from '../league/lib/ui';
 import { t } from './text';
@@ -31,6 +31,7 @@ export default function SavesScreen(_props: ScreenProps) {
 }
 
 function slotName(slotId: string): string {
+  if (slotId === AUTOSAVE_ROUND_SLOT) return t('autoRoundSlot');
   const n = slotId.replace(/^\D+-/, '');
   return isAutosaveSlot(slotId) ? t('autoSlot', { n }) : t('slot', { n });
 }
@@ -66,7 +67,10 @@ function Saves({ store }: { store: GameStore }) {
   // Ticket reproductions ("ticket-<id>") are listed apart and never count as manual slots.
   const manual = (list ?? []).filter((m) => !isAutosaveSlot(m.slotId) && !isTicketSlot(m.slotId)).sort((a, b) => MANUAL_SLOT_IDS.indexOf(a.slotId) - MANUAL_SLOT_IDS.indexOf(b.slotId));
   const newestFirst = (a: SaveMeta, b: SaveMeta) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0);
-  const autos = (list ?? []).filter((m) => isAutosaveSlot(m.slotId)).sort(newestFirst);
+  // The mid-match slot first (it is the one to resume from), then the weekly ones, newest first.
+  const autos = (list ?? [])
+    .filter((m) => isAutosaveSlot(m.slotId))
+    .sort((a, b) => Number(b.slotId === AUTOSAVE_ROUND_SLOT) - Number(a.slotId === AUTOSAVE_ROUND_SLOT) || newestFirst(a, b));
   const tickets = (list ?? []).filter((m) => isTicketSlot(m.slotId)).sort(newestFirst);
   const freeSlot = MANUAL_SLOT_IDS.find((id) => !manual.some((m) => m.slotId === id)) ?? null;
   // Save (and Ctrl S) writes only to this career's own manual slot; otherwise Save as asks for one.
@@ -135,6 +139,11 @@ function Saves({ store }: { store: GameStore }) {
             <span class="entity__sub">{auto ? (/^autosave$/i.test(m.label) ? m.playerClubName : m.label) : kind === 'ticket' ? m.playerClubName : slotName(m.slotId)}</span>
           </span>
           {m.slotId === current && <span class="tag tag--accent">{t('current')}</span>}
+          {m.slotId === AUTOSAVE_ROUND_SLOT && (
+            <span class="tag tag--info" data-tip={t('autoRoundTip')} data-testid="auto-round-tag">
+              {t('autoRoundTag')}
+            </span>
+          )}
         </span>
       ),
     },

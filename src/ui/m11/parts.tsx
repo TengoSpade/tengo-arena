@@ -7,7 +7,7 @@ import type { ContentDB } from '../../core/content';
 import type { FreshnessLabel, PerkId } from '../../core/model';
 import { Meter, Pips, Progress, Tag, tipAttrs, type TipContent } from '../components';
 import { formatInt } from '../format';
-import { penaltyText, tierRoman, type FreshInfo, type LevelInfo } from './model';
+import { labelFor, penaltyText, tierRoman, type FreshInfo, type LevelInfo } from './model';
 import './m11.css';
 
 const METER_STATE: Record<FreshnessLabel, 'good' | 'warn' | 'bad' | undefined> = { fresh: 'good', ready: undefined, tired: 'warn', spent: 'bad' };
@@ -30,10 +30,10 @@ export function freshTip(info: FreshInfo, content: ContentDB): TipContent {
   };
 }
 
-/** Compact meter + value; `label` adds the word (Fresh, Ready, Tired, Spent). */
-export function FreshMeter({ info, content, label, testId }: { info: FreshInfo; content: ContentDB; label?: boolean; testId?: string }) {
+/** Compact meter + value; `label` adds the word (Fresh, Ready, Tired, Spent); `compact` shortens the bar (side columns, lists). */
+export function FreshMeter({ info, content, label, testId, compact }: { info: FreshInfo; content: ContentDB; label?: boolean; testId?: string; compact?: boolean }) {
   return (
-    <span class="fresh condition" data-label={info.label} tabIndex={0} aria-label={`Freshness ${info.value}, ${info.labelText}`} data-testid={testId} {...tipAttrs(freshTip(info, content))}>
+    <span class={`fresh condition${compact ? ' fresh--compact' : ''}`} data-label={info.label} tabIndex={0} aria-label={`Freshness ${info.value}, ${info.labelText}`} data-testid={testId} {...tipAttrs(freshTip(info, content))}>
       <Meter value={info.value / 100} mark={info.threshold / 100} state={METER_STATE[info.label]} thin />
       <span class="fresh__value">{info.value}</span>
       {label && <span class="fresh__label">{info.labelText}</span>}
@@ -113,6 +113,44 @@ export function PerkBadge({ content, perkId, muted }: { content: ContentDB; perk
     <span class={`perk${muted ? ' perk--muted' : ''}`} data-tier={perk.tier} tabIndex={0} {...tipAttrs({ kicker: `Perk · tier ${tierRoman(perk.tier)}`, title: perk.name, body: perk.text })}>
       <span class="perk__tier">{tierRoman(perk.tier)}</span>
       {perk.name}
+    </span>
+  );
+}
+
+/**
+ * Freshness across one match: a compact meter at the value he ended on, the part he spent shaded, and
+ * "100 → 62" beside it (the end value takes the Tired / Spent colour). `after` null: only where he started.
+ */
+export function FreshChange({ before, after, content, testId }: { before: number; after: number | null; content: ContentDB; testId?: string }) {
+  const end = after ?? before;
+  const label = labelFor(end, content);
+  const threshold = content.levels.freshness.threshold;
+  const drop = after === null ? 0 : before - after;
+  const tip: TipContent = {
+    kicker: 'Freshness · this match',
+    title: after === null ? `Started at ${before}` : `${before} → ${after}`,
+    rows: [
+      { label: 'At his first round start', value: String(before) },
+      ...(after === null ? [] : [{ label: 'After the match', value: `${after} (${label.text})` }, { label: 'Spent', value: drop > 0 ? `−${drop}` : '0' }]),
+    ],
+    meta: after === null ? 'The value he has now is no longer the one this match left.' : 'Each round started drains Freshness; it recovers in weeks he starts no round.',
+  };
+  return (
+    <span class="fresh-change" data-label={label.id} tabIndex={0} aria-label={after === null ? `Freshness ${before} at the start` : `Freshness ${before} to ${after}`} data-testid={testId} {...tipAttrs(tip)}>
+      <span class="meter meter--thin fresh-change__meter" data-state={METER_STATE[label.id]} style={{ '--v': Math.max(0, Math.min(1, end / 100)), '--from': Math.max(0, Math.min(1, before / 100)) } as Record<string, string | number>}>
+        <span class="fresh-change__spent" />
+        <span class="meter__fill" />
+        <span class="meter__mark" style={{ '--at': threshold / 100 } as Record<string, string | number>} />
+      </span>
+      <span class="fresh-change__nums">
+        <span class="fresh-change__before">{before}</span>
+        {after !== null && (
+          <>
+            <span class="fresh-change__arrow" aria-hidden="true">→</span>
+            <span class="fresh-change__after">{after}</span>
+          </>
+        )}
+      </span>
     </span>
   );
 }

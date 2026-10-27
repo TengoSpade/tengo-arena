@@ -16,6 +16,11 @@
   gap: var(--sp-2);
 }
 
+/* The "Starter" tag sits at the right edge of the name line. */
+.codex-card__starter {
+  margin-left: auto;
+}
+
 .codex-card__glyphs {
   display: inline-flex;
 }

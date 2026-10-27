@@ -148,6 +148,36 @@ describe('tooltips', () => {
     });
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
+
+  it('opens as a manual popover, so it shows above a modal dialog (the top layer)', async () => {
+    const proto = HTMLElement.prototype as unknown as { showPopover?: () => void };
+    const had = proto.showPopover;
+    const shown = vi.fn();
+    proto.showPopover = shown;
+    try {
+      render(
+        <>
+          <TooltipLayer />
+          <Modal open onClose={() => {}} title="Pick" footer={<button class="btn btn--primary">Go</button>}>
+            <span data-testid="why" {...tipAttrs({ title: 'Why', body: 'Less than one point.' })}>
+              10.4 → 11.3
+            </span>
+          </Modal>
+        </>,
+      );
+      await act(() => {
+        fireEvent.mouseOver(screen.getByTestId('why'));
+        return new Promise((r) => setTimeout(r, 320));
+      });
+      const tip = screen.getByRole('tooltip');
+      expect(tip.getAttribute('popover')).toBe('manual');
+      expect(shown).toHaveBeenCalled();
+      expect(tip.textContent).toContain('Less than one point.');
+    } finally {
+      if (had) proto.showPopover = had;
+      else delete proto.showPopover;
+    }
+  });
 });
 
 describe('toasts', () => {
@@ -182,6 +212,46 @@ describe('Modal and ConfirmButton', () => {
     expect(screen.getByText('Keyboard shortcuts')).toBeTruthy();
     fireEvent.keyDown(screen.getByText('Body'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('puts focus inside on opening (primary button, else the first control, else the dialog) and keeps it there', async () => {
+    const { unmount } = render(
+      <Modal open onClose={() => {}} title="Pick" footer={<button class="btn btn--primary">Go</button>}>
+        <button>First</button>
+      </Modal>,
+    );
+    const dlg = document.querySelector('dialog')!;
+    expect(document.activeElement?.textContent).toBe('Go');
+    expect(dlg.tabIndex).toBe(-1);
+    // The focused control goes away (focus falls to <body>): it is brought back into the dialog.
+    (document.activeElement as HTMLElement).blur();
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(dlg.contains(document.activeElement)).toBe(true);
+    unmount();
+    // No primary button: the first control (here the close button) takes focus.
+    render(
+      <Modal open onClose={() => {}} title="Notice">
+        <p>Nothing to press</p>
+      </Modal>,
+    );
+    expect(document.querySelector('dialog')!.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement?.className).toContain('modal__close');
+  });
+
+  it('re-focuses a dialog whose focus was taken in the same tick', async () => {
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    render(
+      <Modal open onClose={() => {}} title="Pick" footer={<button class="btn btn--primary">Go</button>}>
+        <p>Body</p>
+      </Modal>,
+    );
+    // Something (a route change) moves focus away right after the dialog opened.
+    opener.focus();
+    await act(() => new Promise((r) => setTimeout(r, 200)));
+    expect(document.querySelector('dialog')!.contains(document.activeElement)).toBe(true);
+    opener.remove();
   });
 
   it('opens the commit dialog with the consequences and confirms once', async () => {
@@ -270,6 +340,16 @@ describe('domain components', () => {
     expect(link.getAttribute('href')).toBe('#/fighter/f-1');
     expect(document.querySelector('.captain-mark')).toBeTruthy();
     expect(document.querySelector('.portrait[data-role="tank"][data-race="human"]')).toBeTruthy();
+  });
+
+  it('ClassTag marks a starter class with a star and its tooltip', () => {
+    const { container } = render(<ClassTag name="Knight" roles={['tank']} starter />);
+    const star = container.querySelector('.class-tag__star')!;
+    expect(star.textContent).toContain('★');
+    expect(star.textContent).toContain('Starter');
+    expect(star.getAttribute('data-tip')).toMatch(/Starter class/);
+    cleanup();
+    expect(render(<ClassTag name="Knight" roles={['tank']} />).container.querySelector('.class-tag__star')).toBeNull();
   });
 
   it('ClassTag shows both glyphs for a hybrid with a tooltip', () => {

@@ -16,6 +16,7 @@ import type { GameStore } from '../../store';
 import { useWp7Engine, type Wp7Engine } from '../league/lib/engine';
 import { fmtMoney } from '../league/lib/format';
 import { formatInt } from '../../format';
+import { isStarterClass } from '../../format/fighter';
 import { rosterOf } from '../league/lib/season';
 import { useCareer, type Career } from '../league/lib/store';
 import { Callout, ClassTag, Empty, FighterLink, NoCareer, Portrait, RatingPill, Segmented, Stars, TraitDots, classRoles, roleNames } from '../league/lib/ui';
@@ -362,6 +363,7 @@ function FilterRail({
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                  {isStarterClass(c) ? ' ★' : ''}
                   {c.archetypes.length > 1 ? ` (${roleNames(content, c.archetypes).join(' / ')})` : ''}
                 </option>
               ))}
@@ -542,7 +544,7 @@ function AgentsTable({
       header: t('col.class'),
       sortValue: (r) => content.classes.get(r.fighter.classId)?.name ?? '',
       firstDir: 'asc',
-      cell: (r) => <ClassTag content={content} classId={r.fighter.classId} />,
+      cell: (r) => <ClassTag content={content} classId={r.fighter.classId} starter />,
     },
     {
       id: 'race',
@@ -563,7 +565,7 @@ function AgentsTable({
     { id: 'rating', header: t('col.rating'), align: 'num', sortValue: (r) => r.rating, cell: (r) => <RatingPill value={r.rating} /> },
     { id: 'potential', header: t('col.potential'), sortValue: (r) => r.potential, cell: (r) => <Stars potential={r.potential} /> },
     // M1.1 Freshness (free agents rest every week, so most are Fresh).
-    { id: 'fresh', header: t('col.fresh'), class: 'col-mid', sortValue: (r) => r.fighter.freshness10 ?? 1000, cell: (r) => <FreshMeter info={freshInfo(freshEngine, game, content, r.fighter)} content={content} /> },
+    { id: 'fresh', header: t('col.fresh'), class: 'market-col-fresh', sortValue: (r) => r.fighter.freshness10 ?? 1000, cell: (r) => <FreshMeter info={freshInfo(freshEngine, game, content, r.fighter)} content={content} compact /> },
     // Traits need the room of a wide screen; below it they are one hover away in Compare and the profile.
     { id: 'traits', header: t('col.traits'), class: 'col-wide', cell: (r) => <TraitDots content={content} traitIds={r.fighter.traits.map((x) => x.id)} /> },
     {

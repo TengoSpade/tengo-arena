@@ -87,17 +87,19 @@ function Dialog({
     if (view.pending.length <= 1) onClose(true);
   };
 
-  // Keys work wherever focus is inside the dialog (the Modal keeps them from the game's shortcuts).
+  // Keys work wherever focus is inside the dialog (the Modal keeps them from the game's shortcuts), and on
+  // <body> too: this dialog is modal, so a keypress with nothing focused is meant for it.
   const onKey = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
-    if (!target?.closest?.('[data-testid="levelup-dialog"]') || target.tagName === 'SELECT') return;
+    const nothingFocused = target === document.body || target === document.documentElement;
+    if (!(nothingFocused || target?.closest?.('[data-testid="levelup-dialog"]')) || target?.tagName === 'SELECT') return;
     const k = e.key.toLowerCase();
     const n = Number(k);
     if (n >= 1 && n <= 3 && offer.options[n - 1]?.legal) setOption(n - 1);
     else if ((k === '4' || k === '5') && offer.traitOffer?.[Number(k) - 4]) setTrait(Number(k) - 4);
     else if (k === '6' && offer.traitOffer) setTrait(null);
     else if (k === 'a') confirm(auto);
-    else if (k === 'enter' && target.closest('.lu')) {
+    else if (k === 'enter' && (nothingFocused || target?.closest('.lu'))) {
       if (canConfirm) confirm({ optionIndex: option, traitIndex: trait });
     } else return;
     e.preventDefault();
@@ -187,7 +189,9 @@ function Dialog({
                   {auto.optionIndex === i && <span class="tag tag--info">{t('autoMark')}</span>}
                 </span>
                 <span class="lu-card__title">{text.title}</span>
-                <span class="lu-card__change u-num">{o.option.kind === 'stat' && o.statAfter !== null ? `${text.change.split(' → ')[0]} → ${o.statAfter}` : text.change}</span>
+                <span class="lu-card__change u-num" {...tipAttrs(text.tip ?? null)} data-testid={`levelup-change-${i}`}>
+                  {text.change}
+                </span>
                 {o.option.kind === 'rank' && <RankPips rank={o.option.toRank} label={t('rankPips', { n: o.option.toRank })} />}
                 <span class="lu-card__detail">{o.option.kind === 'perk' ? playerText(text.detail) : text.detail}</span>
                 {o.option.kind === 'stat' && rating !== null && ratingAfter !== null && (

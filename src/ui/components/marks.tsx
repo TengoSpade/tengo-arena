@@ -145,12 +145,26 @@ export function ViceCaptainTag({ tip }: { tip?: Tip }) {
   );
 }
 
-/** Starting row mark: Front filled, Back outlined, Reserve faint (data-row="bench" = 01 "reserve"). */
-export function RowMark({ row, label, tip }: { row: 'front' | 'back' | 'bench'; label?: string; tip?: Tip }) {
-  const text = label ?? (row === 'front' ? t('lineup.front') : row === 'back' ? t('lineup.back') : t('lineup.reserve'));
+/**
+ * Starting row mark: Front filled, Back outlined, Bench faint, Match reserve outlined in the accent
+ * (the 2 reserves who travel with the five; the rest of the roster is the bench).
+ */
+export function RowMark({ row, label, tip }: { row: 'front' | 'back' | 'bench' | 'reserve'; label?: string; tip?: Tip }) {
+  const text = label ?? (row === 'front' ? t('lineup.front') : row === 'back' ? t('lineup.back') : row === 'reserve' ? t('lineup.matchReserve') : t('lineup.bench'));
+  const autoTip = row === 'reserve' ? t('lineup.matchReserveTip') : row === 'bench' ? t('lineup.benchTip') : undefined;
   return (
-    <span class="row-mark" data-row={row} {...tipAttrs(tip)}>
-      {text}
+    <span class="row-mark" data-row={row} {...tipAttrs(tip ?? autoTip)}>
+      {row === 'reserve' && !label ? (
+        // "Match reserve" where there is room; "Reserve" in the narrowest layouts (the full name stays for screen readers and the tooltip).
+        <>
+          <span class="row-mark__full">{text}</span>
+          <span class="row-mark__short" aria-hidden="true">
+            {t('lineup.reserveShort')}
+          </span>
+        </>
+      ) : (
+        text
+      )}
     </span>
   );
 }

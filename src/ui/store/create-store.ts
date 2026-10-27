@@ -7,7 +7,10 @@
  *   shows a toast with the mapped text).
  * - advance() / finishSeason() are busy-guarded (no double advance), yield
  *   one task so the "Simulating" state paints, commit atomically, then
- *   autosave into the rotating slots auto-1..3 (oldest overwritten).
+ *   autosave: a finished week (and a season end, and a new career) rotates over
+ *   auto-1..3 (oldest overwritten); a match paused between rounds goes to its own
+ *   slot, auto-round, overwritten after every round. So three weekly slots survive
+ *   a whole match week and a bad week can be rolled back.
  * - Every thrown error from core (a stub, a broken invariant) becomes an
  *   EngineError, never an uncaught exception in a screen.
  * - Command log since the last save, plus the last 20 for the debug overlay.
@@ -35,7 +38,7 @@ import {
 import { isValidSeed, seedFromEntropy } from '../../core/rng';
 import { ENGINE_VERSION } from '../../core/sim';
 import { deepFreeze, engineError, err, hashString, NotImplementedError, ok, type EngineError, type Result } from '../../core/util';
-import { AUTOSAVE_SLOTS, MANUAL_SLOT_COUNT } from '../../platform/save-store';
+import { AUTOSAVE_ROUND_SLOT, AUTOSAVE_SLOTS, MANUAL_SLOT_COUNT } from '../../platform/save-store';
 import { showToast } from '../components/Toast';
 import { configureFormat } from '../format';
 import { t } from '../text';
@@ -47,11 +50,12 @@ export const MATCH_PAUSED = 'match.paused';
 
 /** Manual slot ids "manual-1" .. "manual-10" (TUNABLE (tech): 10). */
 export const MANUAL_SLOT_IDS: readonly string[] = Array.from({ length: MANUAL_SLOT_COUNT }, (_, i) => `manual-${i + 1}`);
-export { AUTOSAVE_SLOTS };
+export { AUTOSAVE_ROUND_SLOT, AUTOSAVE_SLOTS };
 
-/** Player-facing slot name: "slot 3", "autosave 2". */
+/** Player-facing slot name: "slot 3", "autosave 2", "mid-match autosave". */
 export function slotName(slotId: string): string {
   const n = slotId.slice(slotId.lastIndexOf('-') + 1);
+  if (slotId === AUTOSAVE_ROUND_SLOT) return t('save.slotAutoRound');
   if (slotId.startsWith('auto-')) return t('save.slotAuto', { n });
   if (slotId.startsWith('manual-')) return t('save.slotManual', { n });
   return slotId;
@@ -62,8 +66,9 @@ export function isTicketSlot(slotId: string | null | undefined): boolean {
   return typeof slotId === 'string' && slotId.startsWith('ticket-');
 }
 
+/** Any autosave slot: the three weekly ones and the mid-match one. */
 export function isAutosaveSlot(slotId: string): boolean {
-  return (AUTOSAVE_SLOTS as readonly string[]).includes(slotId);
+  return (AUTOSAVE_SLOTS as readonly string[]).includes(slotId) || slotId === AUTOSAVE_ROUND_SLOT;
 }
 
 /** Map anything thrown by core into an EngineError (05 §2: no uncaught errors for expected gaps). */
@@ -283,8 +288,9 @@ export function createGameStore(platform: StorePlatform): AppStore {
         lastAdvanceMs.value = platform.clock.nowMs() - t0;
         dirty.value = true;
       });
-      // Every round is committed (P-05): a reload resumes on the between-round screen.
-      await autosave();
+      // Every round is committed (P-05): a reload resumes on the between-round screen. A paused match goes to its
+      // own slot; the weekly slots rotate only when the week is done.
+      await autosave(week ? 'week' : 'round');
       // Paused between rounds: not an error to show; the frame opens the between-round screen.
       if (!week) return err(engineError(MATCH_PAUSED, 'The match waits between rounds'));
       return ok(week);
@@ -387,17 +393,25 @@ export function createGameStore(platform: StorePlatform): AppStore {
     }
   };
 
-  /** Rotate over auto-1..3: first empty slot, else the oldest. Never during a running write. */
-  const autosave = async (): Promise<void> => {
+  /**
+   * 'week' (a week boundary): rotate over auto-1..3, first empty slot, else the oldest. 'round' (the player's match
+   * waits between rounds): overwrite auto-round, which holds the match in progress. Never during a running write.
+   */
+  const autosave = async (kind: 'week' | 'round' = 'week'): Promise<void> => {
     // A ticket reproduction never writes the shared autosave slots (they hold real careers).
     if (!game.value || isTicketSlot(loadedSlot.value)) return;
+    if (kind === 'round') {
+      const rounds = game.value.liveMatch?.rounds.length;
+      await writeSlot(AUTOSAVE_ROUND_SLOT, rounds ? `${defaultSaveLabel()} · ${t('save.afterRound', { n: rounds })}` : undefined, 'auto');
+      return;
+    }
     let metas: SaveMeta[];
     try {
       metas = await platform.saves.list();
     } catch {
       metas = [];
     }
-    const autos = metas.filter((m) => isAutosaveSlot(m.slotId));
+    const autos = metas.filter((m) => (AUTOSAVE_SLOTS as readonly string[]).includes(m.slotId));
     const free = AUTOSAVE_SLOTS.find((id) => !autos.some((m) => m.slotId === id));
     const oldest = [...autos].sort((a, b) => (a.savedAt < b.savedAt ? -1 : a.savedAt > b.savedAt ? 1 : a.slotId < b.slotId ? -1 : 1))[0];
     const slot = free ?? oldest?.slotId ?? AUTOSAVE_SLOTS[0];

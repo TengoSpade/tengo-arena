@@ -41,7 +41,7 @@ export const SETTINGS_TEXT = {
   'tickets.deleteTip': 'Delete ticket {id} from this browser',
   'tickets.deleted': 'Ticket {id} deleted',
   'autosave.label': 'Autosave',
-  'autosave.text': 'After every week processing and after the season-end step, rotating over {n} slots.',
+  'autosave.text': 'After every week processing and after the season-end step, rotating over {n} slots; your match in progress has a slot of its own, saved after every round.',
   'interface.title': 'Interface',
   'theme.label': 'Theme',
   'theme.dark': 'Dark',

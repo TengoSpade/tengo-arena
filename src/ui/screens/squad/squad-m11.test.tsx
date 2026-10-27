@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { GameState } from '../../../core/model';
 import { installShortcuts } from '../../app/shortcuts';
-import { resetToasts } from '../../components';
+import { resetToasts, toasts, undoLast } from '../../components';
 import { TestProviders, createTestStore } from '../../debug/test-store';
 import { coreEngine } from '../../store';
 import SquadScreen, { squadSelection } from './index';
@@ -48,6 +48,49 @@ describe('Squad: match squad of 5 + 2 and Freshness (M1.1)', () => {
     expect(screen.getByTestId('reserves-cover').textContent).toMatch(/Cover: /);
     // Every starter card carries a Freshness meter and the forecast after this match.
     for (const e of club.lineup.fighters) expect(screen.getByTestId(`fresh-${e.fighterId}`)).toBeTruthy();
+  });
+
+  it('labels the 2 match reserves apart from the rest of the bench', () => {
+    const { store } = createTestStore();
+    const next = structuredClone(store.game.value!) as GameState;
+    const club = next.clubs[next.playerClubId!]!;
+    const starters = new Set(club.lineup.fighters.map((e) => e.fighterId as string));
+    const bench = Object.values(next.fighters).filter((f) => f.clubId === club.id && !starters.has(f.id) && !(f.injury && f.injury.weeksOut > 0));
+    club.lineup.reserves = [bench[0]!.id, bench[1]!.id];
+    store.replaceWorld(next);
+    mount(store);
+    const marks = (id: string) => screen.getByTestId('roster-table').querySelector(`tr[data-fighter="${id}"] .row-mark`)!;
+    expect(marks(bench[0]!.id).querySelector(".row-mark__full")!.textContent).toBe("Match reserve");
+    expect(marks(bench[0]!.id).getAttribute('data-row')).toBe('reserve');
+    expect(marks(bench[2]!.id).textContent).toBe('Bench');
+    expect(marks(bench[2]!.id).getAttribute('data-row')).toBe('bench');
+  });
+
+  it('naming a third reserve replaces the one named first and the toast says who was dropped, with Undo', async () => {
+    const { store } = createTestStore();
+    const next = structuredClone(store.game.value!) as GameState;
+    const club = next.clubs[next.playerClubId!]!;
+    const starters = new Set(club.lineup.fighters.map((e) => e.fighterId as string));
+    const bench = Object.values(next.fighters).filter((f) => f.clubId === club.id && !starters.has(f.id) && !(f.injury && f.injury.weeksOut > 0));
+    club.lineup.reserves = [bench[0]!.id, bench[1]!.id];
+    store.replaceWorld(next);
+    mount(store);
+    await act(() => {
+      squadSelection.value = bench[2]!.id;
+    });
+    await act(() => {
+      fireEvent.keyDown(document.body, { key: 'm' });
+    });
+    expect(store.game.value!.clubs[club.id]!.lineup.reserves).toEqual([bench[1]!.id, bench[2]!.id]);
+    const toast = toasts.value.at(-1)!;
+    expect(toast.title).toContain(bench[2]!.name.full);
+    expect(toast.sub).toContain(bench[0]!.name.full);
+    expect(toast.sub).toMatch(/back on the bench/);
+    expect(toast.undo).toBeTruthy();
+    await act(() => {
+      undoLast();
+    });
+    expect(store.game.value!.clubs[club.id]!.lineup.reserves).toEqual([bench[0]!.id, bench[1]!.id]);
   });
 
   it('warns about a Tired starter and suggests resting him for a fresher fighter of his role (one click)', async () => {

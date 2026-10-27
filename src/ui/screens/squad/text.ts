@@ -74,6 +74,7 @@ export const T = {
   matchReservesTip: 'Two reserves travel with the five: up to 2 swaps between rounds, and they cover injuries. A fighter swapped out cannot return in that match. Select a bench fighter and press M, or drag him here.',
   reserveOn: '{name} named a match reserve',
   reserveOff: '{name} is no longer a match reserve',
+  reserveDropped: 'Both places were taken, so {name} is back on the bench. Undo brings him back.',
   reserveEmpty: 'Name a reserve',
   reserveRatingTip: 'Rating',
   reservesNamed: 'Match reserves named',

@@ -2,6 +2,11 @@
  * Modal dialog on the native <dialog> (04 §9: dialogs as <dialog>, initial
  * focus, Esc closes, focus returns to the opener). Only dialogs the player
  * opened appear (04 notification budget).
+ *
+ * Focus always lands inside: on [data-autofocus], else the primary footer button, else the first
+ * control, else the dialog itself (it is focusable, tabindex -1). A re-render, a route change or the
+ * opener leaving the page can take it away right after opening, and a focused control that goes
+ * (disabled, removed) drops it to <body>; both are put back, so a dialog's keys work at once.
  */
 import type { ComponentChildren } from 'preact';
 import { useEffect, useId, useRef } from 'preact/hooks';
@@ -24,6 +29,22 @@ export interface ModalProps {
   testId?: string;
 }
 
+/** Where focus goes when a dialog opens (or gets lost). */
+function initialFocusTarget(dlg: HTMLDialogElement): HTMLElement {
+  return (
+    dlg.querySelector<HTMLElement>('[data-autofocus]') ??
+    dlg.querySelector<HTMLElement>('.modal__footer .btn--primary, .modal__footer .btn--danger') ??
+    dlg.querySelector<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])') ??
+    dlg
+  );
+}
+
+/** True when focus is outside the dialog or on nothing (<body>). */
+function focusLost(dlg: HTMLDialogElement): boolean {
+  const a = document.activeElement;
+  return !a || a === document.body || a === document.documentElement || !dlg.contains(a);
+}
+
 export function Modal({ open, onClose, title, icon, size, children, footer, footerNote, onEnter, testId }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -33,7 +54,7 @@ export function Modal({ open, onClose, title, icon, size, children, footer, foot
 
   useEffect(() => {
     const dlg = ref.current;
-    if (!dlg) return;
+    if (!dlg) return undefined;
     if (open) {
       opener.current = document.activeElement;
       if (!dlg.open) {
@@ -45,16 +66,23 @@ export function Modal({ open, onClose, title, icon, size, children, footer, foot
           }
         } else dlg.setAttribute('open', '');
       }
-      const target =
-        dlg.querySelector<HTMLElement>('[data-autofocus]') ??
-        dlg.querySelector<HTMLElement>('.modal__footer .btn--primary, .modal__footer .btn--danger') ??
-        dlg.querySelector<HTMLElement>('button, [href], input, select');
-      target?.focus();
+      initialFocusTarget(dlg).focus();
+      // Focus taken away in the same tick (a re-render, a route change): put it back once things settle.
+      const recheck = () => {
+        if ((dlg.open || dlg.hasAttribute('open')) && focusLost(dlg)) initialFocusTarget(dlg).focus();
+      };
+      const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(recheck) : 0;
+      const timer = setTimeout(recheck, 150);
+      return () => {
+        if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
+        clearTimeout(timer);
+      };
     } else if (dlg.open || dlg.hasAttribute('open')) {
       if (typeof dlg.close === 'function') dlg.close();
       dlg.removeAttribute('open');
       if (opener.current instanceof HTMLElement && opener.current.isConnected) opener.current.focus();
     }
+    return undefined;
   }, [open]);
 
   useEffect(() => {
@@ -64,8 +92,19 @@ export function Modal({ open, onClose, title, icon, size, children, footer, foot
       e.preventDefault();
       closeRef.current();
     };
+    // The focused control went away (disabled, removed): focus fell to <body>. Bring it back into the dialog.
+    const onFocusOut = (e: FocusEvent) => {
+      if (e.relatedTarget) return;
+      setTimeout(() => {
+        if ((dlg.open || dlg.hasAttribute('open')) && focusLost(dlg)) initialFocusTarget(dlg).focus();
+      }, 0);
+    };
     dlg.addEventListener('cancel', onCancel);
-    return () => dlg.removeEventListener('cancel', onCancel);
+    dlg.addEventListener('focusout', onFocusOut);
+    return () => {
+      dlg.removeEventListener('cancel', onCancel);
+      dlg.removeEventListener('focusout', onFocusOut);
+    };
   }, []);
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -90,6 +129,7 @@ export function Modal({ open, onClose, title, icon, size, children, footer, foot
     <dialog
       ref={ref}
       class={`modal${size ? ` modal--${size}` : ''}`}
+      tabIndex={-1}
       aria-labelledby={titleId}
       data-testid={testId}
       onKeyDown={onKeyDown}

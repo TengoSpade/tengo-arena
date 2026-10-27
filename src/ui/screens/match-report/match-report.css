@@ -239,3 +239,58 @@
   order: 9;
   margin-top: calc(-1 * var(--sp-1));
 }
+
+/* Reserves who came in ("sub R2") and the bench XP rows (⅓ of a lineup slot). */
+.report-sub,
+.report-bench {
+  flex: none;
+  margin-left: var(--sp-1);
+  white-space: nowrap;
+}
+
+td > .report-bench {
+  margin-left: 0;
+  margin-right: var(--sp-2);
+}
+
+tr.is-bench td {
+  color: var(--c-text-muted);
+}
+
+.report-xp-bench dt,
+.report-xp-bench dd {
+  color: var(--c-text-muted);
+}
+
+/* Smaller than a tag elsewhere: it sits beside a name in a crowded row. */
+.report-sub {
+  padding: 0 0.3rem;
+  font-size: 0.68rem;
+}
+
+/* The box score now carries Freshness, so its two least-needed columns wait for more room (the Rule recaps below
+   hold every rule's fires): Control seconds from 1600 px, Rules fired from 2100 px. The names stay readable. */
+@media (max-width: 1599px) {
+  .report-col-1600 {
+    display: none;
+  }
+}
+
+@media (max-width: 2099px) {
+  .report-col-2100 {
+    display: none;
+  }
+}
+
+/* Class from 1900 px and Row from 1440 px: the box score table is 681 px wide at 1280 and widens column by column. */
+@media (max-width: 1899px) {
+  .report-col-1900 {
+    display: none;
+  }
+}
+
+@media (max-width: 1439px) {
+  .report-col-1440 {
+    display: none;
+  }
+}

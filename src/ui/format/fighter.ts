@@ -16,6 +16,11 @@ export function rolesOf(klass: ClassDef): string[] {
   return [...klass.archetypes];
 }
 
+/** A beginner-friendly class (role tag "starter", design 03 ★): shown as a small mark wherever classes are picked from. */
+export function isStarterClass(klass: Pick<ClassDef, 'roleTags'> | undefined): boolean {
+  return !!klass?.roleTags.includes('starter');
+}
+
 export function roleNames(klass: ClassDef, content: ContentDB): string[] {
   return klass.archetypes.map((a) => content.combat.archetypes.find((x) => x.id === a)?.name ?? a);
 }

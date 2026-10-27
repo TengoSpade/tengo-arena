@@ -10,7 +10,7 @@ import type { FighterId, GameState, MatchReport, SwapReason } from '../../../cor
 import { Tag, tipAttrs } from '../../components';
 import { labelFor } from '../../m11/model';
 import { FreshTag } from '../../m11/parts';
-import type { Perspective } from './analysis';
+import { benchXpOf, type Perspective } from './analysis';
 
 const REASON: Record<SwapReason, string> = { player: 'your swap', auto: 'auto', injury: 'forced: injury', emergency: 'emergency entrant' };
 
@@ -33,6 +33,9 @@ export function MatchDayPanel({ state, content, report, persp }: { state: GameSt
   const themSide = usSide === 'home' ? 'away' : 'home';
   const sides = [usSide, themSide] as const;
   const squadIds = [...tl.squads[usSide].starters, ...tl.squads[usSide].reserves, ...tl.emergencyEntrants.filter((id) => tl.fighters[id]?.side === usSide)];
+  // Bench XP (⅓ of a lineup slot) reaches reserves who never entered and the rest of the bench.
+  const bench = new Map(benchXpOf(report, persp, state).map((b) => [b.id, b.xp] as const));
+  const benchOnly = [...bench.keys()].filter((id) => !squadIds.includes(id));
   const levelsOf = (id: FighterId): number[] => {
     const f = state.fighters[id];
     if (!f) return [];
@@ -94,9 +97,10 @@ export function MatchDayPanel({ state, content, report, persp }: { state: GameSt
         <div>
           <div class="panel-section__title">XP and levels</div>
           <ul class="md-xp" role="list" data-testid="md-xp">
-            {squadIds.map((id) => {
+            {[...squadIds, ...benchOnly].map((id) => {
               const tf = tl.fighters[id];
-              const xp = report.aftermath.xp[id];
+              const xp = report.aftermath.xp[id] ?? bench.get(id);
+              const isBench = report.aftermath.xp[id] === undefined && bench.has(id);
               const levels = levelsOf(id);
               const procs = Object.entries(procsOf(report, id));
               const fate =
@@ -113,8 +117,9 @@ export function MatchDayPanel({ state, content, report, persp }: { state: GameSt
                 <li key={id} class="md-xp__row">
                   <span class="u-sm">{name(id)}</span>
                   {fate && <span class="u-xs u-muted md-xp__fate">{fate}</span>}
-                  <span class="l-push u-num u-sm" {...tipAttrs('XP from this match (rounds started; ⅓ of a slot for a reserve who did not enter)')}>
+                  <span class="l-push u-num u-sm" {...tipAttrs('XP from this match (rounds started; ⅓ of a slot, "bench ⅓", for a reserve or bench fighter who did not play)')}>
                     {xp !== undefined ? `+${xp} XP` : '—'}
+                    {isBench && <span class="tag tag--outline report-bench">bench ⅓</span>}
                   </span>
                   {levels.map((lv) => (
                     <Tag key={lv} kind="accent" icon="level-up" tip={`Reached level ${lv} with this match`}>

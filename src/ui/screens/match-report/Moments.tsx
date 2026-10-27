@@ -11,7 +11,7 @@ import { clubShort } from '../league/lib/club';
 import { fmtInt, fmtMoney, fmtTicks } from '../league/lib/format';
 import { href } from '../league/lib/store';
 import { Callout, Delta } from '../league/lib/ui';
-import { downSummaries, name, type FighterInfo, type Moment, type Perspective } from './analysis';
+import { benchXpOf, downSummaries, name, type FighterInfo, type Moment, type Perspective } from './analysis';
 import { isCareerEnding, weeksOutText } from '../../format/fighter';
 import { t } from './text';
 
@@ -186,6 +186,9 @@ export function Aftermath({
   const gold = report.aftermath.gold.filter((g) => g.clubId === persp.usClubId);
   const sevLabel = (id: string) => content.development.injury.severityLadder.find((s) => s.id === id)?.label ?? id;
   const weekIndex = state.fixtures[report.fixtureId]?.weekIndex ?? state.calendar.weekIndex;
+  const bench = benchXpOf(report, persp, state);
+  const benchTotal = bench.reduce((n, b) => n + b.xp, 0);
+  const starterXp = ours.reduce((n, f) => n + (report.aftermath.xp[f.id] ?? 0), 0);
   return (
     <section class="panel" aria-labelledby="h-after" data-testid="panel-after">
       <header class="panel__header">
@@ -239,14 +242,39 @@ export function Aftermath({
             .filter((f) => report.aftermath.xp[f.id] !== undefined)
             .sort((a, b) => (report.aftermath.xp[b.id] ?? 0) - (report.aftermath.xp[a.id] ?? 0))
             .map((f) => (
-              <div key={f.id}>
-                <dt>{name(state, f.id)}</dt>
+              <div key={f.id} data-testid="xp-row">
+                <dt>
+                  {name(state, f.id)}
+                  {f.enteredRound !== null && (
+                    <span class="tag tag--info report-sub" data-tip={t('tip.sub', { round: f.enteredRound, out: f.entry?.out ? name(state, f.entry.out) : t('tip.subNobody'), how: f.entry?.reason === 'injury' ? 'forced by an injury' : f.entry?.reason === 'player' ? 'your swap' : f.entry?.reason === 'emergency' ? 'emergency entrant' : 'auto-swap' })}>
+                      {t('sub', { round: f.enteredRound })}
+                    </span>
+                  )}
+                </dt>
                 <dd>
                   <Delta value={report.aftermath.xp[f.id]!} /> XP
                 </dd>
               </div>
             ))}
+          {bench.map((b) => (
+            <div key={b.id} class="report-xp-bench" data-testid="xp-bench-row">
+              <dt>
+                {name(state, b.id)}
+                <span class="tag tag--outline report-bench" data-tip={b.reserve ? t('tip.benchReserve') : t('tip.bench')}>
+                  {t('bench.tag')}
+                </span>
+              </dt>
+              <dd>
+                <Delta value={b.xp} /> XP
+              </dd>
+            </div>
+          ))}
         </dl>
+        {bench.length > 0 && (
+          <p class="u-xs u-muted" data-testid="xp-total">
+            {t('xpTotal.bench', { starters: starterXp, bench: benchTotal, total: starterXp + benchTotal })}
+          </p>
+        )}
       </div>
     </section>
   );

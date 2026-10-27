@@ -15,6 +15,7 @@ export {
   isTicketSlot,
   slotName,
   MANUAL_SLOT_IDS,
+  AUTOSAVE_ROUND_SLOT,
   AUTOSAVE_SLOTS,
   type AppStore,
 } from './create-store';

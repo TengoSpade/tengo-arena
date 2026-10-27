@@ -9,6 +9,7 @@ import { personName, type Fighter, type FighterId, type GameState } from '../../
 import * as C from '../../../components';
 import type { IconName } from '../../../components';
 import { playerText } from '../../../format';
+import { isStarterClass } from '../../../format/fighter';
 import { href } from './store';
 import { tc } from './text';
 
@@ -44,9 +45,9 @@ export function Portrait({
   );
 }
 
-export function ClassTag({ content, classId }: { content: ContentDB; classId: string }) {
+export function ClassTag({ content, classId, starter }: { content: ContentDB; classId: string; /** Mark a starter class with the small star (lists a class is picked from). */ starter?: boolean }) {
   const roles = classRoles(content, classId);
-  return <C.ClassTag name={content.classes.get(classId)?.name ?? classId} roles={roles} roleNames={roleNames(content, roles)} />;
+  return <C.ClassTag name={content.classes.get(classId)?.name ?? classId} roles={roles} roleNames={roleNames(content, roles)} starter={starter && isStarterClass(content.classes.get(classId))} />;
 }
 
 export function fighterName(state: GameState, id: FighterId | null | undefined): string {

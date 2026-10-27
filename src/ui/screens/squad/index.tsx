@@ -634,12 +634,6 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
         {r.view ? <Rating value={r.view.rating} tip={ratingTip(r.view, r.klass, content, tier)} /> : <span class="u-faint">—</span>}
       </div>
       <div class="lineup-card__foot lineup-card__meta">
-        {risk && (
-          // Normal risk is the quiet default: icon only (the word stays for screen readers and the tooltip).
-          <span {...tipAttrs(risk.tip)} class={risk.atRisk ? 'lineup-card__risk u-warn' : 'lineup-card__risk'}>
-            <Icon name="injury" size="sm" /> <span class={risk.notable ? undefined : 'u-sr-only'}>{risk.word}</span>
-          </span>
-        )}
         <FreshMeter info={fresh} content={content} testId={`fresh-${r.f.id}`} />
         <span
           class={`lineup-card__proj u-xs${willTire ? ' u-warn' : ' u-muted'}`}
@@ -647,6 +641,13 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
         >
           {format(T.freshProjection, { n: fresh.afterMatch })}
         </span>
+        {risk && (
+          // Normal risk is the quiet default: icon only (the word stays for screen readers and the tooltip). A notable one
+          // (Still tender, At risk) names itself, on a line of its own when the card is narrow.
+          <span {...tipAttrs(risk.tip)} class={`lineup-card__risk${risk.atRisk ? ' u-warn' : ''}${risk.notable ? ' lineup-card__risk--notable' : ''}`}>
+            <Icon name="injury" size="sm" /> <span class={risk.notable ? undefined : 'u-sr-only'}>{risk.word}</span>
+          </span>
+        )}
         <button class="lineup-card__lvl" type="button" onClick={(e) => {
           e.stopPropagation();
           if (level.pending > 0) levelUpRequest.value = r.f.id;
@@ -749,7 +750,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
           {weeksOutText(r.f.injury)}
         </Tag>
       ) : (
-        <RowMark row={r.entry ? r.entry.row : 'bench'} />
+        <RowMark row={r.entry ? r.entry.row : (club.lineup.reserves ?? []).includes(r.f.id) ? 'reserve' : 'bench'} />
       ),
   };
   const preset: Column<Row> = {
