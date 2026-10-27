@@ -16,7 +16,7 @@ import { signal } from '@preact/signals';
 import { useMemo, useState } from 'preact/hooks';
 import type { ClassDef, ContentDB } from '../../../core/content';
 import type { FighterView } from '../../../core/game';
-import type { Club, Fighter, FighterId, GameState, LineupEntry, StatId } from '../../../core/model';
+import { fieldedFive, type Club, type Fighter, type FighterId, type GameState, type LineupEntry, type StatId } from '../../../core/model';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
 import { levelUpRequest } from '../../app/intents';
@@ -721,8 +721,8 @@ function lastLineup(state: GameState, club: Club): LineupEntry[] | null {
     .filter((r) => r.homeClubId === club.id || r.awayClubId === club.id)
     .sort((a, b) => b.weekIndex - a.weekIndex)[0];
   if (!last) return null;
-  const side = last.homeClubId === club.id ? last.input.home : last.input.away;
-  const entries = side.fighters.filter((f) => state.fighters[f.fighterId]?.clubId === club.id).map((f) => ({ fighterId: f.fighterId, row: f.row }));
+  const five = fieldedFive(last, last.homeClubId === club.id ? 'home' : 'away');
+  const entries = five.filter((f) => state.fighters[f.fighterId]?.clubId === club.id).map((f) => ({ fighterId: f.fighterId, row: f.row }));
   return entries.length > 0 ? entries : null;
 }
 

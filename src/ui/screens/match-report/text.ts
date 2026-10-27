@@ -247,7 +247,7 @@ export const REPORT_TEXT = {
   'error.title': 'This report could not be built',
   'why.gap': 'Their five averaged a rating of {them} against your {us}: a gap this size is hard to close with tactics alone.',
   'compacted.title': 'Summary only',
-  'compacted.text': 'This match between other clubs is from an earlier season, so only the score, the round results and each fighter’s rounds, downs, damage and healing are kept, to keep saves small. Your own matches keep their full reports.',
+  'compacted.text': 'The detailed report of an older match between other clubs is not kept, to keep saves small. What is kept: the score, the round results and each fighter’s rounds, downs, damage and healing. Your own matches keep their full reports.',
   'error.notPlayed': 'This fixture has not been played yet.',
   'error.back': 'Back to fixtures',
   'hired': 'Hired blade',
