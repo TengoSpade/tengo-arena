@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { STATE_SCHEMA_VERSION, asId, type ClassId, type FighterId, type GameState, type SaveEnvelope } from '../model';
-import { buildFixtureWorld, fixtureContent } from '../testkit';
+import { SAVE_BOUNDS } from '../content';
+import { STATE_SCHEMA_VERSION, asId, type ClassId, type ClubId, type FighterId, type GameState, type SaveEnvelope } from '../model';
+import { buildFixtureWorld, fixtureContent, fixtureMatchState, fixturePendingLevelUp } from '../testkit';
 import { cloneJson, deepFreeze } from '../util';
 import {
   MIGRATIONS,
@@ -12,6 +13,7 @@ import {
   saveMetaFor,
   serializeSave,
   validateState,
+  GameStateSchema,
   type Migration,
 } from './index';
 
@@ -343,6 +345,52 @@ describe('tampered saves: inherited names as ids or keys', () => {
     expect(validateState(s, content)).toEqual([]);
     s.playerClubId = asId('constructor');
     expect(validateState(s, content)).toEqual([{ path: 'playerClubId', message: 'reserved name "constructor" is not a valid id' }]);
+  });
+});
+
+describe('structure bounds come from SAVE_BOUNDS (the same constants the content validator checks)', () => {
+  /** Paths the strict schema refuses (structure only: the references of a hand-built live match are not under test). */
+  const structureIssues = (state: GameState): string[] => {
+    const r = GameStateSchema.safeParse(state);
+    return r.success ? [] : r.error.issues.map((i) => i.path.join('.'));
+  };
+
+  it('the queue of unresolved level-ups: SAVE_BOUNDS.pendingLevelUps is accepted, one more is refused', () => {
+    const state = world();
+    const f = Object.values(state.fighters).find((x) => x.status === 'active')!;
+    f.pendingLevelUps = Array.from({ length: SAVE_BOUNDS.pendingLevelUps }, (_, i) => fixturePendingLevelUp(f, content, { level: f.level + 1 + i }));
+    expect(structureIssues(state)).toEqual([]);
+    f.pendingLevelUps = [...f.pendingLevelUps, fixturePendingLevelUp(f, content, { level: f.level + 9 })];
+    expect(structureIssues(state).some((p) => p.includes(`fighters.${f.id}.pendingLevelUps`))).toBe(true);
+  });
+
+  it('swaps used in a live match: SAVE_BOUNDS.swapsPerMatch is accepted, one more is refused', () => {
+    const state = world();
+    const [home, away] = Object.keys(state.clubs) as ClubId[];
+    state.liveMatch = fixtureMatchState(state, home!, away!, content);
+    state.liveMatch.home.swapsUsed = SAVE_BOUNDS.swapsPerMatch;
+    expect(structureIssues(state)).toEqual([]);
+    state.liveMatch.home.swapsUsed = SAVE_BOUNDS.swapsPerMatch + 1;
+    expect(structureIssues(state).some((p) => p.includes('liveMatch.home.swapsUsed'))).toBe(true);
+  });
+
+  it('squad size and reserves: the schema follows SAVE_BOUNDS.squadStarters and squadReserves', () => {
+    const state = world();
+    const [home, away] = Object.keys(state.clubs) as ClubId[];
+    state.liveMatch = fixtureMatchState(state, home!, away!, content);
+    expect(state.liveMatch.home.active).toHaveLength(SAVE_BOUNDS.squadStarters);
+    expect(state.liveMatch.home.squad.reserves.length).toBeLessThanOrEqual(SAVE_BOUNDS.squadReserves);
+    expect(structureIssues(state)).toEqual([]);
+    const extra = Object.keys(state.fighters).find((id) => !state.liveMatch!.home.squad.starters.includes(id as FighterId) && !state.liveMatch!.home.squad.reserves.includes(id as FighterId))! as FighterId;
+    state.liveMatch.home.squad.reserves = [...state.liveMatch.home.squad.reserves, extra, extra, extra].slice(0, SAVE_BOUNDS.squadReserves + 1);
+    expect(structureIssues(state).some((p) => p.startsWith('liveMatch.home.squad.reserves'))).toBe(true);
+    state.liveMatch.home.squad.reserves = [];
+    state.liveMatch.home.active = state.liveMatch.home.active.slice(0, SAVE_BOUNDS.squadStarters - 1);
+    expect(structureIssues(state).some((p) => p.startsWith('liveMatch.home.active'))).toBe(true);
+  });
+
+  it('the bounds are the documented values (changing one is a save-format change)', () => {
+    expect(SAVE_BOUNDS).toEqual({ squadStarters: 5, squadReserves: 2, swapsPerMatch: 2, pendingLevelUps: 3, levelUpOptions: 3, perksPerFighter: 4 });
   });
 });
 

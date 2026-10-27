@@ -7,7 +7,7 @@
  * adds a migration, and updates these schemas in the same change.
  */
 import { z } from 'zod';
-import { AUTO_SWAP_MODES, LEVEL_UP_MODES, LEVEL_UP_PACING, PAUSE_BETWEEN_ROUNDS, RANKABLE_SLOTS } from '../content';
+import { AUTO_SWAP_MODES, LEVEL_UP_MODES, LEVEL_UP_PACING, PAUSE_BETWEEN_ROUNDS, RANKABLE_SLOTS, SAVE_BOUNDS } from '../content';
 import { LEDGER_CATEGORIES, SAVE_FORMAT, SEASON_PHASES } from '../model';
 
 const int = z.number().int();
@@ -34,8 +34,8 @@ const tacticsAssignment = z.union([
 const startingRow = z.enum(['front', 'back']);
 
 const lineup = z.strictObject({
-  fighters: z.array(z.strictObject({ fighterId: id, row: startingRow })).max(5),
-  reserves: z.array(id).max(2),
+  fighters: z.array(z.strictObject({ fighterId: id, row: startingRow })).max(SAVE_BOUNDS.squadStarters),
+  reserves: z.array(id).max(SAVE_BOUNDS.squadReserves),
   matchCaptainId: nullableId,
   tactics: z.record(z.string(), tacticsAssignment),
 });
@@ -65,7 +65,7 @@ const pendingLevelUp = z.strictObject({
   level: int.min(1),
   season: int,
   weekIndex: int,
-  options: z.array(levelOption).max(3),
+  options: z.array(levelOption).max(SAVE_BOUNDS.levelUpOptions),
   traitOffer: z.array(id).length(2).nullable(),
 });
 const resolvedLevelUp = z.strictObject({
@@ -251,10 +251,10 @@ const fighter = z.strictObject({
   level: int.min(1),
   xpIntoLevel: nonNegInt,
   xpNeeded: int.min(1),
-  pendingLevelUps: z.array(pendingLevelUp).max(3),
+  pendingLevelUps: z.array(pendingLevelUp).max(SAVE_BOUNDS.pendingLevelUps),
   levelUpMode: z.union([z.literal('inherit'), levelUpMode]),
   abilityRanks,
-  perkIds: z.array(id).max(4),
+  perkIds: z.array(id).max(SAVE_BOUNDS.perksPerFighter),
   freshness10: int.min(0).max(1000),
   career: careerStats,
   season: seasonCounters,
@@ -357,7 +357,7 @@ const fightFighterInput = z.strictObject({
     .optional(),
   freshness: int.min(0).max(100).optional(),
   abilityRanks: abilityRanks.optional(),
-  perkIds: z.array(id).max(4).optional(),
+  perkIds: z.array(id).max(SAVE_BOUNDS.perksPerFighter).optional(),
   enteredThisRound: z.boolean().optional(),
 });
 
@@ -373,8 +373,8 @@ const matchInput = z.strictObject({ seed: id, bestOf: int, home: sideInput, away
 
 // ---- M1.1 squads, swaps, round lineups ----
 const matchSquad = z.strictObject({
-  starters: z.array(id).length(5),
-  reserves: z.array(id).max(2),
+  starters: z.array(id).length(SAVE_BOUNDS.squadStarters),
+  reserves: z.array(id).max(SAVE_BOUNDS.squadReserves),
   rows: z.record(z.string(), startingRow),
   captainId: nullableId,
   viceCaptainId: nullableId,
@@ -390,13 +390,13 @@ const betweenRoundRecord = z.strictObject({
   freshness: z.record(z.string(), int.min(0).max(100)),
 });
 const roundSideLineup = z.strictObject({
-  fighterIds: z.array(id).length(5),
-  rows: z.array(startingRow).length(5),
+  fighterIds: z.array(id).length(SAVE_BOUNDS.squadStarters),
+  rows: z.array(startingRow).length(SAVE_BOUNDS.squadStarters),
   captainIndex: int,
   viceCaptainIndex: int.nullable(),
   captainQuality: int,
-  freshness: z.array(int.min(0).max(100)).length(5),
-  entered: z.array(z.boolean()).length(5),
+  freshness: z.array(int.min(0).max(100)).length(SAVE_BOUNDS.squadStarters),
+  entered: z.array(z.boolean()).length(SAVE_BOUNDS.squadStarters),
 });
 const roundLineups = z.strictObject({ round: int.min(1), home: roundSideLineup, away: roundSideLineup });
 
@@ -480,11 +480,11 @@ const matchResult = z.strictObject({
 const matchSideState = z.strictObject({
   clubId: id,
   squad: matchSquad,
-  active: z.array(id).length(5),
-  rows: z.array(startingRow).length(5),
+  active: z.array(id).length(SAVE_BOUNDS.squadStarters),
+  rows: z.array(startingRow).length(SAVE_BOUNDS.squadStarters),
   withdrawn: z.array(id),
   unusedReserves: z.array(id),
-  swapsUsed: int.min(0).max(2),
+  swapsUsed: int.min(0).max(SAVE_BOUNDS.swapsPerMatch),
   injured: z.array(id),
   emergencyEntrants: z.array(id),
   actingCaptainId: nullableId,

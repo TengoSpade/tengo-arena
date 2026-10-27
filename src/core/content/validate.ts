@@ -10,6 +10,7 @@
 import { compareNumbers, isReservedName } from '../util';
 import { isDocKey } from './doc-keys';
 import type { ContentIssue } from './issues';
+import { SAVE_BOUNDS } from './save-bounds';
 import {
   AFFINITY_GROUPS,
   ARCHETYPE_IDS,
@@ -624,16 +625,49 @@ function pointerUnitKey(path: string): string {
 
 type AbilityLike = ContentFiles['abilities']['abilities'][number];
 
-function hardControlDurations(a: AbilityLike, statusById: M11Ctx['statusById']): string {
+/** Status categories whose durations a rank may never lengthen (owner rule: control durations never grow with rank). */
+const CONTROL_CATEGORIES: ReadonlySet<string> = new Set(['cc_hard', 'cc_soft']);
+
+/**
+ * The control durations an ability applies (hard and soft control), as one comparable string: every status effect
+ * whose status is cc_hard or cc_soft, with its path and duration. A rank step that changes the string lengthened,
+ * shortened or moved a control.
+ */
+function controlDurations(a: AbilityLike, statusById: M11Ctx['statusById']): string {
   const out: string[] = [];
   const visit = (e: Effect, p: string): void => {
-    if (e.type === 'status' && statusById.get(e.status)?.category === 'cc_hard') out.push(`${p}=${e.durationS}`);
+    const category = e.type === 'status' ? statusById.get(e.status)?.category : undefined;
+    if (e.type === 'status' && category !== undefined && CONTROL_CATEGORIES.has(category)) out.push(`${p}=${e.durationS}`);
   };
   forEachEffect(a.effects, 'effects', visit);
   forEachEffect(a.allyEffects, 'allyEffects', visit);
   forEachEffect(a.selfEffects, 'selfEffects', visit);
   a.passive?.triggers.forEach((t, ti) => forEachEffect(t.effects, `passive.triggers[${ti}].effects`, visit));
   return out.join();
+}
+
+/**
+ * Content values that become array lengths or counters in the persisted state must fit the save schema
+ * (core/save/schema.ts reads the same SAVE_BOUNDS), or a save written with the tuned value could not be loaded again.
+ */
+function validateSaveBounds(c: Collector, f: ContentFiles): void {
+  const b = SAVE_BOUNDS;
+  const over = (file: string, path: string, value: number, limit: number, name: string, exact = false): void => {
+    if (exact ? value !== limit : value > limit) {
+      c.error(
+        file,
+        path,
+        `${value} ${exact ? 'differs from' : 'exceeds'} the save format's ${name} (${limit}): a save holding it would not load. Keep the value ${exact ? 'equal to' : 'at or below'} ${limit} or widen SAVE_BOUNDS in core/content/save-bounds.ts (a save-format change)`,
+      );
+    }
+  };
+  const m = f.combat.match;
+  over('combat.json', 'match.squad.starters', m.squad.starters, b.squadStarters, 'squad size (starters per side)', true);
+  over('combat.json', 'match.squad.reservesMax', m.squad.reservesMax, b.squadReserves, 'reserves per squad');
+  over('combat.json', 'match.swaps.maxPerMatch', m.swaps.maxPerMatch, b.swapsPerMatch, 'swaps per match');
+  over('levels.json', 'offers.pending.maxQueued', f.levels.offers.pending.maxQueued, b.pendingLevelUps, 'queued level-ups per fighter');
+  over('levels.json', 'offers.optionsPerLevelUp', f.levels.offers.optionsPerLevelUp, b.levelUpOptions, 'options per level-up offer');
+  over('perks.json', 'rules.perkCap', f.perks.rules.perkCap, b.perksPerFighter, 'perks per fighter');
 }
 
 function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
@@ -648,6 +682,7 @@ function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
   checkClosedList(c, CF, 'match.pauseBetweenRounds.options', m.pauseBetweenRounds.options, PAUSE_BETWEEN_ROUNDS, 'pause options');
   if (m.squad.reservesMin > m.squad.reservesMax) c.error(CF, 'match.squad', 'reservesMin > reservesMax');
   if (m.swaps.maxPerMatch > m.squad.reservesMax) c.warn(CF, 'match.swaps.maxPerMatch', 'more swaps than reserves (only injuries could use them)');
+  validateSaveBounds(c, f);
   const fz = combat.freshness;
   if (fz.fullPenaltyAtOrBelow >= fz.thresholdBelow) c.error(CF, 'freshness.fullPenaltyAtOrBelow', 'must be below thresholdBelow');
   if (fz.resistClamp[0] > fz.resistClamp[1]) c.error(CF, 'freshness.resistClamp', 'min > max');
@@ -688,7 +723,7 @@ function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
       c.error(AR, `${p}.ranks`, 'rankable abilities list rank 2 then rank 3');
       return;
     }
-    const hard = hardControlDurations(ab, statusById);
+    const control = controlDurations(ab, statusById);
     const work = structuredClone(ab) as AbilityLike;
     row.ranks.forEach((r, ri) => {
       r.changes.forEach((ch, ci) => {
@@ -705,7 +740,7 @@ function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
         if (rule && !isExact(ch.to, rule.factor)) c.error(AR, `${cp}.to`, `${ch.to} does not convert exactly to ${rule.unit}`);
       });
       const rp = `${p}.ranks[${ri}]`;
-      if (hardControlDurations(work, statusById) !== hard) c.error(AR, rp, 'ranks never change hard-control durations');
+      if (controlDurations(work, statusById) !== control) c.error(AR, rp, `rank ${r.rank} changes a control duration (${control} -> ${controlDurations(work, statusById)}): ranks never change hard or soft control durations`);
       if (work.kind === 'active') {
         if (work.cooldownS < 1) c.error(AR, rp, `rank ${r.rank} cooldown ${work.cooldownS} s is below 1 s`);
         if (work.focusCost < 10) c.error(AR, rp, `rank ${r.rank} focus cost ${work.focusCost} is below 10`);

@@ -5438,21 +5438,14 @@
         },
         {
           "rank": 3,
-          "summary": "Slowed 3 → 4 s; Sluggish 3 → 4 s",
+          "summary": "cooldown 12 → 10.5 s",
           "changes": [
             {
-              "path": "/effects/0/durationS",
-              "from": 3,
-              "to": 4,
-              "kind": "duration",
-              "label": "Slowed 3 → 4 s"
-            },
-            {
-              "path": "/effects/1/durationS",
-              "from": 3,
-              "to": 4,
-              "kind": "duration",
-              "label": "Sluggish 3 → 4 s"
+              "path": "/cooldownS",
+              "from": 12,
+              "to": 10.5,
+              "kind": "cooldown",
+              "label": "cooldown 12 → 10.5 s"
             }
           ]
         }

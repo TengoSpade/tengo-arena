@@ -12,6 +12,7 @@ import {
   secondsToTicks,
   type ContentIssue,
   type RawContentFiles,
+  SAVE_BOUNDS,
 } from './index';
 
 type Mutable = Record<string, unknown>;
@@ -143,6 +144,57 @@ describe('loadContent: errors are precise and collected', () => {
     const issues = errorsOf(raw(), 'theme');
     expect(issues.some((i) => i.message.includes('expected 42 classes'))).toBe(true);
     expect(issues.some((i) => i.message.includes('base classes, expected 6'))).toBe(true);
+  });
+
+  it('refuses content whose counts exceed the save format (SAVE_BOUNDS), with the offending path and the bound', () => {
+    expect(errorsOf(raw())).toEqual([]);
+    const cases: { file: string; path: string; name: string; set: (files: Record<string, Mutable>, value: number) => void; value: number }[] = [
+      { file: 'levels.json', path: 'offers.pending.maxQueued', name: 'queued level-ups', value: SAVE_BOUNDS.pendingLevelUps + 1, set: (f, v) => (((f['levels']!['offers'] as Mutable)['pending'] as Mutable)['maxQueued'] = v) },
+      { file: 'combat.json', path: 'match.swaps.maxPerMatch', name: 'swaps per match', value: SAVE_BOUNDS.swapsPerMatch + 1, set: (f, v) => (((f['combat']!['match'] as Mutable)['swaps'] as Mutable)['maxPerMatch'] = v) },
+      { file: 'combat.json', path: 'match.squad.reservesMax', name: 'reserves per squad', value: SAVE_BOUNDS.squadReserves + 1, set: (f, v) => (((f['combat']!['match'] as Mutable)['squad'] as Mutable)['reservesMax'] = v) },
+      { file: 'combat.json', path: 'match.squad.starters', name: 'squad size', value: SAVE_BOUNDS.squadStarters + 1, set: (f, v) => (((f['combat']!['match'] as Mutable)['squad'] as Mutable)['starters'] = v) },
+      { file: 'levels.json', path: 'offers.optionsPerLevelUp', name: 'options per level-up offer', value: SAVE_BOUNDS.levelUpOptions + 1, set: (f, v) => (((f['levels']!['offers'] as Mutable)['optionsPerLevelUp'] = v)) },
+      { file: 'perks.json', path: 'rules.perkCap', name: 'perks per fighter', value: SAVE_BOUNDS.perksPerFighter + 1, set: (f, v) => (((f['perks']!['rules'] as Mutable)['perkCap'] = v)) },
+    ];
+    for (const k of cases) {
+      const files = raw();
+      k.set(files, k.value);
+      const hit = errorsOf(files).find((i) => i.file === k.file && i.path === k.path);
+      expect(hit, `${k.file} ${k.path}`).toBeDefined();
+      expect(hit!.message).toContain(k.name);
+      expect(hit!.message).toContain('SAVE_BOUNDS');
+      expect(hit!.message).toContain(`${k.value}`);
+    }
+  });
+
+  it('accepts content at or below the save format bounds, also a smaller squad of reserves and fewer queued level-ups', () => {
+    const files = raw();
+    (((files['levels']!['offers'] as Mutable)['pending'] as Mutable)['maxQueued']) = 1;
+    (((files['combat']!['match'] as Mutable)['squad'] as Mutable)['reservesMax']) = 1;
+    (((files['combat']!['match'] as Mutable)['squad'] as Mutable)['reservesMin']) = 0;
+    (((files['combat']!['match'] as Mutable)['swaps'] as Mutable)['maxPerMatch']) = 1;
+    (((files['levels']!['matchSquad'] as Mutable)['reserves'])) = 1;
+    (((files['levels']!['matchSquad'] as Mutable)['maxSwapsPerMatch'])) = 1;
+    expect(errorsOf(files)).toEqual([]);
+  });
+
+  it('refuses a rank step that changes a control duration, hard or soft (control never grows with rank)', () => {
+    expect(errorsOf(raw())).toEqual([]);
+    const rankRow = (files: Record<string, Mutable>, abilityId: string): Mutable => list(files['ability-ranks']!, 'ranks').find((r) => r['abilityId'] === abilityId)!;
+    // soft control: Hamstring's Slowed (effects[1]) 2.5 s -> 3 s at rank 3
+    const soft = raw();
+    ((rankRow(soft, 'gutterknife_hamstring')['ranks'] as Mutable[])[1]!['changes'] as Mutable[]).push({ path: '/effects/1/durationS', from: 2.5, to: 3, kind: 'duration', label: 'Slowed 2.5 → 3 s' });
+    const softIssue = errorsOf(soft).find((i) => i.file === 'ability-ranks.json' && i.message.includes('control duration'));
+    expect(softIssue).toBeDefined();
+    expect(softIssue!.message).toContain('effects[1]=2.5');
+    expect(softIssue!.message).toContain('effects[1]=3');
+    // hard control: Shield Bash's Stun (effects[?]) is still checked
+    const hard = raw();
+    const bash = list(hard['abilities']!, 'abilities').find((a) => a['id'] === 'oathguard_shield_bash')!;
+    const at = (bash['effects'] as Mutable[]).findIndex((e) => e['status'] === 'stun');
+    const ranksOfBash = rankRow(hard, 'oathguard_shield_bash')['ranks'] as Mutable[];
+    (ranksOfBash[0]!['changes'] as Mutable[]).push({ path: `/effects/${at}/durationS`, from: 0.8, to: 1, kind: 'duration', label: 'Stunned 0.8 → 1 s' });
+    expect(errorsOf(hard).some((i) => i.file === 'ability-ranks.json' && i.message.includes('control duration'))).toBe(true);
   });
 
   it('formats issues one per line, errors first', () => {

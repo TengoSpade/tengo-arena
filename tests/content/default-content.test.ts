@@ -49,4 +49,18 @@ ${formatContentIssues(shipped.ok ? [] : shipped.error)}`);
     expect(db.weeks.list).toHaveLength(db.economy.season.wageWeeksPerSeason);
     expect(db.development.decline.mentalDeclineScalesWithLifespan).toBe(true);
   });
+
+  // Owner rule: control durations never grow with rank. The validator checks hard and soft control for every
+  // rank row (cc_hard and cc_soft); this pins the row that used to lengthen Slowed / Sluggish at rank 3.
+  it('Torpor Field: Slowed and Sluggish keep their 3 s at every rank; rank 3 is a shorter cooldown instead', () => {
+    if (!result.ok) return;
+    const db = result.value;
+    const ability = db.abilities.require('hourglass_sage_torpor_field');
+    const row = db.files['ability-ranks'].ranks.find((r) => r.abilityId === 'hourglass_sage_torpor_field')!;
+    const durations = ability.effects.flatMap((e) => (e.type === 'status' ? [e.durationS] : []));
+    expect(durations).toEqual([3, 3]);
+    for (const rank of row.ranks) for (const change of rank.changes) expect(change.path).not.toMatch(/durationS$/);
+    const rank3 = row.ranks.find((r) => r.rank === 3)!;
+    expect(rank3.changes).toEqual([expect.objectContaining({ path: '/cooldownS', from: ability.kind === 'active' ? ability.cooldownS : -1, to: 10.5, kind: 'cooldown' })]);
+  });
 });

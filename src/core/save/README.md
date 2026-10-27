@@ -22,6 +22,7 @@ Structure (strict: an unknown key is an error, so a module writing an undeclared
 - The v2 checksum depends on key order. JSON.parse keeps it, so a parsed save hashes the same; states built by the engine are deterministic in key order too.
 - **v1 → v2** (`migrations.ts`): retired fighters and past hired blades move to `alumni`, and every shortlist, lineup, offer and negotiation entry naming them is dropped; agreed renewals move from negotiations to `Contract.next`; `FreeAgency.enteredAt`, `Injury.careerEnding` and `TierSeasonRecord.reckoningStages` (from the clubs' season rows) are filled in; fighter history rows keep display stats on the last two rows only.
 - After a migration the envelope carries the checksum of the migrated state and `migratedFrom`.
+- Array lengths and counters that content values feed into (squad size, reserves, swaps per match, queued level-ups, options per level-up, perks per fighter) are built from `SAVE_BOUNDS` (`core/content/save-bounds.ts`), the same constants `core/content/validate.ts` checks the content against, so tuning a content value past the schema is refused at content load instead of producing a save that cannot be loaded.
 - The schema mirrors `core/model`; a model change bumps `STATE_SCHEMA_VERSION`, adds a migration and updates `schema.ts` together (architect).
 
 ## Orchestrator decisions (M1 core fix round, pending owner confirmation)
