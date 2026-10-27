@@ -146,4 +146,13 @@ export const LeaguesFileSchema = z.object({
     weekProcessingOrder: z.array(z.string()),
     seasonEndOrder: z.array(z.string()),
   }).strict(),
+  /**
+   * Optional: a content set without it (the frozen test fixture, whose hash pins the sim goldens) compacts after
+   * DEFAULT_COMPACT_AI_MATCHES_AFTER_WEEKS (core/league). content/default always carries it.
+   */
+  matchRecords: z.object({
+    _doc: z.string().optional(),
+    /** Weeks after which a match between two other clubs is compacted (1-99; 23 or more: never in season). */
+    compactAiMatchesAfterWeeks: int().min(1).max(99),
+  }).strict().optional(),
 }).strict();

@@ -7,6 +7,8 @@
 import type { ContentDB } from '../content';
 import {
   asId,
+  compactFielded,
+  fieldedFive,
   leagueCompetitionId,
   reckoningCompetitionId,
   type ClubId,
@@ -189,14 +191,26 @@ export function leagueSeasonColumnsImpl(state: GameState, record: SeasonRecord, 
 
 /**
  * Seasons whose fixtures, results and competitions are kept: the current and
- * the previous season (05 §5, TUNABLE (tech)). Within that window only the
- * current season and the player club's matches of the previous season keep
- * full detail; the previous season's other results are compacted (scores,
- * round summaries, winner, MVP and hired blades stay; sim fighters, per-round
- * final HP and per-fighter stats go). Older seasons are dropped entirely:
- * their tables, titles and movements live in history (SeasonRecord).
+ * the previous season (05 §5, TUNABLE (tech)). Matches between other clubs
+ * are compacted twice over: in season, once they are
+ * `leagues.json matchRecords.compactAiMatchesAfterWeeks` weeks old
+ * (`compactAgedResultsImpl`), and at the season end for the season just
+ * played (`compactHistoryImpl`: whatever the in-season rule had not reached
+ * yet, the last few weeks). The player club's matches are never compacted
+ * while they are in the window. A compacted result keeps scores, round
+ * summaries, winner, MVP, hired blades, the squads, each fighter's totals and
+ * the round-1 fives; sim fighters, per-round final HP, per-fighter stats and
+ * the M1.1 per-round records go. Older seasons are dropped entirely: their
+ * tables, titles and movements live in history (SeasonRecord).
  */
 export const RESULT_RETENTION_SEASONS = 2;
+
+/**
+ * Weeks after which a match between other clubs is compacted when a content set does not say
+ * (`leagues.json matchRecords.compactAiMatchesAfterWeeks` is optional in the schema because the frozen test fixture
+ * predates it; content/default carries the value and is the one to tune).
+ */
+export const DEFAULT_COMPACT_AI_MATCHES_AFTER_WEEKS = 3;
 
 /** True for a result stripped by compactHistory (its sim input has no fighters, so it cannot be re-simulated). */
 export function isCompactedResult(result: MatchResult): boolean {
@@ -207,11 +221,13 @@ export function isCompactedResult(result: MatchResult): boolean {
  * A compacted copy (results are write-once and shared between states: never edit one in place).
  *
  * Kept: the score, winner, MVP and hired blades, the round summaries (without final HP), the sides' squads without
- * their row maps (a summary of who was named), the emergency entrants, and `fighterTotals`: for every fighter who
+ * their row maps (a summary of who was named), the emergency entrants, `fighterTotals` (for every fighter who
  * started a round the side, rounds started, downs inflicted and suffered, damage dealt and healing done, so an old
- * report still attributes every fighter to his club, emergency entrants and swapped-in reserves included.
- * Dropped: the sim fighters, per-fighter stats, `reserveInputs`, `roundLineups` and `betweenRounds` (together about
- * 0.7 MB a season; they only serve re-simulating and the round-by-round timeline, which a compacted result no
+ * report still attributes every fighter to his club, emergency entrants and swapped-in reserves included) and
+ * `fielded` (each side's round-1 five with rows and kickoff ratings: what the renewal ask and the opponent's last
+ * lineup read, so compacting never changes them).
+ * Dropped: the sim fighters, per-fighter stats, `reserveInputs`, `roundLineups` and `betweenRounds` (about 13 of a
+ * result's 16 KB; they only serve re-simulating and the round-by-round timeline, which a compacted result no
  * longer offers).
  */
 export function compactedResult(result: MatchResult): MatchResult {
@@ -227,12 +243,38 @@ export function compactedResult(result: MatchResult): MatchResult {
     rounds: result.rounds.map((r) => ({ ...r, finalHp: [] })),
     fighterStats: {},
     fighterTotals: result.fighterTotals ?? fighterTotals,
+    fielded: result.fielded ?? { home: compactFielded(fieldedFive(result, 'home')), away: compactFielded(fieldedFive(result, 'away')) },
   };
   delete out.reserveInputs;
   delete out.roundLineups;
   delete out.betweenRounds;
   if (result.squads) out.squads = { home: squad(result.squads.home), away: squad(result.squads.away) };
   return out;
+}
+
+/** True when the match involves the player's club (never compacted while it is in the retention window). */
+function involves(result: MatchResult, clubId: ClubId | null): boolean {
+  return clubId !== null && (result.homeClubId === clubId || result.awayClubId === clubId);
+}
+
+/**
+ * Run at the end of every week processing (`processedWeek` = the week just processed, `season` its season): compact
+ * the season's matches between other clubs that are at least `compactAiMatchesAfterWeeks` weeks older than that
+ * week. A match played in week w is compacted by the processing of week w + N, so the last N weeks stay full (the
+ * match report of a recent match still has its timeline). Deterministic, a pure function of the state: the player
+ * club's matches are never touched, and with no player club (headless runs) every match is. The weeks it has
+ * already passed are covered too, so a state saved by a build without this rule is caught up at its next week.
+ */
+export function compactAgedResultsImpl(draft: GameState, season: number, processedWeek: number, afterWeeks: number): void {
+  const cutoff = processedWeek - afterWeeks;
+  if (cutoff < 1) return;
+  const player = draft.playerClubId;
+  const aged: MatchResult[] = [];
+  for (const result of Object.values(draft.results)) {
+    if (result.season !== season || result.weekIndex > cutoff || isCompactedResult(result) || involves(result, player)) continue;
+    aged.push(result);
+  }
+  for (const result of aged) putResult(draft, compactedResult(result));
 }
 
 /**
@@ -252,8 +294,7 @@ export function compactHistoryImpl(draft: GameState): void {
   }
   const player = draft.playerClubId;
   for (const result of Object.values(draft.results)) {
-    if (result.season >= season || isCompactedResult(result)) continue;
-    if (player !== null && (result.homeClubId === player || result.awayClubId === player)) continue;
+    if (result.season >= season || isCompactedResult(result) || involves(result, player)) continue;
     putResult(draft, compactedResult(result));
   }
 }

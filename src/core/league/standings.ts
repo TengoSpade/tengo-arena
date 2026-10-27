@@ -50,6 +50,12 @@ export function playedLeagueMatches(state: GameState, competition: Competition):
       if (stats.clubId === fixture.homeClubId) homeDowns += stats.downsSuffered;
       else if (stats.clubId === fixture.awayClubId) awayDowns += stats.downsSuffered;
     }
+    // A compacted result has no per-fighter stats, but its fighter totals hold the same downs suffered (side 0 = home):
+    // the tables and the downs tie-break must not depend on whether a match was compacted.
+    for (const total of Object.values(result.fighterTotals ?? {})) {
+      if (total[0] === 0) homeDowns += total[3];
+      else awayDowns += total[3];
+    }
     out.push({
       fixtureId: id,
       weekIndex: fixture.weekIndex,

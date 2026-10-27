@@ -11,7 +11,8 @@ Engine and state types shared by every module. Plain JSON data only.
 | `club.ts` | `Club`, `ClubFinance`, captaincy fields, `Lineup`, `TacticsAssignment`, `ClubSeasonRow` |
 | `fighter.ts` | `Fighter` (stored lifecycle inputs; stats are derived), `Contract`, `Injury`, traits, statuses, career and season counters, history rows; reserved `academy` (M5) |
 | `competition.ts` | `Competition` (league with wings, or Reckoning with bracket), `Fixture`, `Bracket`, `StandingRow` |
-| `match.ts` | sim inputs (`MatchInput`, `SideInput`, `FightFighterInput`) and the committed `MatchResult`, `RoundResult`, `FighterMatchStats`, `DownRecord` |
+| `match.ts` | sim inputs (`MatchInput`, `SideInput`, `FightFighterInput`) and the committed `MatchResult` (with the compacted-result fields `fighterTotals` and `fielded`), `RoundResult`, `FighterMatchStats`, `DownRecord` |
+| `fielded.ts` | `fieldedFive(result, side)` (a side's round-1 five from the sim input, or from `fielded` once the result is compacted) and `compactFielded`: the one way to read who a club fielded from a stored result |
 | `events.ts` | fight event stream: envelope, header, the full `FightEvent` union, `SUMMARY_EVENT_TYPES`, `hashEventStream` |
 | `ledger.ts` | `Gold`, `LEDGER_CATEGORIES`, `LedgerEntry`, `Ledger` |
 | `market.ts` | offers, negotiations, trials rookies, AI memory, reserved `KnowledgeEntry` (M4) |

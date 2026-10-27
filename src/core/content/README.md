@@ -27,6 +27,8 @@ Profiles: `'theme'` (default; full shipped-theme rules) and `'fixture'` (skips c
 
 Designers: `npm run validate-content` prints every issue as `file › path: message`. A key that starts with `_` is a note to yourself: it has no effect in the game and is removed from the production build, so never put data there.
 
+`leagues.json matchRecords.compactAiMatchesAfterWeeks` (TUNABLE, 1-99, default 3) is the number of weeks after which a match between two other clubs is compacted to keep saves small (core/league `compactAgedResults`; its `_doc` says what is kept). It changes the size of a save and nothing in the game. The schema makes the block optional only because the frozen test fixture predates it (a missing block means 3, `DEFAULT_COMPACT_AI_MATCHES_AFTER_WEEKS`); `content/default` carries it, and the validator warns when the value is at least the season's length (no match would be compacted in season).
+
 Rank steps (`ability-ranks.json`) never change an ability's control durations: the validator compares every `cc_hard` and `cc_soft` status duration (Stunned, Rooted, Slowed, Sluggish, ...) before and after each rank, so no rank lengthens (or shortens) any control; rank steps use magnitude, cooldown, focus, area or non-control durations.
 
 Adding a vocabulary entry (status, effect type, rule condition, ...) is a code change: the owning module must implement it, then the architect adds it to `schema/common.ts`.

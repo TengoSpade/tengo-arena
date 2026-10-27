@@ -530,6 +530,10 @@ export function validateContentFiles(f: ContentFiles, profile: ValidationProfile
   if (phaseOrder.lastIndexOf('preseason') > firstRegular || phaseOrder.lastIndexOf('regular') > firstTournament) {
     c.error(LF, 'calendar.weeks', 'phases must run preseason, then regular, then tournament');
   }
+  const compactAfter = leagues.matchRecords?.compactAiMatchesAfterWeeks;
+  if (compactAfter !== undefined && compactAfter >= weeks.length) {
+    c.warn(LF, 'matchRecords.compactAiMatchesAfterWeeks', `${compactAfter} is at least the season's ${weeks.length} weeks, so no match is compacted in season and a save peaks at its full size (about 12 MB) until the season end`);
+  }
   const weekById = new Map(weeks.map((w) => [w.id, w]));
   const venueIds = checkUnique(c, LF, 'venues', leagues.venues, 'venue id');
   leagues.venues.forEach((v, i) => {
