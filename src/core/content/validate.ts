@@ -8,6 +8,7 @@
  * 'fixture' skips those count rules so small test content sets validate.
  */
 import { compareNumbers, isReservedName } from '../util';
+import { isDocKey } from './doc-keys';
 import type { ContentIssue } from './issues';
 import {
   AFFINITY_GROUPS,
@@ -120,9 +121,10 @@ function checkUnits(c: Collector, file: string, value: unknown, path: string, ke
   }
   if (value !== null && typeof value === 'object') {
     const obj = value as Record<string, unknown>;
-    if (typeof obj['_label'] === 'string' && obj['_label'].startsWith('EXAMPLE')) return;
     for (const [k, v] of Object.entries(obj)) {
-      if (k.startsWith('_') || k === 'derived') continue;
+      // Documentation keys (`_`-prefixed) are stripped from production builds, so no rule may depend on them:
+      // the EXAMPLE blocks are skipped by name (they hold illustrative values, not engine data).
+      if (isDocKey(k) || k === 'derived' || k === 'qualityShiftExamples') continue;
       checkUnits(c, file, v, path ? `${path}.${k}` : k, k, wholeFile);
     }
     return;

@@ -4,7 +4,8 @@
 
 | File | Purpose |
 | --- | --- |
-| `content-loader.ts` | Bundle `content/<theme>/*.json` via `import.meta.glob`. |
+| `content-loader.ts` | `loadBundledTheme(themeId)`: dynamic import of `content-bundle.ts`, then group the files of one theme (`loadThemeFiles`). Called first thing in `main.ts`; the app mounts when it resolves (index.html shows a loading state meanwhile). A failed import ends on the content-error screen. |
+| `content-bundle.ts` | `import.meta.glob` of `content/*/*.json`, as a module nothing imports statically, so the build emits all content as one separate chunk (same-origin, hashed, offline). The production build strips the `_` documentation keys from it and defines `__CONTENT_HASHES__` (the source files' content hash, passed to `loadContent` so the shipped content has the same identity as the source). |
 | `save-store.ts` | Contracts: `SaveStore`, `Clock`, `FileIO`, `AUTOSAVE_SLOTS`, `MANUAL_SLOT_COUNT` (fixed). |
 | `save-store.idb.ts` | `createIdbSaveStore()`: one record per slot `{ slotId, meta, json }`, one readwrite transaction per write (a failed write never replaces the previous record); the list reads metas only, so unreadable saves stay listed. |
 | `save-store.memory.ts` | `createMemorySaveStore()`: tests and the fallback without IndexedDB; `failNextWrite()` simulates an interrupted write. |

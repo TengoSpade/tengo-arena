@@ -184,7 +184,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
       return err(issues);
     }
     // The 'fixture' theme (tests, dev) is a deliberate subset: validate it with the fixture profile.
-    const result = loadContent(themeId, raw, { profile: themeId === 'fixture' ? 'fixture' : 'theme' });
+    const result = loadContent(themeId, raw, { profile: themeId === 'fixture' ? 'fixture' : 'theme', hash: platform.contentHash?.(themeId) });
     if (!result.ok) {
       contentIssues.value = result.error;
       return result;

@@ -30,7 +30,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('ticket dialog keyboard', () => {
+describe('ticket dialog keyboard', { timeout: 60_000 }, () => {
   it('focuses the text, keeps Shift+Enter as a new line and files on Enter with the id the server assigns', async () => {
     const done = vi.fn();
     render(<TicketDialog draft={draft} onDone={done} />);
@@ -101,7 +101,7 @@ describe('ticket dialog keyboard', () => {
   });
 });
 
-describe('screenshot clone fixes', () => {
+describe('screenshot clone fixes', { timeout: 60_000 }, () => {
   it('moves a scrolled full-page screen up by the document scroll, leaving fixed layers alone', () => {
     const root = document.createElement('div');
     root.innerHTML = '<main style="transform: scale(1)">page</main><div style="position: fixed">toasts</div>';

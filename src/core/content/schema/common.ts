@@ -16,7 +16,7 @@ import { z } from 'zod';
 export const ID_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/;
 export const id = () => z.string().regex(ID_PATTERN, { message: 'must be a lowercase id (a-z, 0-9, words joined by "-" or "_")' });
 
-/** Free text meant for designers (`_doc`, `_note`, ...). Never read by code. */
+/** Free text meant for designers (`_doc`, `_note`, ...). Never read by code; the production build strips every `_` key (core/content/doc-keys.ts). */
 export const note = () => z.string().optional();
 
 /** Whole number. */

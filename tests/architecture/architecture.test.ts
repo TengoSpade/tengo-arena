@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { checkCoreLayout, checkFiles, checkSource, formatViolations, listSourceFiles, type Violation } from './rules';
 
+// These three parse every source file with the TypeScript compiler: about a second alone, but several
+// seconds when the whole suite shares a busy machine. The assertions are unchanged; only the allowance grows.
+const WHOLE_CODEBASE_MS = 60_000;
+
 function expectClean(violations: Violation[]): void {
   if (violations.length > 0) {
     throw new Error(`Architecture violations (${violations.length}):\n${formatViolations(violations)}`);
@@ -12,15 +16,15 @@ describe('architecture: the real codebase', () => {
     const files = listSourceFiles('src/core');
     expect(files.length).toBeGreaterThan(0);
     expectClean(checkFiles(files));
-  });
+  }, WHOLE_CODEBASE_MS);
 
   it('every core module is registered and has README.md and index.ts', () => {
     expectClean(checkCoreLayout());
-  });
+  }, WHOLE_CODEBASE_MS);
 
   it('src/ui, src/platform and src/render use core only through module index files', () => {
     expectClean(checkFiles([...listSourceFiles('src/ui'), ...listSourceFiles('src/platform'), ...listSourceFiles('src/render')]));
-  });
+  }, WHOLE_CODEBASE_MS);
 });
 
 describe('architecture: the checker catches violations (guards against a vacuous pass)', () => {
