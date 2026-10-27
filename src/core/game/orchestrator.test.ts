@@ -220,6 +220,55 @@ describe('between-round swaps (sw-002 … sw-006)', () => {
     expect(autoSwapDecisions(ports, s, (playRound(ports, s, ms, content), ms), 'home', content)).toEqual([]);
   });
 
+  it("blind view: the player's between-round view carries his own suggestions only; the opponent's pending auto-swap decision is blanked, never computed for him", () => {
+    for (const playerSide of ['home', 'away', null] as const) {
+      const ports = scripted({ winners: ['away', 'home', 'home'] });
+      const { s, fx, home, away } = setup();
+      s.playerClubId = playerSide === null ? null : playerSide === 'home' ? home : away;
+      const ms = start(ports, s, fx);
+      playRound(ports, s, ms, content);
+      for (const id of [...ms.home.active, ...ms.away.active]) setFresh(s, id, 25);
+      // Both sides would swap if they decided now (the AI's decision is real, and it still acts on it).
+      const homeAuto = autoSwapDecisions(ports, s, ms, 'home', content);
+      const awayAuto = autoSwapDecisions(ports, s, ms, 'away', content);
+      expect(homeAuto.length).toBeGreaterThan(0);
+      expect(awayAuto.length).toBeGreaterThan(0);
+      const view = betweenRounds(ports, s, ms, content);
+      expect(view.playerSide).toBe(playerSide);
+      expect(view.home.suggestions).toEqual(playerSide === 'away' ? [] : homeAuto);
+      expect(view.away.suggestions).toEqual(playerSide === 'home' ? [] : awayAuto);
+      // Whatever the view says, the AI side decides by its rules when the step is applied.
+      const before = cloneJson(ms);
+      const applied = applyBetweenRound(ports, s, cloneJson(ms), { home: playerSide === 'home' ? [] : homeAuto, away: playerSide === 'away' ? [] : awayAuto }, content);
+      expect(ms).toEqual(before);
+      const aiSide = playerSide === 'home' ? 'away' : playerSide === 'away' ? 'home' : null;
+      if (aiSide !== null) expect(applied.betweenRounds[0]![aiSide].map((r) => ({ out: r.out, in: r.in }))).toEqual(aiSide === 'home' ? homeAuto : awayAuto);
+    }
+  });
+
+  it("blind view through the engine: advance() pauses with the opponent's suggestions blanked, and betweenRoundView(state) equals the pause", { timeout: 120_000 }, () => {
+    const engine = createGameEngine(createStandInPorts());
+    let state = careerAt(engine, 'blind-1', 'MW1');
+    let pause: ReturnType<typeof engine.advance> | null = null;
+    for (let guard = 0; guard < 8 && pause === null; guard++) {
+      if (engine.getBlockers(state, content).length > 0) {
+        const fixed = engine.applyCommand(state, engine.suggestLineup(state, state.playerClubId!, content), content);
+        if (!fixed.ok) throw new Error(fixed.error.message);
+        state = fixed.value.state;
+      }
+      const r = engine.advance(state, content);
+      if (!r.ok) throw new Error(r.error.message);
+      state = r.value.state;
+      if (r.value.pause !== null) pause = r;
+    }
+    if (pause === null || !pause.ok || pause.value.pause === null) throw new Error('the match of the player never paused');
+    const view = pause.value.pause;
+    const other = view.playerSide === 'home' ? view.away : view.home;
+    expect(view.playerSide).not.toBeNull();
+    expect(other.suggestions).toEqual([]);
+    expect(engine.betweenRoundView(state, content)).toEqual(view);
+  });
+
   it('sw-005: blind decisions from the same post-round state, applied home then away, recorded side by side', () => {
     const ports = scripted({ winners: ['away', 'home', 'home'] });
     const { s, fx } = setup();
