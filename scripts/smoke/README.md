@@ -73,21 +73,21 @@ vis-003 (01 §6): observers watch 5 fights at 1x and each can name both sides' t
 | --- | --- | --- |
 | Observer protocol | how the owner watches 5 fights and what to say to observers | [`vis003/PROTOCOL.md`](vis003/PROTOCOL.md) |
 | Score sheet | a blank sheet for any fights; for a run's fights, one observer sheet per fight, a tally and the key | [`vis003/SCORE-SHEET.md`](vis003/SCORE-SHEET.md), `sheets/fight-N.md`, `owner-tally.md`, `owner-answer-key.md` |
-| Capture | plays the seeded career at 1x, takes screenshots at the planned moments, writes the packets, keys and evidence | `npx tsx scripts/smoke/run.ts --only vis003 [--seed s] [--fights 5] [--every 4]` |
+| Capture | plays the seeded career at 1x, takes numbered screenshots on a fixed schedule, writes the packets, keys and evidence | `npx tsx scripts/smoke/run.ts --only vis003 [--seed s] [--fights 5]` |
 | Automated proxy | from the DOM evidence at every capture and the fight log: is each tank and healer identifiable (role glyphs agree with the classes) and is every down's victim, credited fighter and ability named on screen within the callout's life | runs at the end of the capture; `vis003/cli.ts precheck` re-runs it |
 | Agent observer | an agent looks at the screenshot sequence of a fight and answers the prompts; scored against the key | below |
 
-An observer is never told who went down, when, or how many downs there were: the prompts are four role questions and one "list every fighter that went down and who or what downed them". The capture asserts that the log the answer key came from is the log on screen (the viewer's hash equals the key's) before it captures a fight, so a stale save cannot key the wrong fight.
+An observer is never told who went down, when, or how many downs there were: the prompts are four role questions and one "list every fighter that went down and who or what downed them", and the packet reveals nothing either. Its frames are numbered (`frame-01.png`, no tick in the name) and taken on a fixed schedule that does not depend on the downs (tick 10, then every 30 ticks, 1.5 s, which is under the 2 s life of a callout, then the last tick), so their count follows the fight's length only; a stop adds no frame. The captures that bracket each down (just before it, at its callout, later in the callout's life) exist only as text in the scorer's private `evidence/` file, with no picture, and feed the on-screen proxy. The capture asserts that the log the answer key came from is the log on screen (the viewer's hash equals the key's) before it captures a fight, so a stale save cannot key the wrong fight.
 
 `--only vis003` writes `reports/smoke/<run>/vis003/`:
 
 ```
-packets/fight-N/frames/f01-t0010.png ...   the screenshots of one fight, in order (the observer's whole world)
+packets/fight-N/frames/frame-01.png ...    the screenshots of one fight, in order (the observer's whole world)
 packets/fight-N/prompts.json               the prompts (no victims, no times)
 packets/fight-N/observer-brief.md          what to tell an agent observer: rules, prompts, the JSON to reply with
 sheets/fight-N.md                          the sheet a person fills in for one fight, handed over after that fight
 keys/fight-N.key.json                      the answer key from the fight log (tanks, healers, every down and who is credited)
-evidence/fight-N.json                      what the screen said at each capture (text, live regions, role glyphs)
+evidence/fight-N.json                      what the screen said at each capture, with the private down-bracketing captures (text, live regions, role glyphs)
 owner-tally.md / owner-answer-key.md       the tally to fill in per observer, and the key to mark the sheets with
 answers-template.json, manifest.json (with source: game or mock), evidence-score.json
 ```

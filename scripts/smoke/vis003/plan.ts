@@ -1,48 +1,48 @@
 /**
- * Which moments of a fight to capture for the agent observer. The packet is a sequence of stills of a fight played at
- * 1x: the spawn, a frame every few seconds, and around each down the frame before the blow lands, the frame where the
- * callout names the cause, and one later in the callout's 2 s life. Pure.
+ * Which moments of a fight to capture, in two kinds that never mix.
+ *
+ * The observer packet is a fixed schedule that does not depend on the downs: a frame at tick 10, then one every 30 ticks
+ * (1.5 s of fight time, shorter than a callout's 2 s so every callout is on screen in at least one frame), then the last
+ * tick. Its frame count follows the fight's length only and its files are numbered, so nothing in a packet says how many
+ * downs there were or when.
+ *
+ * The evidence-only captures bracket every down (just before it, where its callout appears, and later in the callout's life)
+ * and are private to the scorer: they record what the screen's text said at those ticks, with no screenshot and no file in
+ * the packet. Pure.
  */
 import type { FightKey } from './types';
 
+/** Ticks between observer frames: 1.5 s of fight time, under the 2 s life of a down callout. */
+export const PACKET_EVERY_TICKS = 30;
+
 export interface PlannedCapture {
   tick: number;
-  reason: 'spawn' | 'periodic' | 'before-down' | 'down' | 'after-down' | 'end';
+  reason: 'spawn' | 'periodic' | 'end' | 'before-down' | 'down' | 'after-down';
+  /** true: a numbered screenshot in the observer packet. false: the scorer's private evidence only (text, no picture). */
+  packet: boolean;
 }
 
-export interface PlanOptions {
-  /** A periodic frame every n ticks (20 ticks = 1 s). Default 80 (4 s). */
-  everyTicks?: number;
-  /** Frames closer than this to one already planned are dropped. Default 6 ticks. */
-  minGapTicks?: number;
+/** The observer frames of a fight of `durationTicks`: depends on nothing but its length. */
+export function planPacket(durationTicks: number, everyTicks = PACKET_EVERY_TICKS): PlannedCapture[] {
+  const out: PlannedCapture[] = [{ tick: Math.min(10, durationTicks), reason: 'spawn', packet: true }];
+  for (let t = 10 + everyTicks; t < durationTicks; t += everyTicks) out.push({ tick: t, reason: 'periodic', packet: true });
+  if (durationTicks > 10) out.push({ tick: durationTicks, reason: 'end', packet: true });
+  return out;
 }
 
-const rank = (r: PlannedCapture['reason']): number => (r === 'down' ? 0 : r === 'before-down' || r === 'after-down' ? 1 : r === 'end' ? 2 : r === 'spawn' ? 3 : 4);
-
-export function planCaptures(key: FightKey, opts: PlanOptions = {}): PlannedCapture[] {
-  const every = Math.max(20, opts.everyTicks ?? 80);
-  const gap = opts.minGapTicks ?? 6;
+/** Private evidence moments around every down; the down that ends the fight is at the last tick, so its frames are clamped to it. */
+export function planEvidence(key: FightKey): PlannedCapture[] {
   const end = key.durationTicks;
-  const wanted: PlannedCapture[] = [{ tick: 10, reason: 'spawn' }];
-  for (let t = every; t < end; t += every) wanted.push({ tick: t, reason: 'periodic' });
-  for (const d of key.downs) {
-    wanted.push({ tick: Math.max(0, d.tick - 8), reason: 'before-down' });
-    // The down that ends the fight is at the last tick: its frames are clamped to it.
-    wanted.push({ tick: Math.min(d.tick + 2, end), reason: 'down' });
-    wanted.push({ tick: Math.min(d.tick + 30, end), reason: 'after-down' });
-  }
-  wanted.push({ tick: end, reason: 'end' });
-  // Down frames win over periodic ones when they collide.
-  wanted.sort((a, b) => a.tick - b.tick || rank(a.reason) - rank(b.reason));
   const out: PlannedCapture[] = [];
-  for (const w of wanted) {
-    if (w.tick > end) continue;
-    const last = out[out.length - 1];
-    if (last && w.tick - last.tick < gap) {
-      if (rank(w.reason) < rank(last.reason)) out[out.length - 1] = w;
-      continue;
-    }
-    out.push(w);
+  for (const d of key.downs) {
+    out.push({ tick: Math.max(0, d.tick - 8), reason: 'before-down', packet: false });
+    out.push({ tick: Math.min(d.tick + 2, end), reason: 'down', packet: false });
+    out.push({ tick: Math.min(d.tick + 30, end), reason: 'after-down', packet: false });
   }
   return out;
+}
+
+/** Everything to capture while the fight plays, in tick order (packet frames before evidence at the same tick). */
+export function planCaptures(key: FightKey, everyTicks = PACKET_EVERY_TICKS): PlannedCapture[] {
+  return [...planPacket(key.durationTicks, everyTicks), ...planEvidence(key)].sort((a, b) => a.tick - b.tick || Number(b.packet) - Number(a.packet));
 }

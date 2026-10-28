@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { countChecks, exitCodeOf, renderMarkdown, runIdFor, unmadeChecks, verdictOf, writeSmokeReport, type CheckResult, type SmokeReport } from './report';
+import { countChecks, exitCodeOf, renderMarkdown, runIdFor, summaryLines, unmadeChecks, verdictOf, writeSmokeReport, type CheckResult, type SmokeReport } from './report';
 
 const pass = (id: string): CheckResult => ({ id, title: `Check ${id}`, status: 'pass' });
 const fail = (id: string): CheckResult => ({ id, title: `Check ${id}`, status: 'fail', actual: 'it broke' });
@@ -147,5 +147,36 @@ describe('writing the report', () => {
   it('run ids sort by time', () => {
     expect(runIdFor(new Date(2026, 9, 28, 9, 5, 3))).toBe('20261028-090503');
     expect(runIdFor(new Date(2026, 9, 28, 10, 0, 0)) > runIdFor(new Date(2026, 9, 28, 9, 59, 59))).toBe(true);
+  });
+});
+
+describe('the console summary', () => {
+  const summary = (checks: CheckResult[], blocked = [] as SmokeReport['blocked']): string[] => {
+    const verdict = verdictOf(checks, blocked);
+    return summaryLines({ verdict, counts: countChecks(checks), blocked, checks });
+  };
+
+  it('a passing run is one line', () => {
+    expect(summary([pass('a'), warn('b'), pending('c')])).toEqual(['PASS: 1 pass, 0 fail, 1 warn, 1 skipped (0 not made), 0 blocked steps']);
+  });
+
+  it('a BLOCKED run names the unmade check and why, and the blocked step', () => {
+    const lines = summary([pass('a'), { ...skip('perf.round-load'), detail: 'indexFightLog is not available (Not implemented yet)\nmore detail' }], [blocked]);
+    expect(lines[0]).toBe('BLOCKED: 1 pass, 0 fail, 0 warn, 1 skipped (1 not made), 1 blocked step');
+    expect(lines).toContain('  BLOCKED at fixture.hook (smoke.hook-missing): window.__arena.viewer is not in this build');
+    expect(lines).toContain('  NOT MADE perf.round-load: indexFightLog is not available (Not implemented yet)');
+  });
+
+  it('an unmade check with no blocked step still shows, and pending ones do not', () => {
+    const lines = summary([skip('hash.viewed-eq-headless'), pending('vis003.agent-observer')]);
+    expect(lines[0]).toContain('BLOCKED');
+    expect(lines[0]).toContain('(1 not made), 0 blocked steps');
+    expect(lines.filter((l) => l.includes('NOT MADE'))).toEqual(['  NOT MADE hash.viewed-eq-headless: no state to read']);
+  });
+
+  it('failures are listed too', () => {
+    const lines = summary([fail('perf.fps-4x')]);
+    expect(lines[0]).toMatch(/^FAIL: /);
+    expect(lines).toContain('  FAIL perf.fps-4x: it broke');
   });
 });

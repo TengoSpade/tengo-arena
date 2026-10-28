@@ -125,12 +125,15 @@ export interface ScreenEvidence {
 
 /** A frame captured while a fight played at 1x. */
 export interface Capture {
+  /** Order of capture within the fight, 1-based (packet frames and evidence-only captures alike). */
   index: number;
   tick: number;
-  /** Why this frame: spawn, periodic, before-down, down, after-down, end. */
+  /** Why this capture: spawn, periodic, end (packet frames), before-down, down, after-down (private evidence only). */
   reason: string;
-  /** Path relative to the packet folder. */
-  file: string;
+  /** The observer-packet frame number (frame-NN.png), or null for an evidence-only capture, which has no picture. */
+  frame: number | null;
+  /** Path of the screenshot relative to the run's vis003 folder; null for an evidence-only capture. */
+  file: string | null;
   /** What was on screen as text and structure at the same moment (the DOM evidence of the pre-check). */
   evidence: ScreenEvidence | null;
 }

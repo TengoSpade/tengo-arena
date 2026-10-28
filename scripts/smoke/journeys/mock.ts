@@ -81,8 +81,8 @@ export async function runMockVis003(env: JourneyEnv, round: MockRound): Promise<
         await page.goto(`${env.baseUrl}/?live=1&theme=dark`);
         await page.waitFor('window.__arena && window.__arena.viewer.frame().units.length === 10', 'the mock round', { timeoutMs: 15_000 });
         const key = buildFightKey(round.log, env.content, { fight: 1, ourSide: 0, clubNames: ['Mock Home', 'Mock Away'] });
-        const run = await captureFight(page, env, key, root);
-        rec.say(`  ${run.captures.length} frames, ${key.downs.length} downs`);
+        const run = await captureFight(page, key, root);
+        rec.say(`  ${run.captures.filter((c) => c.frame !== null).length} frames, ${key.downs.length} downs`);
         fights.push({ key, captures: run.captures });
       });
     } finally {

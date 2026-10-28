@@ -101,6 +101,23 @@ export function verdictOf(checks: readonly CheckResult[], blocked: readonly Bloc
 }
 
 /** Process exit code: 0 pass, 1 a check failed, 3 blocked (the viewer or its test hook is not there yet). */
+const firstLine = (text: string): string => text.split(/\r?\n/)[0] ?? '';
+
+/**
+ * The console summary of a run: the verdict with its counts, then every failed check, every blocked step and every check
+ * that was wanted and not made, each by name and with its reason (the same things report.md lists), so a BLOCKED run says
+ * what it is waiting for without opening the report.
+ */
+export function summaryLines(report: Pick<SmokeReport, 'verdict' | 'counts' | 'blocked' | 'checks'>): string[] {
+  const c = report.counts;
+  const unmade = unmadeChecks(report.checks);
+  const lines = [`${report.verdict.toUpperCase()}: ${c.pass} pass, ${c.fail} fail, ${c.warn} warn, ${c.skip} skipped (${unmade.length} not made), ${report.blocked.length} blocked step${report.blocked.length === 1 ? '' : 's'}`];
+  for (const k of report.checks.filter((x) => x.status === 'fail')) lines.push(`  FAIL ${k.id}: ${firstLine(k.actual ?? '')}`);
+  for (const b of report.blocked) lines.push(`  BLOCKED at ${b.step} (${b.code}): ${firstLine(b.message)}`);
+  for (const k of unmade) lines.push(`  NOT MADE ${k.id}: ${firstLine(k.detail ?? k.actual ?? 'no reason given')}`);
+  return lines;
+}
+
 export function exitCodeOf(verdict: Verdict): number {
   return verdict === 'pass' ? 0 : verdict === 'fail' ? 1 : 3;
 }

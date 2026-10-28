@@ -21,9 +21,14 @@ export const MOCK_BANNER = '> **SELF-TEST on the mock arena.** These are not rea
 
 const pad = (n: number, w: number): string => String(n).padStart(w, '0');
 
-/** File name of a capture frame, relative to the fight's packet folder. */
-export function frameFile(index: number, tick: number): string {
-  return `frames/f${pad(index, 2)}-t${pad(tick, 4)}.png`;
+/** File name of an observer frame, relative to the fight's packet folder: a number and nothing else (no tick, no reason). */
+export function frameFile(frame: number): string {
+  return `frames/frame-${pad(frame, 2)}.png`;
+}
+
+/** The observer frames of a fight: the captures that have a picture. */
+export function packetFrames(f: PacketFight): Capture[] {
+  return f.captures.filter((c) => c.frame !== null);
 }
 
 export function packetDir(fight: number): string {
@@ -41,7 +46,7 @@ export function renderObserverBrief(f: PacketFight, source: Vis003Source = 'game
   if (source === 'mock') lines.push(MOCK_BANNER, '');
   lines.push(`# Observer brief: fight ${f.key.fight}`);
   lines.push('');
-  lines.push('You are an observer in a readability test of a fantasy arena autobattler. Two sides of five fighters fight in a top-down arena. The folder `frames/` next to this file holds screenshots of ONE fight, in time order (the file names carry a frame number and the fight tick; 20 ticks are one second). They were taken while the fight played at normal speed (1x).');
+  lines.push('You are an observer in a readability test of a fantasy arena autobattler. Two sides of five fighters fight in a top-down arena. The folder `frames/` next to this file holds screenshots of ONE fight, in time order (`frame-01.png` is the first). They were taken at regular intervals, about one and a half seconds of fight time apart, while the fight played at normal speed (1x).');
   lines.push('');
   lines.push('## Rules');
   lines.push('');
@@ -68,7 +73,8 @@ export function renderObserverBrief(f: PacketFight, source: Vis003Source = 'game
   lines.push(JSON.stringify({ observer: '<your name>', fight: f.key.fight, answers: example }, null, 2));
   lines.push('```');
   lines.push('');
-  lines.push(`There are ${f.captures.length} screenshots in \`frames/\`, in order f01 to f${pad(f.captures.length, 2)}.`);
+  const n = packetFrames(f).length;
+  lines.push(`There are ${n} screenshots in \`frames/\`, in order frame-01 to frame-${pad(n, 2)}.`);
   return `${lines.join('\n')}\n`;
 }
 
@@ -155,7 +161,7 @@ export function writeVis003Files(root: string, fights: readonly PacketFight[], e
     put(root, `${dir}/prompts.json`, `${JSON.stringify(observerPrompts(f.key), null, 2)}\n`);
     put(root, `${dir}/observer-brief.md`, renderObserverBrief(f, extra.source));
     put(root, `keys/fight-${f.key.fight}.key.json`, `${JSON.stringify(f.key, null, 2)}\n`);
-    put(root, `evidence/fight-${f.key.fight}.json`, `${JSON.stringify(f.captures.map((c) => ({ index: c.index, tick: c.tick, reason: c.reason, file: c.file, evidence: c.evidence })), null, 2)}\n`);
+    put(root, `evidence/fight-${f.key.fight}.json`, `${JSON.stringify(f.captures.map((c) => ({ index: c.index, tick: c.tick, reason: c.reason, frame: c.frame, file: c.file, evidence: c.evidence })), null, 2)}\n`);
     put(root, `sheets/fight-${f.key.fight}.md`, renderObserverSheet(f.key, extra.source));
   }
   const keys = fights.map((f) => f.key);
@@ -165,6 +171,6 @@ export function writeVis003Files(root: string, fights: readonly PacketFight[], e
   put(
     root,
     'manifest.json',
-    `${JSON.stringify({ format: 'arena-league-vis003', version: 1, source: extra.source, seed: extra.seed, commit: extra.commit, fights: fights.map((f) => ({ fight: f.key.fight, round: f.key.round, fixtureId: f.key.fixtureId, logHash: f.key.logHash, frames: f.captures.length, packet: packetDir(f.key.fight), prompts: promptsFor(f.key).length })) }, null, 2)}\n`,
+    `${JSON.stringify({ format: 'arena-league-vis003', version: 1, source: extra.source, seed: extra.seed, commit: extra.commit, fights: fights.map((f) => ({ fight: f.key.fight, round: f.key.round, fixtureId: f.key.fixtureId, logHash: f.key.logHash, frames: packetFrames(f).length, packet: packetDir(f.key.fight), prompts: promptsFor(f.key).length })) }, null, 2)}\n`,
   );
 }

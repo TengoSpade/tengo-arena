@@ -30,8 +30,6 @@ export interface RunOptions {
   only: ReadonlySet<JourneyName>;
   /** vis-003 capture: how many fights to capture (5). */
   fights: number;
-  /** vis-003 capture: a frame every N seconds of fight time. */
-  everySec: number;
   /** Skip the screenshot matrix (faster). */
   noShots: boolean;
   /** Extra console messages to ignore (regular expressions). */
@@ -57,7 +55,6 @@ const HELP = `usage: npx tsx scripts/smoke/run.ts [options]   (the package scrip
   --browser <path>      msedge.exe or chrome.exe (or set SMOKE_BROWSER)
   --headed              open a window instead of running headless
   --fights <n>          vis-003: fights to capture (default 5)
-  --every <seconds>     vis-003: a frame every n seconds of fight time (default 4)
   --no-shots            skip the screenshot matrix
   --allow-console <re>  ignore console errors matching this regular expression (repeatable as a,b)
   --ring-colors <css,css>  extra ring colours for the token check
@@ -95,7 +92,6 @@ export function parseOptions(argv: readonly string[]): RunOptions | 'help' {
     strictPerf: args.has('strict-perf'),
     only,
     fights: intArg(args, 'fights', 5),
-    everySec: intArg(args, 'every', 4),
     noShots: args.has('no-shots'),
     allowConsole: stringArg(args, 'allow-console', '')
       .split(',')

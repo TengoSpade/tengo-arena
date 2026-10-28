@@ -19,7 +19,7 @@ import { DEFAULT_CONSOLE_ALLOW, checkConsole, splitConsole, type PerfContext } f
 import { HELP, parseOptions, type RunOptions } from './lib/options';
 import { PageDriver } from './lib/page';
 import { Recorder } from './lib/recorder';
-import { countChecks, exitCodeOf, runIdFor, verdictOf, writeSmokeReport, type SmokeReport } from './lib/report';
+import { countChecks, exitCodeOf, runIdFor, summaryLines, verdictOf, writeSmokeReport, type SmokeReport } from './lib/report';
 import { buildSmoke, startPreview, type Served } from './lib/serve';
 import { runCareerJourney } from './journeys/career';
 import { runCrossJourney } from './journeys/cross-hash';
@@ -188,10 +188,7 @@ ${event}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
     artifacts: rec.artifacts,
   };
   const written = writeSmokeReport(opts.reportsDir, report);
-  const c = report.counts;
-  console.log(`\n${report.verdict.toUpperCase()}: ${c.pass} pass, ${c.fail} fail, ${c.warn} warn, ${c.skip} skipped, ${report.blocked.length} blocked`);
-  for (const b of report.blocked) console.log(`  blocked at ${b.step}: ${b.message.split('\n')[0]}`);
-  for (const k of rec.checks.filter((x) => x.status === 'fail')) console.log(`  FAIL ${k.id}: ${k.actual ?? ''}`);
+  console.log(`\n${summaryLines(report).join('\n')}`);
   console.log(`report: ${relative(REPO_ROOT, written.md).split('\\').join('/')}`);
   return setupFailure && !report.checks.some((x) => x.id !== 'env.setup' && x.status === 'fail') ? 2 : exitCodeOf(report.verdict);
 }

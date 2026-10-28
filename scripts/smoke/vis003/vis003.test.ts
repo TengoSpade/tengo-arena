@@ -15,11 +15,11 @@ import { extractJson, mergeAnswers, parseAnswerFile } from './answers';
 import { CALLOUT_TICKS, scoreEvidence, shownRoles, summarizeEvidence, type EvidenceCapture } from './evidence';
 import { buildFightKey } from './key';
 import { DOWN_ROWS, answersTemplate, frameFile, renderAnswerKey, renderObserverBrief, renderObserverSheet, renderTally, writeVis003Files } from './packet';
-import { planCaptures } from './plan';
+import { PACKET_EVERY_TICKS, planCaptures, planEvidence, planPacket } from './plan';
 import { DOWNS_PROMPT, observerPrompts, promptsFor } from './prompts';
 import { latestRealVisDir, visRuns, visSourceOf } from './runs';
 import { normalize, scoreFight, scoreFightDetailed, scoreObserver, summarize, unitsMentioned } from './score';
-import type { DownAnswer, FightAnswers, FightKey, ObserverAnswers, PromptResult, ScreenEvidence } from './types';
+import type { Capture, DownAnswer, FightAnswers, FightKey, ObserverAnswers, PromptResult, ScreenEvidence } from './types';
 
 const loaded = loadContent('default', loadRawContentFromDisk('default').raw);
 if (!loaded.ok) throw new Error('content/default is invalid');
@@ -118,31 +118,57 @@ describe('the prompts', () => {
 
 describe('the capture plan', () => {
   const key = keyOf();
+  const keyWithDowns = (downs: FightKey['downs']): FightKey => ({ ...key, downs });
 
-  it('starts at the spawn, ends at the end, and brackets every down', () => {
-    const plan = planCaptures(key);
-    expect(plan[0]).toEqual({ tick: 10, reason: 'spawn' });
-    // The last frame is at the last tick (a down that ends the fight takes that frame over from the plain end frame).
-    expect(plan[plan.length - 1]!.tick).toBe(key.durationTicks);
+  it('the observer frames are a fixed schedule: tick 10, every 30 ticks, the last tick', () => {
+    const packet = planPacket(130);
+    expect(packet.map((p) => p.tick)).toEqual([10, 40, 70, 100, 130]);
+    expect(packet.map((p) => p.reason)).toEqual(['spawn', 'periodic', 'periodic', 'periodic', 'end']);
+    expect(packet.every((p) => p.packet)).toBe(true);
+    const odd = planPacket(145).map((p) => p.tick);
+    expect(odd).toEqual([10, 40, 70, 100, 130, 145]);
+    // Every callout (40 ticks) is on screen in at least one frame.
+    expect(PACKET_EVERY_TICKS).toBeLessThan(40);
+  });
+
+  it('the packet schedule and its frame count do not depend on the downs', () => {
+    const none = planCaptures(keyWithDowns([])).filter((p) => p.packet);
+    const many = planCaptures(key).filter((p) => p.packet);
+    expect(key.downs.length).toBeGreaterThan(0);
+    expect(many).toEqual(none);
+    expect(many.map((p) => p.tick)).toEqual(planPacket(key.durationTicks).map((p) => p.tick));
+    const doubled = keyWithDowns([...key.downs, ...key.downs.map((d, i) => ({ ...d, index: key.downs.length + i + 1 }))]);
+    expect(planCaptures(doubled).filter((p) => p.packet)).toEqual(none);
+  });
+
+  it('the frame count follows the fight length only', () => {
+    expect(planPacket(900).length).toBeGreaterThan(planPacket(600).length);
+    expect(planPacket(600)).toEqual(planCaptures({ ...key, downs: [], durationTicks: 600 }));
+  });
+
+  it('the down-bracketing captures are evidence only: no picture, never a packet frame', () => {
+    const evidence = planEvidence(key);
+    expect(evidence).toHaveLength(3 * key.downs.length);
+    expect(evidence.every((p) => !p.packet)).toBe(true);
     for (const d of key.downs) {
-      // A frame while the callout is on screen (it lasts 40 ticks), and the frame where it is named is kept when downs cluster.
-      expect(plan.some((p) => p.tick >= d.tick && p.tick < d.tick + 40)).toBe(true);
+      expect(evidence.some((p) => p.reason === 'before-down' && p.tick === Math.max(0, d.tick - 8))).toBe(true);
+      expect(evidence.some((p) => p.reason === 'down' && p.tick >= d.tick && p.tick <= d.tick + 2)).toBe(true);
+      expect(evidence.some((p) => p.reason === 'after-down' && p.tick >= d.tick && p.tick <= d.tick + 30)).toBe(true);
     }
+    expect(evidence.every((p) => p.tick <= key.durationTicks)).toBe(true);
   });
 
-  it('is sorted, within the fight, and thinned', () => {
-    const plan = planCaptures(key, { everyTicks: 80, minGapTicks: 6 });
-    for (let i = 1; i < plan.length; i++) expect(plan[i]!.tick - plan[i - 1]!.tick).toBeGreaterThanOrEqual(6);
-    expect(plan.every((p) => p.tick <= key.durationTicks)).toBe(true);
-    expect(plan.length).toBeLessThan(80);
+  it('the merged plan is in tick order and holds both kinds', () => {
+    const plan = planCaptures(key);
+    for (let i = 1; i < plan.length; i++) expect(plan[i]!.tick).toBeGreaterThanOrEqual(plan[i - 1]!.tick);
+    expect(plan.length).toBe(planPacket(key.durationTicks).length + 3 * key.downs.length);
+    expect(plan[plan.length - 1]!.tick).toBe(key.durationTicks);
   });
 
-  it('a longer interval gives fewer frames', () => {
-    expect(planCaptures(key, { everyTicks: 200 }).length).toBeLessThan(planCaptures(key, { everyTicks: 40 }).length);
-  });
-
-  it('frame file names carry the number and the tick', () => {
-    expect(frameFile(3, 142)).toBe('frames/f03-t0142.png');
+  it('frame file names are a number and nothing else', () => {
+    expect(frameFile(3)).toBe('frames/frame-03.png');
+    expect(frameFile(12)).toBe('frames/frame-12.png');
+    expect(frameFile(7)).not.toMatch(/t\d{4}|tick|down/i);
   });
 });
 
@@ -402,6 +428,43 @@ describe('packet documents', () => {
     expect(brief).not.toContain(keys[0]!.logHash);
     for (const d of keys[0]!.downs) expect(brief).not.toContain(`${d.seconds.toFixed(0)} s`);
     expect(brief).not.toContain('SELF-TEST');
+  });
+
+  it('nothing an observer sees counts or places the downs: neutral frame names, a count from the packet frames only, no ticks', () => {
+    const k = keys[0]!;
+    const packet = planPacket(k.durationTicks).map((p, i): Capture => ({ index: i + 1, tick: p.tick, reason: p.reason, frame: i + 1, file: `packets/fight-1/${frameFile(i + 1)}`, evidence: null }));
+    const priv = planEvidence(k).map((p, i): Capture => ({ index: packet.length + i + 1, tick: p.tick, reason: p.reason, frame: null, file: null, evidence: null }));
+    const fight = { key: k, captures: [...packet, ...priv] };
+    const n = packet.length;
+    const brief = renderObserverBrief(fight);
+    expect(brief).toContain(`There are ${n} screenshots`);
+    expect(brief).toContain(`frame-${String(n).padStart(2, '0')}`);
+    expect(brief).not.toMatch(/\btick|20 ticks|before-down|after-down|f\d\d-t\d{4}/i);
+    // The same fight with a different number of downs gives the same observer-facing count.
+    const fewer = { key: { ...k, downs: k.downs.slice(0, 1) }, captures: packet };
+    expect(renderObserverBrief(fewer).match(/There are \d+ screenshots/)![0]).toBe(brief.match(/There are \d+ screenshots/)![0]);
+  });
+
+  it('the evidence-only captures and their reasons stay in the private evidence file, not in the packet folder', () => {
+    const k = keys[0]!;
+    const dir = mkdtempSync(join(tmpdir(), 'vis003-private-'));
+    try {
+      const captures: Capture[] = [
+        { index: 1, tick: 10, reason: 'spawn', frame: 1, file: 'packets/fight-1/frames/frame-01.png', evidence: null },
+        { index: 2, tick: 92, reason: 'before-down', frame: null, file: null, evidence: null },
+        { index: 3, tick: 102, reason: 'down', frame: null, file: null, evidence: null },
+      ];
+      writeVis003Files(dir, [{ key: k, captures }], { seed: 's', commit: 'abc', source: 'game' });
+      const evidence = JSON.parse(readFileSync(join(dir, 'evidence', 'fight-1.json'), 'utf8')) as Capture[];
+      expect(evidence.map((c) => c.reason)).toEqual(['spawn', 'before-down', 'down']);
+      expect(evidence.map((c) => c.frame)).toEqual([1, null, null]);
+      const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { fights: { frames: number }[] };
+      expect(manifest.fights[0]!.frames).toBe(1);
+      expect(readdirSync(join(dir, 'packets', 'fight-1')).sort()).toEqual(['observer-brief.md', 'prompts.json']);
+      for (const f of ['packets/fight-1/observer-brief.md', 'packets/fight-1/prompts.json', 'sheets/fight-1.md']) expect(readFileSync(join(dir, f), 'utf8')).not.toMatch(/before-down|after-down/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('a mock run says so at the top of every document', () => {

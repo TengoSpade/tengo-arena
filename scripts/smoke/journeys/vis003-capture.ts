@@ -15,7 +15,7 @@ import { MATCHDAY_MAIN, ROUTE, SEL } from '../lib/selectors';
 import { canvasInfo, frame, logHash, pause, play, requireHook, setSpeed } from '../lib/viewer';
 import { buildFightKey } from '../vis003/key';
 import { writeVis003Files, frameFile, packetDir, type PacketFight } from '../vis003/packet';
-import { planCaptures } from '../vis003/plan';
+import { planCaptures, type PlannedCapture } from '../vis003/plan';
 import { scoreEvidence, summarizeEvidence } from '../vis003/evidence';
 import type { Capture, FightKey, ScreenEvidence } from '../vis003/types';
 import { continueState, newCareerToMatchday, playMatchAndWatch } from './career';
@@ -75,19 +75,27 @@ export interface CaptureRun {
 }
 
 /**
- * Play the open round at 1x and take the planned frames. Frames are taken when the clock reaches their tick (a few ticks of
- * lag at 1x); a stop (auto-pause) takes every frame planned up to the stop at once, then plays on.
+ * Play the open round at 1x and take the planned captures (vis003/plan.ts): numbered screenshots on a fixed schedule for the
+ * observer packet, and private text-only evidence around every down. Captures are taken when the clock reaches their tick (a
+ * few ticks of lag at 1x); a stop (auto-pause) takes every capture planned up to the stop at once, then plays on. A stop
+ * adds no capture of its own, so the packet's frame count never depends on the downs.
  */
-export async function captureFight(page: PageDriver, env: JourneyEnv, key: FightKey, outRoot: string): Promise<CaptureRun> {
-  const plan = planCaptures(key, { everyTicks: env.opts.everySec * 20 });
+export async function captureFight(page: PageDriver, key: FightKey, outRoot: string): Promise<CaptureRun> {
+  const plan = planCaptures(key);
   const captures: Capture[] = [];
   const dir = packetDir(key.fight);
-  const take = async (reason: string, tick: number): Promise<void> => {
-    const index = captures.length + 1;
-    const rel = frameFile(index, Math.round(tick));
-    await page.screenshot(join(outRoot, dir, rel));
+  let frames = 0;
+  const take = async (item: PlannedCapture, tick: number): Promise<void> => {
+    let frame: number | null = null;
+    let file: string | null = null;
+    if (item.packet) {
+      frame = ++frames;
+      const rel = frameFile(frame);
+      await page.screenshot(join(outRoot, dir, rel));
+      file = `${dir}/${rel}`;
+    }
     const evidence = await page.probe<ScreenEvidence>('evidence').catch(() => null);
-    captures.push({ index, tick: Math.round(tick), reason, file: `${dir}/${rel}`, evidence });
+    captures.push({ index: captures.length + 1, tick: Math.round(tick), reason: item.reason, frame, file, evidence });
   };
   await setSpeed(page, 1);
   await play(page);
@@ -100,7 +108,7 @@ export async function captureFight(page: PageDriver, env: JourneyEnv, key: Fight
   while (next < plan.length && Date.now() - startedAt < limitMs) {
     const tick = await page.probe<number>('tick');
     if (Number.isFinite(tick) && tick >= plan[next]!.tick) {
-      await take(plan[next]!.reason, tick);
+      await take(plan[next]!, tick);
       next++;
       continue;
     }
@@ -110,7 +118,7 @@ export async function captureFight(page: PageDriver, env: JourneyEnv, key: Fight
       const f = await frame(page);
       // Stopped, by an auto-pause or at the end: whatever was planned up to here is on screen now.
       while (next < plan.length && plan[next]!.tick <= tick + 3) {
-        await take(plan[next]!.reason, tick);
+        await take(plan[next]!, tick);
         next++;
       }
       if (f.ended) {
@@ -172,8 +180,8 @@ export async function runVis003Capture(env: JourneyEnv): Promise<void> {
             throw e;
           }
           assertKeyIsOnScreen(await logHash(page), keyed.key, read.source);
-          const run = await captureFight(page, env, keyed.key, root);
-          rec.say(`  fight ${n}: ${run.captures.length} frames, ${keyed.key.downs.length} downs${run.ended ? '' : ' (did not see the end)'}`);
+          const run = await captureFight(page, keyed.key, root);
+          rec.say(`  fight ${n}: ${run.captures.filter((c) => c.frame !== null).length} frames, ${keyed.key.downs.length} downs${run.ended ? '' : ' (did not see the end)'}`);
           fights.push({ key: keyed.key, captures: run.captures });
         });
       }
