@@ -1,19 +1,23 @@
 /**
- * Team colours and contrast (05-technical-m2 §A5; WP-M2C). PURE.
+ * Team colours and contrast (05-technical-m2 §A5, amended by §A18 decision 4; WP-M2C). PURE.
  *
  * asset-006: the player's side ring is brass (--c-side-us), the opponent's steel blue (--c-side-them); in a
- * match between other clubs both rings use the clubs' primaries with a luminance check. Research §6: when the
- * two primaries are too close the away side becomes secondary-dominant. Every ring and body colour must reach
- * 3:1 against the floor (04 §9); the ring style (solid or double) is the colour-free side cue.
+ * match between other clubs both rings use the clubs' primaries, shifted in Lab (hue and chroma kept) until they reach
+ * 3:1 against the floor. Research §6: when the two primaries are too close the away side becomes secondary-dominant.
+ * Body colours are the exact club colours (A18 decision 4: the body is enclosed by the ring and keylines and carries
+ * identity only); 3:1 binds the rings, the glyph plate and glyph, the bars and the pip outlines. The ring style (solid
+ * or double) is the colour-free side cue.
  *
- * Colours are 0xRRGGBB numbers. The palette comes from the host (read from tokens.css); the defaults below only
+ * Colours are 0xRRGGBB numbers. The palette comes from the host (read from tokens.css); the defaults (defaults.ts) only
  * serve tests and the first frame before a host supplies one.
  */
 import type { Side } from '../../core/model';
 import { InvariantError } from '../../core/util';
-import type { ArenaPalette, ClubColors, RoleId, TeamColors } from '../types';
+import type { ArenaPalette, ClubColors, TeamColors } from '../types';
 
-/** Ring, body and trim colours reach this contrast against the arena floor (04 §9, WCAG graphical objects). */
+export * from './defaults';
+
+/** Rings, the glyph plate and glyph, bars and pip outlines reach this contrast (04 §9, WCAG graphical objects). Bodies are exempt (A18). */
 export const MIN_ARENA_CONTRAST = 3;
 
 /**
@@ -144,78 +148,76 @@ function mix(from: number, to: number, t: number): number {
 const WHITE = 0xffffff;
 const BLACK = 0x000000;
 
-/** Smallest mix of `color` toward `target` (0..1, in steps of 1/64) that reaches `min` contrast with `bg`; null when even the target fails. */
-function minMixFor(color: number, target: number, bg: number, min: number): number | null {
-  if (contrastRatio(target, bg) < min) return null;
-  for (let i = 0; i <= 64; i++) {
-    const t = i / 64;
-    if (contrastRatio(mix(color, target, t), bg) >= min) return t;
-  }
-  return 1;
+const LAB_EPS = 216 / 24389;
+const LAB_KAPPA = 24389 / 27;
+
+/** A 0xRRGGBB colour from L*a*b* (D65), clipped to the sRGB gamut (clipping is the only thing that moves hue or chroma). */
+function fromLab(l: number, a: number, b: number): number {
+  const fy = (l + 16) / 116;
+  const fx = fy + a / 500;
+  const fz = fy - b / 200;
+  const inv = (f: number): number => (f * f * f > LAB_EPS ? f * f * f : (116 * f - 16) / LAB_KAPPA);
+  const x = inv(fx) * 0.95047;
+  const y = l > LAB_KAPPA * LAB_EPS ? fy * fy * fy : l / LAB_KAPPA;
+  const z = inv(fz) * 1.08883;
+  const encode = (v: number): number => {
+    const c = Math.min(1, Math.max(0, v));
+    return 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+  };
+  return pack(encode(3.2404542 * x - 1.5371385 * y - 0.4985314 * z), encode(-0.969266 * x + 1.8760108 * y + 0.041556 * z), encode(0.0556434 * x - 0.2040259 * y + 1.0572252 * z));
 }
 
 /**
- * The colour itself when it reaches `min` contrast with `bg`; otherwise the nearest mix of it toward white or black
- * that does (hue kept, lightness moved the least). For any background at least one direction can reach 3:1.
+ * The colour itself when it reaches `min` contrast with `bg`; otherwise the nearest colour of the same hue and chroma
+ * (L* moved the least, in Lab) that does. If the gamut leaves none (an extreme background), the nearest mix toward white
+ * or black. For any background some lightness reaches 3:1.
  */
 export function ensureContrast(color: number, bg: number, min: number = MIN_ARENA_CONTRAST): number {
   if (contrastRatio(color, bg) >= min) return color;
-  const toWhite = minMixFor(color, WHITE, bg, min);
-  const toBlack = minMixFor(color, BLACK, bg, min);
-  if (toWhite === null && toBlack === null) return contrastRatio(WHITE, bg) >= contrastRatio(BLACK, bg) ? WHITE : BLACK;
-  if (toBlack === null || (toWhite !== null && toWhite <= toBlack)) return mix(color, WHITE, toWhite!);
-  return mix(color, BLACK, toBlack);
-}
-
-/** Moves `color` away from `ref` (toward white or black, the smaller move that works) until the two are at least `minDistance` apart and `color` keeps `min` contrast with `bg`. */
-function separate(color: number, ref: number, bg: number, minDistance: number): number {
-  let best = color;
-  let bestDistance = colorDistance(color, ref);
-  for (let i = 1; i <= 32; i++) {
-    const t = i / 32;
-    for (const target of [WHITE, BLACK]) {
-      const c = mix(color, target, t);
-      if (contrastRatio(c, bg) < MIN_ARENA_CONTRAST) continue;
-      const d = colorDistance(c, ref);
-      if (d >= minDistance) return c;
-      if (d > bestDistance) {
-        best = c;
-        bestDistance = d;
+  const [l0, a, b] = lab(color);
+  let best: { color: number; shift: number } | null = null;
+  for (const dir of [1, -1]) {
+    for (let step = 0.5; step <= 100; step += 0.5) {
+      const l = l0 + dir * step;
+      if (l < 0 || l > 100) break;
+      const c = fromLab(l, a, b);
+      if (contrastRatio(c, bg) >= min) {
+        if (!best || step < best.shift) best = { color: c, shift: step };
+        break;
       }
     }
   }
-  return best;
+  if (best) return best.color;
+  for (let i = 1; i <= 64; i++) {
+    for (const target of [WHITE, BLACK]) {
+      const c = mix(color, target, i / 64);
+      if (contrastRatio(c, bg) >= min) return c;
+    }
+  }
+  return contrastRatio(WHITE, bg) >= contrastRatio(BLACK, bg) ? WHITE : BLACK;
 }
 
 /**
  * Side colours for both sides of a match (index 0 = home, 1 = away). playerSide null = a match between other clubs.
  *
+ * - Body and trim: the exact club colours (A18 decision 4). When the two primaries clash (CIEDE2000 below the clash
+ *   threshold) the away side becomes secondary-dominant: it leads with whichever of its two colours is farther from the
+ *   home primary. No colour is ever altered to separate the bodies; the ring and its style carry the side regardless.
  * - Ring: the player's side takes the brass token and a solid ring, the other side the steel-blue token and a double
- *   ring. Between other clubs the rings are the clubs' (adjusted) primaries, home solid and away double: the ring
- *   style is the colour-free side cue either way.
- * - Body: the club's primary, trim its secondary. When the two primaries clash (ΔE < PRIMARY_CLASH_DELTA_E) the away
- *   side becomes secondary-dominant (the farther of its two colours leads); if that still clashes the away body is
- *   lightened or darkened until it does not.
- * - Every colour is first moved the least needed to reach 3:1 against the floor (ensureContrast).
+ *   ring. Between other clubs the rings are the clubs' leading colours (home solid, away double), shifted in Lab (hue and
+ *   chroma kept) until they reach 3:1 against the floor. Tokens that already pass are untouched.
  * `options.clashDeltaE` is clubs.json `colorRules.clashDeltaE` (CIEDE2000), 20 when the host does not pass it.
  */
 export function colorsForMatch(home: ClubColors, away: ClubColors, playerSide: Side | null, palette: ArenaPalette, options?: { clashDeltaE?: number }): readonly [TeamColors, TeamColors] {
   const clash = options?.clashDeltaE ?? PRIMARY_CLASH_DELTA_E;
   const floor = palette.floor;
   const fit = (c: number): number => ensureContrast(c, floor, MIN_ARENA_CONTRAST);
-  const homePrimary = fit(home.primary);
-  const homeSecondary = fit(home.secondary);
-  let awayPrimary = fit(away.primary);
-  let awaySecondary = fit(away.secondary);
-
-  if (colorDistance(homePrimary, awayPrimary) < clash) {
-    // Secondary-dominant away side: lead with the colour farther from the home body.
-    if (colorDistance(homePrimary, awaySecondary) > colorDistance(homePrimary, awayPrimary)) {
-      [awayPrimary, awaySecondary] = [awaySecondary, awayPrimary];
-    }
-    if (colorDistance(homePrimary, awayPrimary) < clash) {
-      awayPrimary = separate(awayPrimary, homePrimary, floor, clash);
-    }
+  const homePrimary = home.primary;
+  const homeSecondary = home.secondary;
+  let awayPrimary = away.primary;
+  let awaySecondary = away.secondary;
+  if (colorDistance(homePrimary, awayPrimary) < clash && colorDistance(homePrimary, awaySecondary) > colorDistance(homePrimary, awayPrimary)) {
+    [awayPrimary, awaySecondary] = [awaySecondary, awayPrimary];
   }
 
   let homeRing: number;
@@ -223,8 +225,8 @@ export function colorsForMatch(home: ClubColors, away: ClubColors, playerSide: S
   let homeStyle: TeamColors['ringStyle'];
   let awayStyle: TeamColors['ringStyle'];
   if (playerSide === null) {
-    homeRing = homePrimary;
-    awayRing = awayPrimary;
+    homeRing = fit(homePrimary);
+    awayRing = fit(awayPrimary);
     homeStyle = 'solid';
     awayStyle = 'double';
   } else {
@@ -238,56 +240,4 @@ export function colorsForMatch(home: ClubColors, away: ClubColors, playerSide: S
     { primary: homePrimary, secondary: homeSecondary, ring: homeRing, ringStyle: homeStyle },
     { primary: awayPrimary, secondary: awaySecondary, ring: awayRing, ringStyle: awayStyle },
   ];
-}
-
-// ---- Defaults (tests and the first frame; the host's computed-style palette replaces them) ---------------------
-
-const GLYPH_OPEN = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>";
-const ROLE_GLYPH_SVG: Readonly<Record<RoleId, string>> = {
-  tank: `${GLYPH_OPEN}<path d='M12 1.5 21 5v6.2c0 5.4-3.8 9.6-9 11.3-5.2-1.7-9-5.9-9-11.3V5z'/></svg>`,
-  melee: `${GLYPH_OPEN}<path d='M12 1 22.5 12 12 23 1.5 12z'/></svg>`,
-  ranged: `${GLYPH_OPEN}<path d='M12 2 23 21.5H1z'/></svg>`,
-  controller: `${GLYPH_OPEN}<path d='M3 2h18l-7 10 7 10H3l7-10z'/></svg>`,
-  healer: `${GLYPH_OPEN}<path fill-rule='evenodd' d='M12 1.5a10.5 10.5 0 1 1 0 21 10.5 10.5 0 0 1 0-21zM10.3 6.3v4H6.3v3.4h4v4h3.4v-4h4v-3.4h-4v-4z'/></svg>`,
-};
-
-/** Dark and light arena palettes: the values tokens.css defines (04 §3, asset-006). */
-export const DEFAULT_ARENA_PALETTES: Readonly<Record<'dark' | 'light', ArenaPalette>> = {
-  dark: {
-    theme: 'dark',
-    sideUs: 0xe6b866,
-    sideThem: 0xa7b4c6,
-    roles: { tank: 0x56b4e9, melee: 0xee7a3c, ranged: 0xf0e442, controller: 0xd88bb6, healer: 0x1fb88a },
-    roleGlyphSvg: ROLE_GLYPH_SVG,
-    text: 0xebe6da,
-    textMuted: 0xaaa69c,
-    floor: 0x3e3a32,
-    wall: 0x716857,
-    good: 0x5fcb92,
-    bad: 0xf27a69,
-    warn: 0xeebf52,
-    fxPhysical: 0xf2e6c8,
-    fxArcane: 0xa98bff,
-  },
-  light: {
-    theme: 'light',
-    sideUs: 0x8a5a12,
-    sideThem: 0x4a5a70,
-    roles: { tank: 0x0b6fae, melee: 0xc1500c, ranged: 0x957b00, controller: 0xa8457e, healer: 0x007f5c },
-    roleGlyphSvg: ROLE_GLYPH_SVG,
-    text: 0x1d1c19,
-    textMuted: 0x54514a,
-    floor: 0xeee7d6,
-    wall: 0x857a64,
-    good: 0x166d3f,
-    bad: 0xb43626,
-    warn: 0x8a6100,
-    fxPhysical: 0x4a3b22,
-    fxArcane: 0x5a2fd0,
-  },
-};
-
-/** The default palette of a theme. */
-export function defaultArenaPalette(theme: 'dark' | 'light'): ArenaPalette {
-  return DEFAULT_ARENA_PALETTES[theme];
 }

@@ -6,27 +6,28 @@ import { DEFAULT_CAMERA, MAX_TILT_DEG, viewTransform } from './index';
 
 const ARENA = { width: 3200, height: 1800 };
 const HD = { width: 1920, height: 1080 };
+const PAD = DEFAULT_CAMERA.padding;
 
 describe('DEFAULT_CAMERA', () => {
-  it('is the approved M2 camera: top-down, whole arena, no follow, HUD padding, 220 ms ease', () => {
-    expect(DEFAULT_CAMERA).toEqual({ projection: { kind: 'top-down' }, zoom: 1, follow: null, padding: { top: 56, right: 16, bottom: 72, left: 16 }, easeMs: 220 });
+  it('is the approved M2 camera: top-down, whole arena, no follow, 16 px all round (the host is the stage only, A18), 220 ms ease', () => {
+    expect(DEFAULT_CAMERA).toEqual({ projection: { kind: 'top-down' }, zoom: 1, follow: null, padding: { top: 16, right: 16, bottom: 16, left: 16 }, easeMs: 220 });
   });
 });
 
 describe('viewTransform, top-down at zoom 1', () => {
-  it('fits the whole arena inside the padding at about 52 px per metre at 1920 x 1080', () => {
+  it('fits the whole arena inside the padding at the fit scale (about 58 px per metre in a 1920 x 1080 stage, 46 with the dock)', () => {
     const v = viewTransform(DEFAULT_CAMERA, HD, ARENA);
-    expect(v.pxPerMetre).toBeGreaterThan(52);
-    expect(v.pxPerMetre).toBeLessThan(53.5);
+    expect(v.pxPerMetre).toBeCloseTo(Math.min((1920 - PAD.left - PAD.right) / 32, (1080 - PAD.top - PAD.bottom) / 18), 6);
+    expect(viewTransform(DEFAULT_CAMERA, { width: 1920 - 22 * 16, height: 1080 }, ARENA).pxPerMetre).toBeGreaterThan(45);
     const nw = v.toScreen(0, 0);
     const se = v.toScreen(ARENA.width, ARENA.height);
-    expect(nw.y).toBeGreaterThanOrEqual(56 - 1e-9);
-    expect(se.y).toBeLessThanOrEqual(1080 - 72 + 1e-9);
-    expect(nw.x).toBeGreaterThanOrEqual(16 - 1e-9);
-    expect(se.x).toBeLessThanOrEqual(1920 - 16 + 1e-9);
+    expect(nw.y).toBeGreaterThanOrEqual(PAD.top - 1e-9);
+    expect(se.y).toBeLessThanOrEqual(1080 - PAD.bottom + 1e-9);
+    expect(nw.x).toBeGreaterThanOrEqual(PAD.left - 1e-9);
+    expect(se.x).toBeLessThanOrEqual(1920 - PAD.right + 1e-9);
     // Height-limited here: the arena touches the top and bottom of the padded area and is centred left to right.
-    expect(nw.y).toBeCloseTo(56, 6);
-    expect(se.y).toBeCloseTo(1080 - 72, 6);
+    expect(nw.y).toBeCloseTo(PAD.top, 6);
+    expect(se.y).toBeCloseTo(1080 - PAD.bottom, 6);
     expect(nw.x + se.x).toBeCloseTo(1920, 6);
   });
 
@@ -62,7 +63,7 @@ describe('viewTransform, top-down at zoom 1', () => {
     }
     const mid = v.toScreen(ARENA.width / 2, ARENA.height / 2);
     expect(mid.x).toBeCloseTo(960, 6);
-    expect(mid.y).toBeCloseTo(56 + (1080 - 56 - 72) / 2, 6);
+    expect(mid.y).toBeCloseTo(PAD.top + (1080 - PAD.top - PAD.bottom) / 2, 6);
   });
 
   it('ignores the focus and the height in a top-down view at zoom 1', () => {
@@ -91,8 +92,8 @@ describe('viewTransform, zoom and follow', () => {
     expect(v.pxPerMetre).toBeCloseTo(fit * 2, 9);
     const c = v.toScreen(1600, 900);
     expect(c.x).toBeCloseTo(960, 6);
-    expect(c.y).toBeCloseTo(56 + (1080 - 56 - 72) / 2, 6);
-    const world = v.toWorld(960, 56 + 476);
+    expect(c.y).toBeCloseTo(PAD.top + (1080 - PAD.top - PAD.bottom) / 2, 6);
+    const world = v.toWorld(960, PAD.top + (1080 - PAD.top - PAD.bottom) / 2);
     expect(world.x).toBeCloseTo(1600, 6);
     expect(world.y).toBeCloseTo(900, 6);
   });
@@ -104,18 +105,18 @@ describe('viewTransform, zoom and follow', () => {
         const nw = v.toScreen(0, 0);
         const se = v.toScreen(ARENA.width, ARENA.height);
         // The padded area is always covered by the arena.
-        expect(nw.x).toBeLessThanOrEqual(16 + 1e-6);
-        expect(nw.y).toBeLessThanOrEqual(56 + 1e-6);
-        expect(se.x).toBeGreaterThanOrEqual(1920 - 16 - 1e-6);
-        expect(se.y).toBeGreaterThanOrEqual(1080 - 72 - 1e-6);
+        expect(nw.x).toBeLessThanOrEqual(PAD.left + 1e-6);
+        expect(nw.y).toBeLessThanOrEqual(PAD.top + 1e-6);
+        expect(se.x).toBeGreaterThanOrEqual(1920 - PAD.right - 1e-6);
+        expect(se.y).toBeGreaterThanOrEqual(1080 - PAD.bottom - 1e-6);
       }
     }
   });
 
   it('shows the arena centred when zoomed with no focus, and round-trips', () => {
     const v = viewTransform(zoomed(1.5), HD, ARENA, null);
-    expect(v.toWorld(960, 56 + 476).x).toBeCloseTo(1600, 6);
-    expect(v.toWorld(960, 56 + 476).y).toBeCloseTo(900, 6);
+    expect(v.toWorld(960, PAD.top + (1080 - PAD.top - PAD.bottom) / 2).x).toBeCloseTo(1600, 6);
+    expect(v.toWorld(960, PAD.top + (1080 - PAD.top - PAD.bottom) / 2).y).toBeCloseTo(900, 6);
     const s = v.toScreen(2000, 700);
     expect(v.toWorld(s.x, s.y).x).toBeCloseTo(2000, 6);
     expect(v.toWorld(s.x, s.y).y).toBeCloseTo(700, 6);
@@ -123,10 +124,10 @@ describe('viewTransform, zoom and follow', () => {
 
   it('stays centred on an axis where the zoomed arena still fits', () => {
     const tall = viewTransform({ ...DEFAULT_CAMERA, zoom: 1.5 }, { width: 600, height: 1400 }, ARENA, { x: 100, y: 100 });
-    // Width-limited: at 1.5x the arena is 1.5 × 568 px wide, wider than the padded area; but vertically it is much shorter, so it stays centred.
+    // Width-limited: at 1.5x the arena is wider than the padded area; but vertically it is much shorter, so it stays centred.
     const nw = tall.toScreen(0, 0);
     const se = tall.toScreen(ARENA.width, ARENA.height);
-    expect((nw.y + se.y) / 2).toBeCloseTo(56 + (1400 - 56 - 72) / 2, 6);
+    expect((nw.y + se.y) / 2).toBeCloseTo(PAD.top + (1400 - PAD.top - PAD.bottom) / 2, 6);
   });
 });
 
@@ -145,10 +146,10 @@ describe('viewTransform, oblique', () => {
     expect(lifted.x).toBe(o.x);
     const nw = v.toScreen(0, 0);
     const se = v.toScreen(ARENA.width, ARENA.height);
-    expect(nw.y).toBeGreaterThanOrEqual(56 - 1e-6);
-    expect(se.y).toBeLessThanOrEqual(1080 - 72 + 1e-6);
-    expect(nw.x).toBeGreaterThanOrEqual(16 - 1e-6);
-    expect(se.x).toBeLessThanOrEqual(1920 - 16 + 1e-6);
+    expect(nw.y).toBeGreaterThanOrEqual(PAD.top - 1e-6);
+    expect(se.y).toBeLessThanOrEqual(1080 - PAD.bottom + 1e-6);
+    expect(nw.x).toBeGreaterThanOrEqual(PAD.left - 1e-6);
+    expect(se.x).toBeLessThanOrEqual(1920 - PAD.right + 1e-6);
   });
 
   it('toWorld inverts the ground plane (picking), and tilt 0 equals top-down', () => {

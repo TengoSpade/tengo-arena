@@ -15,7 +15,7 @@
 import type { AbilityDef, ContentDB, Effect, StatusDef } from '../../core/content';
 import { secondsToTicks } from '../../core/content';
 import { InvariantError, assertNever } from '../../core/util';
-import type { AbilityCue, AbilityEffectType, CueTable, EffectKind, StatusCue } from '../types';
+import type { AbilityCue, AbilityEffectType, CueTable, EffectKind, PipKind, StatusCue } from '../types';
 
 /** Telegraph threshold (04 §7: casts and channels of 0.3 s or longer). In ticks at 20 per second. */
 export const TELEGRAPH_MIN_TICKS = 6;
@@ -206,12 +206,37 @@ function abilityCue(def: AbilityDef, content: ContentDB, meleeReachM: number, ti
 const CATEGORY_RING: Readonly<Record<string, StatusCue['ring']>> = { cc_hard: 'grey', dot: 'pulse', hot: 'pulse' };
 const CATEGORY_PRIORITY: Readonly<Record<string, number>> = { cc_hard: 80, cc_soft: 60, dot: 50, debuff: 40, hot: 30, buff: 20, special: 10, shield: 10 };
 
+/** The pip a status shows: its category's (A18; the shield category has none, the bar segment shows it). An exhaustive switch. */
+export function pipOf(category: StatusDef['category']): PipKind | null {
+  switch (category) {
+    case 'cc_hard':
+      return 'control-hard';
+    case 'cc_soft':
+      return 'control-soft';
+    case 'buff':
+      return 'buff';
+    case 'debuff':
+      return 'debuff';
+    case 'dot':
+      return 'dot';
+    case 'hot':
+      return 'hot';
+    case 'special':
+      return 'special';
+    case 'shield':
+      return null;
+    default:
+      return assertNever(category, 'status category');
+  }
+}
+
 function statusCue(def: StatusDef): StatusCue {
   const blocked = def.blocks?.length ?? 0;
   return {
     status: def.id,
     category: def.category,
     icon: def.iconId,
+    pip: pipOf(def.category),
     ring: CATEGORY_RING[def.category] ?? 'none',
     priority: (CATEGORY_PRIORITY[def.category] ?? 0) + blocked * 4 + (def.interrupts ? 2 : 0),
   };

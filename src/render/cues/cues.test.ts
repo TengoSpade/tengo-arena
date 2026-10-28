@@ -7,8 +7,10 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { EFFECT_TYPES, type AbilityDef, type Effect } from '../../core/content';
 import { InvariantError } from '../../core/util';
 import { defaultContent } from '../timeline/support.mts';
-import type { AbilityCue, AbilityEffectType, EffectKind } from '../types';
-import { PROJECTILE_MIN_PX, TELEGRAPH_MIN_TICKS, buildCueTable, childEffects, collectEffects, effectCueKind, explainRelease, walkEffects, type ReleaseRule } from './index';
+import { STATUS_CATEGORIES } from '../../core/content';
+import { defaultArenaPalette } from '../colors';
+import type { AbilityCue, AbilityEffectType, EffectKind, PipKind } from '../types';
+import { PROJECTILE_MIN_PX, TELEGRAPH_MIN_TICKS, buildCueTable, childEffects, collectEffects, effectCueKind, explainRelease, pipOf, walkEffects, type ReleaseRule } from './index';
 
 const content = defaultContent();
 const cues = buildCueTable(content);
@@ -282,6 +284,35 @@ describe('status cues: all 34 statuses map to a pip', () => {
     const stun = content.statuses.list.find((s) => (s.blocks ?? []).length === 3 && s.category === 'cc_hard')!;
     const root = content.statuses.list.find((s) => (s.blocks ?? []).length === 1 && s.category === 'cc_hard')!;
     expect(byPriority.get(stun.id)!).toBeGreaterThan(byPriority.get(root.id)!);
+  });
+
+  it('gives every status the pip of its category (A18): the seven pip kinds, and none for the shield category', () => {
+    const expected: Record<string, PipKind | null> = {
+      cc_hard: 'control-hard',
+      cc_soft: 'control-soft',
+      buff: 'buff',
+      debuff: 'debuff',
+      dot: 'dot',
+      hot: 'hot',
+      special: 'special',
+      shield: null,
+    };
+    expect([...STATUS_CATEGORIES].sort()).toEqual(Object.keys(expected).sort());
+    for (const category of STATUS_CATEGORIES) expect(pipOf(category), category).toBe(expected[category]);
+    const used = new Set<PipKind>();
+    for (const def of content.statuses.list) {
+      const pip = cues.status(def.id).pip;
+      expect(pip, def.id).toBe(expected[def.category]);
+      expect(pip, def.id + ' has a pip').not.toBeNull();
+      used.add(pip!);
+    }
+    expect([...used].sort()).toEqual(['buff', 'control-hard', 'control-soft', 'debuff', 'dot', 'hot', 'special']);
+    // The palette has a colour and a glyph for each pip the cues name.
+    const palette = defaultArenaPalette('dark');
+    for (const pip of used) {
+      expect(palette.pipColor[pip]).toBeGreaterThan(0);
+      expect(palette.pipGlyphSvg[pip]).toContain('<path');
+    }
   });
 
   it('refuses an unknown id', () => {

@@ -7,12 +7,12 @@
 import { InvariantError } from '../../core/util';
 import type { CameraConfig, ViewTransform } from '../types';
 
-/** M2 (approved, Q55): top-down orthographic, whole arena, no zoom or follow (04 §4). */
+/** M2 (approved, Q55): top-down orthographic, whole arena, no zoom or follow (04 §4). The viewer's host is the stage only, so the padding is 16 px all round for the wall (§A18 decision 2). */
 export const DEFAULT_CAMERA: CameraConfig = {
   projection: { kind: 'top-down' },
   zoom: 1,
   follow: null,
-  padding: { top: 56, right: 16, bottom: 72, left: 16 },
+  padding: { top: 16, right: 16, bottom: 16, left: 16 },
   easeMs: 220,
 };
 
