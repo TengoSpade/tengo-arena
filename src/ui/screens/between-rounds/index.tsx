@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { BetweenRoundSideView } from '../../../core/game';
 import type { FighterId, StartingRow, SwapDecision } from '../../../core/model';
 import { afterMatch } from '../../app/after-match';
+import { useMounted } from '../../app/mounted';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
 import { useShortcuts } from '../../app/shortcuts';
@@ -60,6 +61,7 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
     return matchXpSoFar(content, ms, sideKey, tournament);
   }, [content, ms, sideKey]);
 
+  const mounted = useMounted();
   const playOn = async () => {
     if (!state || !mine || busy) return;
     setBusy(true);
@@ -73,6 +75,8 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
         return;
       }
       const res = await store.advance();
+      // Gone while the round was played (Back, another screen): the state has moved on; Continue reads where the match stands.
+      if (!mounted.current) return;
       if (res.ok) afterMatch(store.game.value, res.value);
       // M2: a watched match opens the next round in the arena (after its lock was saved); a lock that could not be
       // saved stays here, with Continue as the retry.

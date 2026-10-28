@@ -153,5 +153,6 @@ export function buildHud(args: { state: GameState; ctx: ArenaRoundContext; playb
   };
   const rows: Record<number, 'front' | 'back'> = {};
   for (const u of args.playback.log.header.units) rows[u.index] = u.row;
-  return { left: side(mine), right: side(mine === 0 ? 1 : 0), bestOf: ctx.bestOf, round: ctx.round, kind: args.kind, rows };
+  // Home on the left, away on the right, as the report has it; the player's side carries the You tag and the solid ring.
+  return { left: side(0), right: side(1), bestOf: ctx.bestOf, round: ctx.round, kind: args.kind, rows };
 }

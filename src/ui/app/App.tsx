@@ -64,7 +64,7 @@ export function App({ store }: AppProps) {
       effect(() => {
         const e = store.lastError.value;
         if (!e) return;
-        showToast({ title: errorText(e), kind: 'bad', sub: e.code });
+        showToast({ title: errorText(e), kind: 'bad' });
         store.clearError();
       }),
     [store],

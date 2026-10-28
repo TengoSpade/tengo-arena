@@ -14,6 +14,7 @@ import type { FixtureId, GameState, WeekReport } from '../../../core/model';
 import type { EngineError, Result } from '../../../core/util';
 import type { ArenaViewer } from '../../../render/viewer';
 import { afterMatch, opensReport } from '../../app/after-match';
+import { useMounted } from '../../app/mounted';
 import { navigate } from '../../app/router';
 import type { ScreenProps } from '../../app/routes';
 import { Empty, Modal, PageHeader, showToast } from '../../components';
@@ -28,6 +29,7 @@ import { ArenaLayout } from './Arena';
 import { buildHud, buildRoundContext, fightInputOf } from './context';
 import { readArenaPalette } from './palette';
 import { ROUND_END_MS, RoundEndOverlay, resetRoundEnd, roundEnd, type RoundEndResult } from './RoundEnd';
+import { recallStop, rememberStop, type StopAt } from './resume-cause';
 import { useViewerSession, type StopKind } from './session';
 import { clock, t, t as uiText } from './text';
 
@@ -105,6 +107,13 @@ export default function ArenaScreen(_props: ScreenProps) {
   const store = useStore() as AppStore;
   const state = store.game.value;
   const content = store.content.value;
+  // A card left in the module signal by an earlier screen (a commit that finished after its screen was gone) must neither show
+  // nor run its next step here: reset at MOUNT, before the first read below (the unmount reset alone left that window open).
+  const fresh = useRef(true);
+  if (fresh.current) {
+    fresh.current = false;
+    resetRoundEnd();
+  }
   const over = roundEnd.value;
   // While the round is being committed and its result shows, the round stays mounted (the state under it moves on at
   // the commit, before the card is up, and the card lives inside the round's screen).
@@ -225,20 +234,28 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
   const [busy, setBusy] = useState(false);
   const resumePlaying = useRef(false);
   const committing = useRef(false);
+  // Back, Leave or another screen while a commit or the simulated rest runs: the step must not open a card, route or toast after.
+  const mounted = useMounted();
 
   // The cursor persisted so far (the resume point at mount). The inspector's probe waits for it: core refuses a tick past it.
   const cursorSaved = useMemo(() => signal(startTick), []);
   const lastSaved = useRef(startTick);
 
-  const persistCursor = (viewer: ArenaViewer): void => {
+  const stopAt = (cursor: number): StopAt => ({ career: String(state.rng.root), fixtureId, round, cursor });
+  const resumedStop = useMemo(() => (startTick > 0 ? recallStop(stopAt(startTick)) : null), []);
+
+  const persistCursor = (viewer: ArenaViewer, stop: StopKind): void => {
     // The reveal frontier: an integer tick at or beyond everything shown (tech-019); a rewind never lowers it.
     const head = Math.ceil(viewer.headTick);
     if (head <= lastSaved.current) return;
     const before = lastSaved.current;
     lastSaved.current = head;
     void arena.saveCursor(store.game.value ?? state, head).then((r) => {
-      if (r.ok) cursorSaved.value = Math.max(cursorSaved.value, head);
-      else lastSaved.current = before;
+      if (r.ok) {
+        cursorSaved.value = Math.max(cursorSaved.value, head);
+        // The cause travels with the cursor it belongs to: an automatic pause is recalled on resume, any other stop clears it.
+        rememberStop(stopAt(head), stop.kind === 'auto' ? stop.stop : null);
+      } else lastSaved.current = before;
     });
   };
 
@@ -256,6 +273,7 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
     // The hash of the log the viewer loaded (never a hash of anything else): the commit compares it in every build.
     const res = await arena.finishRound({ round, logHash: playback.log.hash });
     committing.current = false;
+    if (!mounted.current) return; // the commit stands in the state; no card, no route from a screen that is gone
     setBusy(false);
     const after = store.game.value ?? state;
     if (res.ok) return showResult(after, () => afterMatch(after, res.value), res.value);
@@ -288,7 +306,7 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
       void finish();
       return;
     }
-    persistCursor(viewer);
+    persistCursor(viewer, stop);
   };
 
   const session = useViewerSession(hostRef, {
@@ -298,6 +316,7 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
     autoplay: startTick === 0,
     pauseWhenHidden: settings.value.arena.pauseWhenHidden,
     onStopped,
+    resumedStop,
     onLoaded: () => {
       if (startTick > 0) showToast({ kind: 'info', title: t('resumed'), sub: t('resumedSub', { time: clock(startTick * TICK_S) }) });
     },
@@ -355,6 +374,7 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
     roundEnd.value = { phase: 'saving', round, bestOf: ctx.bestOf, result: null, next: null, retry: null, message: 'simulating' };
     const head = Math.ceil(session.snap.peek().head);
     const res = await arena.simulateRest(store.game.value ?? state, head);
+    if (!mounted.current) return;
     setBusy(false);
     roundEnd.value = null;
     if (res.ok) afterMatch(store.game.value, res.value);

@@ -8,7 +8,7 @@
  * captain-down, handover and call are about `unit`.
  */
 import type { ContentDB } from '../../../core/content';
-import type { ArenaRoundContext, AutoPauseReason, AutoPauseRules, AutoPauseStop, KeyMoment, PlaybackStop } from '../../../render';
+import type { ArenaRoundContext, AutoPauseReason, KeyMoment } from '../../../render';
 import { abilityName } from '../../m11/model';
 import type { StopKind } from './session';
 import { clock, t } from './text';
@@ -30,6 +30,8 @@ export interface FeedItem {
   detail: string;
   text: string;
   time: string;
+  /** A down whose fighter was the captain (his captain-down moment is folded into this item). */
+  captain?: boolean;
 }
 
 const TICK_S = 0.05;
@@ -38,12 +40,14 @@ export function nameOfUnit(ctx: ArenaRoundContext, unit: number | null): string 
   return unit === null ? '' : (ctx.units[unit]?.name ?? `#${unit}`);
 }
 
-export function momentParts(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB): { title: string; detail: string } {
+/** `captain`: the fallen was the acting captain (his captain-down moment is folded into this line, not a second one). */
+export function momentParts(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB, captain = false): { title: string; detail: string } {
   const unit = nameOfUnit(ctx, m.target);
   const by = nameOfUnit(ctx, m.unit);
   const ability = m.ability ? abilityName(content, m.ability) : '';
   switch (m.kind) {
     case 'down':
+      if (captain) return { title: by ? t('momentDownCaptain', { unit, by }) : t('momentDownCaptainAlone', { unit }), detail: ability };
       return { title: by ? t('momentDown', { unit, by }) : t('momentDownAlone', { unit }), detail: ability };
     default:
       return { title: momentText(m, ctx, content), detail: '' };
@@ -55,7 +59,7 @@ export function subjectOf(m: KeyMoment): number | null {
   return m.kind === 'down' || m.kind === 'interrupt' || m.kind === 'deathward' ? m.target : m.unit;
 }
 
-export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB): string {
+export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB, captain = false): string {
   // About whom (the fallen, the interrupted, the saved) and by whom, per the convention above.
   const affected = subjectOf(m) === m.target && m.target !== null;
   const unit = nameOfUnit(ctx, affected ? m.target : m.unit);
@@ -63,6 +67,7 @@ export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: Conten
   const ability = m.ability ? abilityName(content, m.ability) : '';
   switch (m.kind) {
     case 'down':
+      if (captain) return by && ability ? t('momentDownCaptainBy', { unit, by, ability }) : by ? t('momentDownCaptain', { unit, by }) : t('momentDownCaptainAlone', { unit });
       return by && ability ? t('momentDownBy', { unit, by, ability }) : by ? t('momentDown', { unit, by }) : t('momentDownAlone', { unit });
     case 'interrupt':
       return by ? t('momentInterruptBy', { unit, by }) : t('momentInterrupt', { unit });
@@ -84,12 +89,22 @@ export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: Conten
 }
 
 export function feedItems(moments: readonly KeyMoment[], ctx: ArenaRoundContext, content: ContentDB): FeedItem[] {
-  return moments.map((m) => {
+  // A captain's fall is one line: the down names him Captain, and his captain-down moment (same tick, same fighter) is folded
+  // into it. A captain-down with no down beside it stays as its own line.
+  const downs = new Set<string>();
+  for (const m of moments) if (m.kind === 'down' && m.target !== null) downs.add(`${m.tick}:${m.target}`);
+  const folded = (m: KeyMoment): boolean => m.kind === 'captain-down' && m.unit !== null && downs.has(`${m.tick}:${m.unit}`);
+  const captains = new Set<string>();
+  for (const m of moments) if (folded(m)) captains.add(`${m.tick}:${m.unit}`);
+  const items: FeedItem[] = [];
+  for (const m of moments) {
+    if (folded(m)) continue;
+    const captain = m.kind === 'down' && m.target !== null && captains.has(`${m.tick}:${m.target}`);
     const subject = subjectOf(m);
     const side = subject !== null ? (ctx.units[subject]?.side ?? null) : null;
     const ours = side === null ? null : side === (ctx.playerSide ?? 0);
-    const parts = momentParts(m, ctx, content);
-    return {
+    const parts = momentParts(m, ctx, content, captain);
+    items.push({
       key: `${m.seq}`,
       tick: m.tick,
       kind: m.kind,
@@ -99,10 +114,12 @@ export function feedItems(moments: readonly KeyMoment[], ctx: ArenaRoundContext,
       event: m.kind === 'down' || m.kind === 'captain-down' ? 'down' : m.kind === 'overtime' || m.kind === 'end' ? 'end' : 'rule',
       title: parts.title,
       detail: parts.detail,
-      text: momentText(m, ctx, content),
+      text: momentText(m, ctx, content, captain),
       time: clock(m.tick * TICK_S),
-    };
-  });
+      ...(captain ? { captain: true } : {}),
+    });
+  }
+  return items;
 }
 
 const AUTO_WHY: Record<AutoPauseReason, Parameters<typeof t>[0]> = {
@@ -112,36 +129,6 @@ const AUTO_WHY: Record<AutoPauseReason, Parameters<typeof t>[0]> = {
   overtime: 'stopAutoOvertime',
   ownHpBelowPct: 'stopAutoOwnHpBelowPct',
 };
-
-/**
- * Why a RESUMED round sits paused where it does: the auto-pause the player's rules would have raised at the saved cursor,
- * read from the moments the viewer has shown (never the log: a live round stays bounded by its head). The cursor is the
- * reveal frontier, ceil of the head at the stop, so the stop's tick is the cursor or the tick before it. Null when nothing
- * would have stopped there (a manual pause, a window that was hidden, a rule since switched off) or for the low-HP rule,
- * which needs the samples and not the moments.
- */
-export function resumeStop(moments: readonly KeyMoment[], ctx: ArenaRoundContext, rules: AutoPauseRules, cursor: number): PlaybackStop | null {
-  const own = ctx.playerSide;
-  const stopOf = (m: KeyMoment): AutoPauseStop | null => {
-    if (m.kind === 'overtime') return rules.overtime ? { tick: m.tick, seq: m.seq, reason: 'overtime', unit: null } : null;
-    if (own === null) return null;
-    if (m.kind === 'down' && m.target !== null) {
-      const mine = ctx.units[m.target]?.side === own;
-      return (mine ? rules.ownDowned : rules.enemyDowned) ? { tick: m.tick, seq: m.seq, reason: mine ? 'ownDowned' : 'enemyDowned', unit: m.target } : null;
-    }
-    if (m.kind === 'captain-down' && m.unit !== null && ctx.units[m.unit]?.side === own && rules.ownCaptainDown) return { tick: m.tick, seq: m.seq, reason: 'ownCaptainDown', unit: m.unit };
-    return null;
-  };
-  for (const tick of [cursor, cursor - 1]) {
-    const hits = moments
-      .filter((m) => m.tick === tick)
-      .map(stopOf)
-      .filter((s): s is AutoPauseStop => s !== null)
-      .sort((a, b) => a.seq - b.seq);
-    if (hits[0]) return { kind: 'auto', stop: hits[0] };
-  }
-  return null;
-}
 
 /** The cause of an automatic pause for the transport's status ("Kael Dunmere was downed"), or null. */
 export function stopCause(stop: StopKind, ctx: ArenaRoundContext): string | null {

@@ -2,7 +2,8 @@
  * The top strip of the arena (04 §4, mockups/arena.html `.ahud`; 05-technical-m2 §A7): crests, names with "n of 5
  * standing", rounds won as pips, round and clock (amber with the word Overtime), speed and pause, the hidden calls slot.
  * Pure DOM over the viewer's frame: for a live round nothing here reads past the live head. The player's side is on
- * the left; the colour-free side cue is the place and the ring style.
+ * the same place whichever side the player is on (home left, away right, as the report); the colour-free player cue is the
+ * "You" tag and the ring style (solid for ours, double for theirs).
  */
 import type { ReadonlySignal } from '@preact/signals';
 import type { ArenaFrameState, Speed } from '../../../render';
@@ -25,8 +26,9 @@ export interface HudSide {
 }
 
 export interface HudInfo {
-  /** The player's side first (home first in a match between other clubs). */
+  /** Home, whoever the player is. */
   left: HudSide;
+  /** Away. */
   right: HudSide;
   bestOf: number;
   round: number;

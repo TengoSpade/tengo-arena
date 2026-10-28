@@ -2,9 +2,11 @@
  * The right dock (mockups/arena.html `.arena-dock`; 05-technical-m2 §A18): the pause inspector above the key-moment
  * feed. Both are DOM over the canvas (tech-018) and take only what the session hands them, which for a live round is
  * bounded by the live head. The feed reuses the report's `.timeline`: chronological, aria-live polite, the newest line
- * highlighted, opened scrolled to the newest; a replay shows the whole round with later moments dimmed.
+ * highlighted, opened scrolled to the newest; a replay shows the whole round with later moments dimmed. The lines are ONE
+ * tab stop (roving: the newest, or the one last focused or clicked); Up and Down move between them, so a long feed does not
+ * stand between the player and the fighter strip.
  */
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ContentDB } from '../../../core/content';
 import { Icon, Portrait, RoleGlyph, tipAttrs } from '../../components';
 import { StanceSentence, RuleSentence } from '../match-report/rule-sentence';
@@ -31,6 +33,16 @@ export function ArenaFeed({
     if (el) el.scrollTop = el.scrollHeight;
   }, [newest]);
   const nowKey = [...items].reverse().find((m) => m.tick <= playheadTick)?.key;
+  // The roving tab stop: the line last focused or clicked while it is still in the feed, else the newest.
+  const [picked, setPicked] = useState<string | null>(null);
+  const roving = items.some((m) => m.key === picked) ? picked : (items[items.length - 1]?.key ?? null);
+  const list = useRef<HTMLOListElement>(null);
+  const moveTo = (index: number): void => {
+    const target = items[Math.max(0, Math.min(items.length - 1, index))];
+    if (!target) return;
+    setPicked(target.key);
+    list.current?.querySelectorAll<HTMLElement>('[data-testid="feed-item"]')[items.indexOf(target)]?.focus();
+  };
   return (
     <section class="panel afeed" aria-labelledby="h-feed" data-testid="arena-feed">
       <header class="panel__header">
@@ -46,8 +58,8 @@ export function ArenaFeed({
             {t('feedEmpty')}
           </p>
         ) : (
-          <ol class="timeline" aria-live="polite" aria-label={t('feedTitle')} data-testid="feed-list">
-            {items.map((m) => (
+          <ol class="timeline" ref={list} aria-live="polite" aria-label={t('feedTitle')} data-testid="feed-list">
+            {items.map((m, i) => (
               <li
                 key={m.key}
                 class={`timeline__item${m.key === nowKey ? ' is-now' : ''}${kind === 'replay' && m.tick > playheadTick ? ' is-future' : ''}`}
@@ -56,13 +68,21 @@ export function ArenaFeed({
                 data-kind={m.kind}
                 data-ours={m.ours === null ? undefined : String(m.ours)}
                 data-testid="feed-item"
-                tabIndex={0}
-                onClick={() => onJump(m.tick)}
+                tabIndex={m.key === roving ? 0 : -1}
+                onFocus={() => setPicked(m.key)}
+                onClick={() => {
+                  setPicked(m.key);
+                  onJump(m.tick);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     e.stopPropagation();
                     onJump(m.tick);
+                  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    moveTo(i + (e.key === 'ArrowDown' ? 1 : -1));
                   }
                 }}
                 {...tipAttrs(t(kind === 'live' ? 'feedGo' : 'feedGoReplay', { time: m.time }))}

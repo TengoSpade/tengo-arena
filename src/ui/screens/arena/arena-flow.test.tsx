@@ -6,6 +6,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ContentDB } from '../../../core/content';
+import type { FixtureId } from '../../../core/model';
 import { fixtureContent } from '../../../core/testkit';
 import { App } from '../../app/App';
 import { navigate } from '../../app/router';
@@ -14,7 +15,8 @@ import { createTestStore } from '../../debug/test-store';
 import { DEFAULT_SETTINGS, updateSettings } from '../../store/settings';
 import { resetLiveRoundCache } from './index';
 import { liveWatchState } from '../../debug/arena-test-world';
-import { resetRoundEnd } from './RoundEnd';
+import { forgetStop, recallStop, rememberStop } from './resume-cause';
+import { resetRoundEnd, roundEnd } from './RoundEnd';
 import { fakeTimeline } from './testing/fake-timeline';
 import { createFakeViewerHarness, type FakeViewerHarness } from './testing/fake-viewer';
 import { createScriptedCore, watchWorld, type ScriptedCore, type WatchWorld } from '../../debug/arena-test-world';
@@ -25,6 +27,7 @@ beforeEach(() => {
   resetToasts();
   resetRoundEnd();
   resetLiveRoundCache();
+  forgetStop();
   content = fixtureContent();
   // A player who lets the rounds run: no auto-pause stops, Watch without the offer, no lineup stop.
   updateSettings({
@@ -52,8 +55,14 @@ interface Mounted {
   t: ReturnType<typeof createTestStore>;
 }
 
-function mountApp(opts: { winners?: ('home' | 'away')[]; state?: 'prelock' | 'round-waiting'; hash?: string } = {}): Mounted {
+function mountApp(opts: { winners?: ('home' | 'away')[]; state?: 'prelock' | 'round-waiting'; hash?: string; injured?: boolean } = {}): Mounted {
   const w = watchWorld(content);
+  if (opts.injured) {
+    // A reserve of the player's club hurt this week (the scripted core's reports are of season 1, week 11): the injury stop.
+    const reserve = Object.values(w.state.fighters).find((f) => f.clubId === w.home && !w.prepared.home.active.includes(f.id));
+    if (!reserve) throw new Error('the fixture club has no reserve to injure');
+    reserve.injury = { severity: 'minor', weeksOut: 1, fixtureId: w.fixtureId as FixtureId, round: 1, causeFighterId: null, damageBp: 4000, since: { season: 1, weekIndex: 11 } };
+  }
   const core = createScriptedCore(w, { winners: opts.winners });
   const t = createTestStore({ world: 'none', engine: core.engine });
   t.store.replaceWorld(opts.state === 'round-waiting' ? liveWatchState(w) : w.state, content);
@@ -151,18 +160,23 @@ describe('ux-001 counted: Play match, then one Enter per round boundary', () => 
 
 describe('after the deciding round the report opens per the pacing preset, as after a simulated match (A7, A18, D-L)', () => {
   const NO_STOPS = { ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null };
-  const cases: { pacing: 'thorough' | 'balanced' | 'streamlined'; won: boolean; opens: boolean; note: string }[] = [
-    { pacing: 'thorough', won: true, opens: true, note: 'Thorough opens every report' },
-    { pacing: 'thorough', won: false, opens: true, note: 'Thorough opens every report' },
-    { pacing: 'balanced', won: true, opens: false, note: 'Balanced: only after a loss or an injury, so a win goes Home with the result toast' },
-    { pacing: 'balanced', won: false, opens: true, note: 'Balanced opens it after a loss' },
-    { pacing: 'streamlined', won: true, opens: false, note: 'Streamlined: only an injury opens it' },
-    { pacing: 'streamlined', won: false, opens: false, note: 'Streamlined does not stop on a loss' },
+  // pacingStops (D-L): Thorough opens every report; Balanced after a loss or an injury; Streamlined after an injury only.
+  const cases: { pacing: 'thorough' | 'balanced' | 'streamlined'; won: boolean; injured: boolean; opens: boolean }[] = [
+    { pacing: 'thorough', won: true, injured: false, opens: true },
+    { pacing: 'thorough', won: false, injured: false, opens: true },
+    { pacing: 'thorough', won: true, injured: true, opens: true },
+    { pacing: 'balanced', won: true, injured: false, opens: false }, // a win goes Home with the result toast
+    { pacing: 'balanced', won: false, injured: false, opens: true },
+    { pacing: 'balanced', won: true, injured: true, opens: true },
+    { pacing: 'streamlined', won: true, injured: false, opens: false },
+    { pacing: 'streamlined', won: false, injured: false, opens: false }, // Streamlined does not stop on a loss
+    { pacing: 'streamlined', won: true, injured: true, opens: true }, // it does stop on an injury
+    { pacing: 'streamlined', won: false, injured: true, opens: true },
   ];
-  it.for(cases)('$pacing, won=$won: the report opens=$opens ($note)', { timeout: 30_000 }, async (c) => {
+  it.for(cases)('$pacing, won=$won, injured=$injured: the report opens=$opens', { timeout: 30_000 }, async (c) => {
     updateSettings({ ...DEFAULT_SETTINGS, pacing: c.pacing, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: NO_STOPS } });
     // On the Squad screen (the lineup stop of Thorough and Balanced is behind us): Watch is the primary button.
-    const m = mountApp({ winners: c.won ? ['home', 'home'] : ['away', 'away'], hash: '#/squad' });
+    const m = mountApp({ winners: c.won ? ['home', 'home'] : ['away', 'away'], hash: '#/squad', injured: c.injured });
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toMatch(/Watch|Play match|Simulate/), { timeout: 4000 });
     await settle();
     // Under Streamlined the primary action simulates, and Watch is the second button.
@@ -436,52 +450,92 @@ describe('routing and resume', () => {
 });
 
 describe('a resumed round says why it stopped where it did', () => {
-  /** Reopen a saved lock whose cursor is `cursorTick` (the fixture round's first down is unit 3, ours, at tick 400). */
-  async function resumeAt(cursorTick: number, autoPause?: Partial<typeof DEFAULT_SETTINGS.arena.autoPause>) {
-    const w = watchWorld(content);
-    const core = createScriptedCore(w);
-    const t = createTestStore({ world: 'none', engine: core.engine });
-    t.store.replaceWorld(liveWatchState(w, { cursorTick }), content);
-    updateSettings({ ...DEFAULT_SETTINGS, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: { ownDowned: true, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null, ...autoPause } } });
-    const harness = createFakeViewerHarness(fakeTimeline, content);
+  /** Play the live round to a stop, save, "reload" (a fresh store and app on the round autosave), and return the resumed arena. */
+  async function stopAndReload(stopTick: number, autoPause: Partial<typeof DEFAULT_SETTINGS.arena.autoPause>, pause: 'auto' | 'manual', savedTick = Math.ceil(stopTick)) {
+    updateSettings({ ...DEFAULT_SETTINGS, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: { ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null, ...autoPause } } });
+    const m = mountApp({ state: 'round-waiting', hash: '#/arena' });
+    await arenaReady(m, 1);
+    await settle();
+    const saved = savedTick;
+    await act(async () => {
+      m.harness.current().advanceTo(stopTick); // an automatic stop is reached on the way; a manual one is made below
+    });
+    await settle();
+    if (pause === 'manual') {
+      press(' ');
+      await waitFor(() => expect(m.harness.current().playing).toBe(false));
+    } else await waitFor(() => expect(m.harness.current().playing).toBe(false));
+    await waitFor(() => expect(m.core.watchCommands.at(-1)?.tick).toBe(saved), { timeout: 4000 });
+    await waitFor(async () => expect(JSON.parse((await m.t.saves.read('auto-round'))!).state.liveMatch.watch.cursorTick).toBe(saved), { timeout: 4000 });
+    cleanup();
+    const json = (await m.t.saves.read('auto-round'))!;
+    const core2 = createScriptedCore(m.w);
+    const t2 = createTestStore({ world: 'none', engine: core2.engine });
+    t2.store.replaceWorld(JSON.parse(json).state, content);
+    const harness2 = createFakeViewerHarness(fakeTimeline, content);
     navigate('#/arena');
     render(
-      <ViewerFactoryContext.Provider value={harness.factory}>
-        <App store={t.store} />
+      <ViewerFactoryContext.Provider value={harness2.factory}>
+        <App store={t2.store} />
       </ViewerFactoryContext.Provider>,
     );
-    await waitFor(() => expect(harness.all).toHaveLength(1), { timeout: 4000 });
+    await waitFor(() => expect(harness2.all).toHaveLength(1), { timeout: 4000 });
     await waitFor(() => expect(screen.getByTestId('screen-arena').getAttribute('data-status')).toBe('ready'), { timeout: 4000 });
-    expect(harness.current().tick).toBe(cursorTick);
-    expect(harness.current().playing).toBe(false);
-    return { w, harness };
+    expect(harness2.current().tick).toBe(saved);
+    expect(harness2.current().playing).toBe(false);
+    return { m };
   }
 
-  it('at the tick of an own down: the same cause as the live stop (status text and announcement)', async () => {
-    const { w } = await resumeAt(400);
-    const fallen = w.state.fighters[w.prepared.home.active[3]!]!.name.full;
+  it('an automatic pause: the same cause and announcement as the live stop', async () => {
+    // The fixture round's first down is unit 3, ours, at tick 400.
+    await stopAndReload(1000, { ownDowned: true }, 'auto', 400);
+    const fallen = screen.getByTestId('status-note').textContent!;
+    expect(fallen).toMatch(/ was downed$/);
     expect(screen.getByText('Paused automatically')).toBeTruthy();
-    expect(screen.getByTestId('status-note').textContent).toBe(fallen + ' was downed');
-    expect(screen.getByTestId('arena-announce').textContent).toBe('Paused: one of yours went down (' + fallen + ')');
+    expect(screen.getByTestId('arena-announce').textContent).toBe(`Paused: one of yours went down (${fallen.replace(' was downed', '')})`);
   });
 
-  it('a cursor saved a frame after the stop (ceil of the head) still shows its cause', async () => {
-    await resumeAt(401);
-    expect(screen.getByTestId('status-note').textContent).toMatch(/was downed$/);
-  });
-
-  it('a pause that no rule would have raised shows no cause; neither does a stop whose rule has since been switched off', async () => {
-    await resumeAt(250);
+  it('a manual pause shows no cause', async () => {
+    await stopAndReload(250, { ownDowned: true }, 'manual');
     expect(screen.queryByTestId('status-note')).toBeNull();
     expect(screen.getByTestId('arena-announce').textContent).toBe('');
-    cleanup();
-    await resumeAt(400, { ownDowned: false });
+  });
+
+  it('a manual pause a fraction of a tick before a down is not shown as that down (the cursor is the ceil of the head)', async () => {
+    // Paused at 399.6: the reveal frontier saved is 400, the tick of the own down, which was never reached.
+    await stopAndReload(399.6, { ownDowned: true }, 'manual');
     expect(screen.queryByTestId('status-note')).toBeNull();
+    expect(screen.queryByText('Paused automatically')).toBeNull();
+    expect(screen.getByTestId('arena-announce').textContent).toBe('');
   });
 
   it('the start of overtime is named too, when the player stops on it', async () => {
-    await resumeAt(900, { overtime: true });
+    await stopAndReload(1000, { overtime: true }, 'auto', 900);
     expect(screen.getByTestId('arena-announce').textContent).toBe('Paused: overtime starts');
+  });
+});
+
+describe('the remembered stop (resume-cause.ts)', () => {
+  const at = { career: '7', fixtureId: 'f1', round: 1, cursor: 400 };
+  const stop = { tick: 400, seq: 12, reason: 'ownDowned' as const, unit: 3 };
+
+  it('is recalled for the same career, fixture, round and cursor, and for nothing else', () => {
+    rememberStop(at, stop);
+    expect(recallStop(at)).toEqual({ kind: 'auto', stop });
+    for (const other of [{ ...at, cursor: 401 }, { ...at, round: 2 }, { ...at, fixtureId: 'f2' }, { ...at, career: '8' }]) expect(recallStop(other)).toBeNull();
+  });
+
+  it('a later stop that was not automatic clears it; garbage and missing storage give no cause', () => {
+    rememberStop(at, stop);
+    rememberStop({ ...at, cursor: 450 }, null);
+    expect(recallStop(at)).toBeNull();
+    expect(recallStop({ ...at, cursor: 450 })).toBeNull();
+    localStorage.setItem('arena-league.arena.last-stop', '{not json');
+    expect(recallStop(at)).toBeNull();
+    localStorage.setItem('arena-league.arena.last-stop', JSON.stringify({ ...at, stop: { tick: 'x' } }));
+    expect(recallStop(at)).toBeNull();
+    forgetStop();
+    expect(recallStop(at)).toBeNull();
   });
 });
 
@@ -658,4 +712,56 @@ describe('keyboard only (04 §9, A9)', () => {
     // The keys are listed on screen.
     expect(root.textContent).toContain('Space plays or pauses');
   });
+});
+
+describe('a step that outlives its screen does not act afterwards (Back while a round commits)', () => {
+  it('leaves no result card behind: the next arena shows none and is not sent to the between-round screen 1.5 s later', async () => {
+    const m = mountApp({ state: 'round-waiting', hash: '#/arena' });
+    await arenaReady(m, 1);
+    await settle();
+    // Hold the commit's autosave, so finish() is still waiting when Back is pressed.
+    const write = m.t.saves.write.bind(m.t.saves);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    m.t.saves.write = async (...a: Parameters<typeof m.t.saves.write>) => {
+      if (a[0] === 'auto-round') await gate;
+      return write(...a);
+    };
+    await playOut(m); // the round ends: the commit starts and waits on the held write
+    await waitFor(() => expect(screen.getByTestId('arena-overlay').getAttribute('data-phase')).toBe('saving'));
+    navigate('#/home'); // Back
+    await waitFor(() => expect(screen.queryByTestId('screen-arena')).toBeNull());
+    release();
+    await waitFor(() => expect(m.t.store.game.value!.liveMatch!.phase).toBe('between_rounds'), { timeout: 4000 }); // the commit stands
+    await settle();
+    expect(location.hash).toBe('#/home'); // the finished commit did not route him anywhere
+    expect(toasts.value).toHaveLength(0);
+    // Round 2, from the between-round screen: no card is waiting for it.
+    navigate('#/between-rounds');
+    await waitFor(() => expect(screen.getByTestId('screen-between-rounds')).toBeTruthy());
+    await settle();
+    press('Enter');
+    await waitFor(() => expect(location.hash).toBe('#/arena'));
+    await arenaReady(m, 2);
+    expect(screen.queryByTestId('arena-overlay')).toBeNull();
+    await new Promise((r) => setTimeout(r, 1900)); // longer than the card's 1.5 s
+    expect(location.hash).toBe('#/arena');
+    expect(m.harness.all[1]!.destroyed).toBe(false);
+    expect(screen.queryByTestId('arena-overlay')).toBeNull();
+  }, 20_000);
+
+  it('a card left in the module signal by an earlier screen is cleared when the arena mounts', async () => {
+    const m = mountApp({ state: 'round-waiting', hash: '#/codex' });
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Resume watching'));
+    // What the commit used to leave behind: a result card with a next step.
+    let ran = 0;
+    roundEnd.value = { phase: 'result', round: 1, bestOf: 3, result: null, next: () => void ran++, retry: null };
+    await settle();
+    press(' ');
+    await arenaReady(m, 1);
+    expect(screen.queryByTestId('arena-overlay')).toBeNull();
+    await new Promise((r) => setTimeout(r, 1800));
+    expect(ran).toBe(0);
+    expect(location.hash).toBe('#/arena');
+  }, 20_000);
 });

@@ -13,7 +13,6 @@ import type { RoundPlayback } from '../../../core/game';
 import type { ArenaFrameState, ArenaRoundContext, DecisionSnapshot, KeyMoment, PlaybackStop, Speed } from '../../../render';
 import type { ArenaViewer } from '../../../render/viewer';
 import { effectiveTheme, reducedMotion, settings, updateArenaSettings } from '../../store/settings';
-import { resumeStop } from './feed';
 import { hookSlot } from './hook-registry';
 import { readArenaPalette } from './palette';
 import { useViewerFactory } from './viewer-factory';
@@ -41,6 +40,8 @@ export interface SessionOptions {
   pauseWhenHidden: boolean;
   onStopped?: (stop: StopKind, viewer: ArenaViewer) => void;
   onLoaded?: (viewer: ArenaViewer) => void;
+  /** Live resume: the automatic pause that left the round at its cursor (resume-cause.ts), shown like a live stop. */
+  resumedStop?: PlaybackStop | null;
 }
 
 export interface ArenaSession {
@@ -167,11 +168,8 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
         hookSlot.frame = () => s.frame.peek();
         s.status.value = 'ready';
         sync(viewer);
-        // A resume sits paused at its cursor: say why it stopped there, as the live stop did (the cause is not saved).
-        if (!o.autoplay && o.playback.kind === 'live' && o.playback.startTick > 0) {
-          const stop = resumeStop(viewer.keyMoments(), o.ctx, settings.value.arena.autoPause, o.playback.startTick);
-          if (stop) s.lastStop.value = stop;
-        }
+        // A resume sits paused at its cursor: say why it stopped there, as the live stop did (the cause is not in the save).
+        if (o.resumedStop) s.lastStop.value = o.resumedStop;
         o.onLoaded?.(viewer);
         if (o.autoplay) viewer.play();
         sync(viewer);
