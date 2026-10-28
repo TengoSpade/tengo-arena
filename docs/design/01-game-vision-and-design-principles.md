@@ -474,7 +474,7 @@ The prototype horizon is milestones M1–M7, each playable on its own, with M1 a
 
 ### 8.5 Owner questions and interview progress
 
-**Questions for the owner.** Q36 and Q37–Q51 were answered by the owner on 2026-10-27 (each is marked **Answer** below); Q1–Q35 and Q52 are the only items that still need the owner, and they remain open. The questions use the guide's format and continuous numbering, and are grouped so that each batch can be approved in one answer ("approve batch A as recommended"). Partial answers settle only what they answer. Each batch ends with a one-line "approve all recommended" option. **M1 and M1.1 have been built at risk on the recommended answers**; the answers given so far matched them and so cost no rework, and a different answer to a question that is still open means rework in the sections listed for that item.
+**Questions for the owner.** Q36 and Q37–Q51 were answered by the owner on 2026-10-27 (each is marked **Answer** below); Q1–Q35 and Q52 are the only items that still need the owner, and they remain open. The questions use the guide's format and continuous numbering, and are grouped so that each batch can be approved in one answer ("approve batch A as recommended"). Partial answers settle only what they answer. Batches A to D each end with a one-line "approve all recommended" option; batch E (Q52) has none, because it needs an explicit Option A or B. **M1 and M1.1 have been built at risk on the recommended answers**; the answers given so far matched them and so cost no rework, and a different answer to a question that is still open means rework in the sections listed for that item.
 
 #### Batch A — confirm the delegated decisions (building proceeds on them meanwhile)
 
@@ -796,6 +796,8 @@ In the 10-season soak a mid-age, mid-potential starter (human-age 24–30) level
 
 **Answer (owner, 2026-10-27):** approved as recommended (O25, D-X). The owner's separate words on levels are O23; how they relate to the level counter is open-034 (Q52).
 
+**Note (2026-10-27):** trait stat adds do count toward the rating (they feed `effectiveStatsOf`), so the recommendation's "skills (ranks, perks, traits) do not count toward the rating" is not exact for traits; see open-034 and Q52.
+
 **Q42 — Should elves level more slowly?**
 **Required before the M1.1 handoff · 01 §8.2 D-X (lifespan scaling); 03 sys-development**
 
@@ -921,7 +923,7 @@ Option A: keep the build's level counter and reword O23 to say so. Option B: mak
 - **Last question number:** Q52. Q36 and Q37–Q51 were put to the owner and answered on 2026-10-27; Q52 was raised in v0.7 and is open. To keep the numbering continuous, Q23–Q25 and Q28–Q34 sit in batch A, Q26, Q35 and Q36 in batch B, Q27 in batch C, Q37–Q51 in batch D and Q52 in batch E. **Counts:** batch A 18 (Q1–Q8, Q23–Q25, Q28–Q34), batch B 11 (Q9–Q16, Q26, Q35, Q36), batch C 7 (Q17–Q22, Q27), batch D 15 (Q37–Q51), batch E 1 (Q52); 52 in all, of which **16 are answered** (Q36, Q37–Q51) and **36 are open** (Q1–Q35 and Q52).
 - **M1.1 "Playtest round 1"** (v0.5 design merge, v0.6 as built): the owner's tickets AL-R001-T001 to T005 and answers are O15–O22; the designers' drafts (`_drafts/m1.1/progression.md` v0.2, `_drafts/m1.1/combat-skills.md` v0.2, `_drafts/m1.1/content/`) were merged into 03 and the architect's addendum (`_drafts/05-technical-m1.1.md`) into 05 §9.3; their remaining choices are D-U to D-Z, and the tuning and QA rounds added D-AA to D-AE (batch D, confirmed by the owner as O25). Work packages WP-A to WP-D, the tuning branches (m1.1/tune-combat, m1.1/tune-life), m1.1/bundle and the QA fix branches are merged on main @ 293f49a. The sprite pipeline questions are open-032. The owner's R002 playtest tickets (AL-R002-T001 to T006) were merged on main @ d440107 (core 15f16ce, UI 12ef36a) and are O27–O32.
 - **Delegated design freedom:** the owner's goal instruction not to pause for questions, exercised through D-A to D-AE and recorded in §8.2; the owner has confirmed D-U to D-AE (O25), and D-A to D-T await confirmation. Every other choice is PROPOSED or OPEN (G1).
-- **Next decision frontier:** batch A (Q1–Q8, Q23–Q25, Q28–Q34: confirmation), then batch B (Q9–Q16, Q26, Q35; Q36 is answered), and Q52 (batch E, how levels relate to stat points). Batch C (Q17–Q22, Q27) can wait for its milestones. Batch D and Q36 were answered on 2026-10-27. Each remaining batch can be answered with its one-line approval.
+- **Next decision frontier:** batch A (Q1–Q8, Q23–Q25, Q28–Q34: confirmation), then batch B (Q9–Q16, Q26, Q35; Q36 is answered), and Q52 (batch E, how levels relate to stat points). Batch C (Q17–Q22, Q27) can wait for its milestones. Batch D and Q36 were answered on 2026-10-27. Batches A to C can each be answered with their one-line approval; Q52 needs an explicit Option A or B.
 
 ### 8.6 Independent review record
 
