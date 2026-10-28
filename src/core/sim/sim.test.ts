@@ -73,7 +73,9 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
   // re-pinned 2026-10 when the fixture content gained the D-P/D-T keys; checksums unchanged, no engine change.
   // Re-derived at the M1.1 integration: fixture orc injury values (chanceMult 0.75, recoveryMult 0.8, scarMult 0.9), levelEta defaults as data, the six development.json
   // removals (the header's content hash moved); round checksums unchanged.
-  it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
+  // Re-pinned for log format 2 (M2 WP-M2A, approved in 05-technical-m2 §A2): frames carry shield and focus, a closing frame ends the log and the header names logFormat; checksums, winners and durations unchanged
+  // (format2.test.ts pins that the stream is otherwise the format-1 stream).
+  it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION or FIGHT_LOG_FORMAT_VERSION bump and architect approval)', () => {
     const out = simulateMatch(match(), content, { record: 'full' });
     expect(ENGINE_VERSION).toBe(2);
     expect({ score: out.score, rounds: out.rounds.map((r) => [r.winner, r.durationTicks, r.checksum, r.eventHash]) }).toMatchInlineSnapshot(`
@@ -102,7 +104,8 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
 
   // M1.1 round API golden (approved with ENGINE_VERSION 2): ranks, perks and Freshness on the fixture.
   // Event hash re-pinned at the M1.1 integration (WP-C): the summary-level perk.proc event joined the stream; checksum unchanged.
-  it('golden: the pinned M1.1 round (ranks, perks, Freshness)', () => {
+  // Event hash re-pinned for log format 2 (M2 WP-M2A): six-element frames, the closing frame, header.logFormat; checksum unchanged.
+  it('golden: the pinned M1.1 round (ranks, perks, Freshness; change only with an ENGINE_VERSION or FIGHT_LOG_FORMAT_VERSION bump)', () => {
     const runs = [0, 1].map(() => simulateRound(m11Round(), 'r-golden', content, { record: 'full' }));
     expect(runs[1]!.result).toEqual(runs[0]!.result);
     const out = runs[0]!;

@@ -47,7 +47,7 @@ export function probeRound(input: RoundInput, roundSeed: Seed, content: ContentD
   });
   if (over) {
     for (const p of units) if (p.standing) p.blockedBy = ROUND_OVER;
-    return { tick: at, units };
+    return { tick: at, evaluatedTick: at + 1, units };
   }
 
   // The evaluation: the sim's next decision phase (tick `at` + 1: its timers, then the decisions), one unit at a time.
@@ -59,5 +59,5 @@ export function probeRound(input: RoundInput, roundSeed: Seed, content: ContentD
     p.blockedBy = d.blockedBy;
     p.evaluation = d.evaluation;
   }
-  return { tick: at, units };
+  return { tick: at, evaluatedTick: at + 1, units };
 }

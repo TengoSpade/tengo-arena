@@ -218,6 +218,41 @@ describe('inspectRoundAt: read-only', () => {
   });
 });
 
+describe('inspectRoundAt: the evaluation is as of the next tick', () => {
+  it('evaluatedTick is tick + 1, also past the end', () => {
+    for (const tick of [0, 1, 77, 250]) expect(probeAt(2, tick).evaluatedTick).toBe(probeAt(2, tick).tick + 1);
+    const endTick = full[2]!.result.durationTicks - 1;
+    expect(probeAt(2, endTick + 40)).toMatchObject({ tick: endTick, evaluatedTick: endTick + 1 });
+  });
+
+  it('the readyInTicks of a trace is one less than cooldownTicks in the same probe (state at tick, trace at tick + 1)', () => {
+    let compared = 0;
+    let shifted = 0;
+    for (const i of [0, 1, 2, 3, 4, 5, 6, 7]) {
+      const input = corpus[i]!.input;
+      const end = full[i]!.result.durationTicks - 1;
+      for (let tick = 5; tick < end; tick += 11) {
+        for (const p of probeAt(i, tick).units) {
+          if (!p.evaluation) continue;
+          const fighter = (p.unit < 5 ? input.home : input.away).fighters[p.unit % 5]!;
+          const preset = fighter.tactics.kind === 'preset' ? content.presets.get(fighter.tactics.presetId) : undefined;
+          for (const t of p.evaluation.trace) {
+            const rule = preset?.rules[t.rule];
+            if (t.reason !== 'cooldown' || t.readyInTicks === undefined || rule?.then.type !== 'ability') continue;
+            const slot = rule.then['slot'] as 'a1' | 'a2';
+            // Exactly one tick of cooldown elapses, unless a cooldown-rate modifier changes in tick + 1's timers (then the rate differs).
+            if (p.cooldownTicks[slot] === t.readyInTicks + 1) shifted++;
+            else expect(p.cooldownTicks[slot], `round ${i} unit ${p.unit} tick ${tick} rule ${t.rule}`).toBeGreaterThan(0);
+            compared++;
+          }
+        }
+      }
+    }
+    expect(compared).toBeGreaterThan(20);
+    expect(shifted / compared).toBeGreaterThan(0.9);
+  });
+});
+
 describe('inspectRoundAt: edges', () => {
   it('a tick at or beyond the end gives the final state at the end tick, with nothing left to decide', () => {
     const run = full[5]!;
@@ -254,6 +289,17 @@ describe('call plans are refused until the calls package (P-01 staged after M2)'
     expect(() => simulateRound({ ...input, calls }, seed, content)).toThrow(InvariantError);
     expect(() => simulateRound({ ...input, calls }, seed, content, { record: 'full' })).toThrow(/call plans are not available/);
     expect(() => inspectRoundAt({ ...input, calls }, seed, content, 30)).toThrow(InvariantError);
+  });
+
+  it('refuses a malformed plan with an InvariantError, never a bare TypeError; null counts as no plan', () => {
+    const malformed = [{}, { home: { mode: 'none' } }, { away: { mode: 'none' } }, { home: {}, away: {} }, { home: null, away: { mode: 'none' } }] as unknown as RoundCalls[];
+    for (const calls of malformed) {
+      expect(() => simulateRound({ ...input, calls }, seed, content)).toThrow(InvariantError);
+      expect(() => inspectRoundAt({ ...input, calls }, seed, content, 30)).toThrow(InvariantError);
+    }
+    const none = { ...input, calls: null } as unknown as typeof input;
+    expect(simulateRound(none, seed, content).result).toEqual(simulateRound(input, seed, content).result);
+    expect(inspectRoundAt(none, seed, content, 30)).toEqual(inspectRoundAt(input, seed, content, 30));
   });
 
   it('accepts no plan and { none, none }, with results identical to the round without the field', () => {

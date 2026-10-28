@@ -29,11 +29,14 @@ export interface FightRun {
  * or { none, none } for both sides. The sim refuses anything else instead of ignoring it, so a plan can never be
  * silently dropped from a replay.
  */
-export function refuseCalls(input: { calls?: RoundCalls | undefined }): void {
+export function refuseCalls(input: { calls?: RoundCalls | null | undefined }): void {
   const c = input.calls;
-  if (c === undefined) return;
-  if (c.home.mode !== 'none' || c.away.mode !== 'none') {
-    throw new InvariantError(`sim: call plans are not available yet (home ${c.home.mode}, away ${c.away.mode}); only { none, none } or no plan is accepted until the calls package`);
+  if (c == null) return;
+  // Optional chaining: a malformed plan (no side, no mode) is refused like any other, never a bare TypeError.
+  const home = (c as Partial<RoundCalls>).home?.mode;
+  const away = (c as Partial<RoundCalls>).away?.mode;
+  if (home !== 'none' || away !== 'none') {
+    throw new InvariantError(`sim: call plans are not available yet (home ${String(home)}, away ${String(away)}); only { none, none } or no plan is accepted until the calls package`);
   }
 }
 

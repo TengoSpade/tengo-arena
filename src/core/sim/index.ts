@@ -216,6 +216,8 @@ export interface UnitProbe {
    * rule's skip reason and observed value (03 sys-tactics trace). Null when he cannot evaluate (see blockedBy).
    * Implemented as the sim's own next decision phase (tick + 1: its timers, his due pending commit, a traced evaluation,
    * ignoring the decision cadence and the reaction delay), so it equals the evaluation the sim records where it makes one.
+   * Every value in it (the trace's `readyInTicks`, `observed` focus, hp, gaps and ticks) is as of `RoundProbe.evaluatedTick`
+   * (tick + 1, after that tick's timers), not of the probed tick: `cooldownTicks` here is one more than a trace's `readyInTicks`.
    */
   evaluation: { rule: number; action: string; target: UnitIndex | null; trace: RuleTraceEntry[] } | null;
   /**
@@ -226,8 +228,17 @@ export interface UnitProbe {
 }
 
 export interface RoundProbe {
-  /** The probed tick: the state at the END of this tick (what a frame at this tick shows). The requested tick floored, clamped to 0 and to the round's end tick. */
+  /**
+   * The probed tick: the state at the END of this tick (what a frame at this tick shows). The requested tick floored,
+   * clamped to 0 and to the round's end tick. `shield` is what the unit holds going into the next tick: a shield whose
+   * `expiresTick` equals this tick is already gone here (and in the frame of that tick), although it absorbed hits during it.
+   */
   tick: number;
+  /**
+   * Additive: the tick the evaluations are as of, always `tick + 1` (the decision phase after `tick`, with its timers
+   * applied). The state fields are as of `tick`; the `evaluation` traces (readyInTicks, observed values) are as of this tick.
+   */
+  evaluatedTick: number;
   units: UnitProbe[];
 }
 

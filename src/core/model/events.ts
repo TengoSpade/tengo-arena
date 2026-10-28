@@ -18,8 +18,8 @@ export const FIGHT_LOG_FORMAT = 'arena-league-fight';
 /**
  * M2 contract (docs/design/_drafts/05-technical-m2.md, tech-016): the version of the RECORDED SHAPE of
  * events, separate from the sim's ENGINE_VERSION (which covers outcomes). 1 = M1/M1.1 (frames
- * [x, y, hp, stateBits], no `FightHeader.logFormat`). 2 (planned, WP-M2A) = frames also carry shield and
- * focus, and the header names its format. A format bump changes full-level event hashes (goldens are
+ * [x, y, hp, stateBits], no `FightHeader.logFormat`). 2 (WP-M2A, implemented) = frames also carry shield and
+ * focus, a closing frame ends the log at the end tick, and the header names its format. A format bump changes full-level event hashes (goldens are
  * re-pinned) but never a result, a round checksum or the replayability of a stored match, because replays
  * are verified by round checksums, which are identical at every record level.
  */
