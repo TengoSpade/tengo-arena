@@ -455,6 +455,7 @@ const fighterMatchStats = z.strictObject({
 });
 
 const compactFighterTotals = z.tuple([z.union([z.literal(0), z.literal(1)]), int, int, int, int, int]);
+const compactFielded = z.tuple([id, z.union([z.literal(0), z.literal(1)]), int]);
 
 const matchResult = z.strictObject({
   fixtureId: id,
@@ -480,6 +481,7 @@ const matchResult = z.strictObject({
   betweenRounds: z.array(betweenRoundRecord).optional(),
   emergencyEntrants: z.array(id).optional(),
   fighterTotals: z.record(z.string(), compactFighterTotals).optional(),
+  fielded: z.strictObject({ home: z.array(compactFielded), away: z.array(compactFielded) }).optional(),
 });
 
 const matchSideState = z.strictObject({

@@ -63,7 +63,7 @@ function advanceTo(engine: ReturnType<typeof createGameEngine>, state: GameState
 }
 
 describe('week processing order (leagues.json calendar.weekProcessingOrder)', () => {
-  it('runs the 11 steps in order in a matchweek', { timeout: 60_000 }, () => {
+  it('runs the steps in order in a matchweek, the compaction of aged matches last (step 12)', { timeout: 60_000 }, () => {
     const { ports, calls } = spied();
     const engine = createGameEngine(ports);
     const w = engine.createWorld(content, { rootSeed: 'pipe-1' });
@@ -90,6 +90,7 @@ describe('week processing order (leagues.json calendar.weekProcessingOrder)', ()
       'ai.planWeek',
       'economy.topUpFreeAgentPool',
       'league.nextCalendar',
+      'league.compactAgedResults',
     ]);
     // Every result is recorded after every match of the week is simulated (step 1 before step 2); M1.1: round by round.
     expect(calls.lastIndexOf('sim.simulateRound')).toBeLessThan(calls.indexOf('league.recordResult'));

@@ -434,6 +434,8 @@ export function standInLeague(): Port {
       return null;
     },
     compactHistory,
+    // The stand-ins keep every result in full until the season end (a smoke test of the loop, not of retention).
+    compactAgedResults: () => undefined,
     lastRegularWeekIndex: (content) => Math.max(...content.leagues.calendar.weeks.filter((w) => w.phase === 'regular').map((w) => w.index)),
     isCompactedResult: (r) => r.input.home.fighters.length === 0 && r.input.away.fighters.length === 0,
   };

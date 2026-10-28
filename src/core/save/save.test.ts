@@ -169,8 +169,52 @@ describe('migrations', () => {
     expect(MIGRATIONS.map((m) => [m.from, m.to])).toEqual([
       [1, 2],
       [2, 3],
+      [3, 4],
     ]);
-    expect(STATE_SCHEMA_VERSION).toBe(3);
+    expect(STATE_SCHEMA_VERSION).toBe(4);
+  });
+
+  it('v3 -> v4 (KI-2) is the identity on the data: a v3 save loads, reports migratedFrom 3 and keeps every field; a v4 save is refused by a v3 build as too new', () => {
+    const state = world();
+    const s = cloneJson(state) as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    s.schemaVersion = 3;
+    const v3 = JSON.stringify({ ...envelopeOf(state), schemaVersion: 3, checksum: checksumState(s as unknown as GameState), state: s });
+    const r = parseSave(v3, content);
+    expect(r.ok ? null : r.error).toBeNull();
+    if (!r.ok) return;
+    expect(r.value.migratedFrom).toBe(3);
+    expect(r.value.envelope.schemaVersion).toBe(4);
+    expect(r.value.envelope.state.schemaVersion).toBe(4);
+    expect(r.value.envelope.state).toEqual(state);
+    expect(r.value.envelope.checksum).toBe(checksumState(state));
+    expect(validateState(r.value.envelope.state, content)).toEqual([]);
+    // Saved again it is a v4 save, which loads without a migration.
+    const again = parseSave(serializeSave(r.value.envelope), content);
+    expect(again.ok && again.value.migratedFrom).toBeNull();
+    // A build that knows only v3 reports a newer version, not a damaged save.
+    const old = parseSaveWith(serializeSave(r.value.envelope), content, { migrations: MIGRATIONS.filter((m) => m.to <= 3), currentVersion: 3 });
+    expect(old.ok).toBe(false);
+    if (!old.ok) expect(old.error).toMatchObject({ code: 'save.too-new', details: { saveVersion: 4, buildVersion: 3 } });
+  });
+
+  it('a compacted result with its kept five (MatchResult.fielded) passes the strict schema; a malformed five does not', () => {
+    const state = world();
+    const [home, away] = Object.keys(state.clubs) as ClubId[];
+    const side = (clubId: ClubId) => ({ clubId, fighters: [], captainIndex: 0, viceCaptainIndex: null, chemistry: 0 });
+    const compacted = {
+      fixtureId: 'lg:x', competitionId: 'lg:c', stage: 'league', season: 1, weekIndex: 5, weekId: 'MW1', homeClubId: home, awayClubId: away,
+      engineVersion: 1, contentHash: 'h', input: { seed: 's', bestOf: 3, home: side(home!), away: side(away!) },
+      rounds: [], score: { home: 2, away: 0 }, winnerClubId: home, fighterStats: {}, mvpFighterId: null, hiredBladeIds: [], fighterTotals: {},
+      fielded: { home: [['f-1', 0, 55]], away: [['f-2', 1, 61]] },
+    };
+    const issuesAt = (result: unknown): string[] => {
+      const r = GameStateSchema.safeParse({ ...cloneJson(state), results: { 'lg:x': result } });
+      return r.success ? [] : r.error.issues.filter((i) => i.path[0] === 'results').map((i) => i.path.join('.'));
+    };
+    expect(issuesAt(compacted)).toEqual([]);
+    expect(issuesAt({ ...compacted, fielded: undefined })).toEqual([]); // saves without it (every older save) stay valid
+    expect(issuesAt({ ...compacted, fielded: { home: [['f-1', 2, 55]], away: [] } }).some((p) => p.includes('fielded'))).toBe(true);
+    expect(issuesAt({ ...compacted, fielded: { home: [], away: [], extra: [] } }).some((p) => p.includes('fielded'))).toBe(true);
   });
 
   /** A v3 state as a v2 save wrote it: the M1.1 fields removed (in place on a clone). */
@@ -206,7 +250,7 @@ describe('migrations', () => {
     if (!r.ok) return;
     const st = r.value.envelope.state;
     expect(r.value.migratedFrom).toBe(2);
-    expect(st.schemaVersion).toBe(3);
+    expect(st.schemaVersion).toBe(STATE_SCHEMA_VERSION);
     expect(validateState(st, content)).toEqual([]);
     for (const f of Object.values(st.fighters)) {
       const before = state.fighters[f.id]!;
@@ -249,7 +293,7 @@ describe('migrations', () => {
     if (!r.ok) return;
     const st = r.value.envelope.state;
     expect(r.value.migratedFrom).toBe(1);
-    expect(st.schemaVersion).toBe(3);
+    expect(st.schemaVersion).toBe(STATE_SCHEMA_VERSION);
     expect(st.fighters[v1.retiredId]).toBeUndefined();
     expect(st.alumni[v1.retiredId]).toMatchObject({ id: v1.retiredId, cause: 'age' });
     expect(st.fighters[v1.renewedId]!.contract!.next).toEqual({ wagePerWeek: 777, endSeason: st.fighters[v1.renewedId]!.contract!.endSeason });
@@ -272,10 +316,10 @@ describe('migrations', () => {
 
   // The runner itself, one version past the current one.
   const state = world();
-  const v3 = serializeSave(envelopeOf(state));
+  const v4 = serializeSave(envelopeOf(state));
   const renameClub: Migration = {
-    from: 3,
-    to: 4,
+    from: 4,
+    to: 5,
     migrate(s) {
       const st = s as GameState;
       for (const c of Object.values(st.clubs)) c.shortName = `${c.shortName}*`;
@@ -284,22 +328,22 @@ describe('migrations', () => {
   };
 
   it('runs each step in order and reports migratedFrom', () => {
-    const r = parseSaveWith(v3, content, { migrations: [renameClub], currentVersion: 4 });
+    const r = parseSaveWith(v4, content, { migrations: [renameClub], currentVersion: 5 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.migratedFrom).toBe(3);
-    expect(r.value.envelope.schemaVersion).toBe(4);
-    expect(r.value.envelope.state.schemaVersion).toBe(4);
+    expect(r.value.migratedFrom).toBe(4);
+    expect(r.value.envelope.schemaVersion).toBe(5);
+    expect(r.value.envelope.state.schemaVersion).toBe(5);
     expect(Object.values(r.value.envelope.state.clubs).every((c) => c.shortName.endsWith('*'))).toBe(true);
     expect(r.value.envelope.checksum).toBe(checksumState(r.value.envelope.state));
   });
 
   it('save.migration when a step is missing or throws', () => {
-    const missing = parseSaveWith(v3, content, { migrations: [], currentVersion: 4 });
+    const missing = parseSaveWith(v4, content, { migrations: [], currentVersion: 5 });
     expect(missing.ok ? null : missing.error.code).toBe('save.migration');
-    const throwing = parseSaveWith(v3, content, {
-      migrations: [{ from: 3, to: 4, migrate: () => { throw new Error('boom'); } }],
-      currentVersion: 4,
+    const throwing = parseSaveWith(v4, content, {
+      migrations: [{ from: 4, to: 5, migrate: () => { throw new Error('boom'); } }],
+      currentVersion: 5,
     });
     expect(throwing.ok ? null : throwing.error.code).toBe('save.migration');
   });

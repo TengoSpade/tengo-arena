@@ -7,6 +7,7 @@
  *  4 income                              9 AI action phase (tier, then club id order)
  *  5 costs                              10 pool floor top-up
  *  6 financial status                   11 advance the calendar (+ seed the Reckoning), digest
+ *                                       12 compact aged matches between other clubs (matchRecords)
  * The UI store autosaves after success. The input state is never mutated.
  */
 import type { ContentDB } from '../content';
@@ -336,6 +337,9 @@ function finishWeek(ports: GamePorts, run: WeekRun, playerResult: MatchResult | 
   if (cal.weekIndex === ports.league.lastRegularWeekIndex(content)) ports.league.seedReckonings(draft, content);
   draft.calendar = ports.league.nextCalendar(cal, content);
   tidyAll(ports, draft, content);
+  // 12. Matches between other clubs that are `matchRecords.compactAiMatchesAfterWeeks` weeks old lose their detail (the
+  // last weeks, and the player's matches, stay in full). After every step: nothing above reads an aged match's detail.
+  ports.league.compactAgedResults(draft, cal.season, cal.weekIndex, content);
 
   const playerClubId = draft.playerClubId;
   const playerFixture = playerClubId === null ? undefined : results.find((r) => r.homeClubId === playerClubId || r.awayClubId === playerClubId);

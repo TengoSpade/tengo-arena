@@ -55,7 +55,7 @@ function stats(clubId: ClubId, downsSuffered: number): FighterMatchStats {
 }
 
 function side(clubId: ClubId, fighterId: FighterId): SideInput {
-  const fighter = { fighterId, slot: 0, row: 'front' } as unknown as FightFighterInput;
+  const fighter = { fighterId, slot: 0, row: 'front', rating: 50 } as unknown as FightFighterInput;
   return { clubId, fighters: [fighter], captainIndex: 0, viceCaptainIndex: null, chemistry: 0 };
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   asId,
+  fieldedFive,
   leagueCompetitionId,
   reckoningCompetitionId,
   type ClubId,
@@ -15,7 +16,9 @@ import {
   applyTierMoves,
   archiveSeason,
   clubSchedule,
+  compactAgedResults,
   compactHistory,
+  DEFAULT_COMPACT_AI_MATCHES_AFTER_WEEKS,
   isCompactedResult,
   leagueRecords,
   leagueSeasonColumns,
@@ -25,6 +28,7 @@ import {
   standings,
   type TierMove,
 } from './index';
+import { compactAgedResultsImpl } from './season-end';
 import { byStrength, playSeason, playWeek, type Decide } from './test-support';
 
 const content = fixtureContent();
@@ -299,6 +303,126 @@ describe('result compaction: the M1.1 per-round records go, the attribution stay
     expect(JSON.stringify(c.fighterTotals![a!]).length).toBeLessThan(30);
     // The original result is untouched (results are write-once).
     expect(r.reserveInputs).toBeDefined();
+  });
+});
+
+describe('in-season compaction (leagues.json matchRecords.compactAiMatchesAfterWeeks)', () => {
+  /** Winner by strength with varied downs, so the downs tie-break column has something to lose. */
+  const decide: Decide = (f) => {
+    const base = byStrength(strength)(f);
+    const n = [...f.id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    return { ...base, homeDowns: n % 7, awayDowns: (n >> 3) % 7 };
+  };
+  /** Season 1 with every week up to and including `through` processed. */
+  function playedThrough(through: number): GameState {
+    const state = buildFixtureWorld();
+    setupSeason(state, 1, content);
+    while (state.calendar.weekIndex <= through) playWeek(state, content, decide);
+    return state;
+  }
+  const fixtureTiers = [CROWN, BANNER, MUSTER];
+  const tables = (state: GameState) => fixtureTiers.map((t) => tierTable(state, t, 1));
+  const results = (state: GameState) => Object.values(state.results);
+  const involves = (r: GameState['results'][keyof GameState['results']], club: ClubId | null) => club !== null && (r.homeClubId === club || r.awayClubId === club);
+
+  it('the default is 3 weeks when a content set does not say (the frozen fixture), and content/default carries its own value', () => {
+    expect(DEFAULT_COMPACT_AI_MATCHES_AFTER_WEEKS).toBe(3);
+    expect(content.leagues.matchRecords).toBeUndefined();
+  });
+
+  it('compacts matches between other clubs that are 3 weeks old or older, and keeps the last 3 weeks and the player matches in full', () => {
+    const state = playedThrough(9);
+    const player = content.clubs.list[0]!.id as ClubId;
+    state.playerClubId = player;
+    expect(results(state).every((r) => !isCompactedResult(r))).toBe(true);
+    compactAgedResults(state, 1, 9, content); // week 9 processed: weeks 7, 8 and 9 stay full
+    const compacted = results(state).filter(isCompactedResult);
+    expect(compacted.length).toBeGreaterThan(0);
+    for (const r of results(state)) {
+      if (involves(r, player)) expect(isCompactedResult(r)).toBe(false);
+      else expect(isCompactedResult(r)).toBe(r.weekIndex <= 6);
+    }
+    expect(results(state).some((r) => !involves(r, player) && r.weekIndex >= 7)).toBe(true);
+    expect(results(state).some((r) => involves(r, player) && r.weekIndex <= 6)).toBe(true);
+    // Idempotent: nothing left to compact.
+    const once = cloneJson(state);
+    compactAgedResults(state, 1, 9, content);
+    expect(state).toEqual(once);
+  });
+
+  it('touches nothing before the first match is N weeks old, and nothing of other seasons', () => {
+    const state = playedThrough(7); // matches start in week 5
+    const before = cloneJson(state);
+    compactAgedResults(state, 1, 7, content); // cutoff 4: no match yet
+    expect(state).toEqual(before);
+    compactAgedResults(state, 2, 20, content); // a season with no results
+    expect(state).toEqual(before);
+  });
+
+  it('the upper bound: matches run from week 5 to 23, so N = 18 still compacts the first matchweek at the last processing and N = 19 compacts nothing', () => {
+    const state = playedThrough(23); // the whole season: the last processing is week 23
+    const full = (n: number) => {
+      const copy = cloneJson(state);
+      copy.playerClubId = null;
+      compactAgedResultsImpl(copy, 1, 23, n);
+      return results(copy).filter(isCompactedResult);
+    };
+    const eighteen = full(18);
+    expect(eighteen.length).toBeGreaterThan(0);
+    expect(eighteen.every((r) => r.weekIndex === 5)).toBe(true);
+    expect(full(19)).toHaveLength(0);
+    expect(full(99)).toHaveLength(0);
+  });
+
+  it('with no player club every match is eligible, and a state that skipped the rule is caught up in one call', () => {
+    const state = playedThrough(12);
+    state.playerClubId = null;
+    compactAgedResults(state, 1, 12, content);
+    for (const r of results(state)) expect(isCompactedResult(r)).toBe(r.weekIndex <= 9);
+  });
+
+  it('keeps the standings (downs and every tie-break included) exactly as they were', () => {
+    const state = playedThrough(15);
+    state.playerClubId = content.clubs.list[0]!.id as ClubId;
+    const wingTables = () =>
+      fixtureTiers.flatMap((tier) => {
+        const comp = state.competitions[leagueCompetitionId(1, tier)]!;
+        return comp.wings.map((wing) => standings(state, comp.id, wing.wingId, content));
+      });
+    const before = { tiers: tables(state), wings: wingTables() };
+    expect(before.tiers.some((t) => t.some((row) => row.downsSuffered > 0))).toBe(true);
+    compactAgedResults(state, 1, 15, content);
+    expect(results(state).filter(isCompactedResult).length).toBeGreaterThan(50);
+    expect({ tiers: tables(state), wings: wingTables() }).toEqual(before);
+  });
+
+  it('keeps each side round-1 five (id, row, rating) readable after compaction', () => {
+    const state = playedThrough(10);
+    const before = new Map(results(state).map((r) => [r.fixtureId, { home: fieldedFive(r, 'home'), away: fieldedFive(r, 'away') }]));
+    compactAgedResults(state, 1, 10, content);
+    const compacted = results(state).filter(isCompactedResult);
+    expect(compacted.length).toBeGreaterThan(0);
+    for (const r of compacted) {
+      expect(r.fielded).toBeDefined();
+      expect({ home: fieldedFive(r, 'home'), away: fieldedFive(r, 'away') }).toEqual(before.get(r.fixtureId));
+      expect(fieldedFive(r, 'home').length).toBeGreaterThan(0);
+    }
+  });
+
+  it('a result is compacted the same way in season and at the season end (the season-end rule finds what is left)', () => {
+    const inSeason = playedThrough(12);
+    inSeason.playerClubId = content.clubs.list[0]!.id as ClubId;
+    const atEnd = cloneJson(inSeason);
+    compactAgedResults(inSeason, 1, 12, content);
+    for (const state of [inSeason, atEnd]) {
+      while (state.calendar.phase !== 'season-end') {
+        playWeek(state, content, decide);
+        if (state === inSeason) compactAgedResults(state, 1, state.calendar.weekIndex - 1, content);
+      }
+      state.calendar = seasonStartCalendar(2, content);
+      compactHistory(state, content);
+    }
+    expect(inSeason.results).toEqual(atEnd.results);
   });
 });
 
