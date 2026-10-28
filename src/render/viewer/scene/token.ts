@@ -29,6 +29,8 @@ export const DOWN_FLATTEN = 0.6;
 const MAX_PIPS = 4;
 const STACK_GAP = 2;
 const ROW_GAP = 4;
+/** A stack keeps this far inside the host's edge (px): beyond it the stack moves below the disc, or sideways. */
+const EDGE_MARGIN = 2;
 /** The Freshness tag shows for the first 3 s of the round (20 ticks per second). */
 const TAG_TICKS = 60;
 /** A hit is fresh enough to flash while it is within this many ticks of the tick shown (so a seek never flashes). */
@@ -68,6 +70,9 @@ export interface TokenFrame {
   cast: number;
   castName: string;
   focusMax: number;
+  /** The host's size (CSS px): a stack never leaves it. */
+  viewW: number;
+  viewH: number;
   body: BodyFrame;
 }
 
@@ -146,6 +151,8 @@ export class Token {
   private drawnShieldPx = -1;
   private barW = 0;
   private bottomY = 0;
+  /** The stack is drawn below the disc (above would leave the host). */
+  private below = false;
   private badgeText = '';
   private tagText = '';
   private nameText = '';
@@ -239,7 +246,7 @@ export class Token {
     this.drawPlate(diameter);
 
     // Bars: a track with an edge hairline around it; fills are unit rects scaled per frame.
-    this.barW = Math.max(1.7 * diameter, 3 * m.pipSizePx);
+    this.barW = Math.max(m.barWidthM * diameter, 3 * m.pipSizePx);
     const barH = m.barHeightPx;
     const focusH = barH * 0.6;
     this.track
@@ -278,10 +285,12 @@ export class Token {
     for (const gl of this.glyphs) gl.destroy(DESTROY_ALL);
     this.glyphs = [];
     const roles = this.info.roles.slice(0, 2);
-    // A plate about a third of the disc across (inset 17%); hybrids put two narrower glyphs side by side.
+    // A plate about a third of the disc across; a hybrid's plate is wider so its two glyphs side by side fit. Radii and
+    // glyph sizes are the designer's tokens, read from the palette's metrics.
+    const hybrid = roles.length > 1;
     this.plateG.clear();
-    if (roles.length > 0) this.plateG.circle(0, 0, diameter * 0.33).fill({ color: p.plate });
-    const size = diameter * (roles.length > 1 ? 0.3 : 0.44);
+    if (roles.length > 0) this.plateG.circle(0, 0, diameter * (hybrid ? p.metrics.plateRadiusHybridM : p.metrics.plateRadiusM)).fill({ color: p.plate });
+    const size = diameter * (hybrid ? p.metrics.glyphSizeHybridM : p.metrics.glyphSizeM);
     const gap = diameter * 0.03;
     const total = roles.length * size + (roles.length - 1) * gap;
     roles.forEach((role, i) => {
@@ -393,14 +402,13 @@ export class Token {
     this.focus.visible = u.focus !== null;
     if (u.focus !== null) this.focus.scale.x = Math.max(0, Math.min(1, u.focus / Math.max(1, f.focusMax))) * this.barW;
 
-    // The stack, bottom to top.
+    // ---- The stack above the disc (arena-notes §1). First each item's content and size, then where the stack goes:
+    // above the disc, or below it when above would leave the host (the north wall), nudged sideways to stay inside.
+    const rem = m.pipSizePx;
+    const lineH = m.labelSizePx * 1.3;
     const blockH = barH + 1 + focusH + 2;
-    let y = this.bottomY;
-    this.bars.position.set(-this.barW / 2, y - blockH);
-    y -= blockH + STACK_GAP;
 
     // Row: the rule badge, up to four pips (hard control first), "+n" for the rest.
-    const rem = m.pipSizePx;
     const rule = u.rule;
     let x = 0;
     let badgeW = 0;
@@ -431,44 +439,69 @@ export class Token {
       this.more.view.position.set(x, 0);
       x += w;
     }
-    this.row.position.set(-x / 2, y - rem);
+    const rowW = Math.max(0, x);
+    const rowH = rowW > 0 ? rem : 0;
+    this.row.position.x = -rowW / 2;
     if (rule) {
       // The badge pulses on a new decision (state.pulse is 0 under reduced motion).
       this.badge.view.pivot.set(badgeW / 2, rem / 2);
       this.badge.view.position.set(badgeW / 2, rem / 2);
       this.badge.view.scale.set(f.reducedMotion ? 1 : 1 + 0.35 * rule.pulse);
     }
-    if (x > 0) y -= rem + STACK_GAP;
 
-    // Cast bar: the ability name over its progress.
-    const lineH = m.labelSizePx * 1.3;
+    // Cast bar: the ability name over its progress. (The one place a cast's name is written: no second label.)
     const casting = f.cast >= 0;
     this.cast.view.visible = casting;
-    if (casting) {
-      const w = this.cast.set(f.castName, this.env, this.barW, rem * 0.35, lineH, f.cast);
-      this.cast.view.position.set(-w / 2, y - lineH);
-      y -= lineH + STACK_GAP;
-    }
+    const castW = casting ? this.cast.set(f.castName, this.env, this.barW, rem * 0.35, lineH, f.cast) : 0;
+    const castH = casting ? lineH : 0;
 
     // Freshness tag (first 3 s), then the name.
     const tagText = f.tick < TAG_TICKS ? this.tagLabel : '';
     this.tag.view.visible = tagText !== '';
     this.tagText = tagText;
-    if (tagText !== '') {
-      const w = this.tag.set(tagText, this.env, 0, rem * 0.35, lineH);
-      this.tag.view.position.set(-w / 2, y - lineH);
-      y -= lineH + STACK_GAP;
-    }
+    const tagW = tagText !== '' ? this.tag.set(tagText, this.env, 0, rem * 0.35, lineH) : 0;
+    const tagH = tagText !== '' ? lineH : 0;
     const showName = f.labels === 'all' || (f.labels === 'selected' && f.selected);
     this.name.view.visible = showName;
-    this.nameText = '';
-    if (showName) {
-      const text = this.nameLabel;
-      this.nameText = text;
-      const nh = m.labelSizePx * 1.35;
-      const w = this.name.set(text, this.env, 0, rem * 0.4, nh);
-      this.name.view.position.set(-w / 2, y - nh);
+    this.nameText = showName ? this.nameLabel : '';
+    const nameH = showName ? m.labelSizePx * 1.35 : 0;
+    const nameW = showName ? this.name.set(this.nameLabel, this.env, 0, rem * 0.4, nameH) : 0;
+
+    // Where: the stack's height decides. Above the disc unless that leaves the host and below fits.
+    let total = blockH;
+    if (rowH > 0) total += STACK_GAP + rowH;
+    if (castH > 0) total += STACK_GAP + castH;
+    if (tagH > 0) total += STACK_GAP + tagH;
+    if (nameH > 0) total += STACK_GAP + nameH;
+    const base = -this.bottomY; // from the disc centre to the stack's near edge
+    const fitsAbove = f.y - base - total >= EDGE_MARGIN;
+    const below = !fitsAbove && f.viewH - (f.y + base + total) >= EDGE_MARGIN;
+    this.below = below;
+    const halfW = Math.max(this.barW, rowW, castW, tagW, nameW) / 2;
+    let dx = 0;
+    if (f.x - halfW < EDGE_MARGIN) dx = EDGE_MARGIN - (f.x - halfW);
+    else if (f.x + halfW > f.viewW - EDGE_MARGIN) dx = f.viewW - EDGE_MARGIN - (f.x + halfW);
+    this.stack.x = dx;
+
+    // Outward from the disc: the bars first (focus nearest the disc), then row, cast bar, tag, name. Below the disc the
+    // same order runs downwards, and the bars block is mirrored so the focus bar is still the nearest.
+    let o = 0;
+    this.bars.scale.y = below ? -1 : 1;
+    this.bars.position.set(-this.barW / 2, below ? base + blockH : -(base + blockH));
+    o += blockH + STACK_GAP;
+    if (rowH > 0) {
+      this.row.position.y = below ? base + o : -(base + o) - rowH;
+      o += rowH + STACK_GAP;
     }
+    if (castH > 0) {
+      this.cast.view.position.set(-castW / 2, below ? base + o : -(base + o) - castH);
+      o += castH + STACK_GAP;
+    }
+    if (tagH > 0) {
+      this.tag.view.position.set(-tagW / 2, below ? base + o : -(base + o) - tagH);
+      o += tagH + STACK_GAP;
+    }
+    if (nameH > 0) this.name.view.position.set(-nameW / 2, below ? base + o : -(base + o) - nameH);
   }
 
   /** The shield segment: hatched, with 1 px lines along its top and bottom (components.css .abar__shield). */
@@ -530,6 +563,13 @@ export class Token {
     hpTint: number;
     focusTint: number;
     barsHeight: number;
+    /** The stack is drawn below the disc, and how far it was nudged sideways to stay in the host. */
+    stackBelow: boolean;
+    stackDx: number;
+    /** Plate width of the first role glyph (px), to check the hybrid size. */
+    glyphSize: number;
+    /** Radius of the role plate (px). */
+    plateRadius: number;
     /** Top y of each stack item (screen up is negative), for the order check. */
     stackY: { bars: number; row: number; cast: number; tag: number; name: number };
   } {
@@ -556,6 +596,10 @@ export class Token {
       hpTint: this.hp.tint as number,
       focusTint: this.focus.tint as number,
       barsHeight: this.track.height,
+      stackBelow: this.below,
+      stackDx: this.stack.x,
+      glyphSize: this.glyphs[0] ? this.glyphs[0].width : 0,
+      plateRadius: this.plateG.width / 2,
       stackY: { bars: this.bars.y, row: this.row.y, cast: this.cast.view.y, tag: this.tag.view.y, name: this.name.view.y },
     };
   }

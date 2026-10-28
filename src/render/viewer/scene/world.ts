@@ -16,7 +16,6 @@ import { DESTROY_ALL } from '../destroy';
 import { KeyedPool } from '../pool';
 import { toneColor } from '../palette';
 import { sx, sy, type AffineMap } from './affine';
-import { Chip } from './chip';
 import type { TextFactory } from './text';
 
 /** What every world layer needs for a frame. Filled in by the scene; never allocated per frame. */
@@ -42,6 +41,8 @@ export interface WorldEnv {
   reducedMotion: boolean;
   playing: boolean;
   nowMs: number;
+  /** The field (the floor without its wall) in screen px; ground marks are clipped to it. */
+  field: { x0: number; y0: number; x1: number; y1: number };
   /** Colour of a side's ring (the viewer-resolved side colour). */
   sideColor(side: 0 | 1): number;
   /** The ring style of a side: ours solid, theirs double (the colour-free cue). */
@@ -142,18 +143,15 @@ class TelegraphMark {
   readonly area = new Container();
   readonly outline = new Graphics();
   readonly inner = new Graphics();
-  readonly name: Chip;
   drawn = '';
-  constructor(text: TextFactory) {
+  constructor() {
     this.root.eventMode = 'none';
     this.area.eventMode = 'none';
-    this.name = new Chip(text, 'label');
     this.area.addChild(this.inner, this.outline);
-    this.root.addChild(this.area, this.name.view);
+    this.root.addChild(this.area);
     this.root.visible = false;
   }
   destroy(): void {
-    this.name.dispose();
     this.root.destroy(DESTROY_ALL);
   }
 }
@@ -162,7 +160,7 @@ export class TelegraphLayer {
   readonly root = new Container();
   private pool: KeyedPool<TelegraphMark> | null = null;
 
-  constructor(private readonly text: TextFactory) {
+  constructor() {
     this.root.eventMode = 'none';
   }
 
@@ -170,7 +168,7 @@ export class TelegraphLayer {
     if (!this.pool) {
       this.pool = new KeyedPool<TelegraphMark>(
         () => {
-          const m = new TelegraphMark(this.text);
+          const m = new TelegraphMark();
           this.root.addChild(m.root);
           return m;
         },
@@ -217,16 +215,7 @@ export class TelegraphLayer {
       else if (t.shape === 'single') m.inner.scale.set(1);
       else m.inner.scale.set(prog);
       if (t.shape === 'single') drawSingleProgress(m, size, prog, p);
-      // The ability's name on a plate chip under the area.
-      const rem = p.metrics.pipSizePx;
-      const name = env.content.abilities.get(t.ability)?.name ?? '';
-      m.name.view.visible = name !== '';
-      if (name !== '') {
-        const h = p.metrics.labelSizePx * 1.35;
-        const w = m.name.set(name, env, 0, rem * 0.4, h);
-        const below = t.shape === 'circle' ? size * env.squash : env.ppm * 0.7;
-        m.name.view.position.set(-w / 2, below + rem * 0.5);
-      }
+      // (The ability's name is on the caster's cast bar, once: no second label here.)
     }
     pool.end();
   }

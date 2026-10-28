@@ -72,8 +72,12 @@ export class ArenaScene {
   readonly root = new Container();
   private readonly floorLayer = new Container();
   private readonly markers = new Container();
+  /** Zones and telegraphs, clipped to the field: a long telegraph never runs over the wall. */
+  private readonly ground = new Container();
+  private readonly groundMask = new Graphics();
+  private groundMaskKey = '';
   private readonly zones = new ZoneLayer();
-  private readonly telegraphs: TelegraphLayer;
+  private readonly telegraphs = new TelegraphLayer();
   private readonly fx = new EffectLayer();
   private readonly bodies = new Container();
   private readonly projectiles = new ProjectileLayer();
@@ -142,6 +146,8 @@ export class ArenaScene {
     cast: -1,
     castName: '',
     focusMax: DEFAULT_FOCUS_MAX,
+    viewW: 1280,
+    viewH: 720,
     body: this.bodyFrame,
   };
 
@@ -150,13 +156,14 @@ export class ArenaScene {
     this.camera = opts.camera;
     this.reducedMotion = opts.reducedMotion;
     this.limiter = new FlashLimiter(opts.flashLimitPerSecond ?? opts.palette.metrics.flashLimitPerSecond);
-    this.telegraphs = new TelegraphLayer(opts.text);
     opts.text.configure(opts.palette);
     this.root.eventMode = 'none';
     this.bodies.sortableChildren = true;
-    for (const layer of [this.floorLayer, this.markers, this.zones.root, this.telegraphs.root, this.fx.low, this.bodies, this.projectiles.root, this.fx.high, this.overlays, this.overtimeEdge]) layer.eventMode = 'none';
+    for (const layer of [this.floorLayer, this.markers, this.ground, this.fx.low, this.bodies, this.projectiles.root, this.fx.high, this.overlays, this.fx.top, this.overtimeEdge]) layer.eventMode = 'none';
     this.markers.addChild(this.markerG);
-    this.root.addChild(this.floorLayer, this.markers, this.zones.root, this.telegraphs.root, this.fx.low, this.bodies, this.projectiles.root, this.fx.high, this.overlays, this.overtimeEdge);
+    this.ground.addChild(this.zones.root, this.telegraphs.root, this.groundMask);
+    this.ground.mask = this.groundMask;
+    this.root.addChild(this.floorLayer, this.markers, this.ground, this.fx.low, this.bodies, this.projectiles.root, this.fx.high, this.overlays, this.fx.top, this.overtimeEdge);
     this.overtimeEdge.visible = false;
     this.env = {
       map: this.current,
@@ -174,6 +181,8 @@ export class ArenaScene {
       reducedMotion: this.reducedMotion,
       playing: false,
       nowMs: 0,
+      field: { x0: 0, y0: 0, x1: 1, y1: 1 },
+      queueTop: true,
       sideColor: (side) => this.ringOf(side),
       ringStyle: (side) => this.ctx?.sides[side].colors.ringStyle ?? (side === 0 ? 'solid' : 'double'),
       limiter: this.limiter,
@@ -279,6 +288,7 @@ export class ArenaScene {
     this.byUnit.fill(undefined);
     this.zones.clear();
     this.telegraphs.clear();
+    this.groundMaskKey = '';
     this.projectiles.clear();
     this.fx.clear();
     this.limiter.reset();
@@ -317,6 +327,7 @@ export class ArenaScene {
     env.nowMs = frame.nowMs;
     env.reducedMotion = this.reducedMotion;
     if (!this.easing && Math.abs(ppm - this.layoutPpm) > 0.01) this.relayoutTokens();
+    this.placeField(map);
 
     this.ensureFloor(ppm);
     this.placeFloor();
@@ -340,6 +351,8 @@ export class ArenaScene {
     f.reducedMotion = this.reducedMotion;
     f.body = body;
     f.focusMax = this.focusMax();
+    f.viewW = this.viewport.width;
+    f.viewH = this.viewport.height;
     for (const u of state.units) {
       const token = this.tokens[u.unit];
       if (!token) continue;
@@ -437,6 +450,19 @@ export class ArenaScene {
     const unit = this.floorPpm / 100;
     floor.position.set(m.ox, m.oy);
     floor.scale.set(m.ax / unit, m.by / unit);
+  }
+
+  /** The field rectangle in screen px: it clips the ground marks and anchors the callout queue. */
+  private placeField(map: AffineMap): void {
+    const f = this.env.field;
+    f.x0 = Math.min(sx(map, 0, 0), sx(map, this.arena.width, this.arena.height));
+    f.x1 = Math.max(sx(map, 0, 0), sx(map, this.arena.width, this.arena.height));
+    f.y0 = Math.min(sy(map, 0, 0), sy(map, this.arena.width, this.arena.height));
+    f.y1 = Math.max(sy(map, 0, 0), sy(map, this.arena.width, this.arena.height));
+    const key = `${f.x0.toFixed(1)}|${f.y0.toFixed(1)}|${f.x1.toFixed(1)}|${f.y1.toFixed(1)}`;
+    if (key === this.groundMaskKey) return;
+    this.groundMaskKey = key;
+    this.groundMask.clear().rect(f.x0, f.y0, f.x1 - f.x0, f.y1 - f.y0).fill({ color: 0xffffff });
   }
 
   private computeMarkers(): void {

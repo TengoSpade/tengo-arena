@@ -29,22 +29,27 @@ import type { WorldEnv } from './world';
 export interface FxEnv extends WorldEnv {
   limiter: FlashLimiter;
   viewport: { width: number; height: number };
+  /** The callout queue sits at the top of the field (true) or at the bottom, whichever is clearer of bodies. */
+  queueTop: boolean;
 }
 
-type Layer = 'low' | 'high';
+type Layer = 'low' | 'high' | 'top';
 
-/** Which side of the bodies an effect draws on: ground marks under them, everything else over them. */
+/**
+ * Where an effect draws: ground marks under the bodies (low), cues over them (high), and the text-bearing ones (numbers,
+ * words, callouts) on top of the overlays (top), so a neighbour's stack never hides a number.
+ */
 export const LAYER_OF: Record<EffectKind, Layer> = {
   swing: 'high',
   beam: 'high',
   impact: 'high',
-  number: 'high',
-  evade: 'high',
+  number: 'top',
+  evade: 'top',
   'heal-pulse': 'low',
   'shield-gain': 'low',
   'shield-break': 'high',
   'status-apply': 'low',
-  'status-resist': 'high',
+  'status-resist': 'top',
   interrupt: 'high',
   'dash-trail': 'low',
   displace: 'low',
@@ -56,10 +61,10 @@ export const LAYER_OF: Record<EffectKind, Layer> = {
   'cooldown-reset': 'high',
   'focus-gain': 'high',
   'zone-trigger': 'low',
-  down: 'high',
+  down: 'top',
   deathward: 'low',
   rally: 'low',
-  'captain-down': 'high',
+  'captain-down': 'top',
   call: 'low',
 };
 
@@ -84,6 +89,9 @@ class EffectView {
   suppressed = false;
   total = 0;
   crit = false;
+  /** A down line: the fallen was the acting captain (folded in from the captain-down cue). A captain-down cue folded into a down line. */
+  captain = false;
+  folded = false;
 
   constructor(private readonly env: () => FxEnv) {
     this.root.eventMode = 'none';
@@ -136,7 +144,13 @@ type Drawer = (v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number, s
 export class EffectLayer {
   readonly low = new Container();
   readonly high = new Container();
+  readonly top = new Container();
   private readonly pools: Record<Layer, KeyedPool<EffectView>>;
+  /** Units with a down cue, and with a captain-down cue, this frame. */
+  private readonly downUnits: number[] = [];
+  private readonly capUnits: number[] = [];
+  private queueOpen = false;
+  private queueTop = true;
   /** Per fighter: the number effect currently hosting merged hits. */
   private readonly hosts = new Map<number, EffectView>();
   private readonly views: EffectView[] = [];
@@ -145,6 +159,7 @@ export class EffectLayer {
   constructor() {
     this.low.eventMode = 'none';
     this.high.eventMode = 'none';
+    this.top.eventMode = 'none';
     const make = (parent: Container): KeyedPool<EffectView> =>
       new KeyedPool<EffectView>(
         () => {
@@ -158,6 +173,8 @@ export class EffectLayer {
           v.suppressed = false;
           v.total = 0;
           v.crit = false;
+          v.captain = false;
+          v.folded = false;
         },
         (v) => {
           v.boundId = -1;
@@ -167,20 +184,23 @@ export class EffectLayer {
         },
         (v) => v.destroy(),
       );
-    this.pools = { low: make(this.low), high: make(this.high) };
+    this.pools = { low: make(this.low), high: make(this.high), top: make(this.top) };
   }
 
   get liveCount(): number {
-    return this.pools.low.liveCount + this.pools.high.liveCount;
+    return this.pools.low.liveCount + this.pools.high.liveCount + this.pools.top.liveCount;
   }
   get created(): number {
-    return this.pools.low.created + this.pools.high.created;
+    return this.pools.low.created + this.pools.high.created + this.pools.top.created;
   }
 
   update(effects: readonly EffectRenderState[], env: FxEnv): void {
     this.current = env;
     this.pools.low.begin();
     this.pools.high.begin();
+    this.pools.top.begin();
+    this.downUnits.length = 0;
+    this.capUnits.length = 0;
     // Pass 1: a view per effect; the first frame an effect is seen decides its flash and merges its number.
     const views = this.views;
     views.length = effects.length;
@@ -193,6 +213,10 @@ export class EffectLayer {
       const v = this.pools[LAYER_OF[e.kind]].get(e.id);
       views[drawn++] = v;
       kept.push(e);
+      if (e.unit !== null) {
+        if (e.kind === 'down') this.downUnits.push(e.unit);
+        else if (e.kind === 'captain-down') this.capUnits.push(e.unit);
+      }
       if (v.fresh) {
         v.fresh = false;
         v.bornMs = env.nowMs;
@@ -209,24 +233,66 @@ export class EffectLayer {
         }
       }
     }
-    // Pass 2: draw (numbers now hold their merged totals).
+    // Pass 2: draw (numbers now hold their merged totals). Down and captain-down callouts share one queue; a
+    // captain-down for a unit that also has a down cue is folded into that down line ("Captain ... downed by ...").
+    let queued = 0;
+    for (let i = 0; i < drawn; i++) {
+      if (kept[i]!.kind === 'down' || (kept[i]!.kind === 'captain-down' && !this.foldsIntoDown(kept[i]!))) queued++;
+    }
+    if (queued > 0 && !this.queueOpen) this.queueTop = this.clearerAtTop(env);
+    this.queueOpen = queued > 0;
+    env.queueTop = this.queueTop;
     let slot = 0;
     for (let i = 0; i < drawn; i++) {
       const e = kept[i]!;
       const v = views[i]!;
       v.root.visible = true;
-      if (e.kind === 'down' || e.kind === 'captain-down') slot++;
+      let place = 0;
+      if (e.kind === 'captain-down' && this.foldsIntoDown(e)) {
+        v.folded = true;
+        v.hideText();
+        v.g.clear();
+        continue;
+      }
+      if (e.kind === 'down') v.captain = v.captain || (e.unit !== null && this.capUnits.includes(e.unit));
+      if (e.kind === 'down' || e.kind === 'captain-down') place = slot++;
       // A burst the limiter refused is a ghost of itself (the zone alpha), never dropped: the cue still reads.
-      DRAWERS[e.kind](v, e, env, v.admitted ? 1 : env.palette.metrics.zoneAlpha, slot - 1);
+      DRAWERS[e.kind](v, e, env, v.admitted ? 1 : env.palette.metrics.zoneAlpha, place);
     }
     this.pools.low.end();
     this.pools.high.end();
+    this.pools.top.end();
     views.length = 0;
     kept.length = 0;
     // Hosts whose view went away no longer merge anything.
     for (const [unit, host] of this.hosts) if (host.boundId < 0) this.hosts.delete(unit);
   }
   private readonly kept: EffectRenderState[] = [];
+
+  private foldsIntoDown(e: EffectRenderState): boolean {
+    return e.unit !== null && this.downUnits.includes(e.unit);
+  }
+
+  /**
+   * Which end of the field holds the callout queue: the one with fewer bodies near the centre line (the queue is a
+   * column about 300 px wide and 4 lines deep). Chosen when the queue opens and kept while it is open (no jumping).
+   */
+  private clearerAtTop(env: FxEnv): boolean {
+    const f = env.field;
+    const cx = (f.x0 + f.x1) / 2;
+    const band = env.palette.metrics.labelSizePx * 1.45 * 4 + 24;
+    let top = 0;
+    let bottom = 0;
+    for (const u of env.byUnit) {
+      if (!u) continue;
+      const x = sx(env.map, u.x, u.y);
+      const y = sy(env.map, u.x, u.y);
+      if (Math.abs(x - cx) > 150) continue;
+      if (y - f.y0 < band) top++;
+      if (f.y1 - y < band) bottom++;
+    }
+    return top <= bottom;
+  }
 
   /** At most one number per fighter per merge window of wall time: later ones fold into the first. */
   private mergeNumber(v: EffectView, e: EffectRenderState, env: FxEnv): void {
@@ -248,15 +314,19 @@ export class EffectLayer {
   clear(): void {
     this.pools.low.releaseAll();
     this.pools.high.releaseAll();
+    this.pools.top.releaseAll();
     this.hosts.clear();
+    this.queueOpen = false;
   }
 
   destroy(): void {
     this.pools.low.clear();
     this.pools.high.clear();
+    this.pools.top.clear();
     this.hosts.clear();
     this.low.destroy(DESTROY_ALL);
     this.high.destroy(DESTROY_ALL);
+    this.top.destroy(DESTROY_ALL);
   }
 }
 
@@ -353,8 +423,16 @@ function floatingNumber(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: 
   // The sign is always shown (U+2212 for damage).
   const l = v.number(e.tone, crit);
   l.setText(`${gain ? '+' : '−'}${Math.abs(amount)}${crit ? '!' : ''}`);
-  const p = here(env, e);
-  l.view.position.set(p.x, p.y - env.ppm * 0.9 - settle(env, env.palette.metrics.numberRisePx * e.age, 0));
+  // Beside the disc (never over its stack, which sits above it, nor under a neighbour's: this is the top layer), on
+  // the right unless that leaves the host; it rises from the disc's middle.
+  const m = env.palette.metrics;
+  const p = unitXY(env, e.target ?? e.unit) ?? here(env, e);
+  const reach = env.ppm * 0.5 + m.ringGapPx * 2 + m.ringLinePx * 2 + 1 + 4;
+  const w = l.width;
+  let x = p.x + reach + w / 2;
+  if (x + w / 2 > env.viewport.width - 2) x = p.x - reach - w / 2;
+  const y = Math.max(m.labelSizePx, p.y - env.ppm * 0.1 - settle(env, m.numberRisePx * e.age, 0));
+  l.view.position.set(x, y);
   l.view.alpha = alpha * fadeOf(env, e, 0.55);
 }
 
@@ -374,19 +452,21 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
   const killer = e.target !== null ? env.infoOf(e.target) : undefined;
   const ability = e.ability !== null ? (env.content.abilities.get(e.ability)?.name ?? null) : null;
   const who = victim?.className ?? 'Fighter';
-  let text = downed ? `Captain down: ${who}` : `${who} downed`;
+  // One line per fallen fighter: a captain's down line carries the captain, a captain-down alone says so.
+  let text = downed ? `Captain down: ${who}` : `${v.captain ? 'Captain ' : ''}${who} downed`;
   if (killer) text += ` by ${killer.className}`;
   if (ability) text += ` · ${ability}`;
   const side = victim ? env.sideColor(victim.side) : env.palette.ink;
   const rem = env.palette.metrics.pipSizePx;
   const h = env.palette.metrics.labelSizePx * 1.45;
   const chip = v.textChip();
-  // The diamond (the ring colour) sits in the left padding of the chip.
+  // The diamond (the side colour) sits in the left padding of the chip.
   const w = chip.set(text, env, 0, rem * 0.75, h);
-  const anchor = unitXY(env, e.unit) ?? here(env, e);
-  // Under the downed fighter, kept inside the canvas, simultaneous callouts stacked downwards.
-  const x = Math.max(w / 2 + 4, Math.min(env.viewport.width - w / 2 - 4, anchor.x));
-  const y = Math.min(env.viewport.height - h - 4, anchor.y + env.ppm * 0.5 + rem * 0.8) + slot * (h + 4);
+  // A queue at one end of the field, away from the bodies (never on the fallen fighter's token): the newest line last.
+  const f = env.field;
+  const x = Math.max(w / 2 + 4, Math.min(env.viewport.width - w / 2 - 4, (f.x0 + f.x1) / 2));
+  const gap = 4;
+  const y = env.queueTop ? f.y0 + gap * 2 + slot * (h + gap) : f.y1 - gap * 2 - h - slot * (h + gap);
   const a = alpha * fadeOf(env, e, 0.7);
   chip.view.position.set(x - w / 2, y);
   chip.view.alpha = a;
@@ -395,6 +475,9 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
   const cx = x - w / 2 + rem * 0.4;
   const cy = y + h / 2;
   v.g.poly([cx, cy - d, cx + d, cy, cx, cy + d, cx - d, cy]).fill({ color: side, alpha: a });
+  // A ring where he fell, to look at, since the line is away from him.
+  const anchor = unitXY(env, e.unit) ?? here(env, e);
+  if (!env.reducedMotion && e.age < 0.1) ring(v.g, anchor.x, anchor.y, env.ppm * (0.5 + 2 * e.age), side, alpha * (1 - e.age * 8), 3, env);
 }
 
 // ---- the drawers: one per EffectKind -----------------------------------------------------------------------------
