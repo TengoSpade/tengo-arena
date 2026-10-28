@@ -16,6 +16,8 @@
   .mockbar__sep { width: 1px; height: 1.3rem; background: var(--c-border-strong); flex: none; }
   .mockbar .select-wrap { width: 10rem; }
   .mockbar .btn { height: 1.8rem; }
+  /* The mock bar sits above the screen, so the arena toast region (components.css 25.10) drops by its height. */
+  body:has(.arena-screen) .toast-region { top: calc(var(--mock-h) + 56px * var(--ui-scale) + var(--sp-3)); }
   /* "Show focus rings": the curated elements show the same ring :focus-visible draws. Real keyboard focus works too. */
   body.demo-focus [data-demo-focus] { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: var(--r-sm); }
   body.demo-focus .arena-canvas[data-demo-focus] { outline: none; }
@@ -162,9 +164,10 @@
           <span class="ascrub__end" data-only="live paused">0:27</span><span class="ascrub__end" data-only="round-end">0:52</span>
           <button class="btn btn--sm btn--ghost btn--icon" type="button" aria-label="Back one frame (Left)" data-tip="Back one frame, 0.1 s (Left). Shift Left: one second. While paused."><span class="icon" data-icon="step-back" aria-hidden="true"></span></button>
           <button class="btn btn--sm btn--ghost btn--icon" type="button" aria-label="Forward one frame (Right)" data-tip="Forward one frame, 0.1 s (Right). Not past the live head."><span class="icon" data-icon="step-fwd" aria-hidden="true"></span></button>
-          <button class="btn btn--sm" type="button" data-tip="Return to the live head (End)"><span class="icon icon--sm" data-icon="eye" aria-hidden="true"></span>Live</button>
-          <button class="btn btn--sm btn--ghost" type="button" data-tip="Skip to the end of this round (Shift S). Asks once. The result is the one the inputs give."><span class="icon" data-icon="skip-end" aria-hidden="true"></span><span class="col-narrow">Skip round</span><span class="col-wide">Skip to end of round</span> <kbd>Shift S</kbd></button>
-          <button class="btn btn--sm btn--ghost" type="button" data-tip="Play the rest of the match without watching. Watch does not come back in this match."><span class="col-narrow">Simulate rest</span><span class="col-wide">Simulate the rest</span></button>
+          <button class="btn btn--sm btn--collapse" type="button" aria-label="Back to live" data-tip="Return to the live head (End)"><span class="icon icon--sm" data-icon="eye" aria-hidden="true"></span><span class="btn__label">Live</span></button>
+          <button class="btn btn--sm btn--ghost btn--collapse" type="button" aria-label="Skip to the end of the round" data-tip="Skip to the end of this round (Shift S). Asks once. The result is the one the inputs give."><span class="icon" data-icon="skip-end" aria-hidden="true"></span><span class="btn__label"><span class="col-narrow">Skip round</span><span class="col-wide">Skip to end of round</span></span> <kbd>Shift S</kbd></button>
+          <button class="btn btn--sm btn--ghost btn--collapse" type="button" aria-label="Simulate the rest of the match" data-tip="Play the rest of the match without watching. Watch does not come back in this match (Shift Space)."><span class="icon" data-icon="bolt" aria-hidden="true"></span><span class="btn__label"><span class="col-narrow">Simulate rest</span><span class="col-wide">Simulate the rest</span></span></button>
+          <button class="btn btn--sm btn--ghost btn--collapse" type="button" aria-label="Show or hide the dock" data-tip="Show or hide the inspector and feed (D)"><span class="icon" data-icon="dock" aria-hidden="true"></span><span class="btn__label">Dock</span> <kbd>D</kbd></button>
         </div>
       </div>
 

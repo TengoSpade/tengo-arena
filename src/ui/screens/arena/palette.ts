@@ -90,6 +90,7 @@ export function glyphTokenToSvg(value: string): string | null {
 const METRICS_FALLBACK: ArenaMetrics = {
   ringWidthPx: 3.5, ringLinePx: 2, ringGapPx: 1.5, downOpacity: 0.4, zoneAlpha: 0.22, telegraphFillAlpha: 0.16, telegraphEdgeAlpha: 0.9, telegraphProgressAlpha: 0.3,
   hitFlashAlpha: 0.7, hitFlashMs: 90, flashLimitPerSecond: 3, fxFadeMs: 400, numberMergeMs: 100, numberRisePx: 14, pulseMs: 220, easeMs: 220, labelSizePx: 12, pipSizePx: 16, barHeightPx: 6,
+  barWidthM: 1.3, plateRadiusM: 0.33, glyphSizeM: 0.44, plateRadiusHybridM: 0.36, glyphSizeHybridM: 0.34,
 };
 
 /** Read the palette for `theme` from `root`'s computed style (once per viewer and after a theme, motion or scale change). */
@@ -151,6 +152,12 @@ export function readArenaPalette(theme: 'dark' | 'light', root: Element = docume
     labelSizePx: length('--arena-label-size', m.labelSizePx),
     pipSizePx: length('--arena-pip-size', m.pipSizePx),
     barHeightPx: length('--arena-bar-h', m.barHeightPx),
+    // Unitless proportions in metres of arena: read as numbers, never measured.
+    barWidthM: num('--arena-bar-w', m.barWidthM),
+    plateRadiusM: num('--arena-plate-r', m.plateRadiusM),
+    glyphSizeM: num('--arena-glyph', m.glyphSizeM),
+    plateRadiusHybridM: num('--arena-plate-r-hybrid', m.plateRadiusHybridM),
+    glyphSizeHybridM: num('--arena-glyph-hybrid', m.glyphSizeHybridM),
   };
   holder.el?.remove();
   return {

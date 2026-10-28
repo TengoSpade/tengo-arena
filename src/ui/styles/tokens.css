@@ -161,6 +161,12 @@
   --arena-pulse-ms: 220ms;        /* rule badge pulse on a new decision (04 section 7) */
   --arena-ease-ms: 220ms;         /* camera zoom ease (04 section 4) */
   --arena-motion: 1;              /* 1 = animate, 0 = reduced motion (set below) */
+  /* Token proportions, in metres of arena (1 m = the fighter's diameter). The viewer reads the same numbers from palette.metrics. */
+  --arena-bar-w: 1.3;             /* HP, shield and focus bar width, and the cast bar's minimum (never under 3 pips) */
+  --arena-plate-r: 0.33;          /* role-glyph plate radius */
+  --arena-glyph: 0.44;            /* one role glyph */
+  --arena-plate-r-hybrid: 0.36;   /* plate radius for a hybrid, so two glyphs and their gap fit inside it */
+  --arena-glyph-hybrid: 0.34;     /* each of a hybrid's two glyphs (was 0.30: about 10 px at 1440, now about 12) */
   --arena-label-size: var(--fs-xs);
   --arena-pip-size: 1rem;         /* pip chip, square; 4 at most above the HP bar */
   --arena-bar-h: 0.4rem;          /* HP bar height; shield rides on it, the focus bar is 60% of it */
