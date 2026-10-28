@@ -120,9 +120,9 @@ export function checkRoundLoad(t: { simMs: readonly number[]; indexMs: readonly 
  * judged on the median of the opens and a cold open over it with the median under it warns, with every sample listed; under
  * --strict-perf the cold open is the gate, as A10 words it (the first open), and fails.
  */
-export function checkFirstOpen(samplesMs: readonly number[] | number | null, ctx: PerfContext): CheckResult {
+export function checkFirstOpen(samplesMs: readonly number[] | number | null, ctx: PerfContext, variant: { id?: string; title?: string; coldNote?: string } = {}): CheckResult {
   const samples = samplesMs === null ? [] : typeof samplesMs === 'number' ? [samplesMs] : [...samplesMs];
-  const base = { id: 'perf.first-open', title: 'First viewer open (lazy chunk, PixiJS init, prepare)', ref: 'A10', expected: `median <= ${TARGETS.firstOpenMsMax} ms` };
+  const base = { id: variant.id ?? 'perf.first-open', title: variant.title ?? 'First viewer open (lazy chunk, PixiJS init, prepare)', ref: 'A10', expected: `median <= ${TARGETS.firstOpenMsMax} ms` };
   if (samples.length === 0) return { ...base, status: 'skip', actual: 'not measured' };
   const med = median(samples);
   const cold = samples[0]!;
@@ -134,7 +134,7 @@ export function checkFirstOpen(samplesMs: readonly number[] | number | null, ctx
   }
   if (cold > TARGETS.firstOpenMsMax) {
     // Strict: the target as written is the first open, which is the cold one.
-    return { ...base, status: ctx.strict ? 'fail' : 'warn', actual, detail: `The cold open (${ms(cold)}) is over the ${TARGETS.firstOpenMsMax} ms target; the median is under it. The target is for a viewer prefetched at idle in a matchweek (A5, tech-025); the fixture path opens it cold, with no prefetch.` };
+    return { ...base, status: ctx.strict ? 'fail' : 'warn', actual, detail: `The cold open (${ms(cold)}) is over the ${TARGETS.firstOpenMsMax} ms target; the median is under it. ${variant.coldNote ?? 'The target is for a viewer prefetched at idle in a matchweek (A5, tech-025); the fixture path opens it cold, with no prefetch.'}` };
   }
   return { ...base, status: 'pass', actual };
 }

@@ -12,7 +12,7 @@ import type { GpuMode } from './browser';
  */
 export const DEFAULT_SEED = 'arena-smoke-10';
 
-export const JOURNEYS = ['cross', 'fixture', 'career', 'vis003'] as const;
+export const JOURNEYS = ['cross', 'fixture', 'career', 'vis003', 'open'] as const;
 export type JourneyName = (typeof JOURNEYS)[number];
 
 export interface RunOptions {
@@ -34,6 +34,8 @@ export interface RunOptions {
   heapLoads: number;
   /** A performance miss on software WebGL is a failure, not a warning. */
   strictPerf: boolean;
+  /** vite build mode of the bundle under test (smoke has the test hook; production has none, and the open journey then reads the canvas). */
+  buildMode: string;
   /** Journeys to run (default: cross, fixture, career). */
   only: ReadonlySet<JourneyName>;
   /** vis-003 capture: how many fights to capture (5). */
@@ -51,7 +53,9 @@ export interface RunOptions {
 
 const HELP = `usage: npx tsx scripts/smoke/run.ts [options]   (the package script smoke:arena is to be added)
 
-  --only cross,fixture,career,vis003   journeys to run (default cross,fixture,career; vis003 captures the observer packets)
+  --only cross,fixture,career,vis003,open   journeys to run (default cross,fixture,career; vis003 captures the observer packets;
+                        open times the first viewer open from Watch in three seeded careers, after the idle prefetch)
+  --build-mode <mode>   vite build mode (default smoke; production has no test hook, only the open journey runs without it)
   --no-build            reuse the build in reports/smoke/build
   --url <http://...>    test an already served build (no build, no preview)
   --self-test           run against the built-in mock arena: tests the driver, not the game
@@ -98,6 +102,7 @@ export function parseOptions(argv: readonly string[]): RunOptions | 'help' {
     seconds: intArg(args, 'seconds', 10),
     heapLoads: intArg(args, 'heap-loads', 20),
     strictPerf: args.has('strict-perf'),
+    buildMode: stringArg(args, 'build-mode', 'smoke'),
     only,
     fights: intArg(args, 'fights', 5),
     noShots: args.has('no-shots'),
