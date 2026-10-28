@@ -4,7 +4,7 @@
  */
 import type { Rgba } from './png';
 import type { CheckResult, CheckStatus } from './report';
-import { TARGETS, median, percentile, type HeapAnalysis, type IntervalSummary, type TraceAnalysis } from './stats';
+import { TARGETS, median, percentile, type HeapAnalysis, type IntervalSummary, type MainThreadLoad, type TraceAnalysis } from './stats';
 
 const ms = (v: number): string => (Number.isFinite(v) ? `${v.toFixed(1)} ms` : 'n/a');
 const fps = (v: number): string => (Number.isFinite(v) ? `${v.toFixed(1)} fps` : 'n/a');
@@ -27,18 +27,51 @@ const SOFTWARE_NOTE = 'Software WebGL: the targets apply to the reference machin
 
 // ---- Frame rate (A10: 60 fps target, p95 interval <= 20 ms, never below 30 fps) ----------------------------
 
-export function checkFrameRate(id: 'perf.fps-1x' | 'perf.fps-4x', speedLabel: string, s: IntervalSummary, ctx: PerfContext): CheckResult {
+/** One line on what bounds the frame rate: the main thread's share, and so where to look. */
+export function loadNote(load: MainThreadLoad | null): string | null {
+  if (!load) return null;
+  const pct = (v: number): string => `${(v * 100).toFixed(0)}%`;
+  const where = load.task < 0.6 ? 'the main thread has room, so the frame time is spent on the GPU or the compositor (draw cost, presenting the canvas), not in script, layout or style' : 'the main thread is busy: look at script, layout and style';
+  return `Main thread busy ${pct(load.task)} of ${load.wallS.toFixed(1)} s (script ${pct(load.script)}, layout ${pct(load.layout)}, style ${pct(load.style)}): ${where}.`;
+}
+
+/**
+ * Frame rate (A10: 60 fps median, p95 interval 20 ms, nothing over 33 ms), judged in three steps.
+ * 1. The target as written: median at least 58 fps (the 60 target with 2 fps of timer slack), p95 at most 20 ms, nothing over
+ *    33.5 ms. Met: pass.
+ * 2. Missed: is the viewer slower than what this browser session can deliver at all? A bare full-window WebGL canvas (antialias,
+ *    preserved drawing buffer, nothing else) is measured in the same session as `baseline`. A viewer slower than that (median
+ *    more than 3% over, p95 more than 2 ms over, or any frame over 33.5 ms) fails: the product costs frame time.
+ * 3. A viewer that keeps up with an empty canvas in a session whose empty canvas is itself under 58 fps has not missed the target
+ *    for a reason of its own, but has not shown it either. That is never a pass: it is a warning, and under --strict-perf the
+ *    check is NOT MADE, which makes the run's verdict blocked. The criterion therefore stays A10's 60 fps median; the baseline
+ *    only decides who to blame for a miss.
+ */
+export function checkFrameRate(id: 'perf.fps-1x' | 'perf.fps-4x', speedLabel: string, s: IntervalSummary, ctx: PerfContext, load: MainThreadLoad | null = null, baseline: IntervalSummary | null = null): CheckResult {
   const enough = s.frames >= 60;
   const ok = enough && s.medianFps >= TARGETS.fpsMedianMin && s.p95Ms <= TARGETS.p95IntervalMsMax && s.over33 === 0;
-  const status: CheckStatus = !enough ? 'fail' : perfStatus(ok, ctx);
+  const keepsUp = baseline !== null && baseline.frames >= 30 && s.medianMs <= baseline.medianMs * 1.03 && s.p95Ms <= baseline.p95Ms + 2 && s.over33 === 0;
+  const environmentLimited = enough && !ok && keepsUp && baseline!.medianFps < TARGETS.fpsMedianMin;
+  // Never a pass: the session cannot show the target. A warning normally; under --strict-perf the check is not made, which blocks the verdict.
+  const status: CheckStatus = !enough ? 'fail' : environmentLimited ? (ctx.strict ? 'skip' : 'warn') : perfStatus(ok, ctx);
+  const baseNote = baseline ? `An empty full-window WebGL canvas in this browser session runs at ${fps(baseline.medianFps)} (median ${ms(baseline.medianMs)}, p95 ${ms(baseline.p95Ms)}); the viewer at ${fps(s.medianFps)} (median ${ms(s.medianMs)}, p95 ${ms(s.p95Ms)}).` : null;
+  const detail = !enough
+    ? `Only ${s.frames} playing frames were recorded (at least 60 needed): the fight clock did not advance long enough.`
+    : environmentLimited
+      ? `NOT DEMONSTRATED in this session (the viewer is not slower than the browser, but the browser cannot reach the target): ${baseNote} The viewer keeps up with the empty canvas, so its frame time is not what holds it under ${TARGETS.fpsMedianMin} fps, but the 60 fps median of A10 is not shown either; run it on the reference machine or on a 60 Hz display.${loadNote(load) ? ` ${loadNote(load)}` : ''}`
+      : status === 'warn'
+        ? [SOFTWARE_NOTE, baseNote, loadNote(load)].filter(Boolean).join(' ')
+        : status === 'fail'
+          ? [baseNote, loadNote(load)].filter(Boolean).join(' ') || undefined
+          : undefined;
   return {
     id,
     title: `Arena frame rate at ${speedLabel}`,
     status,
     ref: 'A10',
     expected: `median >= ${TARGETS.fpsMedianMin} fps, p95 interval <= ${TARGETS.p95IntervalMsMax} ms, none over ${TARGETS.maxIntervalMs} ms`,
-    actual: `${s.frames} frames: median ${fps(s.medianFps)}, p95 ${ms(s.p95Ms)}, max ${ms(s.maxMs)}, ${s.over33} over ${TARGETS.maxIntervalMs} ms`,
-    ...(!enough ? { detail: `Only ${s.frames} playing frames were recorded (at least 60 needed): the fight clock did not advance long enough.` } : status === 'warn' ? { detail: SOFTWARE_NOTE } : {}),
+    actual: `${s.frames} frames: median ${fps(s.medianFps)}, p95 ${ms(s.p95Ms)}, max ${ms(s.maxMs)}, ${s.over33} over ${TARGETS.maxIntervalMs} ms${baseline ? `; empty-canvas baseline ${fps(baseline.medianFps)}` : ''}`,
+    ...(detail ? { detail } : {}),
   };
 }
 
@@ -80,18 +113,30 @@ export function checkRoundLoad(t: { simMs: readonly number[]; indexMs: readonly 
   };
 }
 
-export function checkFirstOpen(openMs: number | null, ctx: PerfContext): CheckResult {
-  if (openMs === null) return { id: 'perf.first-open', title: 'First viewer open', status: 'skip', ref: 'A10', expected: `<= ${TARGETS.firstOpenMsMax} ms`, actual: 'not measured' };
-  const status = perfStatus(openMs <= TARGETS.firstOpenMsMax, ctx);
-  return {
-    id: 'perf.first-open',
-    title: 'First viewer open (lazy chunk, PixiJS init, prepare)',
-    status,
-    ref: 'A10',
-    expected: `<= ${TARGETS.firstOpenMsMax} ms`,
-    actual: ms(openMs),
-    ...(status === 'warn' ? { detail: SOFTWARE_NOTE } : {}),
-  };
+/**
+ * First viewer open (A10: lazy chunk + PixiJS init + prepare, at most 500 ms, local files). One sample is noise of about
+ * +-70 ms around the target (437, 437, 450, 456, 510, 591 ms were seen on one machine), so the driver opens the round in
+ * three pages: the first is the cold one (nothing cached yet in the session), the others find the chunk cached. Normally the target is
+ * judged on the median of the opens and a cold open over it with the median under it warns, with every sample listed; under
+ * --strict-perf the cold open is the gate, as A10 words it (the first open), and fails.
+ */
+export function checkFirstOpen(samplesMs: readonly number[] | number | null, ctx: PerfContext): CheckResult {
+  const samples = samplesMs === null ? [] : typeof samplesMs === 'number' ? [samplesMs] : [...samplesMs];
+  const base = { id: 'perf.first-open', title: 'First viewer open (lazy chunk, PixiJS init, prepare)', ref: 'A10', expected: `median <= ${TARGETS.firstOpenMsMax} ms` };
+  if (samples.length === 0) return { ...base, status: 'skip', actual: 'not measured' };
+  const med = median(samples);
+  const cold = samples[0]!;
+  const list = samples.map((v) => ms(v)).join(', ');
+  const actual = samples.length === 1 ? ms(cold) : `median ${ms(med)} of ${samples.length} opens (${list}; the first is cold)`;
+  if (med > TARGETS.firstOpenMsMax) {
+    const status = perfStatus(false, ctx);
+    return { ...base, status, actual, ...(status === 'warn' ? { detail: SOFTWARE_NOTE } : {}) };
+  }
+  if (cold > TARGETS.firstOpenMsMax) {
+    // Strict: the target as written is the first open, which is the cold one.
+    return { ...base, status: ctx.strict ? 'fail' : 'warn', actual, detail: `The cold open (${ms(cold)}) is over the ${TARGETS.firstOpenMsMax} ms target; the median is under it. The target is for a viewer prefetched at idle in a matchweek (A5, tech-025); the fixture path opens it cold, with no prefetch.` };
+  }
+  return { ...base, status: 'pass', actual };
 }
 
 // ---- The cursor-save trace (A11 test-first item 5) -----------------------------------------------------------
@@ -262,54 +307,92 @@ export interface TokenProbe {
 export interface TokenCensus {
   expected: number;
   found: number;
-  /** Per unit: the candidate colour index that matched, or null. */
+  /** Per standing unit: the ring colour (candidate index) of its side when enough of it was found near the unit, else null; pixels = how many. */
   matches: { unit: number; side: 0 | 1; color: number | null; pixels: number }[];
-  /** Both sides each matched a single colour of their own. */
+  /** The candidate each side was assigned (home, away), or null when no assignment explained any token. The two always differ. */
+  assignment: [number, number] | null;
+  /** Both sides have an assigned ring colour of their own and every standing unit shows its side's. */
   sidesConsistent: boolean;
   missing: number[];
 }
 
+/** The ring's place in a token, in pixels from its centre. */
+export interface RingBand {
+  innerPx: number;
+  outerPx: number;
+}
+
 /**
- * For each standing unit, look within `radiusPx` of its projected centre for pixels near one of the candidate ring
- * colours (the side colours); a unit is drawn when at least `minPixels` match. A downed token is flattened and faded
- * (asset-006), so only standing units are required. Tolerant by design: the projection the driver uses may be a few
- * pixels off the viewer's.
+ * Where a token's side ring is, from the drawing order of 04/arena-notes §1: bottom to top the ring, a keyline, the body
+ * (club primary with a secondary rim), the glyph plate. The disc is the fighter's 0.5 m radius; the ring (3.5 px solid, or two 2 px
+ * lines) sits just outside it, in CSS pixels at any zoom. So the band starts at the disc's edge and runs a few pixels past it:
+ * the body's trim, whose colour is a club colour that can be brass-like, lies inside it and is not looked at.
  */
-export function tokenCensus(img: Rgba, probes: readonly TokenProbe[], candidates: readonly Rgb[], radiusPx: number, tolerance = 42, minPixels = 4): TokenCensus {
-  const matches: TokenCensus['matches'] = [];
-  for (const p of probes) {
-    if (!p.standing) continue;
-    const hits = new Array<number>(candidates.length).fill(0);
-    const r = Math.ceil(radiusPx);
+export function ringBand(pxPerCm: number): RingBand {
+  const disc = 50 * pxPerCm;
+  return { innerPx: Math.max(4, disc - 1), outerPx: disc + 10 };
+}
+
+/**
+ * For each standing unit, count the pixels in the ring band around its projected centre (a ring-shaped window, not a disc)
+ * that are near each candidate ring colour.
+ * The picture decides which candidate belongs to which side: the pair (home colour, away colour), the two different, that
+ * lets the most standing units show enough of their own side's colour. A unit is drawn when at least `minPixels` of its
+ * side's colour are in its band (a real ring has hundreds). Other colours near a token (the body, its trim, a zone disc, the
+ * other side's ring) do not count for or against it, so two clubs whose trims share a hue cannot swap the sides. A downed
+ * token is flattened and faded (asset-006), so only standing units are required. Tolerant by design: the projection the driver
+ * uses may be a few pixels off the viewer's.
+ */
+export function tokenCensus(img: Rgba, probes: readonly TokenProbe[], candidates: readonly Rgb[], band: RingBand, tolerance = 42, minPixels = 30): TokenCensus {
+  const standing = probes.filter((p) => p.standing);
+  const hits = standing.map((p) => {
+    const h = new Array<number>(candidates.length).fill(0);
+    const r = Math.ceil(band.outerPx);
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
-        if (dx * dx + dy * dy > radiusPx * radiusPx) continue;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > band.outerPx * band.outerPx || d2 < band.innerPx * band.innerPx) continue;
         const x = Math.round(p.x) + dx;
         const y = Math.round(p.y) + dy;
         if (x < 0 || y < 0 || x >= img.width || y >= img.height) continue;
         const o = (y * img.width + x) * 4;
         const px: Rgb = [img.data[o]!, img.data[o + 1]!, img.data[o + 2]!];
         candidates.forEach((c, i) => {
-          if (colorDistance(px, c) <= tolerance) hits[i]!++;
+          if (colorDistance(px, c) <= tolerance) h[i]!++;
         });
       }
     }
-    let best = -1;
-    let bestHits = 0;
-    hits.forEach((h, i) => {
-      if (h > bestHits) {
-        bestHits = h;
-        best = i;
-      }
-    });
-    matches.push({ unit: p.unit, side: p.side, color: bestHits >= minPixels ? best : null, pixels: bestHits });
+    return h;
+  });
+  // The assignment that lets the most units show their side's colour (ties: the most ring pixels in all).
+  let best: { pair: [number, number]; shown: number; pixels: number } | null = null;
+  for (let home = 0; home < candidates.length; home++) {
+    for (let away = 0; away < candidates.length; away++) {
+      if (home === away) continue;
+      let shown = 0;
+      let pixels = 0;
+      standing.forEach((p, i) => {
+        const n = hits[i]![p.side === 0 ? home : away]!;
+        pixels += n;
+        if (n >= minPixels) shown++;
+      });
+      if (shown > 0 && (!best || shown > best.shown || (shown === best.shown && pixels > best.pixels))) best = { pair: [home, away], shown, pixels };
+    }
   }
+  const matches: TokenCensus['matches'] = standing.map((p, i) => {
+    const color = best ? best.pair[p.side] : null;
+    const n = color === null ? 0 : hits[i]![color]!;
+    return { unit: p.unit, side: p.side, color: color !== null && n >= minPixels ? color : null, pixels: n };
+  });
   const found = matches.filter((m) => m.color !== null).length;
-  const colorsOf = (side: 0 | 1): Set<number> => new Set(matches.filter((m) => m.side === side && m.color !== null).map((m) => m.color!));
-  const home = colorsOf(0);
-  const away = colorsOf(1);
-  const sidesConsistent = home.size === 1 && away.size === 1 && [...home][0] !== [...away][0];
-  return { expected: matches.length, found, matches, sidesConsistent, missing: matches.filter((m) => m.color === null).map((m) => m.unit) };
+  return {
+    expected: matches.length,
+    found,
+    matches,
+    assignment: best ? best.pair : null,
+    sidesConsistent: best !== null && found === matches.length && matches.some((m) => m.side === 0) && matches.some((m) => m.side === 1),
+    missing: matches.filter((m) => m.color === null).map((m) => m.unit),
+  };
 }
 
 export function checkTokens(c: TokenCensus, label: string): CheckResult {
@@ -319,9 +402,9 @@ export function checkTokens(c: TokenCensus, label: string): CheckResult {
     title: `Ten tokens drawn with their side ring colours (${label})`,
     status: ok ? 'pass' : 'fail',
     ref: 'A11 checks',
-    expected: '10 standing tokens, each with a ring in its side colour (one colour a side, two sides differ)',
-    actual: `${c.found} of ${c.expected} found${c.missing.length ? `, missing units ${c.missing.join(', ')}` : ''}, sides ${c.sidesConsistent ? 'consistent' : 'not consistent'}`,
-    ...(!ok ? { detail: 'The ring colours are looked up in a small window around each unit\'s projected position (the viewer\'s own projection when the hook has one, else a letterbox of the canvas with the default camera padding).' } : {}),
+    expected: '10 standing tokens, each with enough pixels of its own side\'s ring colour near it (the two sides\' colours differ)',
+    actual: `${c.found} of ${c.expected} found${c.missing.length ? `, missing units ${c.missing.join(', ')}` : ''}${c.assignment ? `, ring colours: home candidate ${c.assignment[0]}, away candidate ${c.assignment[1]}` : ', no ring colour matched any token'}`,
+    ...(!ok ? { detail: 'The ring colours are counted in the ring band around each unit\'s projected position (the viewer\'s own projection when the hook has one, else the field found in the screenshot, else a letterbox of the canvas with the default camera padding).' } : {}),
   };
 }
 

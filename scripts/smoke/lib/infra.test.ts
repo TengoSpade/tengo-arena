@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { needsPlayPress } from './arena-ui';
 import { browserArgs, browserCandidates, browserEnv, findBrowser, killByProfileScript } from './browser';
 import { CdpClient, CdpError } from './cdp';
 import { parseOptions } from './options';
@@ -251,5 +252,18 @@ describe('static server', () => {
     } finally {
       await s.close();
     }
+  });
+});
+
+describe('pressing Play like a player', () => {
+  it('presses it when the screen is paused with a Play button, also at the round\'s last tick', () => {
+    expect(needsPlayPress({ state: 'paused', playLabel: 'Play Space' })).toBe(true);
+    expect(needsPlayPress({ state: 'ready', playLabel: 'Play Space' })).toBe(true);
+  });
+  it('does not press it while playing, while the round is ending, or off the arena screen', () => {
+    expect(needsPlayPress({ state: 'playing', playLabel: 'Pause Space' })).toBe(false);
+    expect(needsPlayPress({ state: 'round-end', playLabel: 'Play Space' })).toBe(false);
+    expect(needsPlayPress({ state: 'paused', playLabel: '' })).toBe(false);
+    expect(needsPlayPress(null)).toBe(false);
   });
 });

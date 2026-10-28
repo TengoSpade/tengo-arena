@@ -67,6 +67,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 export class PageDriver {
   readonly console: ConsoleRecord[] = [];
+  private perfEnabled = false;
   private constructor(
     readonly client: CdpClient,
     readonly targetId: string,
@@ -240,6 +241,16 @@ export class PageDriver {
       writeFileSync(file, buf);
     }
     return buf;
+  }
+
+  /** Chromium's per-page counters (seconds): Timestamp, TaskDuration, ScriptDuration, LayoutDuration, RecalcStyleDuration... Cumulative since the page started. */
+  async perfMetrics(): Promise<Record<string, number>> {
+    if (!this.perfEnabled) {
+      await this.send('Performance.enable');
+      this.perfEnabled = true;
+    }
+    const r = await this.send<{ metrics: { name: string; value: number }[] }>('Performance.getMetrics');
+    return Object.fromEntries(r.metrics.map((m) => [m.name, m.value]));
   }
 
   /** JS heap in use, bytes; a forced garbage collection first so samples are comparable. */

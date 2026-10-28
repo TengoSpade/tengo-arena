@@ -4,10 +4,11 @@
  * fps and our frame time at 1x and 4x; the heap over consecutive round loads; the hash of the loaded log.
  */
 import { join } from 'node:path';
+import { arenaCmOf } from '../lib/arena-ui';
 import { decodePng } from '../lib/png';
 import { checkCanvas, checkCpuFrame, checkFirstOpen, checkFrameRate, checkHashEqual, checkHeap, checkTokens, canvasNotBlank, tokenCensus } from '../lib/checks';
-import { PageDriver, SmokeFailure, type VisionDeficiency } from '../lib/page';
-import { analyzeHeap, playingIntervals, summarizeIntervals } from '../lib/stats';
+import { PageDriver, SmokeFailure, sleep, type VisionDeficiency } from '../lib/page';
+import { analyzeHeap, intervalsOf, playingIntervals, summarizeIntervals, type IntervalSummary } from '../lib/stats';
 import { canvasInfo, frame, loadFixtureRound, logHash, playFor, projectUnits, requireHook, seek, settle, sideColors, stats, type CanvasInfo } from '../lib/viewer';
 import type { JourneyEnv } from './env';
 
@@ -49,6 +50,23 @@ async function openPage(env: JourneyEnv, theme: 'dark' | 'light', width = 1920, 
   return page;
 }
 
+/** The cadence of a bare full-window WebGL canvas in a page of its own, in this browser session: what the viewer can at best deliver. */
+export async function measureBaseline(env: JourneyEnv, seconds = 4): Promise<IntervalSummary | null> {
+  const page = await PageDriver.open(env.client, { width: 1920, height: 1080, colorScheme: 'dark' });
+  try {
+    await page.goto(`${env.baseUrl}/?theme=dark#/home`);
+    if (!(await page.probe<boolean>('bareWebgl'))) return null;
+    await page.probe('rafStart');
+    await sleep(seconds * 1000);
+    const raw = await page.probe<{ t: number[] }>('rafStop');
+    const iv = intervalsOf(raw.t).slice(10);
+    return iv.length >= 30 ? summarizeIntervals(iv) : null;
+  } finally {
+    env.collectConsole(page);
+    await page.close();
+  }
+}
+
 export async function runFixtureJourney(env: JourneyEnv): Promise<void> {
   const { rec, opts } = env;
   await rec.journey('fixture', async () => {
@@ -62,8 +80,20 @@ export async function runFixtureJourney(env: JourneyEnv): Promise<void> {
       let endTick = 0;
       await rec.step('fixture.open', 'Load the fixed round (first viewer open)', async () => {
         const opened = await loadFixtureRound(page);
-        rec.measurements['fixture.firstOpen'] = opened;
-        rec.check(checkFirstOpen(opened.ms, env.perf));
+        // Two more opens in fresh pages: one sample is noise around the target.
+        const samples = [opened.ms];
+        for (let i = 0; i < 2; i++) {
+          const other = await openPage(env, 'dark');
+          try {
+            await requireHook(other, { needFixture: true });
+            samples.push((await loadFixtureRound(other)).ms);
+          } finally {
+            env.collectConsole(other);
+            await other.close();
+          }
+        }
+        rec.measurements['fixture.firstOpen'] = { ...opened, samplesMs: samples };
+        rec.check(checkFirstOpen(samples, env.perf));
         const c = await canvasInfo(page);
         if (!c) throw new SmokeFailure('arena.no-canvas', 'loadFixtureRound() finished but the page has no canvas.');
         canvas = c;
@@ -94,8 +124,8 @@ export async function runFixtureJourney(env: JourneyEnv): Promise<void> {
         const img = decodePng(shot);
         rec.check(checkCanvas(canvasNotBlank(img, canvas.rect), `fixture, tick ${Math.round(f.tick)}`));
         const sc = await sideColors(page, opts.ringColors);
-        const proj = await projectUnits(page, f, canvas);
-        rec.check(checkTokens(tokenCensus(img, proj.probes, sc.colors, proj.radiusPx), `fixture, tick ${Math.round(f.tick)}; colours ${sc.names.join(', ')}; projection ${proj.method}`));
+        const proj = await projectUnits(page, f, canvas, { img, arenaCm: arenaCmOf(env) });
+        rec.check(checkTokens(tokenCensus(img, proj.probes, sc.colors, proj.band), `fixture, tick ${Math.round(f.tick)}; colours ${sc.names.join(', ')}; projection ${proj.method}`));
       });
 
       if (!opts.noShots) {
@@ -142,14 +172,16 @@ export async function runFixtureJourney(env: JourneyEnv): Promise<void> {
 
       await rec.step('fixture.fps', `Frame rate and frame time at 1x and 4x (${opts.seconds} s each)`, async () => {
         const cpu: number[] = [];
+        const baseline = await measureBaseline(env);
+        rec.measurements['perf.baseline'] = baseline;
         for (const speed of [1, 4] as const) {
           await loadFixtureRound(page);
           const run = await playFor(page, { speed, seconds: opts.seconds, reload: () => loadFixtureRound(page) });
           const intervals = playingIntervals(run.series, 5);
           const summary = summarizeIntervals(intervals);
           const st = await stats(page);
-          rec.measurements[`perf.fps-${speed}x`] = { ...summary, restarts: run.restarts, resumes: run.resumes, viewerStats: st };
-          rec.check(checkFrameRate(`perf.fps-${speed}x` as 'perf.fps-1x' | 'perf.fps-4x', `${speed}x`, summary, env.perf));
+          rec.measurements[`perf.fps-${speed}x`] = { ...summary, restarts: run.restarts, resumes: run.resumes, viewerStats: st, mainThread: run.load };
+          rec.check(checkFrameRate(`perf.fps-${speed}x` as 'perf.fps-1x' | 'perf.fps-4x', `${speed}x`, summary, env.perf, run.load, baseline));
           if (Number.isFinite(st.frameMsP95)) cpu.push(st.frameMsP95);
         }
         rec.check(checkCpuFrame(cpu.length ? Math.max(...cpu) : null, env.perf));

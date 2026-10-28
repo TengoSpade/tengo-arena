@@ -5,9 +5,11 @@
  * the viewer is not there yet, naming the package that delivers it.
  */
 import type { ArenaFrameState, ViewerStats } from '../../../src/render';
-import { letterboxProject, parseCssColor, type Rect, type Rgb, type TokenProbe } from './checks';
+import { letterboxProject, parseCssColor, ringBand, type Rect, type RingBand, type Rgb, type TokenProbe } from './checks';
+import { findField, projectField } from './field';
+import type { Rgba } from './png';
 import { SmokeFailure, sleep, type PageDriver } from './page';
-import { playingIntervals, stoppedAtEnd, type FrameSeries } from './stats';
+import { mainThreadLoad, playingIntervals, stoppedAtEnd, type FrameSeries, type MainThreadLoad } from './stats';
 
 export const REQUIRED_METHODS = ['frame', 'seek', 'play', 'pause', 'setSpeed', 'stats', 'logHash'] as const;
 
@@ -152,12 +154,25 @@ export async function sideColors(page: PageDriver, extra: readonly string[] = []
   return { colors, names };
 }
 
+/** The floor colour the arena is drawn on (--c-arena-floor), or null. */
+export async function floorColor(page: PageDriver): Promise<Rgb | null> {
+  const resolved = await page.probe<Record<string, string>>('palette', ['--c-arena-floor']);
+  return parseCssColor(resolved['--c-arena-floor'] ?? '');
+}
+
 /**
- * Screen positions of the ten units of a frame. Uses the hook's own projection when it has one (project(x, y) or
- * viewTransform().toScreen), else a letterbox of the canvas with the camera contract's default padding; the ring
- * search window absorbs a few pixels of difference.
+ * Screen positions of the ten units of a frame, and the ring band to look in. In order of trust: the hook's own projection
+ * (project(x, y) or viewTransform().toScreen), then the field found in the screenshot (its floor-coloured box gives the
+ * origin and the scale exactly), then a letterbox of the canvas inside the camera contract's default padding. The ring is a
+ * thin annulus beside the body's trim, so the projection has to be right to a few pixels: the guess is the last resort.
  */
-export async function projectUnits(page: PageDriver, f: ArenaFrameState, canvas: CanvasInfo, arenaCm = { width: 3200, height: 1800 }): Promise<{ probes: TokenProbe[]; radiusPx: number; method: string }> {
+export async function projectUnits(
+  page: PageDriver,
+  f: ArenaFrameState,
+  canvas: CanvasInfo,
+  opts: { img: Rgba; arenaCm?: { width: number; height: number } },
+): Promise<{ probes: TokenProbe[]; band: RingBand; method: string }> {
+  const arenaCm = opts.arenaCm ?? { width: 3200, height: 1800 };
   const pts = f.units.map((u) => [u.x, u.y]);
   const hooked = await page.eval<{ points: { x: number; y: number }[] | null; pxPerMetre: number | null; method: string }>(`(() => {
     const v = ${V}; const pts = ${JSON.stringify(pts)};
@@ -165,15 +180,30 @@ export async function projectUnits(page: PageDriver, f: ArenaFrameState, canvas:
       if (typeof v.project === 'function') return { points: pts.map((p) => v.project(p[0], p[1])), pxPerMetre: null, method: 'hook.project' };
       const t = typeof v.viewTransform === 'function' ? v.viewTransform() : v.viewTransform;
       if (t && typeof t.toScreen === 'function') return { points: pts.map((p) => t.toScreen(p[0], p[1])), pxPerMetre: typeof t.pxPerMetre === 'number' ? t.pxPerMetre : null, method: 'hook.viewTransform' };
-    } catch (e) { /* fall through to the letterbox */ }
-    return { points: null, pxPerMetre: null, method: 'letterbox' };
+    } catch (e) { /* fall through */ }
+    return { points: null, pxPerMetre: null, method: 'none' };
   })()`);
+  const floor = await floorColor(page);
+  const field = floor ? findField(opts.img, canvas.rect, floor, arenaCm) : null;
   const lb = letterboxProject(canvas.rect, arenaCm);
-  const points = hooked.points ?? pts.map((p) => lb.project(p[0]!, p[1]!));
-  const pxPerCm = hooked.pxPerMetre !== null ? hooked.pxPerMetre / 100 : lb.pxPerCm;
+  let points: { x: number; y: number }[];
+  let pxPerCm: number;
+  let method: string;
+  if (hooked.points) {
+    points = hooked.points;
+    pxPerCm = hooked.pxPerMetre !== null ? hooked.pxPerMetre / 100 : field ? field.pxPerCm : lb.pxPerCm;
+    method = hooked.method;
+  } else if (field) {
+    points = pts.map((p) => projectField(field, p[0]!, p[1]!));
+    pxPerCm = field.pxPerCm;
+    method = `field found in the screenshot (${(field.pxPerCm * 100).toFixed(1)} px/m)`;
+  } else {
+    points = pts.map((p) => lb.project(p[0]!, p[1]!));
+    pxPerCm = lb.pxPerCm;
+    method = 'letterbox guess (the field was not found in the screenshot)';
+  }
   const probes: TokenProbe[] = f.units.map((u, i) => ({ unit: u.unit, side: u.side, standing: u.standing, x: points[i]!.x, y: points[i]!.y }));
-  // The body is 0.5 m radius; the ring sits at its edge: search a little beyond it.
-  return { probes, radiusPx: Math.max(8, 50 * pxPerCm * 1.6), method: hooked.method };
+  return { probes, band: ringBand(pxPerCm), method };
 }
 
 // ---- Playback runs -----------------------------------------------------------------------------------------
@@ -184,6 +214,8 @@ export interface PlayRunResult {
   restarts: number;
   resumes: number;
   playingFrames: number;
+  /** The page's main-thread load over the run, when the browser reported it. */
+  load: MainThreadLoad | null;
 }
 
 /**
@@ -193,6 +225,7 @@ export interface PlayRunResult {
  */
 export async function playFor(page: PageDriver, opts: { speed: 1 | 2 | 4; seconds: number; reload: () => Promise<unknown> }): Promise<PlayRunResult> {
   await setSpeed(page, opts.speed);
+  const m0 = await page.perfMetrics().catch(() => null);
   await page.probe('rafStart');
   await page.probe('rafMark', `play@${opts.speed}x`);
   await play(page);
@@ -222,10 +255,11 @@ export async function playFor(page: PageDriver, opts: { speed: 1 | 2 | 4; second
       still = 0;
     }
   }
+  const m1 = await page.perfMetrics().catch(() => null);
   const raw = await page.probe<{ t: number[]; tick: (number | null)[]; marks: { name: string; t: number }[] }>('rafStop');
   const series: FrameSeries = { t: raw.t, tick: raw.tick.map((k) => k ?? NaN) };
   await pause(page);
-  return { series, marks: raw.marks, restarts, resumes, playingFrames: playingIntervals(series, 5).length };
+  return { series, marks: raw.marks, restarts, resumes, playingFrames: playingIntervals(series, 5).length, load: m0 && m1 ? mainThreadLoad(m0, m1) : null };
 }
 
 // ---- The cursor-save trace -----------------------------------------------------------------------------------------

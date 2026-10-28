@@ -77,14 +77,17 @@ function causeNamed(key: FightKey, downIndex: number, captures: readonly Evidenc
   const has = (hay: string, needles: string[]): boolean => needles.some((n) => ` ${normalize(hay)} `.includes(` ${normalize(n)} `));
   const textOf = (e: ScreenEvidence): string => [e.text, ...e.live].join('\n');
   const reads = (e: ScreenEvidence): { victim: boolean; killer: boolean; ability: boolean } => {
-    // Look line by line: the cause is one callout or feed entry, not words scattered over the screen.
+    // Look at one callout or feed entry, not words scattered over the screen: the line that names the victim and the killer,
+    // and the line after it, where the feed prints the ability ("X downed by Y" then "Muting Needle").
     let best = { victim: false, killer: false, ability: false };
-    for (const line of textOf(e).split('\n')) {
-      const v = has(line, names(victim));
-      const k = killer ? has(line, names(killer)) : NO_UNIT.test(line);
-      const a = d.abilityName ? has(line, [d.abilityName]) : true;
-      if (v && k && (a || (best.victim && best.killer && !best.ability))) return { victim: v, killer: k, ability: a };
-      if ([v, k, a].filter(Boolean).length > [best.victim, best.killer, best.ability].filter(Boolean).length) best = { victim: v, killer: k, ability: a };
+    const lines = textOf(e).split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const own = lines[i]!;
+      const v = has(own, names(victim));
+      const k = killer ? has(own, names(killer)) : NO_UNIT.test(own);
+      const ab = d.abilityName ? has(`${own}\n${lines[i + 1] ?? ''}`, [d.abilityName]) : true;
+      if (v && k && ab) return { victim: true, killer: true, ability: true };
+      if ([v, k, ab].filter(Boolean).length > [best.victim, best.killer, best.ability].filter(Boolean).length) best = { victim: v, killer: k, ability: ab };
     }
     return best;
   };

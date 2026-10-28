@@ -10,10 +10,12 @@ import {
   checkHeap,
   checkRoundLoad,
   checkSaveTrace,
+  loadNote,
   checkTokens,
   colorDistance,
   letterboxProject,
   parseCssColor,
+  ringBand,
   splitConsole,
   tokenCensus,
   type TokenProbe,
@@ -62,6 +64,7 @@ describe('frame-rate check (A10)', () => {
     expect(checkFirstOpen(300, gpu).status).toBe('pass');
     expect(checkFirstOpen(900, gpu).status).toBe('fail');
     expect(checkFirstOpen(null, gpu).status).toBe('skip');
+    expect(checkFirstOpen([], gpu).status).toBe('skip');
   });
 });
 
@@ -175,6 +178,8 @@ describe('pixel checks', () => {
     expect(checkCanvas(canvasNotBlank(flat, { x: 0, y: 0, width: 200, height: 120 }), 't').status).toBe('fail');
   });
 
+  // The ring is painted from radius 15 to 20 and the body inside 14; the band is the ring's, so the body's trim is not in it.
+  const BAND = { innerPx: 15, outerPx: 25 };
   const brass: [number, number, number] = [201, 162, 74];
   const steel: [number, number, number] = [74, 120, 168];
 
@@ -197,7 +202,7 @@ describe('pixel checks', () => {
   it('finds all ten ringed tokens, with a projection a few pixels off', () => {
     const { img, probes } = arena();
     const off = probes.map((p) => ({ ...p, x: p.x + 4, y: p.y - 3 }));
-    const c = tokenCensus(img, off, [brass, steel], 28);
+    const c = tokenCensus(img, off, [brass, steel], BAND);
     expect(c.found).toBe(10);
     expect(c.sidesConsistent).toBe(true);
     expect(checkTokens(c, 'test').status).toBe('pass');
@@ -205,24 +210,64 @@ describe('pixel checks', () => {
 
   it('misses a token that is not drawn', () => {
     const { img, probes } = arena({ drop: 7 });
-    const c = tokenCensus(img, probes, [brass, steel], 28);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
     expect(c.found).toBe(9);
     expect(c.missing).toEqual([7]);
     expect(checkTokens(c, 'test').status).toBe('fail');
   });
 
-  it('flags a ring in the wrong side colour', () => {
+  it('flags a ring in the wrong side colour: that token shows none of its own side\'s', () => {
     const { img, probes } = arena({ swapOne: true });
-    const c = tokenCensus(img, probes, [brass, steel], 28);
-    expect(c.found).toBe(10);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
+    expect(c.assignment).toEqual([0, 1]);
+    expect(c.found).toBe(9);
+    expect(c.missing).toEqual([2]);
     expect(c.sidesConsistent).toBe(false);
     expect(checkTokens(c, 'test').status).toBe('fail');
+  });
+
+  it('two clubs whose trims share the ring hue do not swap the sides (the opponent\'s trim is brass-coloured)', () => {
+    const { img, probes } = arena();
+    // The opponent's tokens carry a thick brass trim inside their steel ring: more brass pixels than steel ones.
+    for (const p of probes.filter((q) => q.side === 1)) paintRing(img, p.x, p.y, 14, 9, brass);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
+    expect(c.assignment).toEqual([0, 1]);
+    expect(c.found).toBe(10);
+    expect(c.sidesConsistent).toBe(true);
+    expect(checkTokens(c, 'test').status).toBe('pass');
+  });
+
+  it('a brass trim inside the ring does not stand in for a missing ring (the band is the ring\'s, not the body\'s)', () => {
+    const { img, probes } = arena({ drop: 7 });
+    // Unit 7 has no ring, but a brass trim in the body (radius 9 to 14): the old disc window counted it as brass.
+    const p7 = probes.find((q) => q.unit === 7)!;
+    paintRing(img, p7.x, p7.y, 14, 9, brass);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
+    expect(c.missing).toEqual([7]);
+    expect(c.found).toBe(9);
+    expect(checkTokens(c, 'test').status).toBe('fail');
+  });
+
+  it('works whichever candidate belongs to which side, and with extra candidates', () => {
+    const { img, probes } = arena();
+    const other: [number, number, number] = [10, 200, 10];
+    const c = tokenCensus(img, probes, [other, steel, brass], BAND);
+    expect(c.assignment).toEqual([2, 1]);
+    expect(c.found).toBe(10);
+  });
+
+  it('nothing matching is no assignment and no token found', () => {
+    const { img, probes } = arena();
+    const c = tokenCensus(img, probes, [[255, 0, 255], [0, 255, 255]], BAND);
+    expect(c.assignment).toBeNull();
+    expect(c.found).toBe(0);
+    expect(c.sidesConsistent).toBe(false);
   });
 
   it('does not require downed tokens', () => {
     const { img, probes } = arena({ drop: 3 });
     probes[3] = { ...probes[3]!, standing: false };
-    const c = tokenCensus(img, probes, [brass, steel], 28);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
     expect(c.expected).toBe(9);
     expect(c.found).toBe(9);
     // Nine tokens are not the ten the check wants.
@@ -267,5 +312,109 @@ describe('round load (A10: the sim at full plus indexFightLog, median 15 ms, p99
     expect(c.pending).toBeUndefined();
     expect(c.detail).toMatch(/lower bound/);
     expect(c.detail).toMatch(/render.indexFightLog/);
+  });
+});
+
+describe('what bounds a slow frame rate', () => {
+  const slow = summarizeIntervals(steady(600, 17.6));
+  const quiet = { wallS: 10, task: 0.3, script: 0.15, layout: 0.01, style: 0.02 };
+  const busy = { wallS: 10, task: 0.9, script: 0.6, layout: 0.1, style: 0.1 };
+
+  it('a miss with a quiet main thread says the time goes to the GPU or the compositor', () => {
+    const c = checkFrameRate('perf.fps-1x', '1x', slow, gpu, quiet);
+    expect(c.status).toBe('fail');
+    expect(c.detail).toMatch(/Main thread busy 30%/);
+    expect(c.detail).toMatch(/GPU or the compositor/);
+  });
+
+  it('a miss with a busy main thread points at script, layout and style', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', slow, gpu, busy).detail).toMatch(/look at script, layout and style/);
+  });
+
+  it('a pass carries no note, and no load measured gives no note', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(600)), gpu, quiet).detail).toBeUndefined();
+    expect(checkFrameRate('perf.fps-1x', '1x', slow, gpu, null).detail).toBeUndefined();
+    expect(loadNote(null)).toBeNull();
+  });
+});
+
+describe('the ring band', () => {
+  it('starts at the disc edge (0.5 m) and runs a few pixels past it, in any zoom', () => {
+    const at48 = ringBand(0.478);
+    expect(at48.innerPx).toBeCloseTo(22.9, 1);
+    expect(at48.outerPx).toBeCloseTo(33.9, 1);
+    expect(ringBand(0.27).innerPx).toBeCloseTo(12.5, 1);
+    expect(ringBand(0.001).innerPx).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('frame rate against what the browser session can deliver', () => {
+  const baseSlow = summarizeIntervals(steady(300, 17.9));
+  const baseFast = summarizeIntervals(steady(300, 16.67));
+
+  it('a viewer on target passes whatever the baseline', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(600)), gpu, null, baseFast).status).toBe('pass');
+  });
+
+  it('a miss that equals an empty canvas in a slow session is environment-limited: a warning with the evidence, not a failure', () => {
+    const viewer = summarizeIntervals(steady(550, 17.6));
+    const c = checkFrameRate('perf.fps-1x', '1x', viewer, gpu, { wallS: 10, task: 0.08, script: 0.05, layout: 0, style: 0 }, baseSlow);
+    expect(c.status).toBe('warn');
+    expect(c.detail).toMatch(/NOT DEMONSTRATED in this session/);
+    expect(c.detail).toMatch(/empty full-window WebGL canvas.*55\.9 fps/);
+    expect(c.detail).toMatch(/reference machine/);
+    expect(c.actual).toMatch(/empty-canvas baseline 55\.9 fps/);
+  });
+
+  it('under strict an environment-limited miss is not made (it is not a pass and not the product\'s failure): the run is blocked', () => {
+    const c = checkFrameRate('perf.fps-4x', '4x', summarizeIntervals(steady(550, 17.6)), { softwareGl: false, strict: true }, null, baseSlow);
+    expect(c.status).toBe('skip');
+    expect(c.pending).toBeUndefined();
+    expect(c.detail).toMatch(/NOT DEMONSTRATED/);
+    expect(c.detail).toMatch(/60 fps median of A10 is not shown/);
+  });
+
+  it('a viewer slower than the empty canvas fails, with the comparison', () => {
+    const c = checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(500, 21)), gpu, null, baseSlow);
+    expect(c.status).toBe('fail');
+    expect(c.detail).toMatch(/empty full-window WebGL canvas/);
+  });
+
+  it('a viewer with a hitch fails even in a slow session', () => {
+    const c = checkFrameRate('perf.fps-1x', '1x', summarizeIntervals([...steady(550, 17.6), 80]), gpu, null, baseSlow);
+    expect(c.status).toBe('fail');
+  });
+
+  it('a fast session where the viewer misses is a failure: the browser could have delivered', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(550, 25)), gpu, null, baseFast).status).toBe('fail');
+  });
+
+  it('without a baseline a miss fails as before', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(550, 17.6)), gpu, null, null).status).toBe('fail');
+  });
+});
+
+describe('first viewer open over several opens', () => {
+  it('passes when the median is under the target', () => {
+    const c = checkFirstOpen([450, 420, 430], gpu);
+    expect(c.status).toBe('pass');
+    expect(c.actual).toMatch(/median 430\.0 ms of 3 opens/);
+  });
+
+  it('warns, with every sample, when only the cold open is over the target (the seen 591 ms with 437 and 450 behind it)', () => {
+    const c = checkFirstOpen([591, 437, 450], gpu);
+    expect(c.status).toBe('warn');
+    expect(c.actual).toMatch(/591\.0 ms, 437\.0 ms, 450\.0 ms/);
+    expect(c.detail).toMatch(/cold open.*prefetch/);
+  });
+
+  it('under strict the cold open is the gate, as A10 words it', () => {
+    expect(checkFirstOpen([591, 437, 450], { softwareGl: false, strict: true }).status).toBe('fail');
+    expect(checkFirstOpen([450, 437, 450], { softwareGl: false, strict: true }).status).toBe('pass');
+  });
+
+  it('fails when the median is over the target', () => {
+    expect(checkFirstOpen([520, 560, 700], gpu).status).toBe('fail');
+    expect(checkFirstOpen([520, 560, 700], soft).status).toBe('warn');
   });
 });

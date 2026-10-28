@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { TARGETS, analyzeHeap, analyzeSaveTrace, intervalsOf, median, percentile, playingIntervals, stoppedAtEnd, summarizeIntervals, type FrameSeries, type TraceMark } from './stats';
+import { TARGETS, mainThreadLoad, analyzeHeap, analyzeSaveTrace, intervalsOf, median, percentile, playingIntervals, stoppedAtEnd, summarizeIntervals, type FrameSeries, type TraceMark } from './stats';
 
 /** A steady 60 Hz series whose tick advances 3 per frame (4x) until `stopAtMs`, holds, then advances again from `resumeAtMs`. */
 function series(opts: { frames: number; stopAtMs?: number; resumeAtMs?: number; hitchAtMs?: number; hitchMs?: number; tickEveryFrames?: number }): FrameSeries {
@@ -171,5 +171,17 @@ describe('heap analysis', () => {
     const h = analyzeHeap([mb(10), mb(11)]);
     expect(h.loads).toBe(2);
     expect(Number.isFinite(h.finalMb)).toBe(true);
+  });
+});
+
+describe('main-thread load', () => {
+  it('the share of wall time the main thread spent on tasks, script, layout and style', () => {
+    const l = mainThreadLoad({ Timestamp: 100, TaskDuration: 5, ScriptDuration: 2, LayoutDuration: 0.5, RecalcStyleDuration: 0.25 }, { Timestamp: 110, TaskDuration: 8, ScriptDuration: 3, LayoutDuration: 0.6, RecalcStyleDuration: 0.5 });
+    expect(l).toEqual({ wallS: 10, task: 0.3, script: 0.1, layout: expect.closeTo(0.01, 6), style: 0.025 });
+  });
+
+  it('no time between the samples is no answer', () => {
+    expect(mainThreadLoad({ Timestamp: 5 }, { Timestamp: 5 })).toBeNull();
+    expect(mainThreadLoad({}, {})).toBeNull();
   });
 });

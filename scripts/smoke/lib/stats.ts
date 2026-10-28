@@ -221,3 +221,29 @@ export function analyzeHeap(samplesBytes: readonly number[], warmupLoads = 3): H
     slopeMbPerLoad: den > 0 ? num / den : 0,
   };
 }
+
+// ---- Main-thread load (what bounds the frame rate) --------------------------------------------------------
+
+/** Chromium's page counters, in seconds, as sampled by Performance.getMetrics. */
+export type PerfMetrics = Record<string, number>;
+
+export interface MainThreadLoad {
+  wallS: number;
+  /** Shares of the wall time, 0..1. */
+  task: number;
+  script: number;
+  layout: number;
+  style: number;
+}
+
+/**
+ * How busy the page's main thread was between two samples. A frame rate under target with a main thread far from busy is
+ * not bound by script, layout or style: the time goes to the GPU or the compositor (draw cost, presenting a
+ * preserved drawing buffer).
+ */
+export function mainThreadLoad(before: PerfMetrics, after: PerfMetrics): MainThreadLoad | null {
+  const wall = (after['Timestamp'] ?? NaN) - (before['Timestamp'] ?? NaN);
+  if (!(wall > 0)) return null;
+  const d = (name: string): number => ((after[name] ?? 0) - (before[name] ?? 0)) / wall;
+  return { wallS: wall, task: d('TaskDuration'), script: d('ScriptDuration'), layout: d('LayoutDuration'), style: d('RecalcStyleDuration') };
+}

@@ -228,6 +228,46 @@
   };
 
   /**
+   * The control of the frame-rate check: a full-window WebGL canvas that clears itself every frame (antialias and a preserved
+   * drawing buffer, like the arena's), nothing else on the page. Its cadence is what this browser session can deliver.
+   */
+  S.bareWebgl = () => {
+    document.body.replaceChildren();
+    const c = document.createElement('canvas');
+    c.width = window.innerWidth;
+    c.height = window.innerHeight;
+    c.style.cssText = 'position:fixed;inset:0;width:100%;height:100%';
+    document.body.appendChild(c);
+    const gl = c.getContext('webgl', { preserveDrawingBuffer: true, antialias: true });
+    let n = 0;
+    const draw = () => {
+      if (gl) {
+        gl.clearColor((n++ % 60) / 60, 0.2, 0.3, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      requestAnimationFrame(draw);
+    };
+    draw();
+    return !!gl;
+  };
+
+  /** The HUD's overtime marks (arena screen): the amber clock, the Overtime tag, the scrubber mark, the feed line. */
+  S.overtimeUi = () => {
+    const clock = document.querySelector('[data-testid="arena-clock"]');
+    const tag = document.querySelector('[data-testid="arena-overtime"]');
+    const center = document.querySelector('.ahud__center');
+    return {
+      overtimeAttr: center ? center.getAttribute('data-overtime') : null,
+      clockText: clock ? textOf(clock) : null,
+      clockColor: clock ? getComputedStyle(clock).color : null,
+      tagText: tag ? textOf(tag) : null,
+      tagVisible: !!tag && visible(tag),
+      marks: document.querySelectorAll('[data-testid="arena-marks"] [data-kind="overtime"]').length,
+      feedSaysSo: /overtime begins/i.test(document.body ? document.body.innerText : ''),
+    };
+  };
+
+  /**
    * The game's own saves, as the page's IndexedDB holds them (src/platform/save-store.idb.ts: database arena-league,
    * store saves, records { slotId, meta, json }): the slot asked for and only that one (null when it is not there: a
    * stale or different save must never stand in for it); with no slot given, the newest. Opening a database that does not exist

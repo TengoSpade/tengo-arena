@@ -13,6 +13,7 @@ import { Recorder } from '../lib/recorder';
 import { buildFightKey } from '../vis003/key';
 import { finishMatch } from './arena-steps';
 import type { JourneyEnv } from './env';
+import { resolveDecideFirst } from './career';
 import { assertKeyIsOnScreen } from './vis003-capture';
 
 interface FakeOptions {
@@ -102,5 +103,36 @@ describe('the vis-003 key must be the key of the fight on screen', () => {
         expect((e as SmokeFailure).message).toContain('IndexedDB auto-round saved 10:00');
       }
     }
+  });
+});
+
+describe('"Decide first": the one decision the smoke makes', () => {
+  const found = { x: 5, y: 6, width: 1, height: 1, text: 'Auto-pick', testId: null, disabled: false, tag: 'button' };
+  const fake = (auto: boolean): { page: PageDriver; log: string[] } => {
+    const log: string[] = [];
+    const page = {
+      click: async (_spec: unknown, what: string) => void log.push(`click: ${what}`),
+      locate: async () => (auto ? found : null),
+      mouseClick: async (x: number, y: number) => void log.push(`mouse ${x},${y}`),
+    } as unknown as PageDriver;
+    return { page, log };
+  };
+
+  it('opens what needs deciding with Continue and presses Auto-pick', async () => {
+    const { page, log } = fake(true);
+    await resolveDecideFirst(page, 'Solae Sootstep is unfit to play', 0);
+    expect(log).toEqual(['click: Continue (opens what needs deciding)', 'mouse 5,6']);
+  });
+
+  it('is blocked, not failed, when the screen has no Auto-pick', async () => {
+    const { page } = fake(false);
+    await expect(resolveDecideFirst(page, 'something odd', 0)).rejects.toMatchObject({ code: 'career.blocked-by-game', blocked: true });
+    await expect(resolveDecideFirst(page, 'something odd', 0)).rejects.toThrow(/no Auto-pick/);
+  });
+
+  it('gives up, blocked, after four attempts that did not clear it', async () => {
+    const { page, log } = fake(true);
+    await expect(resolveDecideFirst(page, 'still unfit', 4)).rejects.toMatchObject({ code: 'career.blocked-by-game', blocked: true });
+    expect(log).toEqual([]);
   });
 });
