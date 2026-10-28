@@ -31,7 +31,7 @@ export interface ArenaViewerOptions {
   skin?: ArenaSkin;
   camera?: Partial<CameraConfig>;
   reducedMotion: boolean;
-  /** Global flash limit (04 §9: no flashing above 3 per second). Default 3. */
+  /** Per-fighter flash limit (04 §9: no flashing above 3 per second). Default: palette.metrics.flashLimitPerSecond. */
   flashLimitPerSecond?: number;
   /** Cap on the canvas resolution (default 2): resolution = min(devicePixelRatio, maxResolution). */
   maxResolution?: number;

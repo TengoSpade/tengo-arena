@@ -104,7 +104,10 @@ export type MatchViewMode = 'watch' | 'simulate';
  */
 export interface LiveWatch {
   mode: MatchViewMode;
-  /** The round waiting to be watched or being watched (rounds played + 1), or null between rounds. */
+  /**
+   * The round waiting to be watched or being watched (rounds played + 1). Null between rounds (the between-round
+   * step) and whenever mode is 'simulate' (after "Simulate the rest" no round is watched).
+   */
   round: number | null;
   /**
    * The reveal frontier of that round: an integer fight tick (0 before kickoff, at most the time cap) at or beyond
