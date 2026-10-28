@@ -223,7 +223,10 @@ describe('Match report screen', () => {
       </Providers>,
     );
     expect(screen.getByText('This report could not be built')).toBeTruthy();
-    expect(screen.getByText(/report.version/)).toBeTruthy();
+    // Player words, never the code or the engine's own sentence.
+    expect(screen.getByText('That match report was made by another version of the game.')).toBeTruthy();
+    expect(screen.getByTestId('screen-match-report').textContent).not.toContain('report.version');
+    expect(screen.getByTestId('screen-match-report').textContent).not.toContain('Engine changed');
   });
 
   it('tells an AI-vs-AI result from the home side', () => {

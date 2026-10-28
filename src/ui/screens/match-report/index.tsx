@@ -13,6 +13,7 @@ import type { FighterId, FixtureId, MatchReport } from '../../../core/model';
 import { weekTitle } from '../league/lib/calendar';
 import { clubShort } from '../league/lib/club';
 import { href, go, useCareer, type Career } from '../league/lib/store';
+import { errorText } from '../../store/messages';
 import { showToast } from '../../components';
 import { Callout, Empty, NoCareer, Tabs } from '../league/lib/ui';
 import { adjacentReports, eventLogText, fighterInfos, moments, perspective } from './analysis';
@@ -41,7 +42,7 @@ function Report({ career, fixtureId }: { career: Career; fixtureId: FixtureId })
     const notPlayed = fixture && fixture.status !== 'played';
     return (
       <section class="page" data-testid="screen-match-report">
-        <Empty icon="warning" title={t('error.title')} text={notPlayed ? t('error.notPlayed') : `${built.error.message} (${built.error.code})`}>
+        <Empty icon="warning" title={t('error.title')} text={notPlayed ? t('error.notPlayed') : errorText(built.error)}>
           <a class="btn" href={href('fixtures')}>
             {t('error.back')}
           </a>

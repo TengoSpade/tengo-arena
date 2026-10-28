@@ -4,7 +4,7 @@ export const T = {
   eyebrowMatch: '{week} · {where} {club} ({venue})',
   home: 'home',
   away: 'away',
-  metaDraft: 'Lineup is a draft until you press Play match',
+  metaDraft: 'Lineup is a draft until you watch or simulate the match',
   metaFree: 'Presets, captain and rows can change freely between matches',
   viewLabel: 'Table view',
   viewOverview: 'Overview',

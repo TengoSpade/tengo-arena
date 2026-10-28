@@ -30,6 +30,8 @@ export interface FeedItem {
   detail: string;
   text: string;
   time: string;
+  /** A down whose fighter was the captain (his captain-down moment is folded into this item). */
+  captain?: boolean;
 }
 
 const TICK_S = 0.05;
@@ -38,12 +40,14 @@ export function nameOfUnit(ctx: ArenaRoundContext, unit: number | null): string 
   return unit === null ? '' : (ctx.units[unit]?.name ?? `#${unit}`);
 }
 
-export function momentParts(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB): { title: string; detail: string } {
+/** `captain`: the fallen was the acting captain (his captain-down moment is folded into this line, not a second one). */
+export function momentParts(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB, captain = false): { title: string; detail: string } {
   const unit = nameOfUnit(ctx, m.target);
   const by = nameOfUnit(ctx, m.unit);
   const ability = m.ability ? abilityName(content, m.ability) : '';
   switch (m.kind) {
     case 'down':
+      if (captain) return { title: by ? t('momentDownCaptain', { unit, by }) : t('momentDownCaptainAlone', { unit }), detail: ability };
       return { title: by ? t('momentDown', { unit, by }) : t('momentDownAlone', { unit }), detail: ability };
     default:
       return { title: momentText(m, ctx, content), detail: '' };
@@ -55,7 +59,7 @@ export function subjectOf(m: KeyMoment): number | null {
   return m.kind === 'down' || m.kind === 'interrupt' || m.kind === 'deathward' ? m.target : m.unit;
 }
 
-export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB): string {
+export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB, captain = false): string {
   // About whom (the fallen, the interrupted, the saved) and by whom, per the convention above.
   const affected = subjectOf(m) === m.target && m.target !== null;
   const unit = nameOfUnit(ctx, affected ? m.target : m.unit);
@@ -63,6 +67,7 @@ export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: Conten
   const ability = m.ability ? abilityName(content, m.ability) : '';
   switch (m.kind) {
     case 'down':
+      if (captain) return by && ability ? t('momentDownCaptainBy', { unit, by, ability }) : by ? t('momentDownCaptain', { unit, by }) : t('momentDownCaptainAlone', { unit });
       return by && ability ? t('momentDownBy', { unit, by, ability }) : by ? t('momentDown', { unit, by }) : t('momentDownAlone', { unit });
     case 'interrupt':
       return by ? t('momentInterruptBy', { unit, by }) : t('momentInterrupt', { unit });
@@ -84,12 +89,22 @@ export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: Conten
 }
 
 export function feedItems(moments: readonly KeyMoment[], ctx: ArenaRoundContext, content: ContentDB): FeedItem[] {
-  return moments.map((m) => {
+  // A captain's fall is one line: the down names him Captain, and his captain-down moment (same tick, same fighter) is folded
+  // into it. A captain-down with no down beside it stays as its own line.
+  const downs = new Set<string>();
+  for (const m of moments) if (m.kind === 'down' && m.target !== null) downs.add(`${m.tick}:${m.target}`);
+  const folded = (m: KeyMoment): boolean => m.kind === 'captain-down' && m.unit !== null && downs.has(`${m.tick}:${m.unit}`);
+  const captains = new Set<string>();
+  for (const m of moments) if (folded(m)) captains.add(`${m.tick}:${m.unit}`);
+  const items: FeedItem[] = [];
+  for (const m of moments) {
+    if (folded(m)) continue;
+    const captain = m.kind === 'down' && m.target !== null && captains.has(`${m.tick}:${m.target}`);
     const subject = subjectOf(m);
     const side = subject !== null ? (ctx.units[subject]?.side ?? null) : null;
     const ours = side === null ? null : side === (ctx.playerSide ?? 0);
-    const parts = momentParts(m, ctx, content);
-    return {
+    const parts = momentParts(m, ctx, content, captain);
+    items.push({
       key: `${m.seq}`,
       tick: m.tick,
       kind: m.kind,
@@ -99,10 +114,12 @@ export function feedItems(moments: readonly KeyMoment[], ctx: ArenaRoundContext,
       event: m.kind === 'down' || m.kind === 'captain-down' ? 'down' : m.kind === 'overtime' || m.kind === 'end' ? 'end' : 'rule',
       title: parts.title,
       detail: parts.detail,
-      text: momentText(m, ctx, content),
+      text: momentText(m, ctx, content, captain),
       time: clock(m.tick * TICK_S),
-    };
-  });
+      ...(captain ? { captain: true } : {}),
+    });
+  }
+  return items;
 }
 
 const AUTO_WHY: Record<AutoPauseReason, Parameters<typeof t>[0]> = {

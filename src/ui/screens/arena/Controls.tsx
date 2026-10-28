@@ -8,8 +8,11 @@
  * its marks after the playhead dimmed. Ours sit above the track, theirs below (the mark's place carries the side).
  */
 import type { ComponentChildren } from 'preact';
+import { useRef } from 'preact/hooks';
 import { Icon, tipAttrs } from '../../components';
 import type { FeedItem } from './feed';
+import { mergeMarks, type MarkGroup } from './marks';
+import { useElementWidth } from './responsive';
 import type { ArenaSession, ViewerSnap } from './session';
 import { clock, t } from './text';
 
@@ -55,6 +58,11 @@ export function ArenaControls({
   const at = (n: number): number => Math.max(0, Math.min(1, n / span));
   const over = !live && sn.end !== null && tick >= sn.end;
   const behind = live && head - tick > 1;
+  // Marks that would touch on the track (closer than 12 px) are one.
+  const scrub = useRef<HTMLDivElement>(null);
+  const trackPx = useElementWidth(scrub);
+  const shown = marks.filter((m) => !live || m.tick <= head);
+  const groups = mergeMarks(shown, at, trackPx);
 
   // Pointer seeking: the track maps to ticks 0..span; a live seek never passes the head (the session clamps it).
   const seekFrom = (e: PointerEvent) => {
@@ -103,6 +111,7 @@ export function ArenaControls({
     <div class="atransport" data-testid="arena-controls" role="group" aria-label={t('controlsLabel')}>
       {status}
       <div
+        ref={scrub}
         class="ascrub"
         role="slider"
         tabIndex={0}
@@ -129,19 +138,18 @@ export function ArenaControls({
           <span class="ascrub__fill" style={{ '--at': at(live ? head : tick) } as Record<string, number>} />
         </span>
         <span data-testid="arena-marks" style={{ display: 'contents' }}>
-          {marks
-            .filter((m) => !live || m.tick <= head)
-            .map((m) => (
-              <i
-                key={m.key}
-                class={`amark${!live && m.tick > tick ? ' is-future' : ''}`}
-                data-side={m.mark ?? 'them'}
-                data-kind={m.kind}
-                data-tick={m.tick}
-                style={{ '--at': at(m.tick) } as Record<string, number>}
-                {...tipAttrs(`${m.time} · ${m.text}`)}
-              />
-            ))}
+          {groups.map((g) => (
+            <i
+              key={g.key}
+              class={`amark${!live && g.items.every((m) => m.tick > tick) ? ' is-future' : ''}`}
+              data-side={g.lane}
+              data-kind={g.lead.kind}
+              data-tick={g.tick}
+              data-count={g.items.length > 1 ? g.items.length : undefined}
+              style={{ '--at': at(g.tick) } as Record<string, number>}
+              {...tipAttrs(markTip(g))}
+            />
+          ))}
         </span>
         <span class="ascrub__thumb" />
       </div>
@@ -162,24 +170,33 @@ export function ArenaControls({
             {t('goLive')} <kbd>End</kbd>
           </button>
         )}
+        {/* Below 1600 px the designer's CSS collapses these three to their icon (.btn--collapse hides the label and the key hint),
+            so each carries its full name for the screen reader. */}
         {live && (
-          <button class="btn btn--sm btn--ghost" type="button" onClick={onSkip} disabled={!ready || busy} data-testid="arena-skip" {...tipAttrs(t('skipRoundTip'))}>
+          <button class="btn btn--sm btn--ghost btn--collapse" type="button" onClick={onSkip} disabled={!ready || busy} aria-label={t('skipRound')} aria-keyshortcuts="Shift+S" data-testid="arena-skip" {...tipAttrs(`${t('skipRoundTip')} (Shift S)`)}>
             <Icon name="skip-end" />
-            <span class="col-narrow">{t('skipRoundShort')}</span>
-            <span class="col-wide">{t('skipRound')}</span> <kbd>Shift S</kbd>
+            <span class="btn__label">{t('skipRound')}</span> <kbd>Shift S</kbd>
           </button>
         )}
         {onSimulateRest && (
-          <button class="btn btn--sm btn--ghost" type="button" onClick={onSimulateRest} disabled={!ready || busy} data-testid="arena-simulate-rest" {...tipAttrs(t('simulateRestTip'))}>
-            <span class="col-narrow">{t('simulateRestShort')}</span>
-            <span class="col-wide">{t('simulateRest')}</span> <kbd>Shift Space</kbd>
+          <button class="btn btn--sm btn--ghost btn--collapse" type="button" onClick={onSimulateRest} disabled={!ready || busy} aria-label={t('simulateRest')} aria-keyshortcuts="Shift+Space" data-testid="arena-simulate-rest" {...tipAttrs(`${t('simulateRestTip')} (Shift Space)`)}>
+            <Icon name="bolt" />
+            <span class="btn__label">{t('simulateRest')}</span> <kbd>Shift Space</kbd>
           </button>
         )}
-        <button class="btn btn--sm btn--ghost" type="button" aria-pressed={dockOpen ? 'true' : 'false'} onClick={onToggleDock} data-testid="arena-dock-toggle" {...tipAttrs(t('dockTip'))}>
-          {t('dock')} <kbd>D</kbd>
+        <button class="btn btn--sm btn--ghost btn--collapse" type="button" aria-pressed={dockOpen ? 'true' : 'false'} aria-label={t('dock')} aria-keyshortcuts="D" onClick={onToggleDock} data-testid="arena-dock-toggle" {...tipAttrs(`${t('dockTip')} (D)`)}>
+          <Icon name="dock" />
+          <span class="btn__label">{t('dock')}</span> <kbd>D</kbd>
         </button>
         {over && <span class="u-sr-only">{t('statusOver')}</span>}
       </div>
     </div>
   );
+}
+
+/** A mark's tooltip: one moment, or how many a merged mark stands for with the first few. */
+function markTip(g: MarkGroup): string {
+  if (g.items.length === 1) return `${g.lead.time} · ${g.lead.text}`;
+  const first = g.items.slice(0, 3).map((m) => m.text).join(' · ');
+  return t('markMerged', { n: g.items.length, time: g.items[0]!.time, list: first + (g.items.length > 3 ? ' …' : '') });
 }

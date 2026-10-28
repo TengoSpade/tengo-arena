@@ -1,6 +1,6 @@
 /**
  * The bottom fighter strip (04 §4, mockups/arena.html `.astrip`; 05-technical-m2 §A7, §A18): both sides, ten card
- * buttons, ours on the left, front row before back row. Each card shows the portrait, name and captain mark, the live rule
+ * buttons, home on the left and away on the right (as the HUD and the report), front row before back row. Each card shows the portrait, name and captain mark, the live rule
  * badge, an HP bar with its hatched shield and a percentage, the role glyph(s) and class, the Freshness tag and, when
  * down, "Downed · <cause>". FOCUS IS SELECTION (A18): Tab walks the ten cards in the normal order, so it never traps,
  * and a click focuses its card. Side is the card's left border (solid for ours, double for theirs) and the place.
@@ -123,7 +123,9 @@ export function ArenaStrip({
             {u.roles.map((r) => (
               <RoleGlyph key={r} role={r} label={roleName(r)} />
             ))}
-            <span class="afighter__class">{u.className}</span>
+            {/* The Freshness tag takes the place of the class name (the card is too narrow for both: the name was squeezed to one
+                letter); the class stays in the card's accessible name and in its tooltip. */}
+            {!fresh && <span class="afighter__class">{u.className}</span>}
             {fresh && (
               <span class="tag tag--warn" data-testid={`strip-fresh-${u.unit}`} {...tipAttrs(t('stripFreshTip', { tag: fresh }))}>
                 {fresh.replace(/[()]/g, '')}
@@ -147,8 +149,8 @@ export function ArenaStrip({
   };
   return (
     <footer class="astrip" aria-label={t('stripLabel')} data-testid="arena-strip">
-      {group(hud.left.side, hud.left.ours || hud.left.side === (ctx.playerSide ?? 0), hud.left.name)}
-      {group(hud.right.side, false, hud.right.name)}
+      {group(hud.left.side, hud.left.side === (ctx.playerSide ?? 0), hud.left.name)}
+      {group(hud.right.side, hud.right.side === (ctx.playerSide ?? 0), hud.right.name)}
     </footer>
   );
 }
