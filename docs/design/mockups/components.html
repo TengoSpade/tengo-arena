@@ -202,6 +202,51 @@
 
     <h2>Rule sentence</h2>
     <div class="panel"><div class="panel__body"><span class="rule"><span class="rule__id rule__id--preset">R1</span> <span class="rule__kw">If</span> <span class="rule__v">an ally (or self) is below 40% HP</span> <span class="rule__kw">then</span> <span class="rule__v">Suture</span> <span class="rule__kw">on</span> <span class="rule__v">lowest-HP ally</span></span></div></div>
+
+    <h2>Arena marks (M2): floor, rings, bars, status pips</h2>
+    <div class="swatches">
+      <div class="swatch" data-swatch="--c-arena-floor"><span class="swatch__chip"></span><span>arena-floor<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-wall"><span class="swatch__chip"></span><span>arena-wall<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-line"><span class="swatch__chip"></span><span>arena-line<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-plate"><span class="swatch__chip"></span><span>arena-plate<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-ink"><span class="swatch__chip"></span><span>arena-ink<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-edge"><span class="swatch__chip"></span><span>arena-edge<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-hp"><span class="swatch__chip"></span><span>arena-hp<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-shield"><span class="swatch__chip"></span><span>arena-shield<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-focus"><span class="swatch__chip"></span><span>arena-focus<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-arena-telegraph"><span class="swatch__chip"></span><span>arena-telegraph<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-fx-physical"><span class="swatch__chip"></span><span>fx-physical<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-fx-arcane"><span class="swatch__chip"></span><span>fx-arcane<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-fx-true"><span class="swatch__chip"></span><span>fx-true<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-fx-heal"><span class="swatch__chip"></span><span>fx-heal<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-pip-buff"><span class="swatch__chip"></span><span>pip-buff<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-pip-debuff"><span class="swatch__chip"></span><span>pip-debuff<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-pip-control"><span class="swatch__chip"></span><span>pip-control<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-side-us"><span class="swatch__chip"></span><span>side-us (ring)<code data-swatch-value></code></span></div>
+      <div class="swatch" data-swatch="--c-side-them"><span class="swatch__chip"></span><span>side-them (ring)<code data-swatch-value></code></span></div>
+    </div>
+    <div class="l-grid" style="margin-top:var(--sp-3)">
+      <div class="panel span-6"><div class="panel__body">
+        <div class="u-caps u-mb-2">Status pips on the floor (chip outline + silhouette + colour)</div>
+        <div class="l-cluster l-cluster--lg" style="background:var(--c-arena-floor);padding:var(--sp-4);border-radius:var(--r-md)">
+          <span class="l-stack l-stack--xs" style="align-items:center;gap:6px"><i class="apip" data-pip="buff" style="width:1.6rem;height:1.6rem"></i><span class="u-xs u-muted">buff</span></span><span class="l-stack l-stack--xs" style="align-items:center;gap:6px"><i class="apip" data-pip="debuff" style="width:1.6rem;height:1.6rem"></i><span class="u-xs u-muted">debuff</span></span><span class="l-stack l-stack--xs" style="align-items:center;gap:6px"><i class="apip" data-pip="control-hard" style="width:1.6rem;height:1.6rem"></i><span class="u-xs u-muted">hard control</span></span><span class="l-stack l-stack--xs" style="align-items:center;gap:6px"><i class="apip" data-pip="control-soft" style="width:1.6rem;height:1.6rem"></i><span class="u-xs u-muted">soft control</span></span><span class="l-stack l-stack--xs" style="align-items:center;gap:6px"><i class="apip" data-pip="dot" style="width:1.6rem;height:1.6rem"></i><span class="u-xs u-muted">over time (dmg)</span></span><span class="l-stack l-stack--xs" style="align-items:center;gap:6px"><i class="apip" data-pip="hot" style="width:1.6rem;height:1.6rem"></i><span class="u-xs u-muted">over time (heal)</span></span><span class="l-stack l-stack--xs" style="align-items:center;gap:6px"><i class="apip" data-pip="special" style="width:1.6rem;height:1.6rem"></i><span class="u-xs u-muted">special</span></span>
+        </div>
+        <div class="u-caps u-mb-2 u-mt-4">Damage tones (shape also differs)</div>
+        <div class="l-cluster l-cluster--lg" style="background:var(--c-arena-floor);padding:var(--sp-4);border-radius:var(--r-md);position:relative;min-height:3.4rem">
+          <span class="l-cluster l-cluster--xs"><i class="aimpact" data-tone="physical" style="position:relative;left:auto;top:auto;transform:none"></i><span class="anum" data-tone="physical" style="position:relative;left:auto;top:auto;transform:none">−38</span></span>
+          <span class="l-cluster l-cluster--xs"><i class="aimpact" data-tone="arcane" style="position:relative;left:auto;top:auto;transform:none"></i><span class="anum" data-tone="arcane" style="position:relative;left:auto;top:auto;transform:none">−64</span></span>
+          <span class="l-cluster l-cluster--xs"><i class="aimpact" data-tone="true" style="position:relative;left:auto;top:auto;transform:none"></i><span class="anum" data-tone="true" style="position:relative;left:auto;top:auto;transform:none">−12</span></span>
+          <span class="l-cluster l-cluster--xs"><span class="anum" data-tone="heal" style="position:relative;left:auto;top:auto;transform:none">+45</span></span>
+        </div>
+      </div></div>
+      <div class="panel span-6"><div class="panel__body">
+        <div class="u-caps u-mb-2">Side rings: ours solid, theirs double (the colour-free side cue)</div>
+        <div class="l-cluster" style="background:var(--c-arena-floor);padding:var(--sp-2) var(--sp-4);border-radius:var(--r-md);align-items:flex-end">
+          <div class="atoken" data-side="us" style="position:relative;left:auto;top:auto;transform:none;--m:3rem;--hp:.62;--sh:.2;--fo:.5;--face:0;margin:3.6rem 2rem 0.6rem"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="tank"></i></span><span class="atoken__crown"></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R3</span><i class="apip" data-pip="buff"></i><i class="apip" data-pip="control-hard"></i></span><span class="abars"><span class="abar"><i class="abar__hp"></i><i class="abar__shield"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div><div class="atoken" data-side="them" style="position:relative;left:auto;top:auto;transform:none;--m:3rem;--hp:.62;--sh:.2;--fo:.5;--face:0;margin:3.6rem 2rem 0.6rem"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="healer"></i></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R3</span><i class="apip" data-pip="buff"></i><i class="apip" data-pip="control-hard"></i></span><span class="abars"><span class="abar"><i class="abar__hp"></i><i class="abar__shield"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <span class="u-xs u-muted" style="max-width:16rem;color:var(--c-arena-ink);background:var(--c-arena-plate);padding:.3rem .5rem;border-radius:3px">HP is neutral parchment; the shield is hatched beyond it; the thin bar is focus.</span>
+        </div>
+      </div></div>
+    </div>
   </div>
   </main>
 <script src="mockups.js"></script>

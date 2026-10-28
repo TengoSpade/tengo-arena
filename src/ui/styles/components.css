@@ -22,6 +22,8 @@
                               22  Callouts, outcome banner, empty states
                               23  Checklist, dense tables, wide columns
                               24  Title screen and club select shell
+                              25  Arena screen (M2): HUD, canvas marks, strip,
+                                  feed, inspector, round-end, Watch / Simulate
    ========================================================================== */
 
 /* ==========================================================================
@@ -4463,4 +4465,1431 @@ dialog.modal::backdrop {
   max-width: var(--page-max);
   margin: 0 auto;
   padding: var(--sp-3) var(--page-gutter);
+}
+
+/* ==========================================================================
+   25  Arena screen (M2): HUD, canvas stage, token marks, strip, feed, inspector
+   Mock: docs/design/mockups/arena.html. Guide: docs/design/mockups/arena-notes.md.
+   The HUD, strip, feed, inspector and overlays are DOM (T3). The canvas draws
+   the floor, bodies and the token marks; the .a* classes below that describe
+   canvas marks (.atoken, .abar, .apip, .atele ...) are the SPECIFICATION the
+   PixiJS viewer follows, and the DOM version the static mock renders, so a
+   reviewer can read geometry, order and colours from one place. Every colour
+   comes from the --c-arena-*, --c-fx-*, --c-pip-* tokens, so the canvas and
+   the DOM cannot drift.
+   Units: --m is one metre of arena in CSS px (32 m across the canvas).
+   ========================================================================== */
+
+/* ---- Arena icons (not in the generated set above; add to IconName when built) ---- */
+:root {
+  --i-pause: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Crect x='6' y='4.5' width='4.2' height='15' rx='1'/%3E%3Crect x='13.8' y='4.5' width='4.2' height='15' rx='1'/%3E%3C/svg%3E");
+  --i-step-back: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Crect x='4.5' y='5' width='2.6' height='14' rx='1'/%3E%3Cpath d='M19.5 5v14L8.5 12z'/%3E%3C/svg%3E");
+  --i-step-fwd: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Crect x='16.9' y='5' width='2.6' height='14' rx='1'/%3E%3Cpath d='M4.5 5v14l11-7z'/%3E%3C/svg%3E");
+  --i-skip-end: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M3.5 5v14l9-7zM11.5 5v14l9-7z'/%3E%3C/svg%3E");
+}
+[data-icon="pause"] { --icon: var(--i-pause); }
+[data-icon="step-back"] { --icon: var(--i-step-back); }
+[data-icon="step-fwd"] { --icon: var(--i-step-fwd); }
+[data-icon="skip-end"] { --icon: var(--i-skip-end); }
+
+/* ---- 25.1 Screen frame and HUD (top strip 56 px, fighter strip 72 px, 04 section 4) ---- */
+.arena-screen {
+  --hud-h: calc(56px * var(--ui-scale));
+  --strip-h: calc(72px * var(--ui-scale));
+  --dock-w: 22rem;
+  display: grid;
+  grid-template-rows: var(--hud-h) minmax(0, 1fr) var(--strip-h);
+  grid-template-columns: minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+
+@media (max-width: 1599px) {
+  .arena-screen {
+    --dock-w: 20rem;
+  }
+}
+
+.arena-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--dock-w);
+  min-height: 0;
+}
+
+.arena-body[data-dock="closed"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.arena-main {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ahud {
+  position: relative;
+  z-index: var(--z-nav);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-4);
+  background: var(--c-surface-0);
+  border-bottom: 1px solid var(--c-border);
+  min-width: 0;
+}
+
+.ahud__side {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.ahud__side--away {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.ahud__who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--lh-snug);
+}
+
+.ahud__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+}
+
+.ahud__sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+/* Score pips: rounds won toward the target (best of 3 = 2). Filled = won, ring = not yet. */
+.ahud__pips {
+  display: inline-flex;
+  gap: 0.3rem;
+  flex: none;
+  margin-left: auto;
+}
+
+.spip {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px var(--c-text-faint);
+}
+
+.spip.is-won {
+  background: var(--spip-c, var(--c-text));
+  box-shadow: 0 0 0 1px var(--c-bg), 0 0 0 2px var(--spip-c, var(--c-text));
+}
+
+.ahud__side[data-side="us"] .spip { --spip-c: var(--c-side-us); }
+.ahud__side[data-side="them"] .spip { --spip-c: var(--c-side-them); }
+
+.ahud__center {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex: none;
+}
+
+.ahud__round {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.ahud__round-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+.ahud__clock {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
+  color: var(--c-text);
+}
+
+/* Overtime (from 45 s): amber clock plus the word, so colour is never the only cue. */
+.ahud__center[data-overtime="true"] .ahud__clock {
+  color: var(--c-warn);
+}
+
+.ahud__ot {
+  display: none;
+}
+
+.ahud__center[data-overtime="true"] .ahud__ot {
+  display: inline-flex;
+}
+
+.ahud__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+  margin-left: var(--sp-2);
+}
+
+/* Calls left (P-01): reserved slot, hidden until the calls package. */
+.ahud__calls[hidden] {
+  display: none;
+}
+
+/* ---- 25.2 Stage, canvas, floor and walls (letterboxed 16:9, never scrolls) ---- */
+.arena-stage {
+  position: relative;
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--sp-4);
+  background: var(--c-bg);
+}
+
+.arena-canvas {
+  --m: 3.125cqw;
+  position: relative;
+  container-type: inline-size;
+  width: min(100cqw, calc(100cqh * 32 / 18));
+  aspect-ratio: 32 / 18;
+  background: var(--c-arena-floor);
+  isolation: isolate;
+}
+
+/* Keyboard focus on the canvas: a ring outside the wall (the wall would hide a ring drawn on the canvas box). */
+.arena-canvas:focus-visible {
+  outline: none;
+}
+
+.arena-canvas:focus-visible .arena-wall {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 3px;
+}
+
+/* Wall: drawn outside the 32 x 18 m field, 0.35 m thick, with a thin keyline inside. */
+.arena-wall {
+  position: absolute;
+  inset: calc(var(--m) * -0.35);
+  border: calc(var(--m) * 0.35) solid var(--c-arena-wall);
+  box-shadow: inset 0 0 0 1px var(--c-arena-plate);
+  pointer-events: none;
+}
+
+/* Centre line and the four row markers (faint; labelled only at kickoff). */
+.arena-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--at) / 32 * 100%);
+  width: 0;
+  border-left: 1px dashed var(--c-arena-line);
+  pointer-events: none;
+}
+
+.arena-line--centre {
+  border-left: 2px solid var(--c-arena-line);
+  margin-left: -1px;
+}
+
+.arena-line-label {
+  position: absolute;
+  top: 0.4rem;
+  left: calc(var(--at) / 32 * 100%);
+  transform: translateX(-50%);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--c-arena-ink);
+  background: var(--c-arena-plate);
+  padding: 0 0.4rem;
+  border-radius: 3px;
+  opacity: 0.85;
+}
+
+/* ---- 25.3 Token: one fighter on the canvas -----------------------------------
+   Layers, bottom to top: facing wedge, ring (side), keyline, body (club primary,
+   secondary rim), glyph plate with the role glyph(s). Above the disc, bottom to
+   top: focus bar, HP bar with the shield segment, status pips and rule badge,
+   cast bar, Freshness tag, name. The viewer draws all of it above any skin. */
+.atoken {
+  z-index: 2;
+  --ring-c: var(--c-side-us);
+  --ring-w: var(--arena-ring-w);
+  --body-a: #6b6f78;
+  --body-b: #3d4048;
+  --hp: 1;
+  --sh: 0;
+  --fo: 0.5;
+  position: absolute;
+  left: calc(var(--x) / 32 * 100%);
+  top: calc(var(--y) / 18 * 100%);
+  width: var(--m);
+  height: var(--m);
+  transform: translate(-50%, -50%);
+}
+
+.atoken[data-side="them"] { --ring-c: var(--c-side-them); }
+
+.atoken__body {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--body-a);
+  /* body rim (secondary), keyline, side ring, keyline */
+  box-shadow:
+    inset 0 0 0 calc(var(--m) * 0.07) var(--body-b),
+    0 0 0 var(--arena-ring-gap) var(--c-arena-plate),
+    0 0 0 calc(var(--arena-ring-gap) + var(--ring-w)) var(--ring-c),
+    0 0 0 calc(var(--arena-ring-gap) + var(--ring-w) + 1px) var(--c-arena-plate);
+}
+
+/* The opponent's ring is double (the colour-free side cue): two lines with a plate-coloured gap. */
+.atoken[data-side="them"] .atoken__body {
+  box-shadow:
+    inset 0 0 0 calc(var(--m) * 0.07) var(--body-b),
+    0 0 0 var(--arena-ring-gap) var(--c-arena-plate),
+    0 0 0 calc(var(--arena-ring-gap) + var(--arena-ring-line)) var(--ring-c),
+    0 0 0 calc(var(--arena-ring-gap) * 2 + var(--arena-ring-line)) var(--c-arena-plate),
+    0 0 0 calc(var(--arena-ring-gap) * 2 + var(--arena-ring-line) * 2) var(--ring-c),
+    0 0 0 calc(var(--arena-ring-gap) * 2 + var(--arena-ring-line) * 2 + 1px) var(--c-arena-plate);
+}
+
+/* Role glyph plate: a fixed background for the glyph, so the role hue never depends on the club colours. */
+.atoken__plate {
+  position: absolute;
+  inset: 17%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--c-arena-plate);
+}
+
+.atoken__plate .role-glyph {
+  --glyph-size: calc(var(--m) * 0.44);
+}
+
+/* Hybrids: two glyphs side by side, narrower so both fit the plate. */
+.atoken__plate--hybrid .role-glyph {
+  --glyph-size: calc(var(--m) * 0.3);
+  margin-left: 0;
+}
+
+.atoken__plate--hybrid {
+  gap: calc(var(--m) * 0.03);
+}
+
+/* Facing wedge: a small point on the ring in the facing direction; the skin does not rotate. */
+.atoken__wedge {
+  position: absolute;
+  inset: 0;
+  transform: rotate(calc(var(--face, 0) * 1deg));
+  pointer-events: none;
+}
+
+.atoken__wedge::before {
+  content: "";
+  position: absolute;
+  left: calc(100% + var(--arena-ring-gap) + var(--ring-w) + 1px);
+  top: 50%;
+  width: calc(var(--m) * 0.2);
+  height: calc(var(--m) * 0.26);
+  margin-top: calc(var(--m) * -0.13);
+  background: var(--ring-c);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  filter: drop-shadow(0 0 1px var(--c-arena-plate));
+}
+
+/* Captain crown (moves on captain.handover) */
+.atoken__crown {
+  position: absolute;
+  right: calc(var(--m) * -0.22);
+  top: calc(var(--m) * -0.22);
+  display: grid;
+  place-items: center;
+  width: calc(var(--m) * 0.42);
+  height: calc(var(--m) * 0.42);
+  min-width: 0.85rem;
+  min-height: 0.85rem;
+  border-radius: 50%;
+  background: var(--c-arena-plate);
+  box-shadow: 0 0 0 1px var(--ring-c);
+  color: var(--c-arena-ink);
+}
+
+.atoken__crown::before {
+  content: "";
+  width: 66%;
+  height: 66%;
+  background: currentColor;
+  -webkit-mask: var(--i-crown) center / contain no-repeat;
+  mask: var(--i-crown) center / contain no-repeat;
+}
+
+/* The stack above the disc: everything the player reads about one fighter. */
+.atoken__stack {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + var(--arena-ring-gap) + var(--ring-w) + 4px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.atoken[data-side="them"] .atoken__stack {
+  bottom: calc(100% + var(--arena-ring-gap) * 2 + var(--arena-ring-line) * 2 + 5px);
+}
+
+.abars {
+  display: grid;
+  gap: 1px;
+  width: calc(var(--m) * 1.7);
+  min-width: 3rem;
+}
+
+.abar {
+  position: relative;
+  display: flex;
+  height: var(--arena-bar-h);
+  overflow: hidden;
+  background: var(--c-arena-track);
+  box-shadow: 0 0 0 1px var(--c-arena-edge);
+}
+
+.abar__hp {
+  flex: none;
+  width: calc(var(--hp) * 100%);
+  background: var(--c-arena-hp);
+}
+
+/* Shield: hatched, beyond the HP fill, so it differs by pattern and place, not only hue. */
+.abar__shield {
+  flex: none;
+  width: calc(var(--sh) * 100%);
+  background: repeating-linear-gradient(135deg, var(--c-arena-shield) 0 2px, transparent 2px 4px);
+  box-shadow: inset 0 1px 0 var(--c-arena-shield), inset 0 -1px 0 var(--c-arena-shield);
+}
+
+.abar--focus {
+  height: calc(var(--arena-bar-h) * 0.6);
+}
+
+.abar--focus .abar__hp {
+  width: calc(var(--fo) * 100%);
+  background: var(--c-arena-focus);
+}
+
+/* Status pips: up to 4, hard control first; a chip with a family-colour outline (it is what
+   keeps the pip 3:1 against the floor) and a family silhouette. */
+.apips {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.apip {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--arena-pip-size);
+  height: var(--arena-pip-size);
+  border-radius: 3px;
+  background: var(--c-arena-plate);
+  box-shadow: inset 0 0 0 1.5px var(--pip-c, var(--c-arena-ink));
+}
+
+.apip::before {
+  content: "";
+  width: 66%;
+  height: 66%;
+  background: var(--pip-c, var(--c-arena-ink));
+  -webkit-mask: var(--pip-glyph) center / contain no-repeat;
+  mask: var(--pip-glyph) center / contain no-repeat;
+}
+
+.apip__more {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--c-arena-ink);
+  background: var(--c-arena-plate);
+  border-radius: 3px;
+  padding: 0 0.25rem;
+  line-height: calc(var(--arena-pip-size) - 2px);
+}
+
+/* Live rule badge (P-22): "R3", "S" for the stance, "T" while taunted. */
+.arule {
+  flex: none;
+  min-width: calc(var(--arena-pip-size) * 1.45);
+  height: var(--arena-pip-size);
+  padding: 0 0.28rem;
+  border-radius: 3px;
+  background: var(--c-arena-plate);
+  box-shadow: inset 0 0 0 1px var(--c-arena-edge);
+  color: var(--c-arena-ink);
+  font-family: var(--font-mono);
+  font-size: var(--arena-label-size);
+  font-weight: var(--fw-bold);
+  line-height: calc(var(--arena-pip-size) - 1px);
+  text-align: center;
+}
+
+.arule.is-pulse {
+  animation: arule-pulse var(--arena-pulse-ms) var(--ease-out);
+}
+
+@keyframes arule-pulse {
+  0% { transform: scale(1.35); box-shadow: inset 0 0 0 2px var(--c-arena-ink); }
+  100% { transform: none; }
+}
+
+.alabel {
+  max-width: 11em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.4rem;
+  border-radius: 3px;
+  background: var(--c-arena-plate);
+  color: var(--c-arena-ink);
+  font-size: var(--arena-label-size);
+  font-weight: var(--fw-semibold);
+  line-height: 1.35;
+}
+
+.atag {
+  padding: 0 0.35rem;
+  border-radius: 3px;
+  background: var(--c-arena-plate);
+  box-shadow: inset 0 0 0 1px var(--c-arena-edge);
+  color: var(--c-arena-ink);
+  font-size: var(--arena-label-size);
+  font-weight: var(--fw-semibold);
+  line-height: 1.3;
+}
+
+/* Cast bar (casts of 0.3 s or more): ability name and progress. */
+.acast {
+  position: relative;
+  min-width: calc(var(--m) * 1.7);
+  padding: 0 0.35rem;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--c-arena-plate);
+  box-shadow: inset 0 0 0 1px var(--c-arena-edge);
+  color: var(--c-arena-ink);
+  font-size: var(--arena-label-size);
+  font-weight: var(--fw-semibold);
+  line-height: 1.3;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.acast::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--p) * 100%);
+  background: color-mix(in srgb, var(--c-arena-telegraph) 28%, transparent);
+}
+
+.acast > span {
+  position: relative;
+}
+
+/* Selected: four corner brackets in the focus colour (shape differs from the round rings,
+   so the brass bracket is never taken for a brass side ring), plus the name label. */
+.atoken__sel {
+  --c: var(--c-arena-select);
+  --b: 2px;
+  --l: 0.6rem;
+  position: absolute;
+  inset: calc(var(--arena-ring-gap) * -1 - var(--ring-w) - 7px);
+  background:
+    linear-gradient(var(--c), var(--c)) top left / var(--l) var(--b) no-repeat,
+    linear-gradient(var(--c), var(--c)) top left / var(--b) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / var(--l) var(--b) no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / var(--b) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / var(--l) var(--b) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / var(--b) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / var(--l) var(--b) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / var(--b) var(--l) no-repeat;
+  filter: drop-shadow(0 0 1px var(--c-arena-plate)) drop-shadow(0 0 1px var(--c-arena-plate));
+  pointer-events: none;
+}
+
+.atoken[data-side="them"] .atoken__sel {
+  inset: calc(var(--arena-ring-gap) * -2 - var(--arena-ring-line) * 2 - 7px);
+}
+
+/* Hard control greys the ring (asset-006); the ring style stays, so the side is still told. */
+.atoken.is-cc {
+  --ring-c: var(--c-text-faint);
+}
+
+/* Hit flash: a short white wash on the body; reduced motion removes it, the number stays. */
+.atoken.is-hit .atoken__body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--c-arena-hit-flash);
+  opacity: calc(var(--arena-hit-flash-alpha) * var(--arena-motion));
+}
+
+/* Downed: flattened body at 40% opacity, no bars, a diamond marker in the side colour. */
+.atoken.is-down .atoken__body,
+.atoken.is-down .atoken__plate {
+  opacity: var(--arena-down-opacity);
+  transform: scaleY(0.6);
+}
+
+.atoken.is-down .atoken__stack,
+.atoken.is-down .atoken__wedge,
+.atoken.is-down .atoken__crown {
+  display: none;
+}
+
+.adown {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--m) * 0.5);
+  height: calc(var(--m) * 0.5);
+  min-width: 0.9rem;
+  min-height: 0.9rem;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--ring-c);
+  box-shadow: 0 0 0 2px var(--c-arena-plate);
+}
+
+/* ---- 25.4 Marks on the floor: zones, telegraphs, projectiles, impacts, numbers, callouts ----
+   Draw order, bottom to top: floor, zones, telegraphs, bodies with their marks, then
+   projectiles, impacts, numbers and callouts (effects are never hidden by a body). */
+.azone {
+  position: absolute;
+  z-index: 0;
+  left: calc(var(--x) / 32 * 100%);
+  top: calc(var(--y) / 18 * 100%);
+  width: calc(var(--r) * 2 * var(--m));
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ring-c) calc(var(--arena-zone-alpha) * 100%), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ring-c) 55%, transparent);
+  pointer-events: none;
+}
+
+.azone[data-side="us"] { --ring-c: var(--c-side-us); }
+.azone[data-side="them"] { --ring-c: var(--c-side-them); }
+
+/* Telegraph: the caster's ring colour and ring style (ours solid, theirs double), with a
+   growing inner fill for progress. Progress stays under reduced motion: it is information. */
+.atele {
+  position: absolute;
+  z-index: 1;
+  left: calc(var(--x) / 32 * 100%);
+  top: calc(var(--y) / 18 * 100%);
+  width: calc(var(--r) * 2 * var(--m));
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ring-c) calc(var(--arena-telegraph-fill) * 100%), transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring-c) calc(var(--arena-telegraph-edge) * 100%), transparent);
+  pointer-events: none;
+}
+
+.atele[data-side="us"] { --ring-c: var(--c-side-us); }
+.atele[data-side="them"] {
+  --ring-c: var(--c-side-them);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ring-c) calc(var(--arena-telegraph-edge) * 100%), transparent),
+    0 0 0 4px var(--c-arena-floor),
+    0 0 0 6px color-mix(in srgb, var(--ring-c) calc(var(--arena-telegraph-edge) * 100%), transparent);
+}
+
+.atele::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform: scale(var(--p));
+  background: color-mix(in srgb, var(--c-arena-telegraph) calc(var(--arena-telegraph-progress) * 100%), transparent);
+}
+
+.atele__name {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.5rem);
+  transform: translateX(-50%);
+  padding: 0 0.4rem;
+  border-radius: 3px;
+  background: var(--c-arena-plate);
+  color: var(--c-arena-ink);
+  font-size: var(--arena-label-size);
+  font-weight: var(--fw-semibold);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+/* Projectile: at least 10 px (research A4.2: no tiny projectiles), pointing along its path. */
+.aproj {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--x) / 32 * 100%);
+  top: calc(var(--y) / 18 * 100%);
+  width: max(0.9rem, calc(var(--m, 2.4rem) * 0.5));
+  height: max(0.5rem, calc(var(--m, 2.4rem) * 0.26));
+  transform: translate(-50%, -50%) rotate(calc(var(--ang) * 1deg));
+  background: var(--tone-c, var(--c-fx-physical));
+  clip-path: polygon(0 20%, 62% 20%, 62% 0, 100% 50%, 62% 100%, 62% 80%, 0 80%);
+  filter: drop-shadow(0 0 1px var(--c-arena-plate)) drop-shadow(0 0 1px var(--c-arena-plate));
+  pointer-events: none;
+}
+
+/* Impacts: shape tells the damage kind as well as colour (physical spark, arcane burst, true diamond). */
+.aimpact {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--x) / 32 * 100%);
+  top: calc(var(--y) / 18 * 100%);
+  width: max(1.1rem, calc(var(--m, 2.4rem) * 0.7));
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: var(--tone-c, var(--c-fx-physical));
+  pointer-events: none;
+  filter: drop-shadow(0 0 1px var(--c-arena-plate)) drop-shadow(0 0 1px var(--c-arena-plate));
+}
+
+.aimpact[data-tone="physical"] {
+  clip-path: polygon(50% 0, 60% 38%, 100% 50%, 60% 62%, 50% 100%, 40% 62%, 0 50%, 40% 38%);
+}
+
+.aimpact[data-tone="arcane"] {
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 0 38%, var(--tone-c, var(--c-fx-arcane)) 40% 62%, transparent 64%);
+  filter: none;
+}
+
+.aimpact[data-tone="true"] {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+/* Floating numbers: sign always shown, drawn with a plate stroke so text keeps 4.5:1 on any floor. */
+.anum {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--x) / 32 * 100%);
+  top: calc(var(--y) / 18 * 100%);
+  transform: translate(-50%, -50%);
+  color: var(--tone-c, var(--c-arena-ink));
+  font-size: calc(var(--fs-md) * var(--k, 1));
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow:
+    -1px -1px 0 var(--c-arena-plate), 1px -1px 0 var(--c-arena-plate),
+    -1px 1px 0 var(--c-arena-plate), 1px 1px 0 var(--c-arena-plate),
+    0 -2px 0 var(--c-arena-plate), 0 2px 0 var(--c-arena-plate),
+    -2px 0 0 var(--c-arena-plate), 2px 0 0 var(--c-arena-plate);
+  pointer-events: none;
+}
+
+.anum[data-crit="true"] { --k: 1.3; }
+
+/* Down callout (2 s): "Knight downed by Assassin . Shadowstep", with the diamond. */
+.acallout {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--x) / 32 * 100%);
+  top: calc(var(--y) / 18 * 100%);
+  transform: translate(-50%, 0);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.55rem 0.15rem 0.45rem;
+  border-radius: 3px;
+  background: var(--c-arena-plate);
+  box-shadow: 0 0 0 1px var(--c-arena-edge);
+  color: var(--c-arena-ink);
+  font-size: var(--arena-label-size);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.acallout::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  transform: rotate(45deg);
+  background: var(--ring-c);
+}
+
+.acallout[data-side="us"] { --ring-c: var(--c-side-us); }
+.acallout[data-side="them"] { --ring-c: var(--c-side-them); }
+
+/* ---- 25.5 Transport: scrubber with key-moment marks (live: 0 to the head; replay: whole round) ---- */
+.atransport {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 3rem;
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--c-surface-0);
+  border-top: 1px solid var(--c-border);
+}
+
+.atransport__status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+
+.atransport__status strong {
+  color: var(--c-text);
+}
+
+.atransport__right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ascrub {
+  --at: 1;
+  position: relative;
+  height: 2.2rem;
+  min-width: 0;
+  border-radius: var(--r-sm);
+}
+
+.ascrub__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface-4);
+}
+
+.ascrub__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--at) * 100%);
+  border-radius: inherit;
+  background: var(--c-text-muted);
+}
+
+.ascrub__thumb {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--at) * 100%);
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: -0.475rem 0 0 -0.475rem;
+  border-radius: 50%;
+  background: var(--c-text);
+  box-shadow: 0 0 0 2px var(--c-surface-0), 0 0 0 3px var(--c-text-muted);
+}
+
+/* Key-moment marks: our events above the track, theirs below (place carries the side), and the
+   shape carries the kind: diamond = down, ring = rule or save, bar = overtime or round end. */
+.amark {
+  --side-c: var(--c-text-muted);
+  position: absolute;
+  left: calc(var(--at) * 100%);
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-left: -0.35rem;
+  background: var(--side-c);
+}
+
+.amark[data-side="us"] { --side-c: var(--c-side-us); top: calc(50% - 1.05rem); }
+.amark[data-side="them"] { --side-c: var(--c-side-them); top: calc(50% + 0.4rem); }
+.amark[data-kind="down"] { transform: rotate(45deg) scale(0.82); border-radius: 1px; }
+.amark[data-kind="interrupt"],
+.amark[data-kind="deathward"],
+.amark[data-kind="rally"],
+.amark[data-kind="handover"] {
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--side-c);
+}
+.amark[data-kind="captain-down"] { transform: rotate(45deg) scale(0.82); border-radius: 1px; box-shadow: 0 0 0 2px var(--c-surface-0), 0 0 0 3.5px var(--side-c); }
+.amark[data-kind="overtime"],
+.amark[data-kind="end"] {
+  --side-c: var(--c-text);
+  top: calc(50% - 0.65rem);
+  width: 0.28rem;
+  height: 1.3rem;
+  margin-left: -0.14rem;
+  border-radius: 1px;
+}
+
+/* Replay marks the whole round, so a mark after the playhead is dimmed, never hidden. */
+.amark.is-future { opacity: 0.55; }
+
+/* Time readout beside the scrubber: "0:27" at the head (live), "0:27 / 0:52" in a replay. */
+.ascrub__end {
+  min-width: 2.6rem;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ascrub__end small {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  color: var(--c-text-muted);
+}
+
+/* ---- 25.6 Dock: key-moment feed and pause inspector ---- */
+.arena-dock {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--c-surface-0);
+  border-left: 1px solid var(--c-border);
+}
+
+.arena-dock .panel {
+  min-height: 0;
+  border-radius: 0;
+  border-width: 0 0 1px;
+  box-shadow: none;
+}
+
+.arena-dock .afeed {
+  flex: 1 1 8.5rem;
+  min-height: 8.5rem;
+}
+
+.afeed .panel__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column-reverse; /* a live feed opens scrolled to the newest line */
+  overflow: auto;
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.afeed .timeline {
+  margin-bottom: auto; /* short lists sit at the top; long ones scroll from the newest line */
+}
+
+/* The round is over: the closing line is "now". */
+.arena-screen[data-state="round-end"] .afeed .timeline__item.is-now {
+  background: transparent;
+  box-shadow: none;
+}
+
+.arena-screen[data-state="round-end"] .afeed .timeline__item:last-child {
+  background: var(--c-accent-soft);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+/* A replay lists the whole round from the top, with the playhead line marked. */
+.arena-screen[data-state="replay"] .afeed .panel__body {
+  flex-direction: column;
+}
+
+/* The newest line is the "now" line; replay dims moments after the playhead. */
+.afeed .timeline__item.is-now {
+  background: var(--c-accent-soft);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+.afeed .timeline__item.is-future {
+  opacity: 0.55;
+}
+
+.afeed .timeline__item {
+  grid-template-columns: 2.2rem 1.1rem minmax(0, 1fr);
+}
+
+.afeed .timeline__item:focus-visible {
+  outline-offset: -2px;
+}
+
+.arena-dock .ainspect {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ainspect__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+}
+
+.ainspect__who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--lh-snug);
+}
+
+.ainspect__name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+}
+
+.ainspect__section {
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border-top: 1px solid var(--c-divider);
+}
+
+.ainspect__h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+/* "Why this rule": every rule above the committed one, with its skip reason and the observed value. */
+.awhy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.awhy__item {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  column-gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+}
+
+.awhy__mark {
+  display: grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.1rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--c-text-faint);
+  color: var(--c-text-faint);
+  font-size: 0.7rem;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+
+.awhy__why {
+  grid-column: 2;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.awhy__why b {
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+/* Fired: filled mark with a check, brass wash. Skipped: ring with a dash. Not reached: faint. */
+.awhy__item[data-fired="true"] {
+  background: var(--c-accent-soft);
+  box-shadow: inset 2px 0 0 var(--c-accent);
+}
+
+.awhy__item[data-fired="true"] .awhy__mark {
+  background: var(--c-accent);
+  box-shadow: none;
+  color: var(--c-on-accent);
+}
+
+.awhy__item[data-reached="false"] {
+  opacity: 0.6;
+}
+
+.ainspect .kv > div {
+  padding: 0.18rem 0;
+}
+
+.ainspect__bars {
+  display: grid;
+  gap: 3px;
+  margin-bottom: var(--sp-2);
+}
+
+.ainspect__bar {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.ainspect__bar .abar {
+  height: 0.5rem;
+}
+
+.ainspect__bar .abar--focus {
+  height: 0.35rem;
+}
+
+/* ---- 25.7 Fighter strip (72 px, both sides) ---- */
+.astrip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-3);
+  background: var(--c-surface-0);
+  border-top: 1px solid var(--c-border);
+  min-width: 0;
+}
+
+.astrip__side {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.afighter {
+  --side-c: var(--c-side-us);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--sp-2);
+  height: calc(var(--strip-h) - 14px);
+  min-width: 0;
+  padding: 0 var(--sp-2) 0 var(--sp-2);
+  border: 1px solid var(--c-border);
+  border-left: 4px solid var(--side-c);
+  border-radius: var(--r-md);
+  background: var(--c-surface-1);
+  color: var(--c-text);
+  text-align: left;
+  transition: background var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+.afighter[data-side="them"] {
+  --side-c: var(--c-side-them);
+  border-left: 5px double var(--side-c);
+}
+
+.afighter:hover {
+  background: var(--c-surface-2);
+}
+
+.afighter[aria-pressed="true"] {
+  background: var(--c-surface-2);
+  box-shadow: 0 0 0 2px var(--c-arena-select);
+}
+
+/* The portrait only where there is room (below 1600 px the glyph carries the role). */
+.afighter .portrait {
+  display: none;
+}
+
+@media (min-width: 1600px) {
+  .afighter .portrait {
+    display: block;
+  }
+}
+
+.afighter__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.afighter__line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.afighter__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.afighter__hp {
+  flex: 1 1 auto;
+  height: 0.4rem;
+  overflow: hidden;
+  display: flex;
+  min-width: 0;
+  background: var(--c-arena-track);
+  box-shadow: 0 0 0 1px var(--c-arena-edge);
+}
+
+.afighter__hp .abar__hp {
+  width: calc(var(--hp) * 100%);
+}
+
+.afighter__hp .abar__shield {
+  width: calc(var(--sh) * 100%);
+}
+
+.afighter__pct {
+  flex: none;
+  min-width: 2.2rem;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-muted);
+  text-align: right;
+}
+
+.afighter__class {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.afighter .rule__id {
+  margin: 0;
+  min-width: 1.6rem;
+  height: 1.15rem;
+}
+
+.afighter .captain-mark {
+  width: 1rem;
+  height: 1rem;
+}
+
+.afighter .captain-mark::before {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+/* Downed: the card dims but its text stays readable; a diamond and the word say it. */
+.afighter.is-down .portrait,
+.afighter.is-down .afighter__hp {
+  opacity: 0.4;
+}
+
+.afighter__downmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+  white-space: nowrap;
+}
+
+.afighter__downmark::before {
+  content: "";
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  transform: rotate(45deg);
+  background: var(--side-c);
+}
+
+/* ---- 25.8 Overlays: auto-pause note and the round-end card (non-blocking) ---- */
+/* Over the north strip of the floor, so a fighter still standing at the centre stays in view. */
+.around {
+  position: absolute;
+  left: 50%;
+  top: 3%;
+  z-index: var(--z-overlay);
+  transform: translateX(-50%);
+  width: min(26rem, 80%);
+  pointer-events: none;
+}
+
+.around__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-6) var(--sp-4);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--c-surface-1) 94%, transparent);
+  box-shadow: var(--shadow-3);
+  text-align: center;
+  pointer-events: auto;
+}
+
+.around__kicker {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+.around__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+}
+
+.around__score {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.around__score .is-win {
+  color: var(--c-accent-text);
+}
+
+.around__sub {
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}
+
+.around__foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+/* The 1.5 s auto-advance timer: a bar that drains. Without motion it is a static full bar. */
+.around__timer {
+  position: relative;
+  height: 3px;
+  margin: var(--sp-2) calc(var(--sp-6) * -1) calc(var(--sp-4) * -1);
+  overflow: hidden;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  background: var(--c-surface-3);
+}
+
+.around__timer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--c-accent);
+  transform-origin: left;
+  animation: around-drain 1500ms linear forwards;
+}
+
+:root[data-motion="reduced"] .around__timer::after {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .around__timer::after {
+    animation: none;
+  }
+}
+
+@keyframes around-drain {
+  to { transform: scaleX(0); }
+}
+
+/* ---- 25.9 Play match: Watch (primary) and Simulate (secondary), 05-technical-m2 A3 ---- */
+.playmatch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: var(--sp-2);
+}
+
+.playmatch .continue {
+  margin-left: 0;
+}
+
+/* Simulate: the same height and shape as Continue, but a neutral plate (one primary action per screen). */
+.continue--secondary {
+  background: var(--c-surface-3);
+  color: var(--c-text);
+  box-shadow: inset 0 0 0 1px var(--c-border-strong);
+}
+
+.continue--secondary:hover {
+  background: var(--c-surface-4);
+}
+
+.continue--secondary:active {
+  background: var(--c-surface-4);
+}
+
+.continue--secondary kbd {
+  background: var(--c-surface-4);
+  border-color: var(--c-border-strong);
+  color: var(--c-text-muted);
+}
+
+.playmatch .continue .icon {
+  --icon-size: 1.25rem;
 }
