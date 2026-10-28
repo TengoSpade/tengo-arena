@@ -118,18 +118,21 @@ describe('bodies (tech-020: the viewer translates and depth-sorts, never rotates
 });
 
 describe('layers', () => {
-  it('draws floor, markers, zones, telegraphs, low cues, bodies, projectiles, high cues, overlays, vignette in that order', async () => {
+  it('draws floor, markers, ground marks (zones, telegraphs), low cues, bodies, projectiles, high cues, overlays, top cues, edge in that order', async () => {
     const h = await shown();
     const layers = h.scene.root.children;
     expect(layers).toHaveLength(10);
     const token = h.scene.tokenOf(0)!;
-    expect(layers.indexOf(token.root.parent as Container)).toBe(5); // bodies
-    expect(layers.indexOf(token.overlay.parent as Container)).toBe(8); // bars and badges above every body
+    expect(layers.indexOf(token.root.parent as Container)).toBe(4); // bodies
+    expect(layers.indexOf(token.overlay.parent as Container)).toBe(7); // bars and badges above every body
     expect(layers[0]!.children.length).toBe(1); // the skin's floor
     h.core.seek(320);
-    expect(layers[2]!.children.length).toBeGreaterThan(0); // zones
-    expect(layers[3]!.children.length).toBeGreaterThan(0); // telegraphs
-    for (const [kind, layer] of Object.entries(LAYER_OF)) expect(['low', 'high']).toContain(layer ?? kind);
+    const ground = layers[2] as Container;
+    expect(ground.children[0]!.children.length).toBeGreaterThan(0); // zones
+    expect(ground.children[1]!.children.length).toBeGreaterThan(0); // telegraphs
+    for (const [kind, layer] of Object.entries(LAYER_OF)) expect(['low', 'high', 'top']).toContain(layer ?? kind);
+    // Text-bearing cues are on top, above the overlays.
+    for (const kind of ['number', 'evade', 'status-resist', 'down', 'captain-down'] as const) expect(LAYER_OF[kind]).toBe('top');
   });
 
   it('puts the body and its ring/wedge/glyph together and the bars in the overlay', async () => {
@@ -299,36 +302,36 @@ describe('cues', () => {
     it('draws a swing at the actor, toward the target (x,y is where it lands)', async () => {
       await draw([effect({ id: 1, kind: 'swing', unit: 1, target: 7, x: 0, y: 0, age: 0.1 })]);
       // x,y here is nonsense on purpose: the swing follows the actor and the target, not the event point.
-      const c = centre(7)!;
+      const c = centre(6)!;
       expect(Math.hypot(c.x - pos(1).x, c.y - pos(1).y)).toBeLessThan(Math.hypot(c.x - pos(7).x, c.y - pos(7).y));
     });
 
     it("draws a splash from the area of the ability: a circle of its size, a cone or line aimed at the target", async () => {
       const w = world(1);
       await draw([effect({ id: 2, kind: 'splash', unit: 1, target: 7, ability: 'a.fireball' as never, x: w.x, y: w.y, age: 0.1 })]);
-      const circle = centre(4)!;
+      const circle = centre(3)!;
       const ppm = (Math.hypot(pos(1).x - pos(7).x, pos(1).y - pos(7).y) / Math.hypot(w.x - world(7).x, w.y - world(7).y)) * 100; // px per metre
       expect(circle.width).toBeGreaterThan(2 * 2.6 * ppm * 0.9); // 260 cm radius
       await draw([effect({ id: 3, kind: 'splash', unit: 1, target: 7, ability: 'a.cleave' as never, x: w.x, y: w.y, age: 0.1 })]);
-      const cone = centre(4)!;
+      const cone = centre(3)!;
       const toward = { x: pos(7).x - pos(1).x, y: pos(7).y - pos(1).y };
       expect((cone.x - pos(1).x) * toward.x + (cone.y - pos(1).y) * toward.y).toBeGreaterThan(0); // its mass lies toward the target
     });
 
     it('draws a deathward on the unit that was saved, and a displace from where it began to where the mover is now', async () => {
       await draw([effect({ id: 4, kind: 'deathward', unit: 4, target: 9, age: 0.1 })]);
-      const ring = centre(4)!;
+      const ring = centre(3)!;
       expect(Math.hypot(ring.x - pos(4).x, ring.y - pos(4).y)).toBeLessThan(Math.hypot(ring.x - pos(9).x, ring.y - pos(9).y));
       const w = world(7);
       await draw([effect({ id: 5, kind: 'displace', unit: 7, target: 1, x: w.x - 150, y: w.y, age: 0.1 })]);
-      const streak = centre(4)!;
+      const streak = centre(3)!;
       expect(streak.x).toBeLessThan(pos(7).x); // the streak trails behind the mover
     });
 
     it('draws nothing for the motion-only cues under reduced motion (the model drops them too)', async () => {
       const w = world(7);
       await draw([effect({ id: 6, kind: 'displace', unit: 7, target: 1, x: w.x - 150, y: w.y }), effect({ id: 7, kind: 'heal-pulse', unit: 4, target: 3, tone: 'heal' })], true);
-      expect(centre(4)).toBeNull();
+      expect(centre(3)).toBeNull();
     });
   });
 
