@@ -18,7 +18,7 @@
 import { performance } from 'node:perf_hooks';
 import { runBalance, type BalanceMode, type BalanceOptions, type BalanceReport } from '../src/core/harness';
 import { intArg, parseArgs, stringArg } from './lib/args';
-import { balanceReportLines } from './lib/balance-print';
+import { balanceHeaderLine, balanceReportLines, benchLine } from './lib/balance-print';
 import { loadThemeOrExit } from './lib/cli-content';
 import { writeReport } from './lib/report';
 
@@ -40,16 +40,18 @@ const t0 = performance.now();
 const report = runBalance({ seed, fights, content, mode, clock, profile, pick, perItem });
 const ms = performance.now() - t0;
 
-console.log(`balance: ${report.fights} fights (rounds), mode ${mode}${report.profile ? ` (profile ${report.profile}, pick ${report.pick})` : ''}, seed "${seed}", theme "${theme}"`);
+console.log(balanceHeaderLine(report, mode, seed, theme));
 for (const line of balanceReportLines(report, mode)) console.log(line);
 console.log(`  time: ${ms.toFixed(0)} ms total`);
 
 let benchReport: { none: BalanceReport['timing']; full: BalanceReport['timing'] } | undefined;
 if (bench > 0) {
-  const none = runBalance({ seed: `${seed}-bench`, fights: bench, content, mode, clock, record: 'none', profile, pick, perItem }).timing;
-  const full = runBalance({ seed: `${seed}-bench`, fights: bench, content, mode, clock, record: 'full', profile, pick, perItem }).timing;
-  benchReport = { none, full };
-  console.log(`  bench ${bench} rounds: none median ${none!.medianMs.toFixed(2)} ms p99 ${none!.p99Ms.toFixed(2)} ms; full median ${full!.medianMs.toFixed(2)} ms p99 ${full!.p99Ms.toFixed(2)} ms (budget: none median <= 2, p99 <= 6; full <= 3x)`);
+  // squad-match plays whole matches and records no per-round timing: nothing to bench, so skip the extra runs.
+  const timed = mode !== 'squad-match';
+  const none = timed ? runBalance({ seed: `${seed}-bench`, fights: bench, content, mode, clock, record: 'none', profile, pick, perItem }).timing : undefined;
+  const full = timed ? runBalance({ seed: `${seed}-bench`, fights: bench, content, mode, clock, record: 'full', profile, pick, perItem }).timing : undefined;
+  if (none && full) benchReport = { none, full };
+  console.log(benchLine(bench, mode, none, full));
 }
 
 const path = writeReport(typeof out === 'string' ? out : undefined, `balance-${mode}-${seed}.json`, { ...report, timingMs: ms, theme, bench: benchReport });

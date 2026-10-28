@@ -84,3 +84,15 @@ export function balanceReportLines(report: BalanceReport, mode: BalanceMode): st
   if (report.timing) log(`  ms per round (record none): median ${report.timing.medianMs.toFixed(2)}, p99 ${report.timing.p99Ms.toFixed(2)}, mean ${report.timing.meanMs.toFixed(2)}`);
   return out;
 }
+
+/** First line of the report. The unit is what `report.fights` counts: rounds, or whole matches for squad-match. */
+export function balanceHeaderLine(report: BalanceReport, mode: BalanceMode, seed: string, theme: string): string {
+  const unit = mode === 'squad-match' ? 'matches' : 'fights (rounds)';
+  return `balance: ${report.fights} ${unit}, mode ${mode}${report.profile ? ` (profile ${report.profile}, pick ${report.pick})` : ''}, seed "${seed}", theme "${theme}"`;
+}
+
+/** The `--bench` line, or a note when the mode records no per-round timing (squad-match). */
+export function benchLine(bench: number, mode: BalanceMode, none: BalanceReport['timing'], full: BalanceReport['timing']): string {
+  if (!none || !full) return `  bench ${bench}: not available for mode ${mode} (it has no per-round timing)`;
+  return `  bench ${bench} rounds: none median ${none.medianMs.toFixed(2)} ms p99 ${none.p99Ms.toFixed(2)} ms; full median ${full.medianMs.toFixed(2)} ms p99 ${full.p99Ms.toFixed(2)} ms (budget: none median <= 2, p99 <= 6; full <= 3x)`;
+}
