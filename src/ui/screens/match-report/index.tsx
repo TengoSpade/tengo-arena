@@ -56,7 +56,8 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
   const [round, setRound] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<FighterId | null>(null);
   const result = game.results[fixtureId] ?? null;
-  // An older match between other clubs: core keeps only the totals (report.compacted), shown as a summary.
+  // An older match between other clubs (a few weeks on, or from the previous season): core keeps only the totals
+  // (report.compacted), shown as a summary with a note.
   const compacted = report.compacted === true || (result !== null && isCompactedResult(result));
   const fixture = game.fixtures[fixtureId];
   const persp = perspective(report, club.id);
@@ -151,7 +152,7 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
       </div>
 
       {compacted && (
-        // Older matches between other clubs keep a summary only (core results retention).
+        // Older matches between other clubs keep a summary only (core match compaction, leagues.json matchRecords).
         <Callout kind="info" title={t('compacted.title')}>
           {t('compacted.text')}
         </Callout>

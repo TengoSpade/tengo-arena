@@ -274,6 +274,9 @@ describe('Match report: bench XP', () => {
       })),
     }));
     expect(screen.getByText('Summary only')).toBeTruthy();
+    // The note is plain and does not claim the match is from an earlier season: in-season matches are compacted too.
+    expect(screen.getByText(/detailed report of an older match between other clubs is not kept/i)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/earlier season/i);
     const table = screen.getByTestId('box-table');
     expect(table.querySelectorAll('tbody tr:not(.row-group):not(.row-total)')).toHaveLength(11);
     expect(within(table).getAllByTestId('sub-mark')).toHaveLength(1);

@@ -143,8 +143,20 @@ export function migrateV2ToV3(raw: unknown, content: ContentDB): unknown {
   return s;
 }
 
+/**
+ * v3 -> v4 (KI-2): the only change is the additive optional `MatchResult.fielded` that in-season compaction writes, so
+ * nothing in a v3 state needs rewriting: the step is the identity and the runner stamps the new version. The bump
+ * exists for older builds: their strict schema refuses the new field with "the save is damaged", whereas a version
+ * newer than the build's is reported as exactly that (`save.too-new`). Every v3 save, the owner's careers and ticket
+ * reproductions included, still loads; its full results are compacted by the week rule from its next week on.
+ */
+export function migrateV3ToV4(raw: unknown): unknown {
+  return raw;
+}
+
 /** Ordered migrations up to STATE_SCHEMA_VERSION. */
 export const MIGRATIONS: readonly Migration[] = [
   { from: 1, to: 2, migrate: migrateV1ToV2 },
   { from: 2, to: 3, migrate: migrateV2ToV3 },
+  { from: 3, to: 4, migrate: migrateV3ToV4 },
 ];

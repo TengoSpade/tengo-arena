@@ -38,6 +38,8 @@ import { setupSeasonImpl } from './schedule';
 import {
   applyTierMovesImpl,
   archiveSeasonImpl,
+  DEFAULT_COMPACT_AI_MATCHES_AFTER_WEEKS,
+  compactAgedResultsImpl,
   compactHistoryImpl,
   leagueRecordsImpl,
   leagueSeasonColumnsImpl,
@@ -191,7 +193,16 @@ export function compactHistory(draft: GameState, _content: ContentDB): void {
   compactHistoryImpl(draft);
 }
 
-export { RESULT_RETENTION_SEASONS, isCompactedResult } from './season-end';
+/**
+ * Week step 12 (after the week is processed): compact the season's matches between other clubs that are
+ * `leagues.json matchRecords.compactAiMatchesAfterWeeks` weeks old or older at `processedWeek`. The player club's
+ * matches are never compacted in season. See compactAgedResultsImpl.
+ */
+export function compactAgedResults(draft: GameState, season: number, processedWeek: number, content: ContentDB): void {
+  compactAgedResultsImpl(draft, season, processedWeek, content.leagues.matchRecords?.compactAiMatchesAfterWeeks ?? DEFAULT_COMPACT_AI_MATCHES_AFTER_WEEKS);
+}
+
+export { DEFAULT_COMPACT_AI_MATCHES_AFTER_WEEKS, RESULT_RETENTION_SEASONS, compactedResult, isCompactedResult } from './season-end';
 
 /** All-time records derived from history. */
 export function leagueRecords(state: GameState): LeagueRecordsView {

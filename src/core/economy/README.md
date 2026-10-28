@@ -7,7 +7,7 @@
 | --- | --- |
 | `index.ts` | public contract (05 §9.2) and additive exports |
 | `ledger.ts` | `postAt` — the only writer of `Club.finance.balance` and `GameState.ledger`; `ledgerInvariantViolations` (soak) |
-| `wages.ts` | market wage (EQ, curve, age/trait/role/fan appeal), asks (tier gap, prestige, length, greed, wage demand, renewal situation), greed labels |
+| `wages.ts` | market wage (EQ, curve, age/trait/role/fan appeal), asks (tier gap, prestige, length, greed, wage demand, renewal situation: `seasonStarts` reads each match's round-1 five through `fieldedFive`, so compacted matches count the same), greed labels |
 | `budget.ts` | retainer, gate (exact form term), grant installments, Registry deduction, SB, reserve, WB, in-season SB parts |
 | `offers.ts` | `evaluateOffer` (cap, hard commitment rule, cash, embargo, blocks), offers, counters, patience, renewals, trials, releases, free-agent decisions |
 | `pool.ts` | greed roll, Trials Day assignment, hired blades, pool floors (journeymen), pool maintenance |

@@ -203,7 +203,8 @@
       "free_agent_decisions",
       "ai_action_phase",
       "free_agent_pool_floor_top_up",
-      "advance_calendar_digest_autosave"
+      "advance_calendar_digest_autosave",
+      "compact_aged_ai_match_results (matches between other clubs, matchRecords.compactAiMatchesAfterWeeks weeks old; part of the same commit, before the store's autosave)"
     ],
     "seasonEndOrder": [
       "tournament_complete_placings_fixed",
@@ -222,5 +223,10 @@
       "ai_action_phase (opening offers for P1)",
       "autosave"
     ]
+  },
+
+  "matchRecords": {
+    "_doc": "How long a played match keeps its full record. A match between two clubs other than the player's is compacted once it is compactAiMatchesAfterWeeks calendar weeks old: the processing of week w + N compacts the matches of week w, so the last N weeks always stay in full, and the season-end step compacts whatever is left for the season just played. A compacted match keeps its score, the round results, the winner, the MVP, who was named, each fighter's rounds, downs, damage and healing totals and the five each side fielded (with rows and kickoff ratings); it loses the fight inputs, per-fighter stats and round-by-round records, so its detailed report is gone. Standings, season statistics, wages, XP and every decision read only what is kept, so the value changes the size of a save and nothing in the game. The player's own matches are never compacted during the season (they stay in full for that season and the next, then go). Smaller values give smaller saves (a result is about 16 KB in full and 2 KB compacted, 405 a season) but shorten how long a report of another club's match has its detail; with matches in weeks 5 to 23 (the default calendar), a value of 19 or more compacts nothing in season and keeps every match in full until the season end (the content validator warns above last match week minus first match week). The value is whole weeks, at least 1 (a match is never compacted in the week it is played) and at most 99. Not part of the content's save bounds (it changes no array length or counter in a save) and left out of the content hash, so tuning it does not change a career's content identity.",
+    "compactAiMatchesAfterWeeks": 3
   }
 }

@@ -130,7 +130,20 @@ export interface MatchResult {
    * reserves and emergency entrants alike. See CompactFighterTotals.
    */
   fighterTotals?: Record<FighterId, CompactFighterTotals>;
+  /**
+   * Compacted results only: the round-1 five of each side as the sim input had it (slot order). Two readers need
+   * it once the sim fighters are gone: the renewal ask (which of the club's matches this season a fighter
+   * started) and the opponent's last fielded five on Home and Squad (D-R). `fieldedFive` (core/model) reads
+   * either source.
+   */
+  fielded?: { home: CompactFielded[]; away: CompactFielded[] };
 }
+
+/**
+ * One fighter of a side's round-1 five in a compacted result: [fighter id, row (0 front, 1 back),
+ * rating at kickoff]. A tuple keeps a season of compacted results small (about 20 bytes a fighter).
+ */
+export type CompactFielded = readonly [fighterId: FighterId, row: 0 | 1, rating: number];
 
 /**
  * One fighter's totals in a compacted result: [side (0 = home, 1 = away; the club is the fixture's

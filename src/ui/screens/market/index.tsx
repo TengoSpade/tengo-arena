@@ -26,7 +26,7 @@ import { freshInfo } from '../../m11/model';
 import { FreshMeter } from '../../m11/parts';
 import { useEngine } from '../../store/engine';
 import { CompareDialog } from './CompareDialog';
-import { clubMarket, marketRow, renewalFit, termsCheck, willingLevel, type ClubMarket, type MarketRow } from './model';
+import { clubMarket, marketRow, renewalFit, starterBonusText, termsCheck, willingLevel, type ClubMarket, type MarketRow } from './model';
 import { NextSeasonRoom } from './NextSeasonRoom';
 import { OfferDialog, offerErrorText, type OfferTarget } from './OfferDialog';
 import { t } from './text';
@@ -488,6 +488,8 @@ function AgentsTable({
   const isOverRoom = (r: MarketRow) => market.wageRoom > 0 && excessOf(r) > 0;
   const overRoomTip = (r: MarketRow) => (isOverRoom(r) ? t('disabled.roomRoom', { n: fmtMoney(excessOf(r), content) }) : null);
   const freshEngine = useEngine();
+  // The bonus is a content value (economy.json market.starterBonusBp), so the tip reads it from there.
+  const starterTip = t('tip.starter', { bonus: starterBonusText(content) });
   const columns: Column<MarketRow>[] = [
     {
       id: 'compare',
@@ -526,14 +528,14 @@ function AgentsTable({
     },
     {
       id: 'starter',
-      header: <span data-tip={t('tip.starter')}>{t('col.starter')}</span>,
+      header: <span data-tip={starterTip}>{t('col.starter')}</span>,
       headerLabel: t('tag.starter'),
       align: 'center',
       class: 'col-wide',
       sortValue: (r) => (r.wouldStart ? 1 : 0),
       cell: (r) =>
         r.wouldStart ? (
-          <span class="u-good" data-tip={t('tip.starter')}>
+          <span class="u-good" data-tip={starterTip}>
             <Icon name="check" label={t('tag.starter')} />
           </span>
         ) : (

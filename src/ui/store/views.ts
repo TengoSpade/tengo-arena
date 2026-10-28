@@ -6,7 +6,7 @@
  */
 import type { ContentDB, TierDef, WingDef } from '../../core/content';
 import type { FighterView } from '../../core/game';
-import type { Club, ClubId, CompetitionId, Fighter, FighterId, Fixture, GameState, MatchResult, StandingRow, WingId } from '../../core/model';
+import { fieldedFive, type Club, type ClubId, type CompetitionId, type Fighter, type FighterId, type Fixture, type GameState, type MatchResult, type StandingRow, type WingId } from '../../core/model';
 import type { FinanceView } from '../../core/economy';
 import { useStore } from './contract';
 import { safeView, useEngine, type GameEngine } from './engine';
@@ -82,7 +82,8 @@ export function lastPlayedLineup(state: GameState, clubId: ClubId): PlayedEntry[
     if (!latest || r.weekIndex > latest.weekIndex) latest = r;
   }
   if (!latest) return null;
-  const side = latest.homeClubId === clubId ? latest.input.home : latest.input.away;
-  if (side.fighters.length === 0) return null;
-  return side.fighters.map((f) => ({ fighterId: f.fighterId, row: f.row, rating: f.rating }));
+  // The sim input, or the five a compacted match kept (core/model fieldedFive); null for a result that kept neither.
+  const five = fieldedFive(latest, latest.homeClubId === clubId ? 'home' : 'away');
+  if (five.length === 0) return null;
+  return five.map((f) => ({ fighterId: f.fighterId, row: f.row, rating: f.rating }));
 }

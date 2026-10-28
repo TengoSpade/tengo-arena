@@ -5,6 +5,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
 import { afterEach, describe, expect, it } from 'vitest';
+import { compactedResult } from '../../core/league';
 import type { ClubId, FighterId, GameState } from '../../core/model';
 import { installShortcuts } from '../app/shortcuts';
 import { readTip, resetToasts, toasts, undoLast } from '../components';
@@ -259,6 +260,28 @@ describe('Home', () => {
     expect(theirs.textContent).toMatch(/mean rating 60/i);
   });
 
+  it('shows the opponent as they last played even when that match is compacted (KI-2: nothing about the next opponent changes)', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const state = structuredClone(store.game.value!) as GameState;
+    const us = club(state).id;
+    const fx = Object.values(state.fixtures).find((f) => f.weekIndex === state.calendar.weekIndex && (f.homeClubId === us || f.awayClubId === us))!;
+    const them = fx.homeClubId === us ? fx.awayClubId : fx.homeClubId;
+    const last = Object.values(state.results)
+      .filter((r) => r.season === state.calendar.season && (r.homeClubId === them || r.awayClubId === them))
+      .sort((a, b) => b.weekIndex - a.weekIndex)[0]!;
+    const five = Object.values(state.fighters).filter((f) => f.clubId === them).slice(0, 5);
+    const side = last.homeClubId === them ? last.input.home : last.input.away;
+    (side as { fighters: unknown[] }).fighters = five.map((f, i) => ({ fighterId: f.id, row: i < 2 ? 'front' : 'back', rating: 60 }));
+    state.results[last.fixtureId] = compactedResult(last); // what the week-processing rule leaves of a match three weeks on
+    expect(state.results[last.fixtureId]!.input.home.fighters).toHaveLength(0);
+    expect(state.results[last.fixtureId]!.input.away.fighters).toHaveLength(0);
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const theirs = screen.getByTestId('their-lineup');
+    expect(theirs.textContent).not.toContain('No matches played yet');
+    expect(theirs.textContent).toMatch(/mean rating 60/i);
+  });
+
   it('warns when the opponent is much stronger and when places and wage room are free', () => {
     const { store } = createTestStore({ weekIndex: 11 });
     const state = structuredClone(store.game.value!) as GameState;
@@ -359,6 +382,28 @@ describe('Fighter profile', () => {
     expect(dialog.textContent).toContain(`Release payout${formatMoney(payout)}`);
     expect(dialog.textContent).toContain(`Balance after${formatMoney(club(state).finance.balance - payout)}`);
     expect(dialog.textContent).not.toContain('.json');
+  });
+
+  it('lists a compacted match in the match log with the kept totals and no damage taken (KI-2)', async () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const state = structuredClone(store.game.value!) as GameState;
+    const us = club(state).id;
+    const r = Object.values(state.results).find((x) => x.season === state.calendar.season && (x.homeClubId === us || x.awayClubId === us) && Object.values(x.fighterStats).some((st) => st.clubId === us))!;
+    const id = (Object.keys(r.fighterStats) as FighterId[]).find((f) => r.fighterStats[f]!.clubId === us)!;
+    const kept = r.fighterStats[id]!;
+    state.results[r.fixtureId] = compactedResult(r);
+    expect(state.results[r.fixtureId]!.fighterStats).toEqual({});
+    store.replaceWorld(state);
+    mount(<FighterScreen params={{ id }} />, store);
+    await act(() => {
+      fireEvent.click(screen.getByRole('tab', { name: /match log/i }));
+    });
+    const row = document.querySelector(`a[href="#/match/${encodeURIComponent(r.fixtureId)}"]`)?.closest('tr') as HTMLElement;
+    expect(row).toBeTruthy();
+    const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent ?? '');
+    expect(cells[3]).toBe(String(kept.downsInflicted));
+    expect(cells[4]!.replace(/[^0-9]/g, '')).toBe(String(kept.damageDealt));
+    expect(cells.some((c) => c === '–')).toBe(true); // damage taken is not kept for a compacted match
   });
 
   it('shows a not-found state for an unknown id', () => {

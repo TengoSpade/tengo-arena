@@ -899,25 +899,29 @@ interface LogRow {
   score: string;
   downs: number;
   damage: number;
-  taken: number;
+  /** Damage taken; null for a compacted match between other clubs (it keeps the totals, not this). */
+  taken: number | null;
 }
 
 function MatchLog({ f, state, content }: { f: Fighter; state: GameState; content: ContentDB }) {
+  // A match between other clubs a few weeks old is compacted: its fighter totals stand in for the full stats.
   const rows: LogRow[] = Object.values(state.results)
-    .filter((r) => r.season === state.calendar.season && r.fighterStats[f.id])
+    .filter((r) => r.season === state.calendar.season && (r.fighterStats[f.id] || r.fighterTotals?.[f.id]))
     .map((r) => {
-      const s = r.fighterStats[f.id]!;
-      const home = s.clubId === r.homeClubId;
+      const s = r.fighterStats[f.id];
+      const t = r.fighterTotals?.[f.id];
+      const clubId = s ? s.clubId : t![0] === 0 ? r.homeClubId : r.awayClubId;
+      const home = clubId === r.homeClubId;
       const other = state.clubs[home ? r.awayClubId : r.homeClubId];
       return {
         fixtureId: r.fixtureId,
         weekIndex: r.weekIndex,
         opponent: other?.name ?? '',
-        won: r.winnerClubId === s.clubId,
+        won: r.winnerClubId === clubId,
         score: home ? `${r.score.home}–${r.score.away}` : `${r.score.away}–${r.score.home}`,
-        downs: s.downsInflicted,
-        damage: s.damageDealt,
-        taken: s.damageTaken,
+        downs: s ? s.downsInflicted : t![2],
+        damage: s ? s.damageDealt : t![4],
+        taken: s ? s.damageTaken : null,
       };
     });
   if (rows.length === 0) {
@@ -944,7 +948,13 @@ function MatchLog({ f, state, content }: { f: Fighter; state: GameState; content
     },
     { id: 'downs', header: T.colDowns, align: 'num', sortValue: (r) => r.downs, cell: (r) => <span {...tipAttrs('Downs inflicted')}>{r.downs}</span> },
     { id: 'damage', header: T.colDamage, align: 'num', sortValue: (r) => r.damage, cell: (r) => <span {...tipAttrs('Damage dealt')}>{formatInt(r.damage)}</span> },
-    { id: 'taken', header: T.colTaken, align: 'num', sortValue: (r) => r.taken, cell: (r) => <span {...tipAttrs('Damage taken')}>{formatInt(r.taken)}</span> },
+    {
+      id: 'taken',
+      header: T.colTaken,
+      align: 'num',
+      sortValue: (r) => r.taken ?? -1,
+      cell: (r) => (r.taken === null ? <span {...tipAttrs('Not kept for older matches between other clubs')}>–</span> : <span {...tipAttrs('Damage taken')}>{formatInt(r.taken)}</span>),
+    },
     {
       id: 'report',
       header: '',

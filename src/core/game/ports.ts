@@ -72,6 +72,7 @@ export interface GamePorts {
     | 'archiveSeason'
     | 'leagueSeasonColumns'
     | 'compactHistory'
+    | 'compactAgedResults'
     | 'lastRegularWeekIndex'
     | 'isCompactedResult'
   >;
@@ -167,6 +168,7 @@ export const realGamePorts: GamePorts = {
     archiveSeason: league.archiveSeason,
     leagueSeasonColumns: league.leagueSeasonColumns,
     compactHistory: league.compactHistory,
+    compactAgedResults: league.compactAgedResults,
     lastRegularWeekIndex: league.lastRegularWeekIndex,
     isCompactedResult: league.isCompactedResult,
   },

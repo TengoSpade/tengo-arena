@@ -11,6 +11,7 @@ export * from './progression';
 export type * from './competition';
 export * from './events';
 export type * from './match';
+export * from './fielded';
 export * from './ledger';
 export type * from './news';
 export type * from './market';

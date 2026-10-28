@@ -6,7 +6,7 @@
  */
 import type { ContentDB, TraitDef } from '../content';
 import { fractionToBp } from '../content';
-import { clubResults, type ClubId, type Fighter, type FighterId, type GameState } from '../model';
+import { clubResults, fieldedFive, type ClubId, type Fighter, type FighterId, type GameState } from '../model';
 import { clamp, getOwn } from '../util';
 import { fighterHumanAge, fighterPotential, fighterRating } from './fighter-values';
 import { floorTo, interpolate, mulDiv, stepLookup } from './math';
@@ -130,10 +130,11 @@ export function seasonStarts(state: GameState, fighterId: FighterId, clubId: Clu
   let started = 0;
   let played = 0;
   for (const r of clubResults(state, season, clubId)) {
-    const side = r.homeClubId === clubId ? r.input.home : r.awayClubId === clubId ? r.input.away : null;
+    const side = r.homeClubId === clubId ? 'home' : r.awayClubId === clubId ? 'away' : null;
     if (!side) continue;
     played += 1;
-    if (side.fighters.some((x) => x.fighterId === fighterId)) started += 1;
+    // The round-1 five, from the sim input or, once the match is compacted, from the five it kept.
+    if (fieldedFive(r, side).some((x) => x.fighterId === fighterId)) started += 1;
   }
   return { started, played };
 }

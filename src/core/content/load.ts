@@ -29,7 +29,28 @@ export interface LoadContentOptions {
  * `LoadContentOptions.hash`.
  */
 export function hashContent(raw: RawContentFiles): string {
-  return hashString(stableStringify(raw));
+  return hashString(stableStringify(withoutHashExcluded(raw)));
+}
+
+/**
+ * Content keys left out of the hash because no result, replay or save depends on their value: `leagues.json
+ * matchRecords` only decides how soon a match between other clubs is compacted to keep a save small, and the game
+ * is identical either way (core/game compaction.test.ts). Were it hashed, tuning it would change the content
+ * identity and every stored match of a loaded career would lose its rebuilt timeline ("the content changed since
+ * the match"). A content set without the key hashes exactly as it did before the key existed.
+ */
+const HASH_EXCLUDED: readonly (readonly [file: ContentFileName, key: string])[] = [['leagues', 'matchRecords']];
+
+function withoutHashExcluded(raw: RawContentFiles): RawContentFiles {
+  let out = raw;
+  for (const [file, key] of HASH_EXCLUDED) {
+    const content = raw[file];
+    if (content === null || typeof content !== 'object' || !(key in content)) continue;
+    const rest: Record<string, unknown> = { ...(content as Record<string, unknown>) };
+    delete rest[key];
+    out = { ...out, [file]: rest };
+  }
+  return out;
 }
 
 /** Schema-validate every file; collects every issue across all files. */
