@@ -59,6 +59,8 @@ export function Moments({
               ? t('moments.round', { n: r.round, outcome: usWon ? t('moments.won') : t('moments.lost'), time: fmtTicks(r.durationTicks, tickMs) })
               : t('moments.roundNeutral', { n: r.round, club: clubShort(state, report[r.winner].clubId), time: fmtTicks(r.durationTicks, tickMs) });
             const list = all.get(r.round) ?? [];
+            // One replay link per instant: a down and the captain's down at the same tick start the same replay.
+            const linked = new Set<number>();
             return [
               <li class="timeline__round" key={`r${r.round}`}>
                 {head}
@@ -83,9 +85,16 @@ export function Moments({
                   <div>
                     <div class="timeline__title">{m.title}</div>
                     {m.text && <div class="timeline__text">{m.text}</div>}
-                    {replay.available === true && (
+                    {replay.available === true && !linked.has(m.tick) && linked.add(m.tick) && (
                       <span class="timeline__replay" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                        <ReplayButton fixtureId={report.fixtureId} round={m.round} tick={Math.max(0, m.tick - REPLAY_LEAD_TICKS)} label={t('moments.replayFrom', { time: fmtTicks(m.tick, tickMs) })} testId="moment-replay" />
+                        <ReplayButton
+                          fixtureId={report.fixtureId}
+                          round={m.round}
+                          tick={Math.max(0, m.tick - REPLAY_LEAD_TICKS)}
+                          label={t('moments.replayFrom', { time: fmtTicks(m.tick, tickMs) })}
+                          name={t('moments.replayName', { time: fmtTicks(m.tick, tickMs), title: m.title })}
+                          testId="moment-replay"
+                        />
                       </span>
                     )}
                   </div>

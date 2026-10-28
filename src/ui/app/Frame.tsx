@@ -6,7 +6,7 @@
  * Simulating). Owns the Continue runner and the global shortcut map.
  */
 import type { ComponentChildren } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 // Direct module imports (not the components barrel) keep screen-only components out of the main bundle.
 import { Icon } from '../components/Icon';
 import { Crest, crestLetters } from '../components/basic-marks';
@@ -51,6 +51,10 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const ctx = usePlayerClub();
   const { route } = useRoute();
   const routeId = route?.id ?? null;
+  // A step that outlives the frame (the Simulating pause is 600 ms) must not route afterwards: the frame is gone, and so is
+  // the screen it was started from (a stale navigate() would pull the player off whatever he opened meanwhile).
+  const alive = useRef(true);
+  useEffect(() => () => void (alive.current = false), []);
   const [sheet, setSheet] = useState(false);
   const [search, setSearch] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmVariant | null>(null);
@@ -143,6 +147,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
     const delay = simulates && !reducedMotion(settings.value) ? SIMULATING_MS : 0;
     if (simulates) setSimulating(ctx?.fixture?.bestOf ?? 3);
     const [res] = await Promise.all([store.advance(playsMatch ? { playerMatch: mode } : undefined), new Promise((r) => setTimeout(r, delay))]);
+    if (!alive.current) return;
     setSimulating(null);
     if (!res.ok) {
       stopped(res.error.code);

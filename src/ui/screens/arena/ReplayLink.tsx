@@ -57,6 +57,7 @@ export function ReplayButton({
   class: cls,
   testId = 'replay-button',
   fallbackTip,
+  name,
 }: {
   fixtureId: FixtureId;
   label?: string;
@@ -68,13 +69,15 @@ export function ReplayButton({
   testId?: string;
   /** Tooltip while core's check is a stub. */
   fallbackTip?: string;
+  /** The accessible name when the visible label alone is ambiguous (a list of key moments: "Replay from 0:12" says which moment only with its title). */
+  name?: string;
 }) {
   const r = useReplayState(fixtureId);
   const text = label ?? t('eyebrowReplay');
   const cls2 = `${icon ? 'icon-btn' : 'btn btn--sm btn--ghost'}${cls ? ` ${cls}` : ''}`;
   if (r.available === true) {
     return (
-      <a class={cls2} href={replayHref(fixtureId, round, tick)} data-testid={testId} aria-label={icon ? text : undefined} {...tipAttrs(icon ? text : null)}>
+      <a class={cls2} href={replayHref(fixtureId, round, tick)} data-testid={testId} aria-label={icon ? text : name} {...tipAttrs(icon ? text : null)}>
         <Icon name="play" />
         {!icon && text}
       </a>
@@ -82,7 +85,7 @@ export function ReplayButton({
   }
   const tip = r.available === false ? replayReasonText(r.reason) : (fallbackTip ?? t('stubText'));
   return (
-    <button class={`${cls2} is-disabled`} type="button" aria-disabled="true" data-testid={testId} data-reason={r.reason ?? undefined} aria-label={icon ? `${text}: ${tip}` : undefined} {...tipAttrs(tip)}>
+    <button class={`${cls2} is-disabled`} type="button" aria-disabled="true" data-testid={testId} data-reason={r.reason ?? undefined} aria-label={icon ? `${text}: ${tip}` : name ? `${name}: ${tip}` : undefined} {...tipAttrs(tip)}>
       <Icon name="play" />
       {!icon && text}
     </button>

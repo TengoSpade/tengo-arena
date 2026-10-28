@@ -8,7 +8,7 @@
  * captain-down, handover and call are about `unit`.
  */
 import type { ContentDB } from '../../../core/content';
-import type { ArenaRoundContext, AutoPauseReason, KeyMoment } from '../../../render';
+import type { ArenaRoundContext, AutoPauseReason, AutoPauseRules, AutoPauseStop, KeyMoment, PlaybackStop } from '../../../render';
 import { abilityName } from '../../m11/model';
 import type { StopKind } from './session';
 import { clock, t } from './text';
@@ -112,6 +112,36 @@ const AUTO_WHY: Record<AutoPauseReason, Parameters<typeof t>[0]> = {
   overtime: 'stopAutoOvertime',
   ownHpBelowPct: 'stopAutoOwnHpBelowPct',
 };
+
+/**
+ * Why a RESUMED round sits paused where it does: the auto-pause the player's rules would have raised at the saved cursor,
+ * read from the moments the viewer has shown (never the log: a live round stays bounded by its head). The cursor is the
+ * reveal frontier, ceil of the head at the stop, so the stop's tick is the cursor or the tick before it. Null when nothing
+ * would have stopped there (a manual pause, a window that was hidden, a rule since switched off) or for the low-HP rule,
+ * which needs the samples and not the moments.
+ */
+export function resumeStop(moments: readonly KeyMoment[], ctx: ArenaRoundContext, rules: AutoPauseRules, cursor: number): PlaybackStop | null {
+  const own = ctx.playerSide;
+  const stopOf = (m: KeyMoment): AutoPauseStop | null => {
+    if (m.kind === 'overtime') return rules.overtime ? { tick: m.tick, seq: m.seq, reason: 'overtime', unit: null } : null;
+    if (own === null) return null;
+    if (m.kind === 'down' && m.target !== null) {
+      const mine = ctx.units[m.target]?.side === own;
+      return (mine ? rules.ownDowned : rules.enemyDowned) ? { tick: m.tick, seq: m.seq, reason: mine ? 'ownDowned' : 'enemyDowned', unit: m.target } : null;
+    }
+    if (m.kind === 'captain-down' && m.unit !== null && ctx.units[m.unit]?.side === own && rules.ownCaptainDown) return { tick: m.tick, seq: m.seq, reason: 'ownCaptainDown', unit: m.unit };
+    return null;
+  };
+  for (const tick of [cursor, cursor - 1]) {
+    const hits = moments
+      .filter((m) => m.tick === tick)
+      .map(stopOf)
+      .filter((s): s is AutoPauseStop => s !== null)
+      .sort((a, b) => a.seq - b.seq);
+    if (hits[0]) return { kind: 'auto', stop: hits[0] };
+  }
+  return null;
+}
 
 /** The cause of an automatic pause for the transport's status ("Kael Dunmere was downed"), or null. */
 export function stopCause(stop: StopKind, ctx: ArenaRoundContext): string | null {

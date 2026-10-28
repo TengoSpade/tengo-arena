@@ -149,6 +149,52 @@ describe('ux-001 counted: Play match, then one Enter per round boundary', () => 
   });
 });
 
+describe('after the deciding round the report opens per the pacing preset, as after a simulated match (A7, A18, D-L)', () => {
+  const NO_STOPS = { ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null };
+  const cases: { pacing: 'thorough' | 'balanced' | 'streamlined'; won: boolean; opens: boolean; note: string }[] = [
+    { pacing: 'thorough', won: true, opens: true, note: 'Thorough opens every report' },
+    { pacing: 'thorough', won: false, opens: true, note: 'Thorough opens every report' },
+    { pacing: 'balanced', won: true, opens: false, note: 'Balanced: only after a loss or an injury, so a win goes Home with the result toast' },
+    { pacing: 'balanced', won: false, opens: true, note: 'Balanced opens it after a loss' },
+    { pacing: 'streamlined', won: true, opens: false, note: 'Streamlined: only an injury opens it' },
+    { pacing: 'streamlined', won: false, opens: false, note: 'Streamlined does not stop on a loss' },
+  ];
+  it.for(cases)('$pacing, won=$won: the report opens=$opens ($note)', { timeout: 30_000 }, async (c) => {
+    updateSettings({ ...DEFAULT_SETTINGS, pacing: c.pacing, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: NO_STOPS } });
+    // On the Squad screen (the lineup stop of Thorough and Balanced is behind us): Watch is the primary button.
+    const m = mountApp({ winners: c.won ? ['home', 'home'] : ['away', 'away'], hash: '#/squad' });
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toMatch(/Watch|Play match|Simulate/), { timeout: 4000 });
+    await settle();
+    // Under Streamlined the primary action simulates, and Watch is the second button.
+    fireEvent.click(screen.getByTestId(c.pacing === 'streamlined' ? 'continue-other' : 'continue'));
+    await arenaReady(m, 1);
+    await playOut(m);
+    await waitFor(() => expect(location.hash).toBe('#/between-rounds'), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByTestId('screen-between-rounds')).toBeTruthy());
+    await settle();
+    press('Enter');
+    await waitFor(() => expect(location.hash).toBe('#/arena'));
+    await arenaReady(m, 2);
+    await playOut(m);
+    // The card names the match result and where it goes next; then the player is taken there.
+    await waitFor(() => expect(screen.getByTestId('round-end-winner').textContent).toMatch(/the match/));
+    expect(screen.getByTestId('arena-overlay').textContent).toContain(c.opens ? 'Next, the match report opens' : 'Next, back to Home with the result');
+    await waitFor(() => expect(location.hash).toBe(c.opens ? `#/match/${encodeURIComponent(m.w.fixtureId)}` : '#/home'), { timeout: 4000 });
+    if (!c.opens) expect(toasts.value.some((x) => x.action?.label === 'Open report')).toBe(true);
+    else expect(toasts.value.some((x) => x.action?.label === 'Open report')).toBe(false);
+  });
+
+  it('Simulate under the same preset goes the same way: Thorough opens the report', async () => {
+    updateSettings({ ...DEFAULT_SETTINGS, pacing: 'thorough', arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'simulate', autoPause: NO_STOPS } });
+    const m = mountApp({ hash: '#/squad' });
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Simulate'), { timeout: 4000 });
+    await settle();
+    fireEvent.click(screen.getByTestId('continue'));
+    await waitFor(() => expect(location.hash).toBe(`#/match/${encodeURIComponent(m.w.fixtureId)}`), { timeout: 4000 });
+    expect(m.harness.all).toHaveLength(0);
+  });
+});
+
 describe('the viewer opens only after the lock is saved (test-first item 2, through the shell)', () => {
   it('holds the arena closed while the write is pending, then opens it', async () => {
     const m = mountApp();
@@ -295,6 +341,33 @@ describe('routing and resume', () => {
     expect(toasts.value).toHaveLength(0);
   });
 
+  it('Play match from another screen opens the arena and stays on it (no bounce to Home)', async () => {
+    // This test used to fail under load, about 40 ms after #/arena: an EARLIER test's Simulate (Frame.advance keeps a 600 ms
+    // Simulating pause) finished after its frame was unmounted and navigated Home. Frame.advance no longer routes once unmounted.
+    const m = mountApp({ hash: '#/codex' });
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
+    press(' ');
+    await arenaReady(m, 1);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(location.hash).toBe('#/arena');
+    expect(m.harness.all).toHaveLength(1);
+  });
+
+  it('a Simulate whose frame is gone before it finishes does not route afterwards (the stale navigate behind the bounce)', async () => {
+    updateSettings({ ...DEFAULT_SETTINGS, pacing: 'streamlined', arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'ask' } });
+    const m = mountApp({ hash: '#/codex' });
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Simulate'));
+    await settle();
+    press(' '); // Simulate: the Simulating pause runs 600 ms before the step routes
+    await waitFor(() => expect(m.core.advances).toHaveLength(1));
+    cleanup(); // the frame is gone (another screen took over, the test ended)
+    navigate('#/market');
+    await new Promise((r) => setTimeout(r, 900));
+    expect(location.hash).toBe('#/market');
+    expect(toasts.value).toHaveLength(0);
+  });
+
   it('a cursor save that finds the store busy is retried quietly at the next stop (no toast, no error)', async () => {
     // Opened on a saved lock (a resumed round): this test is about the cursor, not about how the arena was reached.
     const m = mountApp({ state: 'round-waiting', hash: '#/arena' });
@@ -359,6 +432,56 @@ describe('routing and resume', () => {
     expect(harness2.current().tick).toBe(250);
     expect(harness2.current().playing).toBe(false);
     expect(harness2.current().calls).not.toContain('play');
+  });
+});
+
+describe('a resumed round says why it stopped where it did', () => {
+  /** Reopen a saved lock whose cursor is `cursorTick` (the fixture round's first down is unit 3, ours, at tick 400). */
+  async function resumeAt(cursorTick: number, autoPause?: Partial<typeof DEFAULT_SETTINGS.arena.autoPause>) {
+    const w = watchWorld(content);
+    const core = createScriptedCore(w);
+    const t = createTestStore({ world: 'none', engine: core.engine });
+    t.store.replaceWorld(liveWatchState(w, { cursorTick }), content);
+    updateSettings({ ...DEFAULT_SETTINGS, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: { ownDowned: true, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null, ...autoPause } } });
+    const harness = createFakeViewerHarness(fakeTimeline, content);
+    navigate('#/arena');
+    render(
+      <ViewerFactoryContext.Provider value={harness.factory}>
+        <App store={t.store} />
+      </ViewerFactoryContext.Provider>,
+    );
+    await waitFor(() => expect(harness.all).toHaveLength(1), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByTestId('screen-arena').getAttribute('data-status')).toBe('ready'), { timeout: 4000 });
+    expect(harness.current().tick).toBe(cursorTick);
+    expect(harness.current().playing).toBe(false);
+    return { w, harness };
+  }
+
+  it('at the tick of an own down: the same cause as the live stop (status text and announcement)', async () => {
+    const { w } = await resumeAt(400);
+    const fallen = w.state.fighters[w.prepared.home.active[3]!]!.name.full;
+    expect(screen.getByText('Paused automatically')).toBeTruthy();
+    expect(screen.getByTestId('status-note').textContent).toBe(fallen + ' was downed');
+    expect(screen.getByTestId('arena-announce').textContent).toBe('Paused: one of yours went down (' + fallen + ')');
+  });
+
+  it('a cursor saved a frame after the stop (ceil of the head) still shows its cause', async () => {
+    await resumeAt(401);
+    expect(screen.getByTestId('status-note').textContent).toMatch(/was downed$/);
+  });
+
+  it('a pause that no rule would have raised shows no cause; neither does a stop whose rule has since been switched off', async () => {
+    await resumeAt(250);
+    expect(screen.queryByTestId('status-note')).toBeNull();
+    expect(screen.getByTestId('arena-announce').textContent).toBe('');
+    cleanup();
+    await resumeAt(400, { ownDowned: false });
+    expect(screen.queryByTestId('status-note')).toBeNull();
+  });
+
+  it('the start of overtime is named too, when the player stops on it', async () => {
+    await resumeAt(900, { overtime: true });
+    expect(screen.getByTestId('arena-announce').textContent).toBe('Paused: overtime starts');
   });
 });
 
