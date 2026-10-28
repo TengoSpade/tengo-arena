@@ -31,8 +31,8 @@ export interface AppProps {
 
 /** Routes reachable before a career exists. */
 const PRE_CAREER: readonly RouteId[] = ['new-game', 'saves', 'settings', 'codex'];
-/** Full-page routes without the hub frame (flow-state-001 / 002). */
-const BARE: readonly RouteId[] = ['new-game', 'club-select'];
+/** Full-page routes without the hub frame (flow-state-001 / 002; the arena screens, mockups/arena.html: no app shell, the arena owns the keyboard). */
+const BARE: readonly RouteId[] = ['new-game', 'club-select', 'arena', 'replay'];
 
 function debugRequested(): boolean {
   try {

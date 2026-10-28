@@ -13,6 +13,7 @@ export const DEFAULT_ARENA_SETTINGS: Readonly<ArenaSettings> = {
   autoPause: { ownDowned: true, enemyDowned: false, ownCaptainDown: true, overtime: true, ownHpBelowPct: null },
   labels: 'selected',
   pauseWhenHidden: true,
+  dockOpen: true,
 };
 
 const WATCH_PREFERENCES: readonly WatchPreference[] = ['ask', 'watch', 'simulate'];
@@ -32,6 +33,7 @@ export function mergeArenaSettings(raw: unknown): ArenaSettings {
   if (SPEEDS.includes(r['speed'] as Speed)) out.speed = r['speed'] as Speed;
   if (LABELS.includes(r['labels'] as ArenaSettings['labels'])) out.labels = r['labels'] as ArenaSettings['labels'];
   if (typeof r['pauseWhenHidden'] === 'boolean') out.pauseWhenHidden = r['pauseWhenHidden'];
+  if (typeof r['dockOpen'] === 'boolean') out.dockOpen = r['dockOpen'];
   const ap = r['autoPause'];
   if (ap && typeof ap === 'object') {
     const a = ap as Record<string, unknown>;

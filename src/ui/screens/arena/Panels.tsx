@@ -1,54 +1,121 @@
 /**
- * The arena's side panels: the live feed of key moments (aria-live, polite) and the pause inspector (P-22). Both are
- * DOM over the canvas (tech-018) and take only what the session hands them, which for a live round is bounded by the
- * live head.
+ * The right dock (mockups/arena.html `.arena-dock`; 05-technical-m2 §A18): the pause inspector above the key-moment
+ * feed. Both are DOM over the canvas (tech-018) and take only what the session hands them, which for a live round is
+ * bounded by the live head. The feed reuses the report's `.timeline`: chronological, aria-live polite, the newest line
+ * highlighted, opened scrolled to the newest; a replay shows the whole round with later moments dimmed.
  */
-import { Icon, Tag } from '../../components';
+import { useEffect, useRef } from 'preact/hooks';
+import type { ContentDB } from '../../../core/content';
+import { Icon, Portrait, RoleGlyph, tipAttrs } from '../../components';
+import { StanceSentence, RuleSentence } from '../match-report/rule-sentence';
 import type { FeedItem } from './feed';
-import type { InspectorModel, TraceLine } from './inspect';
+import type { InspectorModel, RuleRef, WhyLine } from './inspect';
 import { t } from './text';
 
-export function ArenaFeed({ items, announcement, onJump }: { items: readonly FeedItem[]; announcement: string | null; onJump: (tick: number) => void }) {
-  // Newest first: the moment the player is waiting for sits at the top.
-  const list = [...items].reverse();
+export function ArenaFeed({
+  items,
+  kind,
+  playheadTick,
+  onJump,
+}: {
+  items: readonly FeedItem[];
+  kind: 'live' | 'replay';
+  playheadTick: number;
+  onJump: (tick: number) => void;
+}) {
+  const body = useRef<HTMLDivElement>(null);
+  const newest = items[items.length - 1]?.key;
+  // Opened scrolled to the newest line.
+  useEffect(() => {
+    const el = body.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [newest]);
+  const nowKey = [...items].reverse().find((m) => m.tick <= playheadTick)?.key;
   return (
-    <section class="arena-feed" data-testid="arena-feed" aria-label={t('feedTitle')}>
-      <h2 class="arena-panel__title">{t('feedTitle')}</h2>
-      {/* The polite live region: new moments and auto-pause causes are announced; the whole list is not re-read. */}
-      <div class="u-sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="arena-announce">
-        {announcement ?? (items.length > 0 ? items[items.length - 1]!.text : '')}
-      </div>
-      {list.length === 0 ? (
-        <p class="u-sm u-muted" data-testid="feed-empty">
-          {t('feedEmpty')}
-        </p>
-      ) : (
-        <ol class="arena-feed__list" role="list" data-testid="feed-list">
-          {list.map((m) => (
-            <li key={m.key} class="arena-feed__item" data-kind={m.kind} data-side={m.side ?? undefined} data-ours={m.ours === null ? undefined : String(m.ours)} data-testid="feed-item">
-              <button type="button" class="arena-feed__jump" onClick={() => onJump(m.tick)}>
-                <span class="arena-feed__time u-num">{m.time}</span>
-                <span class="arena-feed__mark" aria-hidden="true">
-                  {m.kind === 'down' || m.kind === 'captain-down' ? '◆' : m.kind === 'overtime' || m.kind === 'end' ? '▮' : '○'}
+    <section class="panel afeed" aria-labelledby="h-feed" data-testid="arena-feed">
+      <header class="panel__header">
+        <h2 class="panel__title" id="h-feed">
+          <Icon name="scroll" />
+          {t('feedTitle')}
+        </h2>
+        <span class="panel__subtitle">{kind === 'live' ? t('feedLive') : t('feedWhole')}</span>
+      </header>
+      <div class="panel__body" ref={body}>
+        {items.length === 0 ? (
+          <p class="u-sm u-muted" data-testid="feed-empty">
+            {t('feedEmpty')}
+          </p>
+        ) : (
+          <ol class="timeline" aria-live="polite" aria-label={t('feedTitle')} data-testid="feed-list">
+            {items.map((m) => (
+              <li
+                key={m.key}
+                class={`timeline__item${m.key === nowKey ? ' is-now' : ''}${kind === 'replay' && m.tick > playheadTick ? ' is-future' : ''}`}
+                data-side={m.mark ?? undefined}
+                data-event={m.event}
+                data-kind={m.kind}
+                data-ours={m.ours === null ? undefined : String(m.ours)}
+                data-testid="feed-item"
+                tabIndex={0}
+                onClick={() => onJump(m.tick)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onJump(m.tick);
+                  }
+                }}
+                {...tipAttrs(t(kind === 'live' ? 'feedGo' : 'feedGoReplay', { time: m.time }))}
+              >
+                <span class="timeline__time">{m.time}</span>
+                <span class="timeline__marker">
+                  <span class="timeline__dot" />
                 </span>
-                <span class="arena-feed__text">{m.text}</span>
-              </button>
-            </li>
-          ))}
-        </ol>
-      )}
+                <div>
+                  <div class="timeline__title">{m.title}</div>
+                  {m.detail && <div class="timeline__text">{m.detail}</div>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </section>
   );
 }
 
-function TraceList({ lines }: { lines: readonly TraceLine[] }) {
+function RuleView({ content, r }: { content: ContentDB; r: RuleRef }) {
+  if (r.rule) return <RuleSentence content={content} rule={r.rule} classId={r.classId} index={r.index} />;
+  if (r.stanceName !== null) return <StanceSentence content={content} stance={r.stanceName} />;
   return (
-    <ol class="arena-trace" role="list">
+    <span class="rule">
+      <span class="rule__id rule__id--preset">{r.label}</span>
+    </span>
+  );
+}
+
+function WhyList({ content, lines }: { content: ContentDB; lines: readonly WhyLine[] }) {
+  return (
+    <ol class="awhy" aria-label="Rules in order, with why each was skipped" data-testid="inspector-why">
       {lines.map((l, i) => (
-        <li key={i} class={`arena-trace__line${l.fired ? ' is-fired' : ''}`} data-testid="trace-line" data-fired={l.fired ? 'true' : 'false'}>
-          <span class="arena-trace__label u-num">{l.label}</span>
-          <span class="arena-trace__sentence">{l.sentence}</span>
-          <span class="arena-trace__why u-xs u-muted">{l.fired ? t('inspectFiredRule') : `${t('inspectSkipped')}: ${l.why}`}</span>
+        <li key={i} class="awhy__item" data-fired={l.fired ? 'true' : 'false'} data-reached={l.reached ? 'true' : 'false'} data-testid="trace-line">
+          <span class="awhy__mark" aria-hidden="true">
+            {l.fired ? <Icon name="check" size="sm" /> : l.reached ? '–' : '·'}
+          </span>
+          <span>
+            <RuleView content={content} r={l.ref} />
+          </span>
+          <span class="awhy__why">
+            {l.fired ? (
+              <b>{t('inspectFired')}</b>
+            ) : l.why ? (
+              <>
+                <b>{l.why.lead}</b> {l.why.text}
+              </>
+            ) : (
+              t('inspectNotReached')
+            )}
+          </span>
         </li>
       ))}
     </ol>
@@ -58,143 +125,209 @@ function TraceList({ lines }: { lines: readonly TraceLine[] }) {
 export type ProbeState = 'idle' | 'loading' | 'failed' | 'ready';
 
 export function ArenaInspector({
+  content,
   model,
   paused,
   probe,
   hasSelection,
   onClose,
+  roleName,
 }: {
+  content: ContentDB;
   model: InspectorModel | null;
   paused: boolean;
   probe: ProbeState;
   hasSelection: boolean;
   onClose: () => void;
+  roleName: (role: string) => string;
 }) {
   return (
-    <aside class="arena-inspector" data-testid="arena-inspector" aria-label={t('inspectTitle')}>
-      <header class="arena-inspector__head">
-        <h2 class="arena-panel__title">{t('inspectTitle')}</h2>
-        <button class="icon-btn" type="button" onClick={onClose} aria-label={t('inspectClose')} data-testid="inspector-close">
+    <section class="panel ainspect" aria-labelledby="h-inspect" data-testid="arena-inspector">
+      <header class="ainspect__head">
+        {model && <Portrait role={model.unit.roles[0] ?? 'melee'} race={model.unit.raceId} size="sm" />}
+        <div class="ainspect__who">
+          <h2 class="ainspect__name" id="h-inspect" data-testid="inspector-name">
+            {model ? model.unit.name : t('inspectTitle')}
+          </h2>
+          {model && (
+            <span class="u-xs u-muted">
+              <span class="class-tag">
+                {model.unit.roles.map((r) => (
+                  <RoleGlyph key={r} role={r} label={roleName(r)} />
+                ))}
+                {model.unit.className}
+              </span>
+              {model.isCaptain ? ` · ${t('inspectCaptain')}` : ''}
+            </span>
+          )}
+        </div>
+        <button class="icon-btn l-push" type="button" onClick={onClose} aria-label={t('inspectClose')} data-testid="inspector-close" {...tipAttrs('Close (Esc)')}>
           <Icon name="close" />
         </button>
       </header>
       {!hasSelection || !model ? (
-        <p class="u-sm u-muted" data-testid="inspector-none">
-          {t('inspectNone')}
-        </p>
+        <div class="ainspect__section">
+          <p class="u-sm u-muted" data-testid="inspector-none">
+            {t('inspectNone')}
+          </p>
+        </div>
       ) : !paused ? (
-        <div data-testid="inspector-pause-first">
+        <div class="ainspect__section" data-testid="inspector-pause-first">
           <p class="u-strong">{t('inspectPauseFirst')}</p>
           <p class="u-sm u-muted">{t('inspectPauseFirstText')}</p>
         </div>
       ) : (
-        <div class="arena-inspector__body l-stack l-stack--sm">
-          <div class="arena-inspector__who">
-            <strong data-testid="inspector-name">{model.unit.name}</strong>
-            <span class="u-sm u-muted">
-              {model.unit.className}
-              {model.isCaptain ? ` · ${t('inspectCaptain')}` : ''}
-            </span>
-            {model.vitals && (
-              <span class="u-sm u-num" data-testid="inspector-vitals">
-                {t('stripHp', { hp: model.vitals.hp, max: model.vitals.maxHp })}
-                {model.vitals.shield ? ` · ${t('stripShield', { n: model.vitals.shield })}` : ''}
-              </span>
-            )}
-            {model.freshness && model.unit.fatigueTag && (
-              <Tag kind="warn" tip={model.freshnessPenalty ?? undefined}>
-                {model.freshness}
-              </Tag>
-            )}
-          </div>
-
-          <section aria-labelledby="insp-decision" data-testid="inspector-decision">
-            <h3 class="panel-section__title" id="insp-decision">
-              {t('inspectDecision')}
-            </h3>
+        <>
+          <div class="ainspect__section" data-testid="inspector-decision">
+            <div class="ainspect__h">
+              <span>{t('inspectDecision')}</span>
+              {model.decision && <span class="u-faint u-num">{model.decision.since}</span>}
+            </div>
             {model.decision ? (
               <>
-                <p class="arena-inspector__rule" data-testid="inspector-rule">
-                  <span class="arena-trace__label u-num">{model.decision.label}</span> {model.decision.sentence}
+                <p data-testid="inspector-rule">
+                  <RuleView content={content} r={model.decision.ref} />
                   {model.decision.target ? <span class="u-muted"> → {model.decision.target}</span> : null}
                 </p>
-                <p class="u-xs u-muted">{model.decision.react}</p>
-                {model.decision.trace.length > 1 && (
-                  <>
-                    <h4 class="u-xs u-faint">{t('inspectWhyNote')}</h4>
-                    <TraceList lines={model.decision.trace} />
-                  </>
-                )}
+                <p class="u-xs u-muted u-mt-2">{model.decision.react}</p>
               </>
             ) : (
               <p class="u-sm u-muted">{t('inspectDecisionNone')}</p>
             )}
-          </section>
+          </div>
 
-          <section aria-labelledby="insp-now" data-testid="inspector-now">
-            <h3 class="panel-section__title" id="insp-now">
-              {t('inspectNow')}
-            </h3>
-            {probe === 'loading' && <p class="u-sm u-muted">{t('inspectNowLoading')}</p>}
-            {(probe === 'failed' || probe === 'idle') && <p class="u-sm u-muted">{t('inspectNowFailed')}</p>}
-            {probe === 'ready' && model.now && (
-              <>
-                {model.now.evaluation ? (
-                  <p class="arena-inspector__rule" data-testid="inspector-now-rule">
-                    <span class="arena-trace__label u-num">{model.now.evaluation.label}</span> {model.now.evaluation.sentence}
-                    {model.now.evaluation.target ? <span class="u-muted"> → {model.now.evaluation.target}</span> : null}
-                    {model.now.evaluation.same && <span class="u-xs u-faint"> · {t('inspectNowSame')}</span>}
-                  </p>
-                ) : (
-                  <p class="u-sm u-muted" data-testid="inspector-blocked">
-                    {t('inspectNowNone', { why: model.now.blocked ?? '' })}
-                  </p>
+          {model.decision && model.decision.why.length > 0 && (
+            <div class="ainspect__section">
+              <div class="ainspect__h">
+                <span>{t('inspectWhy')}</span>
+                <span class="u-faint">{t('inspectWhyFirst')}</span>
+              </div>
+              <WhyList content={content} lines={model.decision.why} />
+              <NowLine probe={probe} model={model} />
+            </div>
+          )}
+          {!(model.decision && model.decision.why.length > 0) && (
+            <div class="ainspect__section">
+              <NowLine probe={probe} model={model} />
+            </div>
+          )}
+
+          <div class="ainspect__section" data-testid="inspector-now">
+            <div class="ainspect__h">
+              <span>{t('inspectState')}</span>
+            </div>
+            {model.vitals && (
+              <div class="ainspect__bars">
+                <div class="ainspect__bar">
+                  <span>{t('inspectHp')}</span>
+                  <span class="abar">
+                    <i class="abar__hp" style={{ '--hp': model.vitals.maxHp ? model.vitals.hp / model.vitals.maxHp : 0 } as Record<string, number>} />
+                  </span>
+                  <span class="u-num u-strong" data-testid="inspector-vitals">
+                    {model.vitals.hp} / {model.vitals.maxHp}
+                  </span>
+                </div>
+                {model.vitals.shield !== null && (
+                  <div class="ainspect__bar">
+                    <span>{t('inspectShield')}</span>
+                    <span class="abar">
+                      <i class="abar__shield" style={{ '--sh': model.vitals.maxHp ? model.vitals.shield / model.vitals.maxHp : 0 } as Record<string, number>} />
+                    </span>
+                    <span class="u-num u-strong">{model.vitals.shield}</span>
+                  </div>
                 )}
-                <p class="u-xs u-faint">{t('inspectNowNote')}</p>
-                {model.now.pending && <p class="u-sm">{model.now.pending}</p>}
-                {model.now.evaluation && model.now.evaluation.trace.length > 1 && <TraceList lines={model.now.evaluation.trace} />}
-                <dl class="arena-inspector__facts u-sm">
+                {model.vitals.focus !== null && (
+                  <div class="ainspect__bar">
+                    <span>{t('inspectFocus')}</span>
+                    <span class="abar abar--focus">
+                      <i class="abar__hp" style={{ '--fo': Math.min(1, model.vitals.focus / 100) } as Record<string, number>} />
+                    </span>
+                    <span class="u-num u-strong">{model.vitals.focus} / 100</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {probe === 'loading' && <p class="u-sm u-muted">{t('inspectNowLoading')}</p>}
+            {probe === 'ready' && model.now && (
+              <dl class="kv">
+                <div>
                   <dt>{t('inspectCooldowns')}</dt>
                   <dd>
-                    {model.now.cooldowns.map((c) => (
-                      <span key={c.name} class="arena-inspector__fact" data-testid="inspector-cooldown">
-                        {c.name}: {c.text}
+                    {model.now.cooldowns.map((c, i) => (
+                      <span key={c.name} data-testid="inspector-cooldown">
+                        {i > 0 ? ' · ' : ''}
+                        {c.name} {c.text}
                       </span>
                     ))}
                   </dd>
+                </div>
+                <div>
                   <dt>{t('inspectStatuses')}</dt>
                   <dd>
                     {model.now.statuses.length === 0 ? (
                       <span class="u-muted">{t('inspectNoStatuses')}</span>
                     ) : (
                       model.now.statuses.map((s) => (
-                        <span key={s.name} class="arena-inspector__fact" data-testid="inspector-status">
-                          {s.name} {s.text}
+                        <span key={s.name} class="l-cluster l-cluster--xs" style={{ justifyContent: 'flex-end' }} data-testid="inspector-status">
+                          <span class="u-sm">
+                            {s.name} {s.text}
+                          </span>
+                          {s.pip && <i class="apip" data-pip={s.pip} aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem', display: 'inline-grid', verticalAlign: 'middle' }} />}
                         </span>
                       ))
                     )}
                   </dd>
-                </dl>
-              </>
+                </div>
+                {model.fires && (
+                  <>
+                    <div data-testid="inspector-fires">
+                      <dt>{t('inspectFiredThisRound')}</dt>
+                      <dd>
+                        {model.fires
+                          .filter((f) => f.count > 0)
+                          .map((f) => `${f.ref.label} ×${f.count}`)
+                          .join(' · ') || t('inspectFiresNever')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t('inspectNotFiredYet')}</dt>
+                      <dd class="u-warn">
+                        {model.fires
+                          .filter((f) => f.count === 0 && f.ref.rule)
+                          .map((f) => f.ref.label)
+                          .join(' · ') || '—'}
+                      </dd>
+                    </div>
+                  </>
+                )}
+                {model.freshness && (
+                  <div>
+                    <dt>{t('inspectFreshnessLine')}</dt>
+                    <dd>{model.freshnessPenalty ? `${model.freshness} · ${model.freshnessPenalty}` : `${model.freshness} · no penalty`}</dd>
+                  </div>
+                )}
+              </dl>
             )}
-          </section>
-
-          {model.fires && (
-            <section aria-labelledby="insp-fires" data-testid="inspector-fires">
-              <h3 class="panel-section__title" id="insp-fires">
-                {t('inspectFires')}
-              </h3>
-              <ul class="arena-inspector__fires u-sm" role="list">
-                {model.fires.map((f) => (
-                  <li key={f.label} class={f.count === 0 ? 'u-muted' : undefined}>
-                    <span class="arena-trace__label u-num">{f.label}</span> {f.count > 0 ? `×${f.count}` : t('inspectFiresNever')}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
+          </div>
+        </>
       )}
-    </aside>
+    </section>
+  );
+}
+
+/** "Deciding now (0:27.0): R4 again, same target." with what he would do, or why he cannot decide. */
+function NowLine({ probe, model }: { probe: ProbeState; model: InspectorModel }) {
+  if (probe === 'loading') return <p class="u-xs u-muted u-mt-2">{t('inspectNowLoading')}</p>;
+  if (probe !== 'ready' || !model.now) return <p class="u-xs u-muted u-mt-2">{t('inspectNowFailed')}</p>;
+  const ev = model.now.evaluation;
+  return (
+    <>
+      <p class="u-xs u-muted u-mt-2" data-testid={ev ? 'inspector-now-rule' : 'inspector-blocked'}>
+        <Icon name="info" size="sm" /> <b class="u-strong">{t('inspectDecidingNow', { time: model.now.at })}</b>{' '}
+        {ev ? (ev.same ? t('inspectSameRule', { label: ev.ref.label }) : t('inspectOtherRule', { label: ev.ref.label })) : t('inspectNowNone', { why: model.now.blocked ?? '' })}
+        {ev?.target ? ` → ${ev.target}` : ''}
+      </p>
+      {model.now.pending && <p class="u-sm">{model.now.pending}</p>}
+    </>
   );
 }

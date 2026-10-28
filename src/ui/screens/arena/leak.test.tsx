@@ -19,7 +19,6 @@ import { ok } from '../../../core/util';
 import { NotImplementedError } from '../../../core/util';
 import { simulateRound } from '../../../core/sim';
 import { buildCueTable, timeline as realTimeline, type CueTable, type Timeline } from '../../../render';
-import { installShortcuts } from '../../app/shortcuts';
 import { TestProviders, createTestStore } from '../../debug/test-store';
 import { DEFAULT_SETTINGS, updateSettings } from '../../store/settings';
 import type { GameEngine } from '../../store/engine';
@@ -74,8 +73,6 @@ async function renderWith(log: FightLog, head: number, tl: Timeline, cues?: CueT
   const t = createTestStore({ world: 'none', engine });
   t.store.replaceWorld(liveWatchState(w, { cursorTick: head }), content);
   const harness = createFakeViewerHarness(tl, content, { cues });
-  dispose?.();
-  dispose = installShortcuts(() => ({}));
   const { container } = render(
     <TestProviders store={t.store}>
       <ViewerFactoryContext.Provider value={harness.factory}>
@@ -99,13 +96,16 @@ function assertBounded(r: Rendered, head: number) {
   }
   for (const e of h.ends) expect(e).toBeNull();
   for (const x of h.heads) expect(x).toBeLessThanOrEqual(head);
-  // The DOM shows the same: the scrubber stops at the head, no mark or feed item lies beyond it.
-  const scrub = screen.getByTestId('arena-scrubber') as HTMLInputElement;
-  expect(Number(scrub.max)).toBe(head);
+  // The DOM shows the same: the live track is a fixed 0 to 75 s (its length tells nothing about the round), the playhead
+  // is at the head, and no mark or feed item lies beyond it.
+  const scrub = screen.getByTestId('arena-scrubber');
+  expect(Number(scrub.getAttribute('aria-valuemax'))).toBe(75);
+  expect(Number(scrub.getAttribute('aria-valuenow'))).toBeLessThanOrEqual(Math.ceil(head * 0.05));
   for (const mark of screen.getByTestId('arena-marks').querySelectorAll('[data-tick]')) expect(Number(mark.getAttribute('data-tick'))).toBeLessThanOrEqual(head);
   // Standing counts are those of the head's sample.
   const last = h.frames[h.frames.length - 1]!.frame;
-  expect(screen.getByTestId('arena-standing').textContent).toBe(`${last.standing.home} v ${last.standing.away}`);
+  expect(screen.getByTestId('hud-left-standing').textContent).toBe(`${last.standing.home} of 5 standing`);
+  expect(screen.getByTestId('hud-right-standing').textContent).toBe(`${last.standing.away} of 5 standing`);
 }
 
 describe('no future leaks (review B1): the screen with the full log equals the screen with the log cut at the head', () => {
@@ -124,7 +124,7 @@ describe('no future leaks (review B1): the screen with the full log equals the s
     assertBounded(a, head);
     assertBounded(b, head);
     // Nothing of the later events is on screen: no overtime, and (at 200) no down.
-    expect(a.html).not.toMatch(/Overtime/);
+    expect(a.html).not.toMatch(/data-overtime="true"|ahud__ot/);
     if (head < 400) expect(a.html).not.toMatch(/downed/i);
     else expect(a.html).toMatch(/downed/i);
   });
@@ -152,6 +152,6 @@ describe('no future leaks (review B1): the screen with the full log equals the s
     // The viewer got the log by reference; the screen added nothing to it.
     expect(r.viewer.loadedLog).toBe(full);
     // RoundPlayback.result is null for a live round, so the HUD has nothing but the committed score to show.
-    expect(screen.getByTestId('arena-score').textContent).toBe('0–0');
+    expect(screen.getByTestId('hud-left-pips').getAttribute('aria-label')).toBe('Rounds won: 0 of 2');
   });
 });

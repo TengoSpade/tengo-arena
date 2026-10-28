@@ -9,7 +9,7 @@ import type { FightFighterInput, GameState, Side, TacticsAssignment } from '../.
 import { colorsForMatch, type ArenaPalette, type ArenaRoundContext, type ArenaSideInfo, type ArenaUnitInfo, type RoleId, type TeamColors } from '../../../render';
 import { safeView } from '../../store/engine';
 import { labelFor } from '../../m11/model';
-import type { HudInfo, HudSide, PipState } from './Hud';
+import type { HudInfo, HudSide } from './Hud';
 import { cssColorToNumber } from './palette';
 
 const ROLE_IDS: readonly string[] = ['tank', 'melee', 'ranged', 'controller', 'healer'];
@@ -126,33 +126,32 @@ export function buildRoundContext(input: ContextInput): ArenaRoundContext {
   };
 }
 
-// ---- the HUD's facts (crests, score, round pips) ------------------------------------------------------------------
-
+// ---- the HUD's facts (crests, rounds won, rows) --------------------------------------------------------------------
 
 /**
- * The top strip's facts. Committed data only: rounds already played (their winners from the match's playback view),
- * the score before this round, the round being watched. A live round's own outcome is never in here.
+ * The top strip's and the fighter strip's facts. Committed data only: the rounds already won, the round being watched,
+ * who stands in which row (round header). The player's side is on the left (the mock: "ours left"); a match between
+ * other clubs shows home on the left. A live round's own outcome is never in here.
  */
-export function buildHud(args: { state: GameState; ctx: ArenaRoundContext; match: MatchPlayback | null; kind: 'live' | 'replay'; score?: { home: number; away: number } }): HudInfo {
-  const { state, ctx, match } = args;
+export function buildHud(args: { state: GameState; ctx: ArenaRoundContext; playback: RoundPlayback; kind: 'live' | 'replay'; score?: { home: number; away: number } }): HudInfo {
+  const { state, ctx } = args;
+  const score = args.score ?? ctx.scoreBefore;
+  const mine = (ctx.playerSide ?? 0) as 0 | 1;
   const side = (i: 0 | 1): HudSide => {
     const info = ctx.sides[i];
     const club = state.clubs[info.clubId];
-    return { name: info.name, shortName: info.shortName, code: club?.code ?? info.shortName, primary: club?.colors.primary ?? '#808080', secondary: club?.colors.secondary ?? '#e0e0e0' };
+    return {
+      name: info.name,
+      shortName: info.shortName,
+      code: club?.code ?? info.shortName,
+      primary: club?.colors.primary ?? '#808080',
+      secondary: club?.colors.secondary ?? '#e0e0e0',
+      side: i,
+      ours: i === mine && ctx.playerSide !== null,
+      wins: i === 0 ? score.home : score.away,
+    };
   };
-  const score = args.score ?? ctx.scoreBefore;
-  const played = (n: number): 'home' | 'away' | null => {
-    const r = match?.rounds.find((x) => x.round === n && x.winner !== null);
-    if (r?.winner) return r.winner;
-    // Without the match view: the score before the round says how many each side won, not in which order.
-    const home = ctx.scoreBefore.home;
-    return n <= home ? 'home' : n <= ctx.round - 1 ? 'away' : null;
-  };
-  const pips: PipState[] = Array.from({ length: ctx.bestOf }, (_, i) => {
-    const n = i + 1;
-    if (n < ctx.round) return played(n) ?? 'later';
-    if (n === ctx.round) return 'current';
-    return 'later';
-  });
-  return { sides: [side(0), side(1)], bestOf: ctx.bestOf, round: ctx.round, score, pips, kind: args.kind };
+  const rows: Record<number, 'front' | 'back'> = {};
+  for (const u of args.playback.log.header.units) rows[u.index] = u.row;
+  return { left: side(mine), right: side(mine === 0 ? 1 : 0), bestOf: ctx.bestOf, round: ctx.round, kind: args.kind, rows };
 }

@@ -1,122 +1,132 @@
 /**
- * The bottom fighter strip (04 §4, 05-technical-m2 §A7): both sides, ten buttons. Each shows the portrait, name, role
- * glyph(s), an HP bar with its shield segment, the live rule badge, the Freshness tag and a down marker; clicking
- * selects the fighter (the inspector's subject). Side is the ring colour AND the ring style (solid for the player's
- * side, double for the other), so it never rests on colour alone (04 §9). HP is neutral parchment on a dark track:
- * no red or green meaning.
+ * The bottom fighter strip (04 §4, mockups/arena.html `.astrip`; 05-technical-m2 §A7, §A18): both sides, ten card
+ * buttons, ours on the left, front row before back row. Each card shows the portrait, name and captain mark, the live rule
+ * badge, an HP bar with its hatched shield and a percentage, the role glyph(s) and class, the Freshness tag and, when
+ * down, "Downed · <cause>". FOCUS IS SELECTION (A18): Tab walks the ten cards in the normal order, so it never traps,
+ * and a click focuses its card. Side is the card's left border (solid for ours, double for theirs) and the place.
  */
 import type { ReadonlySignal } from '@preact/signals';
-import type { ArenaFrameState, ArenaRoundContext, ArenaUnitInfo, UnitRenderState } from '../../../render';
-import { Portrait, RoleGlyph, tipAttrs } from '../../components';
+import type { ArenaFrameState, ArenaRoundContext, ArenaUnitInfo } from '../../../render';
+import { RoleGlyph, tipAttrs } from '../../components';
+import type { HudInfo } from './Hud';
 import { t } from './text';
-
-function hex(n: number): string {
-  return `#${n.toString(16).padStart(6, '0')}`;
-}
 
 export function ArenaStrip({
   ctx,
+  hud,
   frame,
   selected,
+  downCause,
   onSelect,
   roleName,
 }: {
   ctx: ArenaRoundContext;
+  hud: HudInfo;
   frame: ReadonlySignal<ArenaFrameState | null>;
   selected: ReadonlySignal<number | null>;
+  /** Who downed a unit, from the key moments shown so far (never from the log). */
+  downCause: (unit: number) => string | null;
+  /** Called when a card gets focus or is clicked: the card is the selection. */
   onSelect: (unit: number) => void;
   roleName: (role: string) => string;
 }) {
   const f = frame.value;
   const sel = selected.value;
-  const bySide = (side: 0 | 1) => ctx.units.filter((u) => u.side === side);
-  const card = (u: ArenaUnitInfo) => {
-    const st: UnitRenderState | undefined = f?.units.find((x) => x.unit === u.unit);
-    const colors = ctx.sides[u.side].colors;
-    const hp = st ? st.hp : 0;
-    const max = st ? st.maxHp : 0;
+  const card = (u: ArenaUnitInfo, ours: boolean) => {
+    const st = f?.units.find((x) => x.unit === u.unit);
+    const max = st?.maxHp ?? 0;
+    const hp = st?.hp ?? 0;
     const hpFrac = max > 0 ? Math.max(0, Math.min(1, hp / max)) : 1;
-    const shieldFrac = st && st.shield !== null && max > 0 ? Math.max(0, Math.min(1 - hpFrac + 0.0001, st.shield / max)) : 0;
+    const shieldFrac = st && st.shield !== null && max > 0 ? Math.max(0, Math.min(1 - hpFrac, st.shield / max)) : 0;
     const down = st ? !st.standing : false;
+    const cause = down ? downCause(u.unit) : null;
     const rule = st?.rule?.label ?? null;
     const fresh = u.fatigueTag && u.freshness !== null ? t(u.fatigueTag === 'tired' ? 'freshTired' : 'freshSpent', { n: u.freshness }) : null;
     const label = [
       u.name,
-      u.className,
-      st && max > 0 ? t('stripHp', { hp, max }) : null,
-      st?.shield ? t('stripShield', { n: st.shield }) : null,
-      rule ? t('stripRule', { label: rule }) : null,
+      `${u.className} (${u.roles.map(roleName).join(' / ')})`,
+      ours ? 'your side' : 'opponent',
+      down ? (cause ? `${t('stripDowned')} · ${cause}` : t('stripDowned')) : max > 0 ? `${Math.round(hpFrac * 100)}% HP` : null,
+      rule && !down ? t('stripRule', { label: rule }) : null,
       st?.isCaptain ? t('stripCaptain') : null,
-      down ? t('stripDowned') : null,
       fresh,
     ]
       .filter(Boolean)
       .join(', ');
     return (
-      <li key={u.unit}>
-        <button
-          class={`arena-fighter${sel === u.unit ? ' is-selected' : ''}${down ? ' is-down' : ''}`}
-          type="button"
-          data-testid={`strip-unit-${u.unit}`}
-          data-side={u.side}
-          data-ring={colors.ringStyle}
-          data-down={down ? 'true' : undefined}
-          style={{ '--side-c': hex(colors.ring) } as Record<string, string>}
-          aria-pressed={sel === u.unit ? 'true' : 'false'}
-          aria-label={`${t('stripSelect', { name: u.name })}: ${label}`}
-          onClick={() => onSelect(u.unit)}
-        >
-          <Portrait role={u.roles[0] ?? 'melee'} race={u.raceId} size="xs" />
-          <span class="arena-fighter__text">
-            <span class="arena-fighter__name">
-              {u.name}
-              {st?.isCaptain && (
-                <span class="arena-fighter__crown" aria-hidden="true" {...tipAttrs(t('stripCaptain'))}>
-                  {' '}
-                  ♛
+      <button
+        key={u.unit}
+        class={`afighter${down ? ' is-down' : ''}`}
+        type="button"
+        data-testid={`strip-unit-${u.unit}`}
+        data-side={ours ? 'us' : 'them'}
+        data-fighter={u.fighterId}
+        data-down={down ? 'true' : undefined}
+        aria-pressed={sel === u.unit ? 'true' : 'false'}
+        aria-label={label}
+        onFocus={() => onSelect(u.unit)}
+        onClick={() => onSelect(u.unit)}
+      >
+        <span class="portrait portrait--sm" data-role={u.roles[0] ?? 'melee'} data-race={u.raceId} aria-hidden="true" />
+        <span class="afighter__body">
+          <span class="afighter__line">
+            <span class="afighter__name">{u.name}</span>
+            {st?.isCaptain && (
+              <span class="captain-mark" {...tipAttrs(t('stripCaptain'))}>
+                <span class="u-sr-only">{t('stripCaptain')}</span>
+              </span>
+            )}
+          </span>
+          {down ? (
+            <span class="afighter__line">
+              <span class="afighter__downmark" data-testid={`strip-down-${u.unit}`}>
+                {cause ? `${t('stripDowned')} · ${cause}` : t('stripDowned')}
+              </span>
+            </span>
+          ) : (
+            <span class="afighter__line">
+              {rule && (
+                <span class="rule__id" data-testid={`strip-rule-${u.unit}`} {...tipAttrs(rule === 'S' ? t('stripStance') : rule === 'T' ? t('stripForced') : 'The rule he is acting on now')}>
+                  {rule}
                 </span>
               )}
-            </span>
-            <span class="arena-fighter__roles">
-              {u.roles.map((r) => (
-                <RoleGlyph key={r} role={r} label={roleName(r)} />
-              ))}
-            </span>
-          </span>
-          <span class="arena-fighter__hp" role="img" aria-label={st && max > 0 ? t('stripHp', { hp, max }) : ''} style={{ '--hp': hpFrac, '--shield': shieldFrac } as Record<string, number>}>
-            <i class="arena-fighter__hp-fill" />
-            <i class="arena-fighter__hp-shield" />
-          </span>
-          <span class="arena-fighter__badges">
-            {rule && (
-              <span class="arena-fighter__rule u-num" data-testid={`strip-rule-${u.unit}`} {...tipAttrs(rule === 'S' ? t('stripStance') : rule === 'T' ? t('stripForced') : null)}>
-                {rule}
+              <span class="afighter__hp" style={{ '--hp': hpFrac, '--sh': shieldFrac } as Record<string, number>}>
+                <i class="abar__hp" style={{ '--hp': hpFrac } as Record<string, number>} />
+                {shieldFrac > 0 && <i class="abar__shield" style={{ '--sh': shieldFrac } as Record<string, number>} />}
               </span>
-            )}
+              <span class="afighter__pct">{max > 0 ? `${Math.round(hpFrac * 100)}%` : ''}</span>
+            </span>
+          )}
+          <span class="afighter__line">
+            {u.roles.map((r) => (
+              <RoleGlyph key={r} role={r} label={roleName(r)} />
+            ))}
+            <span class="afighter__class">{u.className}</span>
             {fresh && (
-              <span class="tag tag--warn arena-fighter__fresh" data-testid={`strip-fresh-${u.unit}`}>
-                {fresh}
+              <span class="tag tag--warn" data-testid={`strip-fresh-${u.unit}`} {...tipAttrs(`${fresh}: starts the round with a Freshness penalty`)}>
+                {fresh.replace(/[()]/g, '')}
               </span>
             )}
-            {u.entered && <span class="arena-fighter__mark" {...tipAttrs(t('stripEntered'))}>◂</span>}
-            {down && (
-              <span class="arena-fighter__down" aria-hidden="true">
-                ◆
-              </span>
-            )}
+            {u.entered && <span class="u-xs u-faint" {...tipAttrs(t('stripEntered'))}>sub</span>}
           </span>
-        </button>
-      </li>
+        </span>
+      </button>
+    );
+  };
+  const group = (side: 0 | 1, ours: boolean, club: string) => {
+    const units = ctx.units
+      .filter((u) => u.side === side)
+      .sort((a, b) => (hud.rows[a.unit] === hud.rows[b.unit] ? a.unit - b.unit : hud.rows[a.unit] === 'front' ? -1 : 1));
+    return (
+      <div class="astrip__side" role="group" aria-label={t(ours ? 'hudSide' : 'hudSideThem', { club })}>
+        {units.map((u) => card(u, ours))}
+      </div>
     );
   };
   return (
-    <section class="arena-strip" data-testid="arena-strip" aria-label={t('stripLabel')}>
-      <ul class="arena-strip__side arena-strip__side--home" role="list">
-        {bySide(0).map(card)}
-      </ul>
-      <ul class="arena-strip__side arena-strip__side--away" role="list">
-        {bySide(1).map(card)}
-      </ul>
-    </section>
+    <footer class="astrip" aria-label={t('stripLabel')} data-testid="arena-strip">
+      {group(hud.left.side, hud.left.ours || hud.left.side === (ctx.playerSide ?? 0), hud.left.name)}
+      {group(hud.right.side, false, hud.right.name)}
+    </footer>
   );
 }

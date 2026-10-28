@@ -9,7 +9,6 @@ import type { ReplayAvailability } from '../../../core/game';
 import type { FixtureId } from '../../../core/model';
 import { fixtureContent } from '../../../core/testkit';
 import { engineError, err } from '../../../core/util';
-import { installShortcuts } from '../../app/shortcuts';
 import { resetToasts } from '../../components';
 import { TestProviders, createTestStore } from '../../debug/test-store';
 import type { GameEngine } from '../../store/engine';
@@ -44,7 +43,6 @@ function mountReplay(params: Record<string, string>, over: (e: GameEngine, w: Wa
   // Round 3 is being watched; rounds 1 (won) and 2 (lost) are committed and replayable.
   t.store.replaceWorld(liveWatchState(w, { round: 3, wins: ['home', 'away'] }), content);
   const harness = createFakeViewerHarness(fakeTimeline, content);
-  dispose = installShortcuts(() => ({}));
   render(
     <TestProviders store={t.store}>
       <ViewerFactoryContext.Provider value={harness.factory}>
@@ -66,18 +64,15 @@ describe('replay screen', () => {
     const m = mountReplay({ round: '2' });
     await ready();
     const tabs = screen.getByTestId('arena-round-tabs');
-    const labels = [...tabs.querySelectorAll('[role="tab"]')].map((b) => b.textContent);
-    expect(labels).toHaveLength(2);
-    expect(labels[0]).toContain('Round 1');
-    expect(labels[0]).toContain('W');
-    expect(labels[1]).toContain('Round 2');
-    expect(labels[1]).toContain('L');
-    expect(tabs.querySelector('[aria-selected="true"]')!.textContent).toContain('Round 2');
+    const labels = [...tabs.querySelectorAll('[role="tab"]')].map((b) => b.textContent?.trim());
+    expect(labels).toEqual(['R1 W', 'R2 L']);
+    expect(tabs.querySelector('[aria-selected="true"]')!.textContent).toContain('R2');
     expect(text('arena-mode')).toBe('Replay');
     expect(m.viewer().loadedLog!.header.round).toBe(2);
     // A replay auto-plays; its score before the round is shown.
     expect(m.viewer().calls).toContain('play');
-    expect(text('arena-score')).toBe('1–0');
+    expect(screen.getByTestId('hud-left-pips').getAttribute('aria-label')).toBe('Rounds won: 1 of 2');
+    expect(screen.getByTestId('hud-right-pips').getAttribute('aria-label')).toBe('Rounds won: 0 of 2');
   });
 
   it('a key moment opens it at the tick in the link, 2 s before the moment', async () => {
@@ -86,9 +81,12 @@ describe('replay screen', () => {
     await ready();
     expect(m.viewer().tick).toBe(360);
     // Free seeking: the scrubber spans the whole round and any tick can be picked.
-    const scrub = screen.getByTestId('arena-scrubber') as HTMLInputElement;
-    expect(scrub.max).toBe('1000');
-    fireEvent.input(scrub, { target: { value: '900' } });
+    const scrub = screen.getByTestId('arena-scrubber');
+    expect(scrub.getAttribute('aria-valuemax')).toBe('50');
+    expect(scrub.getAttribute('data-span')).toBe('1000');
+    // A pointer on the track picks the tick (the track spans the whole round).
+    scrub.getBoundingClientRect = () => ({ left: 100, width: 1000, top: 0, height: 20, right: 1100, bottom: 20, x: 100, y: 0, toJSON: () => ({}) }) as DOMRect;
+    fireEvent.pointerDown(scrub, { clientX: 100 + 900, pointerId: 1 });
     expect(m.viewer().tick).toBe(900);
     key(' '); // pause
     await waitFor(() => expect(m.viewer().playing).toBe(false));
@@ -111,7 +109,8 @@ describe('replay screen', () => {
     });
     // The recorded winner of round 2 is away: 1–0 before, 1–1 after.
     await waitFor(() => expect(screen.getByTestId('replay-end')).toBeTruthy());
-    expect(text('arena-score')).toBe('1–1');
+    expect(screen.getByTestId('hud-left-pips').getAttribute('aria-label')).toBe('Rounds won: 1 of 2');
+    expect(screen.getByTestId('hud-right-pips').getAttribute('aria-label')).toBe('Rounds won: 1 of 2');
     expect(screen.queryByTestId('replay-next')).toBeNull(); // round 2 is the last committed round
     fireEvent.click(screen.getByTestId('replay-again'));
     expect(m.viewer().tick).toBe(0);
@@ -142,7 +141,6 @@ describe('replay screen', () => {
     const t = createTestStore({ world: 'none', engine: core.engine });
     t.store.replaceWorld(w.state, content);
     const harness = createFakeViewerHarness(fakeTimeline, content);
-    dispose = installShortcuts(() => ({}));
     render(
       <TestProviders store={t.store}>
         <ViewerFactoryContext.Provider value={harness.factory}>

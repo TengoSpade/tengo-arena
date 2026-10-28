@@ -10,8 +10,8 @@ import { effect, signal, type ReadonlySignal, type Signal } from '@preact/signal
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ContentDB } from '../../../core/content';
 import type { RoundPlayback } from '../../../core/game';
-import { DEFAULT_CAMERA, type ArenaFrameState, type ArenaRoundContext, type DecisionSnapshot, type KeyMoment, type PlaybackStop, type Speed } from '../../../render';
-import type { ArenaViewer } from '../../../render/viewer';
+import type { ArenaFrameState, ArenaRoundContext, DecisionSnapshot, KeyMoment, PlaybackStop, Speed } from '../../../render';
+import type { ArenaViewer, ArenaViewerOptions } from '../../../render/viewer';
 import { effectiveTheme, reducedMotion, settings, updateArenaSettings } from '../../store/settings';
 import { hookSlot } from './hook-registry';
 import { readArenaPalette } from './palette';
@@ -65,7 +65,6 @@ export interface ArenaSession {
   selectNext(delta: 1 | -1): void;
   cycleLabels(): void;
   recentre(): void;
-  setPadding(top: number, bottom: number): void;
   decisionAt(unit: number): DecisionSnapshot | null;
   decisionsOf(unit: number): readonly DecisionSnapshot[] | null;
   retry(): void;
@@ -127,7 +126,10 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
         const arena = settings.value.arena;
         const host = hostRef.current;
         if (!host) throw new Error('no host element');
+        // `tabStop: false` (WP-M2D, additive): the host element below is the one tab stop (role img, focus ring outside the
+        // wall), so the viewer's own canvas must not be a second one. Older viewers ignore the option.
         viewer = await factory({
+          tabStop: false,
           host,
           content: o.content,
           palette: readArenaPalette(effectiveTheme(settings.value)),
@@ -149,7 +151,7 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
           onSelect: (unit) => {
             s.selected.value = unit;
           },
-        });
+        } as ArenaViewerOptions);
         if (disposed) {
           viewer.destroy();
           return;
@@ -233,6 +235,7 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
   useEffect(() => {
     let theme = effectiveTheme(settings.value);
     let motion = reducedMotion(settings.value);
+    let scale = settings.value.scale;
     return effect(() => {
       const st = settings.value;
       const v = viewerRef.current;
@@ -242,10 +245,11 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
       const now = effectiveTheme(st);
       const nowMotion = reducedMotion(st);
       v.setReducedMotion(nowMotion);
-      // The palette is read from the CSS tokens once per theme or motion change, never per frame.
-      if (now !== theme || nowMotion !== motion) {
+      // The palette is read from the CSS tokens once per theme, motion or interface-scale change, never per frame.
+      if (now !== theme || nowMotion !== motion || st.scale !== scale) {
         theme = now;
         motion = nowMotion;
+        scale = st.scale;
         v.setPalette(readArenaPalette(now));
       }
     });
@@ -344,9 +348,6 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
     },
     recentre() {
       view()?.setCamera({ follow: null, zoom: 1 });
-    },
-    setPadding(top, bottom) {
-      view()?.setCamera({ padding: { ...DEFAULT_CAMERA.padding, top, bottom } });
     },
     decisionAt(unit) {
       return view()?.decisionAt(unit) ?? null;

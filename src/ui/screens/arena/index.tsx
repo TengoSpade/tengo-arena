@@ -10,10 +10,11 @@ import { signal } from '@preact/signals';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ContentDB } from '../../../core/content';
 import type { MatchPlayback, RoundPlayback } from '../../../core/game';
-import type { FixtureId, GameState } from '../../../core/model';
+import type { FixtureId, GameState, WeekReport } from '../../../core/model';
 import type { EngineError, Result } from '../../../core/util';
 import type { ArenaViewer } from '../../../render/viewer';
-import { afterMatch } from '../../app/after-match';
+import { afterMatch, opensReport } from '../../app/after-match';
+import { quickSaveOrAsk } from '../../app/save-intent';
 import { navigate } from '../../app/router';
 import type { ScreenProps } from '../../app/routes';
 import { Empty, Modal, PageHeader, showToast } from '../../components';
@@ -26,9 +27,9 @@ import { registerArenaTicketInfo } from '../../tickets/arena-info';
 import { ArenaLayout } from './Arena';
 import { buildHud, buildRoundContext, fightInputOf } from './context';
 import { readArenaPalette } from './palette';
-import { ROUND_END_MS, RoundEndOverlay, resetRoundEnd, roundEnd, type RoundEndState } from './RoundEnd';
+import { ROUND_END_MS, RoundEndOverlay, resetRoundEnd, roundEnd, type RoundEndResult } from './RoundEnd';
 import { useViewerSession, type StopKind } from './session';
-import { clock, t } from './text';
+import { clock, t, t as uiText } from './text';
 
 const TICK_S = 0.05;
 
@@ -39,8 +40,8 @@ export function watchingOf(state: GameState | null): { fixtureId: FixtureId; rou
   return ms && w && w.mode === 'watch' && w.round !== null ? { fixtureId: ms.fixtureId, round: w.round, cursorTick: w.cursorTick } : null;
 }
 
-/** The finished round for the overlay: winner, score (the player's side first) and time, from committed state only. */
-function roundOutcome(state: GameState, fixtureId: FixtureId, round: number): RoundEndState['result'] {
+/** The finished round for the card: winner, match score (the player's side first), time and what opens next, from committed state only. */
+function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId, round: number, report: WeekReport | null): RoundEndResult | null {
   const ms = state.liveMatch && state.liveMatch.fixtureId === fixtureId ? state.liveMatch : null;
   const result = state.results[fixtureId];
   const rounds = ms ? ms.rounds : (result?.rounds ?? []);
@@ -52,9 +53,26 @@ function roundOutcome(state: GameState, fixtureId: FixtureId, round: number): Ro
   const winnerId = r.winner === 'home' ? homeId : awayId;
   const playerHome = state.playerClubId !== null && state.playerClubId === homeId;
   const playerAway = state.playerClubId !== null && state.playerClubId === awayId;
-  const ours = playerHome || playerAway ? (r.winner === 'home') === playerHome : null;
+  const involved = playerHome || playerAway;
+  const ours = involved ? (r.winner === 'home') === playerHome : null;
   const [a, b] = playerAway ? [score.away, score.home] : [score.home, score.away];
-  return { winner: (winnerId ? state.clubs[winnerId]?.name : undefined) ?? winnerId ?? '', ours, score: `${a}–${b}`, time: clock(r.durationTicks * TICK_S) };
+  const matchOver = ms === null;
+  const winnerName = (winnerId ? state.clubs[winnerId]?.name : undefined) ?? winnerId ?? '';
+  const seconds = r.durationTicks * TICK_S;
+  return {
+    winner: winnerName,
+    ours,
+    score: [a, b],
+    winnerFirst: involved ? ours === true : r.winner === 'home',
+    time: clock(seconds),
+    overtime: seconds >= content.combat.overtime.startS,
+    reason: r.endReason,
+    standing: r.survivors[r.winner],
+    who: involved ? (ours ? uiText('whoOurs') : uiText('whoTheirs')) : ((winnerId ? state.clubs[winnerId]?.shortName : undefined) ?? winnerName),
+    matchOver,
+    next: matchOver ? (report && opensReport(state, report) ? 'report' : 'home') : ms.watch?.round != null ? 'kickoff' : 'between',
+    nextRound: round + 1,
+  };
 }
 
 /**
@@ -84,21 +102,17 @@ export default function ArenaScreen(_props: ScreenProps) {
   const state = store.game.value;
   const content = store.content.value;
   const over = roundEnd.value;
-  // While the committed round's result shows, the round stays mounted (the state under it has already moved on).
+  // While the round is being committed and its result shows, the round stays mounted (the state under it moves on at
+  // the commit, before the card is up, and the card lives inside the round's screen).
   const frozen = useRef<{ fixtureId: FixtureId; round: number } | null>(null);
   const w = watchingOf(state);
-  if (over?.phase === 'result' && frozen.current) {
+  if ((over?.phase === 'result' || over?.phase === 'saving') && frozen.current) {
     // keep the frozen round
   } else frozen.current = w ? { fixtureId: w.fixtureId, round: w.round } : null;
   useEffect(() => () => resetRoundEnd(), []);
 
   const shown = frozen.current;
-  return (
-    <>
-      {state && content && shown ? <LiveArena key={`${shown.fixtureId}:${shown.round}`} store={store} content={content} fixtureId={shown.fixtureId} round={shown.round} /> : <NoRound state={state} />}
-      <RoundEndOverlay />
-    </>
-  );
+  return state && content && shown ? <LiveArena key={`${shown.fixtureId}:${shown.round}`} store={store} content={content} fixtureId={shown.fixtureId} round={shown.round} /> : <NoRound state={state} />;
 }
 
 function NoRound({ state }: { state: GameState | null }) {
@@ -169,7 +183,7 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
   const { playback, ctx, match } = loaded;
   const startTick = playback.startTick;
   const state = store.game.value!;
-  const [confirm, setConfirm] = useState<'skip' | 'simulate' | null>(null);
+  const [confirm, setConfirm] = useState<'skip' | 'simulate' | 'leave' | null>(null);
   const [busy, setBusy] = useState(false);
   const resumePlaying = useRef(false);
   const committing = useRef(false);
@@ -191,22 +205,22 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
   };
 
   /** Show the committed round for 1.5 s, then open what comes next. */
-  const showResult = (after: GameState, next: () => void): void => {
-    const result = roundOutcome(after, fixtureId, round);
-    roundEnd.value = { phase: 'result', round, result, next, retry: null };
+  const showResult = (after: GameState, next: () => void, report: WeekReport | null = null): void => {
+    const result = roundOutcome(after, content, fixtureId, round, report);
+    roundEnd.value = { phase: 'result', round, bestOf: ctx.bestOf, result, next, retry: null };
   };
 
   const finish = async (): Promise<void> => {
     if (committing.current) return;
     committing.current = true;
     setBusy(true);
-    roundEnd.value = { phase: 'saving', round, result: null, next: null, retry: null };
+    roundEnd.value = { phase: 'saving', round, bestOf: ctx.bestOf, result: null, next: null, retry: null };
     // The hash of the log the viewer loaded (never a hash of anything else): the commit compares it in every build.
     const res = await arena.finishRound({ round, logHash: playback.log.hash });
     committing.current = false;
     setBusy(false);
     const after = store.game.value ?? state;
-    if (res.ok) return showResult(after, () => afterMatch(after, res.value));
+    if (res.ok) return showResult(after, () => afterMatch(after, res.value), res.value);
     switch (res.error.code) {
       case MATCH_PAUSED:
         return showResult(after, () => navigate('#/between-rounds'));
@@ -221,13 +235,13 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
           navigate(w ? '#/arena' : after.liveMatch?.phase === 'between_rounds' ? '#/between-rounds' : '#/home');
           return;
         }
-        roundEnd.value = { phase: 'mismatch', round, result: null, next: null, retry: null, message: res.error.message };
+        roundEnd.value = { phase: 'mismatch', round, bestOf: ctx.bestOf, result: null, next: null, retry: null, message: res.error.message };
         return;
       }
       case WATCH_NOT_SHOWN:
       case SAVE_ROUND_FAILED:
       default:
-        roundEnd.value = { phase: 'failed', round, result: null, next: null, retry: () => void finish(), message: res.error.message };
+        roundEnd.value = { phase: 'failed', round, bestOf: ctx.bestOf, result: null, next: null, retry: () => void finish(), message: res.error.message };
     }
   };
 
@@ -260,7 +274,8 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
     [],
   );
 
-  const hud = useMemo(() => buildHud({ state, ctx, match, kind: 'live' }), []);
+  const hud = useMemo(() => buildHud({ state, ctx, playback, kind: 'live' }), []);
+  void match;
   const roleName = (r: string) => content.combat.archetypes.find((a) => a.id === r)?.name ?? r;
 
   const askSkip = () => {
@@ -274,6 +289,16 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
     resumePlaying.current = session.snap.peek().playing;
     session.pause();
     setConfirm('simulate');
+  };
+  const askLeave = () => {
+    if (committing.current) return;
+    resumePlaying.current = session.snap.peek().playing;
+    session.pause(); // a stop: the cursor is saved
+    setConfirm('leave');
+  };
+  const doLeave = () => {
+    setConfirm(null);
+    navigate('#/home'); // the match stays live: Continue reads Resume watching
   };
   const cancel = () => {
     setConfirm(null);
@@ -311,8 +336,32 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
       busy={busy}
       onSkip={askSkip}
       onSimulateRest={askSimulate}
+      onEscape={askLeave}
+      onSave={() => void quickSaveOrAsk(store)}
+      roundOver={roundEnd.value?.phase === 'result'}
       overlay={
         <>
+          <RoundEndOverlay />
+          <Modal
+            open={confirm === 'leave'}
+            onClose={cancel}
+            title={t('leaveTitle')}
+            icon="info"
+            onEnter={doLeave}
+            footer={
+              <>
+                <button class="btn" type="button" onClick={cancel} data-testid="leave-stay">
+                  {t('leaveStay')} <kbd>Esc</kbd>
+                </button>
+                <button class="btn btn--primary" type="button" onClick={doLeave} data-autofocus data-testid="confirm-leave">
+                  {t('leaveConfirm')} <kbd>Enter</kbd>
+                </button>
+              </>
+            }
+            testId="dialog-leave"
+          >
+            <p>{t('leaveText')}</p>
+          </Modal>
           <Modal
             open={confirm === 'skip'}
             onClose={cancel}

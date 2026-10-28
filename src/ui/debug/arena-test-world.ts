@@ -7,7 +7,7 @@
  */
 import type { ContentDB } from '../../core/content';
 import type { MatchPlayback, ReplayAvailability, RoundPlayback } from '../../core/game';
-import type { ClubId, GameState, MatchState, RoundLineups, RoundResult, WeekReport } from '../../core/model';
+import type { ClubId, FixtureId, GameState, MatchState, RoundLineups, RoundResult, WeekReport } from '../../core/model';
 import type { RoundProbe, UnitProbe } from '../../core/sim';
 import { fixtureMatchState } from '../../core/testkit';
 import { engineError, err, ok, type EngineError, type Result } from '../../core/util';
@@ -128,7 +128,8 @@ export function probeOf(tick: number): RoundProbe {
     evaluation: i === 3 && tick >= 400 ? null : { rule: 0, action: 'attack', target: 6, trace: [{ rule: 0, fired: true, skip: null, reason: null }] },
     blockedBy: i === 3 && tick >= 400 ? 'downed' : null,
   });
-  return { tick, units: Array.from({ length: 10 }, (_, i) => unit(i)) };
+  // evaluatedTick (WP-M2A): the tick the evaluation is the decision of, the one after the probed state.
+  return { tick, evaluatedTick: tick + 1, units: Array.from({ length: 10 }, (_, i) => unit(i)) } as RoundProbe;
 }
 
 export interface ScriptedCore {
@@ -181,6 +182,15 @@ export function createScriptedCore(w: WatchWorld, opts: { winners?: ('home' | 'a
     ms.score = { home: ms.score.home + (win === 'home' ? 1 : 0), away: ms.score.away + (win === 'away' ? 1 : 0) };
     const decided = ms.score.home * 2 > ms.bestOf || ms.score.away * 2 > ms.bestOf;
     if (decided) {
+      // The finished match as the store keeps it: afterMatch and the round card read the result.
+      next.results[ms.fixtureId] = {
+        fixtureId: ms.fixtureId,
+        homeClubId: ms.home.clubId,
+        awayClubId: ms.away.clubId,
+        rounds: ms.rounds,
+        score: ms.score,
+        winnerClubId: ms.score.home > ms.score.away ? ms.home.clubId : ms.away.clubId,
+      } as unknown as GameState['results'][FixtureId];
       next.liveMatch = null;
       next.calendar = { ...next.calendar, weekIndex: next.calendar.weekIndex + 1 };
       return ok({ state: next, week: REPORT(ms.fixtureId), pause: null });

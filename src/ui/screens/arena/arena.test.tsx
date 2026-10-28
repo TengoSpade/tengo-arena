@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ContentDB } from '../../../core/content';
 import type { GameState } from '../../../core/model';
 import { fixtureContent } from '../../../core/testkit';
-import { installShortcuts } from '../../app/shortcuts';
 import { resetToasts, toasts } from '../../components';
 import { TestProviders, createTestStore } from '../../debug/test-store';
 import { DEFAULT_SETTINGS, settings, updateSettings } from '../../store/settings';
@@ -47,7 +46,6 @@ async function mount(opts: { round?: number; cursorTick?: number; winners?: ('ho
   const state = opts.noWatch ? w.state : liveWatchState(w, { round: opts.round, cursorTick: opts.cursorTick, wins: opts.wins });
   t.store.replaceWorld(state, content);
   const harness = createFakeViewerHarness(fakeTimeline, content, { failLoad: opts.failLoad });
-  dispose = installShortcuts(() => ({}));
   render(
     <TestProviders store={t.store}>
       <ViewerFactoryContext.Provider value={harness.factory}>
@@ -76,22 +74,31 @@ async function advance(s: Setup, tick: number) {
 describe('arena screen: a live round', () => {
   it('shows the HUD, both sides of the strip and starts a fresh round playing at the remembered speed', async () => {
     const s = await mount();
-    expect(text('hud-home')).toContain(s.w.state.clubs[s.w.home]!.name);
-    expect(text('hud-away')).toContain(s.w.state.clubs[s.w.away]!.name);
-    expect(text('arena-score')).toBe('0–0');
+    // The player's side is on the left, with "You" and the standing; rounds won are pips toward the 2 a best of 3 takes.
+    expect(text('hud-left')).toContain(s.w.state.clubs[s.w.home]!.name);
+    expect(text('hud-left')).toContain('You');
+    expect(text('hud-right')).toContain(s.w.state.clubs[s.w.away]!.name);
+    expect(text('hud-left-standing')).toBe('5 of 5 standing');
+    expect(text('hud-right-standing')).toBe('5 of 5 standing');
+    expect(screen.getByTestId('hud-left-pips').getAttribute('aria-label')).toBe('Rounds won: 0 of 2');
+    expect(screen.getByTestId('hud-left-pips').querySelectorAll('.spip')).toHaveLength(2);
     expect(text('arena-clock')).toBe('0:00');
-    expect(text('arena-standing')).toBe('5 v 5');
-    expect(text('arena-mode')).toBe('Live');
-    expect(screen.getByTestId('arena-pips').querySelectorAll('li')).toHaveLength(3);
-    expect(screen.getByTestId('arena-pips').querySelector('[data-state="current"]')).toBeTruthy();
-    // Ten fighters, the player's side first in the DOM order of the home group; the colour-free side cue is the ring style.
-    expect(screen.getByTestId('arena-strip').querySelectorAll('button.arena-fighter')).toHaveLength(10);
-    expect(screen.getByTestId('strip-unit-0').getAttribute('data-ring')).toBe('solid');
-    expect(screen.getByTestId('strip-unit-5').getAttribute('data-ring')).toBe('double');
+    expect(screen.getByTestId('arena-hud').textContent).toContain('Round 1 of 3');
+    expect(screen.getByTestId('status-live').textContent).toContain('Live');
+    // Ten fighter cards, ours on the left; the colour-free side cue is the card border (data-side drives it).
+    expect(screen.getByTestId('arena-strip').querySelectorAll('button.afighter')).toHaveLength(10);
+    expect(screen.getByTestId('strip-unit-0').getAttribute('data-side')).toBe('us');
+    expect(screen.getByTestId('strip-unit-5').getAttribute('data-side')).toBe('them');
+    expect(screen.getByTestId('arena-dock')).toBeTruthy(); // the dock is open at every width
     // A fresh round plays at once (so Play match plus one Enter per boundary holds); the calls slot stays hidden.
     expect(s.viewer().calls).toContain('play');
     expect(s.viewer().calls).toContain('speed:1');
     expect(screen.getByTestId('arena-calls').hasAttribute('hidden')).toBe(true);
+    // The viewer gets the palette read from the tokens (metrics included) and is not a second tab stop: the host is the one.
+    const o = s.viewer().options as { tabStop?: boolean; palette: { metrics: { ringWidthPx: number }; plate: number }; reducedMotion: boolean };
+    expect(o.tabStop).toBe(false);
+    expect(o.palette.metrics.ringWidthPx).toBeGreaterThan(0);
+    expect(typeof o.reducedMotion).toBe('boolean');
     // The viewer got the round's log and nothing else of the round was asked of core.
     expect(s.viewer().loadedLog?.header.round).toBe(1);
   });
@@ -101,9 +108,11 @@ describe('arena screen: a live round', () => {
     expect(s.viewer().calls).not.toContain('play');
     expect(s.viewer().playing).toBe(false);
     expect(text('arena-clock')).toBe('0:10');
-    const scrub = screen.getByTestId('arena-scrubber') as HTMLInputElement;
-    expect(scrub.max).toBe('200');
-    expect(scrub.value).toBe('200');
+    // The live track is a fixed 0 to 75 s: its length says nothing about the round. The playhead is at the head.
+    const scrub = screen.getByTestId('arena-scrubber');
+    expect(scrub.getAttribute('aria-valuemax')).toBe('75');
+    expect(scrub.getAttribute('aria-valuenow')).toBe('10');
+    expect(scrub.getAttribute('aria-valuetext')).toBe('0:10, at the live head');
     expect(toasts.value.map((x) => x.title)).toContain('Resumed where the round last stopped');
   });
 
@@ -119,6 +128,58 @@ describe('arena screen: a live round', () => {
     await waitFor(async () => expect((await s.saves.list()).some((m) => m.slotId === 'auto-round')).toBe(true));
     expect(s.state().liveMatch!.watch!.cursorTick).toBe(200);
     expect(JSON.parse((await s.saves.read('auto-round'))!).state.liveMatch.watch.cursorTick).toBe(200);
+  });
+
+  it('Ctrl S saves only while paused (the cursor is already saved with the pause); F8 and the rest of the shell are not here', async () => {
+    const s = await mount();
+    fireEvent.keyDown(screen.getByTestId('arena-host'), { key: 's', ctrlKey: true });
+    expect(location.hash).toBe('#/arena'); // the round runs: nothing saved or opened
+    await advance(s, 100);
+    key(' ');
+    await waitFor(() => expect(s.viewer().playing).toBe(false));
+    fireEvent.keyDown(screen.getByTestId('arena-host'), { key: 's', ctrlKey: true });
+    // No manual slot yet for this career: Save as opens, as everywhere (the pause saved the cursor first).
+    await waitFor(() => expect(location.hash).toBe('#/saves'));
+    expect(s.core.watchCommands.at(-1)?.tick).toBe(100);
+  });
+
+  it('D hides and shows the dock, remembered per device; nothing else changes the layout (A18)', async () => {
+    const s = await mount();
+    expect(screen.getByTestId('arena-dock')).toBeTruthy();
+    key('d');
+    await waitFor(() => expect(screen.queryByTestId('arena-dock')).toBeNull());
+    expect(settings.value.arena.dockOpen).toBe(false);
+    expect(screen.getByTestId('screen-arena').querySelector('.arena-body')!.getAttribute('data-dock')).toBe('closed');
+    // Pausing, an auto-pause stop and a selection never open or close it on their own.
+    await advance(s, 600);
+    expect(screen.queryByTestId('arena-dock')).toBeNull();
+    key('d');
+    await waitFor(() => expect(screen.getByTestId('arena-dock')).toBeTruthy());
+    expect(settings.value.arena.dockOpen).toBe(true);
+  });
+
+  it('Esc with nothing to close asks once to leave (the match stays live), and Stay resumes', async () => {
+    const s = await mount();
+    await advance(s, 100);
+    key('Escape');
+    await waitFor(() => expect(screen.getByTestId('dialog-leave').hasAttribute('open')).toBe(true));
+    expect(s.viewer().playing).toBe(false);
+    await waitFor(() => expect(s.core.watchCommands.at(-1)?.tick).toBe(100)); // leaving is a stop: the cursor is saved
+    fireEvent.click(screen.getByTestId('leave-stay'));
+    await waitFor(() => expect(s.viewer().playing).toBe(true));
+    expect(location.hash).toBe('#/arena');
+    key('Escape');
+    await waitFor(() => expect(screen.getByTestId('dialog-leave').hasAttribute('open')).toBe(true));
+    fireEvent.click(screen.getByTestId('confirm-leave'));
+    expect(location.hash).toBe('#/home');
+    expect(s.state().liveMatch!.watch!.round).toBe(1); // still live: Continue reads Resume watching
+  });
+
+  it('Shift Space is Simulate the rest and asks once', async () => {
+    const s = await mount();
+    key(' ', { shiftKey: true });
+    await waitFor(() => expect(screen.getByTestId('dialog-simulate').hasAttribute('open')).toBe(true));
+    expect(s.viewer().playing).toBe(false);
   });
 
   it('saves the reveal frontier (the furthest tick shown), not the playhead after a rewind (tech-019)', async () => {
@@ -150,8 +211,12 @@ describe('arena screen: a live round', () => {
     expect(items).toHaveLength(1);
     expect(items[0]!.textContent).toMatch(/downed by/);
     expect(items[0]!.getAttribute('data-ours')).toBe('true');
-    expect(text('arena-standing')).toBe('4 v 5');
+    expect(text('hud-left-standing')).toBe('4 of 5 standing');
     expect(screen.getByTestId('strip-unit-3').getAttribute('data-down')).toBe('true');
+    // The card says who downed him (from the key moments shown so far) and the transport names the cause.
+    expect(text('strip-down-3')).toMatch(/^Downed · /);
+    expect(text('status-auto')).toContain('Paused automatically');
+    expect(text('status-note')).toMatch(/was downed/);
     await waitFor(() => expect(s.core.watchCommands.at(-1)?.tick).toBe(400));
   });
 
@@ -264,15 +329,19 @@ describe('arena screen: the inspector (P-22)', () => {
     expect(text('inspector-name')).toBe(s.w.state.fighters[s.w.prepared.home.active[0]!]!.name.full);
     // The recorded decision at tick 200 is rule 2 (R2) of his preset, with the skipped rule above it.
     await waitFor(() => expect(screen.getByTestId('inspector-rule').textContent).toMatch(/^R2/));
+    // Every rule in order: the first skipped with its reason and the observed value, the second fired, the rest not reached.
     const lines = screen.getAllByTestId('trace-line');
-    expect(lines.map((l) => l.getAttribute('data-fired'))).toEqual(['false', 'true']);
-    expect(lines[0]!.textContent).toContain('skipped');
-    expect(lines[0]!.textContent).toContain('condition 1 was not met (saw 8200)');
+    expect(lines.map((l) => l.getAttribute('data-fired')).slice(0, 2)).toEqual(['false', 'true']);
+    expect(lines[0]!.textContent).toContain('Condition 1 was false.');
+    expect(lines[0]!.textContent).toContain('Observed 8200.');
+    expect(lines[1]!.textContent).toContain('Fired.');
+    expect(lines.slice(2).every((l) => l.getAttribute('data-reached') === 'false')).toBe(true);
+    expect(lines.at(-1)!.textContent).toContain('Not reached: a rule fired.');
     // The probe: a live round waits for the saved cursor (200 was persisted at the lock), then asks core for tick 200.
     await waitFor(() => expect(screen.getByTestId('inspector-now-rule')).toBeTruthy());
     expect(s.core.inspects.at(-1)).toEqual([1, 200]);
     expect(screen.getAllByTestId('inspector-cooldown')[0]!.textContent).toMatch(/ready in 2s/);
-    expect(screen.getByTestId('inspector-status').textContent).toMatch(/Stunned 1s/);
+    expect(screen.getByTestId('inspector-status').textContent).toMatch(/Stunned 1 s/);
   });
 
   it('asks to pause first while the round runs, and Esc closes it before going back', async () => {

@@ -210,6 +210,8 @@ export const en = {
   'continue.saveFailedTitle': 'Could not save the lineup lock',
   'continue.saveFailedSub': 'Nothing started. Retry plays the same round.',
   'continue.retry': 'Retry',
+  'continue.resultOnly': 'result only',
+  'continue.watchTheMatch': 'open the arena',
 
   // ---- blockers (core Blocker codes; 02 §3) ---------------------------------------------------------
   'blocker.lineup.incomplete': 'Lineup needs 5 fit fighters',

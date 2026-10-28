@@ -13,11 +13,12 @@ import type { EngineError, Result } from '../../../core/util';
 import { navigate } from '../../app/router';
 import type { ScreenProps } from '../../app/routes';
 import type { ShortcutHandler, ShortcutMap } from '../../app/shortcuts';
-import { Callout, Empty, PageHeader, Tabs } from '../../components';
+import { Callout, Empty, PageHeader } from '../../components';
 import { useStore, type AppStore } from '../../store';
 import { errorText } from '../../store/messages';
 import { effectiveTheme, settings } from '../../store/settings';
 import { useArena } from '../../store/arena';
+import { tipAttrs } from '../../components';
 import { registerArenaTicketInfo } from '../../tickets/arena-info';
 import { useEffect } from 'preact/hooks';
 import { ArenaLayout } from './Arena';
@@ -151,22 +152,16 @@ function ReplayRound({
   }, [fixtureId, round]);
 
   const tabs = (
-    <div class="arena-tabs" data-testid="arena-round-tabs">
-      <Tabs<string>
-        label={t('replayRounds')}
-        idPrefix="replay-round"
-        selected={String(round)}
-        onSelect={(id) => onRound(Number(id))}
-        tabs={rounds.map((n) => {
-          const w = match?.rounds.find((r) => r.round === n)?.winner ?? null;
-          const ours = w === null || match?.playerSide == null ? null : w === match.playerSide;
-          return { id: String(n), label: ours === null ? t('replayRoundTab', { n }) : `${t('replayRoundTab', { n })} · ${ours ? t('replayWon') : t('replayLost')}`, kbd: `Alt ${n}` };
-        })}
-        inset
-      />
-      <a class="btn btn--sm btn--ghost" href={`#/match/${encodeURIComponent(fixtureId)}`} data-testid="replay-report-link">
-        {t('endReplayReport')}
-      </a>
+    <div class="segmented" role="tablist" aria-label={t('roundTabs')} data-testid="arena-round-tabs">
+      {rounds.map((n) => {
+        const w = match?.rounds.find((r) => r.round === n)?.winner ?? null;
+        const ours = w === null || match?.playerSide == null ? null : w === match.playerSide;
+        return (
+          <button key={n} type="button" role="tab" aria-pressed={n === round ? 'true' : 'false'} aria-selected={n === round ? 'true' : 'false'} onClick={() => onRound(n)} {...tipAttrs(`Alt ${n}`)}>
+            R{n} {ours !== null && <span class="u-faint">{ours ? t('replayWon') : t('replayLost')}</span>}
+          </button>
+        );
+      })}
     </div>
   );
   const keys: Record<string, ShortcutHandler> = {};
@@ -241,9 +236,12 @@ function ReplayStage({
     const w = ended ? playback.result?.winner : null;
     return w ? { home: before.home + (w === 'home' ? 1 : 0), away: before.away + (w === 'away' ? 1 : 0) } : before;
   }, [playback, ended]);
-  const hud = useMemo(() => buildHud({ state, ctx, match, kind: 'replay', score }), [playback, ended]);
+  const hud = useMemo(() => buildHud({ state, ctx, playback, kind: 'replay', score }), [playback, ended]);
+  void match;
   const roleName = (r: string) => content.combat.archetypes.find((a) => a.id === r)?.name ?? r;
   const next = rounds[rounds.indexOf(round) + 1];
+  // Esc and the Report button: back to the match report (the fixture round of the test hook has none: Home).
+  const toReport = () => navigate(hookSlot.fixture?.fixtureId === fixtureId ? '#/home' : `#/match/${encodeURIComponent(fixtureId)}`);
 
   return (
     <ArenaLayout
@@ -258,31 +256,38 @@ function ReplayStage({
       probe={(tick) => arena.inspect(state, fixtureId, round, tick)}
       busy={false}
       onSkip={() => session.seek(snap.end ?? snap.head)}
-      aboveControls={tabs}
+      statusSlot={tabs}
+      onReport={toReport}
+      onEscape={toReport}
       extraKeys={keys}
       overlay={
         ended ? (
-          <div class="arena-replay-end" role="status" data-testid="replay-end">
-            <strong>{t('endReplayTitle', { n: round })}</strong> <span class="u-muted u-num">{clock((snap.end ?? 0) * TICK_S)}</span>
-            <button
-              class="btn btn--sm"
-              type="button"
-              onClick={() => {
-                session.seek(0);
-                session.play();
-              }}
-              data-testid="replay-again"
-            >
-              {t('endReplayAgain')}
-            </button>
-            {next !== undefined && (
-              <button class="btn btn--sm btn--primary" type="button" onClick={() => onRound(next)} data-testid="replay-next">
-                {t('endReplayNext')}
-              </button>
-            )}
-            <button class="btn btn--sm btn--ghost" type="button" onClick={() => navigate(`#/match/${encodeURIComponent(fixtureId)}`)}>
-              {t('endReplayReport')}
-            </button>
+          <div class="around" role="status" data-testid="replay-end">
+            <div class="around__card">
+              <span class="around__title">{t('endReplayTitle', { n: round })}</span>
+              <span class="around__sub u-num">{clock((snap.end ?? 0) * TICK_S)}</span>
+              <span class="around__foot">
+                <button
+                  class="btn btn--sm"
+                  type="button"
+                  onClick={() => {
+                    session.seek(0);
+                    session.play();
+                  }}
+                  data-testid="replay-again"
+                >
+                  {t('endReplayAgain')}
+                </button>
+                {next !== undefined && (
+                  <button class="btn btn--sm btn--primary" type="button" onClick={() => onRound(next)} data-testid="replay-next">
+                    {t('endReplayNext')}
+                  </button>
+                )}
+                <button class="btn btn--sm btn--ghost" type="button" onClick={toReport}>
+                  {t('endReplayReport')}
+                </button>
+              </span>
+            </div>
           </div>
         ) : null
       }

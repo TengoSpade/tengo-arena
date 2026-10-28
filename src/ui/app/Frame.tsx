@@ -425,19 +425,34 @@ function Topbar({
             <Icon name="bug" />
           </button>
         )}
-        {model.action.kind === 'advance' && model.action.playsMatch && model.action.offer && (
-          <button
-            class="btn"
-            type="button"
-            onClick={onOther}
-            data-testid="continue-other"
-            aria-disabled={model.state === 'busy' ? 'true' : undefined}
-            {...tipAttrs(t(model.action.mode === 'watch' ? 'continue.simulateTip' : 'continue.tipWatch'))}
-          >
-            {t(model.action.mode === 'watch' ? 'continue.simulateButton' : 'continue.watchButton')}
-            <kbd>Shift Space</kbd>
-          </button>
-        )}
+        {model.action.kind === 'advance' && model.action.playsMatch && model.action.offer ? (
+          // Play match offers both (open-020, Q54; mockups/arena.html .playmatch): Watch is brass, Simulate neutral; one primary per screen.
+          <div class="playmatch" role="group" aria-label={t('continue.playMatch')}>
+            <button class="continue" type="button" onClick={onContinue} data-testid="continue" aria-busy={model.state === 'busy' ? 'true' : undefined} {...tipAttrs(model.tip)}>
+              {model.action.mode === 'watch' && <Icon name="eye" />}
+              <span class="continue__text">
+                <span class="continue__main">{t(model.action.mode === 'watch' ? 'continue.watch' : 'continue.simulate')}</span>
+                <span class="continue__sub">{model.detail}</span>
+              </span>
+              <kbd>Space</kbd>
+            </button>
+            <button
+              class="continue continue--secondary"
+              type="button"
+              onClick={onOther}
+              data-testid="continue-other"
+              aria-disabled={model.state === 'busy' ? 'true' : undefined}
+              {...tipAttrs(t(model.action.mode === 'watch' ? 'continue.simulateTip' : 'continue.tipWatch'))}
+            >
+              {model.action.mode !== 'watch' && <Icon name="eye" />}
+              <span class="continue__text">
+                <span class="continue__main">{t(model.action.mode === 'watch' ? 'continue.simulate' : 'continue.watch')}</span>
+                <span class="continue__sub">{t(model.action.mode === 'watch' ? 'continue.resultOnly' : 'continue.watchTheMatch')}</span>
+              </span>
+              <kbd>Shift Space</kbd>
+            </button>
+          </div>
+        ) : (
         <button
           class="continue"
           type="button"
@@ -453,6 +468,7 @@ function Topbar({
           </span>
           <kbd>Space</kbd>
         </button>
+        )}
       </div>
     </header>
   );

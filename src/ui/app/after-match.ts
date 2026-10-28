@@ -9,17 +9,27 @@ import { pacingStops, settings } from '../store/settings';
 import { t } from '../text';
 import { navigate } from './router';
 
-export function afterMatch(state: GameState | null, report: WeekReport): void {
-  const clubId = state?.playerClubId;
+/** Whether pacing opens the report after this match (D-L): after a loss or an injury, or always; else Home with a toast. */
+export function opensReport(state: GameState, report: WeekReport): boolean {
+  const clubId = state.playerClubId;
   const fixtureId = report.playerFixtureId;
-  if (!state || !clubId || !fixtureId) return;
+  if (!clubId || !fixtureId) return false;
   const result = state.results[fixtureId];
   const stops = pacingStops(settings.value);
   const won = result?.winnerClubId === clubId;
   const injured = Object.values(state.fighters).some(
     (f) => f.clubId === clubId && f.injury && f.injury.since.season === report.season && f.injury.since.weekIndex === report.weekIndex,
   );
-  const open = stops.reportAlways || (!won && stops.reportOnLoss) || (injured && stops.reportOnInjury);
+  return stops.reportAlways || (!won && stops.reportOnLoss) || (injured && stops.reportOnInjury);
+}
+
+export function afterMatch(state: GameState | null, report: WeekReport): void {
+  const clubId = state?.playerClubId;
+  const fixtureId = report.playerFixtureId;
+  if (!state || !clubId || !fixtureId) return;
+  const result = state.results[fixtureId];
+  const open = opensReport(state, report);
+  const won = result?.winnerClubId === clubId;
   if (open) {
     navigate(`#/match/${encodeURIComponent(fixtureId)}`);
     return;

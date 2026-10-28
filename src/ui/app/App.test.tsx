@@ -87,6 +87,7 @@ describe('App', () => {
   it("M1.1: the player's match pauses between rounds; Continue on that screen plays on to the report", async () => {
     const { store } = createTestStore({ world: 'dev', weekIndex: 11, pauseBetweenRounds: 'always' });
     updateSettings({ pacing: 'thorough' }); // open every report
+    updateArenaSettings({ watchPreference: 'simulate' }); // the M1.1 flow (the Watch flow has its own tests)
     const week = store.game.value!.calendar.weekIndex;
     navigate('#/squad');
     render(<App store={store} />);
@@ -112,6 +113,7 @@ describe('App', () => {
     await waitFor(() => expect(location.hash).toMatch(/^#\/match\//), { timeout: 10_000 });
     expect(store.game.value!.calendar.weekIndex).toBe(week + 1);
     updateSettings({ pacing: DEFAULT_SETTINGS.pacing });
+    updateArenaSettings({ watchPreference: DEFAULT_SETTINGS.arena.watchPreference });
   }, 30_000);
 
   it('opens Save / Load with S, as the side navigation shows', async () => {

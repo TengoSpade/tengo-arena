@@ -1,47 +1,65 @@
 /**
- * The pause inspector's content (P-22, 05-technical-m2 §A5 "Pause inspector"): the rule that is committed as a
- * sentence, why it won (every earlier rule's skip reason, the observed value, the ready-in time), what the fighter
- * would decide NOW at the paused tick (the probe), his statuses and cooldowns, Freshness and the rules fired so far.
- * Pure: the screen hands in the viewer's decision snapshot and the facade's probe, never a log.
+ * The pause inspector's content (P-22, 05-technical-m2 §A5 "Pause inspector"; wording of mockups/arena-notes.md §6):
+ * the rule that is committed, why it won (every rule in order: skipped with its reason and observed value, the fired one
+ * marked, the rest "not reached", the stance last), what the fighter would decide NOW at the paused tick (the probe),
+ * his state, statuses and cooldowns, Freshness and the rules fired so far. Pure: the screen hands in the viewer's
+ * decision snapshot and the facade's probe, never a log.
+ *
+ * One number per cooldown: a probe at tick T shows the END of T, but its evaluation is the sim's decision at T+1
+ * (WP-M2A's `evaluatedTick`), so a cooldown that a rule skipped on takes its "ready in" from the evaluation's trace;
+ * the state's `cooldownTicks` fills in only the abilities no evaluated rule named.
  *
  * M2 shows both sides' rules (open-026); from M4 the viewing club's knowledge (P-13) will filter the opponent's.
  */
 import type { ContentDB, RuleDef } from '../../../core/content';
 import type { FightFighterInput, RuleTraceEntry } from '../../../core/model';
 import type { UnitProbe } from '../../../core/sim';
-import type { ArenaRoundContext, ArenaUnitInfo, DecisionSnapshot, UnitRenderState } from '../../../render';
+import type { ArenaRoundContext, ArenaUnitInfo, DecisionSnapshot, PipKind, UnitRenderState } from '../../../render';
 import { penaltyText } from '../../m11/model';
-import { ruleText } from '../match-report/rule-sentence';
+import { ruleParts } from '../match-report/rule-sentence';
 import { presetOfTactics } from './context';
 import { nameOfUnit } from './feed';
-import { t, clock } from './text';
+import { clock, t } from './text';
 
 const TICK_S = 0.05;
+const seconds = (ticks: number): number => Math.ceil(ticks * TICK_S * 10) / 10;
 
-export interface TraceLine {
-  /** "R2", "S" (stance). */
+/** A rule as the inspector shows it: the index, the definition (null for the stance and a forced decision) and the preset's stance name. */
+export interface RuleRef {
+  /** "R2", "S" (stance), "T" (forced by a taunt). */
   label: string;
-  sentence: string;
+  index: number;
+  rule: RuleDef | null;
+  stanceName: string | null;
+  classId: string;
+}
+
+export interface WhyLine {
+  ref: RuleRef;
   fired: boolean;
-  /** Why it was skipped, in words; null on the fired rule. */
-  why: string | null;
+  /** False for the rules after the fired one and the stance when a rule fired. */
+  reached: boolean;
+  /** Bold lead and the rest of the sentence ("Out of range." "The target was 8.8 m away."); null on the fired rule. */
+  why: { lead: string; text: string } | null;
 }
 
 export interface DecisionModel {
-  label: string;
-  sentence: string;
+  ref: RuleRef;
   target: string | null;
   react: string;
-  trace: TraceLine[];
+  since: string;
+  why: WhyLine[];
 }
 
 export interface NowModel {
   /** What he would decide now; null when he cannot evaluate (see blocked). */
-  evaluation: { label: string; sentence: string; target: string | null; same: boolean; trace: TraceLine[] } | null;
+  evaluation: { ref: RuleRef; target: string | null; same: boolean; why: WhyLine[] } | null;
   blocked: string | null;
   pending: string | null;
+  /** The tick the evaluation is the decision of (seconds text), "deciding now (0:27.0)". */
+  at: string;
   cooldowns: { name: string; text: string }[];
-  statuses: { name: string; text: string }[];
+  statuses: { name: string; text: string; pip: PipKind | null }[];
 }
 
 export interface InspectorModel {
@@ -52,21 +70,8 @@ export interface InspectorModel {
   freshnessPenalty: string | null;
   decision: DecisionModel | null;
   now: NowModel | null;
-  fires: { label: string; sentence: string; count: number }[] | null;
+  fires: { ref: RuleRef; count: number }[] | null;
 }
-
-const SKIP_REASON: Record<string, Parameters<typeof t>[0]> = {
-  rule_cooldown: 'skipRuleCooldown',
-  cooldown: 'skipCooldown',
-  on_cooldown: 'skipCooldown',
-  no_focus: 'skipNoFocus',
-  silenced: 'skipSilenced',
-  blocked: 'skipBlocked',
-  no_target: 'skipNoTarget',
-  only_filtered: 'skipFiltered',
-  only_filtered_all: 'skipFiltered',
-  out_of_range: 'skipOutOfRange',
-};
 
 const BLOCKED: Record<string, Parameters<typeof t>[0]> = {
   downed: 'blockedDowned',
@@ -77,6 +82,7 @@ const BLOCKED: Record<string, Parameters<typeof t>[0]> = {
   casting: 'blockedCasting',
   channelling: 'blockedChannelling',
   taunted: 'blockedTaunted',
+  round_over: 'blockedRoundOver',
 };
 
 /** "R3", "S" for the stance, "T" for a forced (taunted) decision: the rule badge's labels (P-22). */
@@ -85,19 +91,26 @@ export function ruleLabel(rule: number, ruleCount: number): string {
   return rule >= ruleCount ? 'S' : `R${rule + 1}`;
 }
 
-/** Why a rule was skipped, in words, from its recorded trace entry. */
-export function skipText(entry: RuleTraceEntry): string {
-  const reason = entry.reason ?? (entry.skip === 'condition_false' ? 'cond_false' : (entry.skip ?? ''));
-  if (reason === 'cond_false' || reason === 'condition_false') {
-    return entry.cond !== undefined && entry.observed !== undefined && entry.observed !== null
-      ? t('skipConditionFalseAt', { n: entry.cond + 1, seen: entry.observed })
-      : t('skipConditionFalse');
+/** The pip a status category shows (mockups/arena-notes.md §1; the shield category has none: the bar segment). */
+export function pipOfCategory(category: string | undefined): PipKind | null {
+  switch (category) {
+    case 'cc_hard':
+      return 'control-hard';
+    case 'cc_soft':
+      return 'control-soft';
+    case 'buff':
+      return 'buff';
+    case 'debuff':
+      return 'debuff';
+    case 'dot':
+      return 'dot';
+    case 'hot':
+      return 'hot';
+    case 'shield':
+      return null;
+    default:
+      return 'special';
   }
-  if ((reason === 'cooldown' || reason === 'on_cooldown') && entry.readyInTicks !== undefined && entry.readyInTicks > 0) {
-    return t('skipCooldownIn', { s: Math.ceil(entry.readyInTicks * TICK_S * 10) / 10 });
-  }
-  const key = SKIP_REASON[reason];
-  return key ? t(key) : reason.replace(/_/g, ' ');
 }
 
 interface RuleSource {
@@ -113,21 +126,82 @@ function sourceOf(content: ContentDB, unit: ArenaUnitInfo, input: FightFighterIn
   return { rules: preset.rules, stanceName: stance, classId: unit.classId };
 }
 
-function sentenceOf(content: ContentDB, src: RuleSource | null, rule: number): string {
-  if (rule < 0) return t('blockedTaunted');
-  if (!src) return ruleLabel(rule, 99);
-  const def = src.rules[rule];
-  if (def) return ruleText(content, def, src.classId);
-  return t('inspectStance', { name: src.stanceName });
+function refOf(src: RuleSource | null, ruleCount: number, rule: number, classId: string): RuleRef {
+  const def = src && rule >= 0 ? (src.rules[rule] ?? null) : null;
+  return { label: ruleLabel(rule, ruleCount), index: rule, rule: def, stanceName: src && rule >= 0 && !def ? src.stanceName : null, classId };
 }
 
-function traceLines(content: ContentDB, src: RuleSource | null, ruleCount: number, trace: readonly RuleTraceEntry[]): TraceLine[] {
-  return trace.map((e) => ({
-    label: ruleLabel(e.rule, ruleCount),
-    sentence: sentenceOf(content, src, e.rule),
-    fired: e.fired,
-    why: e.fired ? null : skipText(e),
-  }));
+/** Why a rule was skipped, in the wording of the notes (§6): a bold lead and a sentence. */
+export function skipParts(entry: RuleTraceEntry, ctx?: { content: ContentDB; rule: RuleDef | null; classId: string }): { lead: string; text: string } {
+  const reason = entry.reason ?? (entry.skip === 'condition_false' ? 'cond_false' : (entry.skip ?? ''));
+  const observed = entry.observed ?? undefined;
+  const slot = ctx?.rule ? (ctx.rule.then as { slot?: string }).slot : undefined;
+  let abilityName = '';
+  if (ctx && (slot === 'a1' || slot === 'a2')) {
+    try {
+      abilityName = ctx.content.classAbility(ctx.classId, slot).name;
+    } catch {
+      abilityName = '';
+    }
+  }
+  const parts = ctx?.rule ? ruleParts(ctx.content, ctx.rule, ctx.classId) : null;
+  switch (reason) {
+    case 'cond_false':
+    case 'condition_false': {
+      const cond = entry.cond !== undefined ? parts?.conditions[entry.cond] : undefined;
+      const n = entry.cond !== undefined ? entry.cond + 1 : null;
+      const lead = n !== null ? t('skipCondLead', { n }) : t('skipCondLeadPlain');
+      const text = [cond?.text ? `${cond.text}.` : '', observed !== undefined ? t('skipObserved', { v: observed }) : ''].filter(Boolean).join(' ');
+      return { lead, text };
+    }
+    case 'rule_cooldown':
+      return { lead: t('skipRuleCooldownLead'), text: entry.readyInTicks ? t('skipReadyIn', { s: seconds(entry.readyInTicks) }) : '' };
+    case 'cooldown':
+    case 'on_cooldown':
+      return { lead: t('skipCooldownLead'), text: abilityName ? t('skipAbilityReady', { name: abilityName, s: seconds(entry.readyInTicks ?? 0) }) : t('skipReadyIn', { s: seconds(entry.readyInTicks ?? 0) }) };
+    case 'no_focus':
+      return { lead: t('skipNoFocusLead'), text: observed !== undefined ? t('skipFocusHad', { have: observed }) : '' };
+    case 'silenced':
+      return { lead: t('skipSilencedLead'), text: '' };
+    case 'blocked':
+      return { lead: t('skipBlockedLead'), text: '' };
+    case 'no_target':
+      return { lead: t('skipNoTargetLead'), text: parts?.selector ? t('skipNobody', { selector: parts.selector }) : '' };
+    case 'only_filtered':
+    case 'only_filtered_all':
+      return { lead: t('skipFilteredLead'), text: parts?.only ? t('skipFilteredBy', { pred: parts.only }) : '' };
+    case 'out_of_range':
+      return { lead: t('skipRangeLead'), text: observed !== undefined ? t('skipGap', { m: Math.round(observed / 100) / 10 }) : '' };
+    default:
+      return { lead: reason.replace(/_/g, ' '), text: '' };
+  }
+}
+
+/** Skip reason as one plain sentence (feed texts, tests). */
+export function skipText(entry: RuleTraceEntry, ctx?: { content: ContentDB; rule: RuleDef | null; classId: string }): string {
+  const p = skipParts(entry, ctx);
+  return `${p.lead} ${p.text}`.trim();
+}
+
+function whyLines(src: RuleSource | null, content: ContentDB, ruleCount: number, trace: readonly RuleTraceEntry[], classId: string): WhyLine[] {
+  const firedEntry = trace.find((e) => e.fired);
+  const byRule = new Map(trace.map((e) => [e.rule, e]));
+  const lines: WhyLine[] = [];
+  // Every rule in order, then the stance; those after the fired one were never reached. A trace without the fired rule
+  // (a forced decision) lists only what was recorded.
+  const last = src ? ruleCount : Math.max(-1, ...trace.map((e) => e.rule));
+  for (let i = 0; i <= last; i++) {
+    const e = byRule.get(i);
+    const ref = refOf(src, ruleCount, i, classId);
+    if (!e) {
+      lines.push({ ref, fired: false, reached: !firedEntry && i === ruleCount ? true : false, why: null });
+    } else if (e.fired) {
+      lines.push({ ref, fired: true, reached: true, why: null });
+    } else {
+      lines.push({ ref, fired: false, reached: true, why: skipParts(e, { content, rule: ref.rule, classId }) });
+    }
+  }
+  return lines;
 }
 
 /** Rules fired so far (committed decisions per rule) from the viewer's decisions up to the shown tick. */
@@ -144,6 +218,8 @@ export function inspectorModel(args: {
   state: UnitRenderState | null;
   decision: DecisionSnapshot | null;
   probe: UnitProbe | null;
+  /** The probe's tick and, when core provides it, the tick its evaluation is the decision of. */
+  probeTick?: { tick: number; evaluatedTick?: number } | null;
   /** The unit's committed decisions up to the tick, when the viewer offers them (optional capability). */
   decisions?: readonly DecisionSnapshot[] | null;
   input: FightFighterInput | null;
@@ -153,24 +229,33 @@ export function inspectorModel(args: {
   if (!unit) return null;
   const src = sourceOf(content, unit, args.input);
   const ruleCount = src?.rules.length ?? unit.ruleCount;
-  const label = (rule: number) => ruleLabel(rule, ruleCount);
+  const ref = (rule: number) => refOf(src, ruleCount, rule, unit.classId);
   const targetName = (u: number | null) => (u === null ? null : nameOfUnit(ctx, u));
 
   let decisionModel: DecisionModel | null = null;
   if (decision) {
     const ms = Math.round(decision.reactTicks * TICK_S * 1000);
     decisionModel = {
-      label: label(decision.rule),
-      sentence: sentenceOf(content, src, decision.rule),
+      ref: ref(decision.rule),
       target: targetName(decision.targetUnit),
       react: decision.reactCauses.length > 0 ? t('inspectReact', { ms, causes: decision.reactCauses.map((c) => c.replace(/_/g, ' ')).join(', ') }) : t('inspectReactNoCause', { ms }),
-      trace: traceLines(content, src, ruleCount, decision.trace),
+      since: t('inspectSince', { time: clock(decision.commitTick * TICK_S) }),
+      why: whyLines(src, content, ruleCount, decision.trace, unit.classId),
     };
   }
 
   let now: NowModel | null = null;
   if (probe) {
     const ev = probe.evaluation;
+    const evWhy = ev ? whyLines(src, content, ruleCount, ev.trace, unit.classId) : [];
+    // "Ready in" from the evaluation's own trace, per ability slot, so one cooldown never shows two numbers.
+    const traced: Partial<Record<'a1' | 'a2', number>> = {};
+    if (ev && src) {
+      for (const e of ev.trace) {
+        const slot = (src.rules[e.rule]?.then as { slot?: string } | undefined)?.slot;
+        if ((slot === 'a1' || slot === 'a2') && e.readyInTicks !== undefined && !(slot in traced)) traced[slot] = e.readyInTicks;
+      }
+    }
     const abilityOf = (slot: 'a1' | 'a2'): string => {
       try {
         return content.classAbility(unit.classId, slot).name;
@@ -178,19 +263,20 @@ export function inspectorModel(args: {
         return slot;
       }
     };
+    const evTick = args.probeTick?.evaluatedTick ?? args.probeTick?.tick ?? 0;
     now = {
-      evaluation: ev
-        ? { label: label(ev.rule), sentence: sentenceOf(content, src, ev.rule), target: targetName(ev.target), same: decision !== null && decision.rule === ev.rule, trace: traceLines(content, src, ruleCount, ev.trace) }
-        : null,
+      evaluation: ev ? { ref: ref(ev.rule), target: targetName(ev.target), same: decision !== null && decision.rule === ev.rule, why: evWhy } : null,
       blocked: probe.blockedBy ? (BLOCKED[probe.blockedBy] ? t(BLOCKED[probe.blockedBy]!) : probe.blockedBy.replace(/_/g, ' ')) : null,
-      pending: probe.pending ? t('inspectPending', { action: sentenceOf(content, src, probe.pending.rule), time: clock(probe.pending.commitTick * TICK_S) }) : null,
+      pending: probe.pending ? t('inspectPending', { action: refLabel(ref(probe.pending.rule)), time: clock(probe.pending.commitTick * TICK_S) }) : null,
+      at: `${clock(Math.floor(evTick / 20))}.${Math.floor((evTick % 20) / 2)}`,
       cooldowns: (['a1', 'a2'] as const).map((slot) => {
-        const ticks = probe.cooldownTicks[slot];
-        return { name: abilityOf(slot), text: ticks > 0 ? t('inspectIn', { s: Math.ceil(ticks * TICK_S * 10) / 10 }) : t('inspectReady') };
+        const ticks = traced[slot] ?? probe.cooldownTicks[slot];
+        return { name: abilityOf(slot), text: ticks > 0 ? t('inspectIn', { s: seconds(ticks) }) : t('inspectReady') };
       }),
       statuses: probe.statuses.map((s) => ({
         name: `${content.statuses.get(s.status)?.name ?? s.status}${s.stacks > 1 ? ` ×${s.stacks}` : ''}`,
-        text: `${Math.ceil(s.ticksLeft * TICK_S * 10) / 10}s`,
+        text: `${seconds(s.ticksLeft)} s`,
+        pip: pipOfCategory(content.statuses.get(s.status)?.category),
       })),
     };
   }
@@ -201,11 +287,14 @@ export function inspectorModel(args: {
     unit,
     isCaptain: state?.isCaptain ?? false,
     vitals: state ? { hp: state.hp, maxHp: state.maxHp, shield: state.shield, focus: state.focus, standing: state.standing } : null,
-    freshness: fresh === null ? null : t('inspectFresh', { n: fresh, label: unit.fatigueTag ?? '' }).replace(/ · $/, ''),
+    freshness: fresh === null ? null : t('inspectFresh', { n: fresh, label: unit.fatigueTag ?? 'ready' }),
     freshnessPenalty: fresh === null ? null : penaltyText(fresh, content),
     decision: decisionModel,
     now,
-    fires: counts ? counts.map((count, i) => ({ label: label(i), sentence: sentenceOf(content, src, i), count })) : null,
+    fires: counts ? counts.map((count, i) => ({ ref: ref(i), count })) : null,
   };
 }
 
+function refLabel(r: RuleRef): string {
+  return r.label;
+}

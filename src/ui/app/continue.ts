@@ -53,6 +53,8 @@ export interface ContinueModel {
   state: 'ready' | 'blocked' | 'busy';
   tip: string;
   action: ContinueAction;
+  /** Play match: what it locks, without the mode ("at Cinderpan · locks lineup"), for the Watch and Simulate pair. */
+  detail?: string;
 }
 
 export interface ContinueInput {
@@ -142,6 +144,7 @@ export function continueModel(input: ContinueInput): ContinueModel {
       state: 'ready',
       tip: t(play.mode === 'watch' ? 'continue.tipWatch' : 'continue.tipSimulateDefault'),
       action: { kind: 'advance', playsMatch: true, mode: play.mode, offer: play.offer },
+      detail: t('continue.locksLineup', { where, club: name }),
     };
   }
 

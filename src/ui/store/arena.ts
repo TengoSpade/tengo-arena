@@ -42,6 +42,8 @@ export interface ArenaSettings {
   labels: 'off' | 'selected' | 'all';
   /** Pause a live round when the window is hidden (on by default). */
   pauseWhenHidden: boolean;
+  /** The right dock (feed and inspector) is open (default); D toggles it, per device. The layout never changes on its own (A18). */
+  dockOpen: boolean;
 }
 
 export interface ArenaFacade {

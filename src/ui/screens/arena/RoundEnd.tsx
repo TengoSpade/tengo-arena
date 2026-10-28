@@ -1,10 +1,12 @@
 /**
- * The round-end overlay (05-technical-m2 §A7, ux-001): NON-BLOCKING, 1.5 s, skipped by any key, after which the next
- * screen opens by itself (the between-round screen per pauseBetweenRounds, the next round, or the report). So a round
- * boundary still costs exactly one input, the Enter on the between-round screen (A17 item 15).
+ * The round-end card (mockups/arena.html `.around`; 05-technical-m2 §A7, §A18, ux-001): NON-BLOCKING, 1.5 s, any key
+ * (Enter included) skips it and that key is consumed, after which the next stop opens by itself: the between-round
+ * screen per pauseBetweenRounds, the next round's kickoff, or after the deciding round the match result and then the
+ * report per pacing. So a round boundary still costs exactly one input, the Enter on the between-round screen (A17 item
+ * 15). It sits over the north strip of the floor, so a fighter still standing in the middle stays visible.
  *
- * It lives in a module-level signal read by the arena route, not in the live round's component: committing the round
- * changes the state under that component (a new watch round remounts it), and the overlay must outlive that.
+ * The state lives in a module-level signal read here: committing the round changes the state under the live round's
+ * component, and the card has to survive that.
  */
 import { signal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
@@ -13,11 +15,32 @@ import { t } from './text';
 
 export type RoundEndPhase = 'saving' | 'result' | 'failed' | 'mismatch';
 
+export interface RoundEndResult {
+  /** The side that won the round (club name), and whether it is the player's. */
+  winner: string;
+  ours: boolean | null;
+  /** The match score, the player's side first; the winner's of the round is marked. */
+  score: [number, number];
+  winnerFirst: boolean;
+  time: string;
+  overtime: boolean;
+  /** 'elimination' | 'time-limit' and how many of the winner's side stood. */
+  reason: 'elimination' | 'time-limit';
+  standing: number;
+  /** "ours" or "theirs" (or the club's short name in a match between other clubs). */
+  who: string;
+  /** The deciding round: the match is over. */
+  matchOver: boolean;
+  /** What opens after the card, in words (the card's foot). */
+  next: 'between' | 'kickoff' | 'report' | 'home';
+  nextRound: number;
+}
+
 export interface RoundEndState {
   phase: RoundEndPhase;
   round: number;
-  /** The committed outcome (known once the round is committed). */
-  result: { winner: string; ours: boolean | null; score: string; time: string } | null;
+  bestOf: number;
+  result: RoundEndResult | null;
   /** Open what comes next; set with the result. */
   next: (() => void) | null;
   /** Try the commit again (a failed save). */
@@ -27,14 +50,14 @@ export interface RoundEndState {
 
 export const roundEnd = signal<RoundEndState | null>(null);
 
-/** How long the overlay shows (TUNABLE (ui)). */
+/** How long the card shows (TUNABLE (ui)). */
 export const ROUND_END_MS = 1500;
 
 export function resetRoundEnd(): void {
   roundEnd.value = null;
 }
 
-/** Close the overlay and open what comes next. Safe to call twice. */
+/** Close the card and open what comes next. Safe to call twice. */
 export function proceedFromRoundEnd(): void {
   const cur = roundEnd.value;
   if (!cur || cur.phase !== 'result') return;
@@ -48,7 +71,7 @@ export function RoundEndOverlay() {
   const key = s ? `${s.round}:${s.phase}` : '';
   const done = useRef(false);
 
-  // The result shows for 1.5 s; any key (or a click) skips it, and the key is not passed on to the next screen.
+  // The card shows for 1.5 s; any key (or a click) skips it, and the key is not passed on to the next screen.
   useEffect(() => {
     if (phase !== 'result') return undefined;
     done.current = false;
@@ -59,7 +82,7 @@ export function RoundEndOverlay() {
     };
     const timer = setTimeout(go, ROUND_END_MS);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'F8') return;
+      if (e.key === 'F8') return; // the ticket tool stays available
       e.preventDefault();
       e.stopPropagation();
       go();
@@ -74,20 +97,42 @@ export function RoundEndOverlay() {
   }, [key]);
 
   if (!s) return null;
+  const r = s.result;
   return (
-    <div class="arena-end" role="status" aria-live="polite" aria-busy={s.phase === 'saving' ? 'true' : undefined} data-testid="arena-overlay" data-phase={s.phase}>
-      <div class="arena-end__card">
-        <h2 class="arena-end__title">{t('endTitle', { n: s.round })}</h2>
-        {s.phase === 'saving' && <p class="u-muted">{t('endSaving')}</p>}
-        {s.phase === 'result' && s.result && (
+    <div class="around" role="status" aria-live="polite" aria-busy={s.phase === 'saving' ? 'true' : undefined} data-testid="arena-overlay" data-phase={s.phase}>
+      <div class="around__card">
+        {s.phase === 'saving' && (
           <>
-            <p class={`arena-end__winner${s.result.ours === true ? ' is-ours' : ''}`} data-testid="round-end-winner">
-              {t('endWon', { club: s.result.winner, n: s.round })}
-            </p>
-            <p class="u-num" data-testid="round-end-score">
-              {t('endScore', { a: s.result.score.split('–')[0] ?? '', b: s.result.score.split('–')[1] ?? '' })} · {s.result.time}
-            </p>
-            <p class="u-xs u-faint">{t('endSkip')}</p>
+            <span class="around__kicker">{t('endTitle', { n: s.round })}</span>
+            <span class="around__sub">{t('endSaving')}</span>
+          </>
+        )}
+        {s.phase === 'result' && r && (
+          <>
+            <span class="around__kicker" data-testid="round-end-kicker">
+              {t(r.overtime ? 'endKickerOt' : 'endKicker', { n: s.round, max: s.bestOf, time: r.time })}
+            </span>
+            <span class="around__title" data-testid="round-end-winner">
+              {t(r.matchOver ? 'endWinMatch' : 'endWinRound', { club: r.winner })}
+            </span>
+            <span class="around__score" aria-label={t('endScoreLabel', { a: r.score[0], b: r.score[1] })} data-testid="round-end-score">
+              <span class={r.winnerFirst ? 'is-win' : undefined}>{r.score[0]}</span>
+              <span class="u-faint">–</span>
+              <span class={r.winnerFirst ? undefined : 'is-win'}>{r.score[1]}</span>
+            </span>
+            <span class="around__sub">
+              {t(r.reason === 'elimination' ? 'endSubElim' : 'endSubCap', { n: r.standing, who: r.who })} {r.matchOver ? t('endDecided') : t('endNextRound', { n: r.nextRound })}
+            </span>
+            <span class="around__foot">
+              <span>{t('endFootAny')}</span>
+              <span>
+                {r.next === 'between' && <>{t('endFootBetween', { n: r.nextRound })}</>}
+                {r.next === 'kickoff' && t('endFootKickoff', { n: r.nextRound })}
+                {r.next === 'report' && t('endFootReport')}
+                {r.next === 'home' && t('endFootHome')}
+              </span>
+            </span>
+            <span class="around__timer" aria-hidden="true" />
           </>
         )}
         {s.phase === 'failed' && (

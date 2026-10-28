@@ -10,13 +10,14 @@ describe('arena viewer settings (per device, outside saves)', () => {
     expect(DEFAULT_SETTINGS.arena.watchPreference).toBe('ask');
     expect(DEFAULT_SETTINGS.arena.speed).toBe(1);
     expect(DEFAULT_SETTINGS.arena.pauseWhenHidden).toBe(true);
+    expect(DEFAULT_SETTINGS.arena.dockOpen).toBe(true);
   });
 
   it('merge keeps valid stored values and falls back per field, never throwing', () => {
     expect(mergeArenaSettings(undefined)).toEqual(DEFAULT_ARENA_SETTINGS);
     expect(mergeArenaSettings('junk')).toEqual(DEFAULT_ARENA_SETTINGS);
-    const m = mergeArenaSettings({ watchPreference: 'simulate', speed: 4, labels: 'all', pauseWhenHidden: false, autoPause: { ownDowned: false, ownHpBelowPct: 30, overtime: 'yes' } });
-    expect(m).toMatchObject({ watchPreference: 'simulate', speed: 4, labels: 'all', pauseWhenHidden: false });
+    const m = mergeArenaSettings({ watchPreference: 'simulate', speed: 4, labels: 'all', pauseWhenHidden: false, dockOpen: false, autoPause: { ownDowned: false, ownHpBelowPct: 30, overtime: 'yes' } });
+    expect(m).toMatchObject({ watchPreference: 'simulate', speed: 4, labels: 'all', pauseWhenHidden: false, dockOpen: false });
     expect(m.autoPause).toEqual({ ownDowned: false, enemyDowned: false, ownCaptainDown: true, overtime: true, ownHpBelowPct: 30 });
     const bad = mergeArenaSettings({ watchPreference: 'sometimes', speed: 3, labels: 'big', autoPause: { ownHpBelowPct: 400 } });
     expect(bad).toEqual(DEFAULT_ARENA_SETTINGS);

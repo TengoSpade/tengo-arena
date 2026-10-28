@@ -18,8 +18,15 @@ export interface FeedItem {
   kind: KeyMoment['kind'];
   /** The side the moment is about (0 home, 1 away), or null for neutral ones (overtime, the end). */
   side: 0 | 1 | null;
+  /** The mock's data-side: 'us' when it is about the player's side (home in a match between other clubs), 'them' for the other, null when neutral. */
+  mark: 'us' | 'them' | null;
   /** True when it is about the player's side (null in a match between other clubs, or when neutral). */
   ours: boolean | null;
+  /** The timeline component's data-event ('down', 'end', 'rule'). */
+  event: 'down' | 'end' | 'rule';
+  /** The sentence ("Kael downed by Cato"), its detail line (the ability), and both as one line (announcements). */
+  title: string;
+  detail: string;
   text: string;
   time: string;
 }
@@ -28,6 +35,18 @@ const TICK_S = 0.05;
 
 export function nameOfUnit(ctx: ArenaRoundContext, unit: number | null): string {
   return unit === null ? '' : (ctx.units[unit]?.name ?? `#${unit}`);
+}
+
+export function momentParts(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB): { title: string; detail: string } {
+  const unit = nameOfUnit(ctx, m.unit);
+  const by = nameOfUnit(ctx, m.target);
+  const ability = m.ability ? abilityName(content, m.ability) : '';
+  switch (m.kind) {
+    case 'down':
+      return { title: by ? t('momentDown', { unit, by }) : t('momentDownAlone', { unit }), detail: ability };
+    default:
+      return { title: momentText(m, ctx, content), detail: '' };
+  }
 }
 
 export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB): string {
@@ -59,12 +78,18 @@ export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: Conten
 export function feedItems(moments: readonly KeyMoment[], ctx: ArenaRoundContext, content: ContentDB): FeedItem[] {
   return moments.map((m) => {
     const side = m.unit !== null ? (ctx.units[m.unit]?.side ?? null) : null;
+    const ours = side === null ? null : side === (ctx.playerSide ?? 0);
+    const parts = momentParts(m, ctx, content);
     return {
       key: `${m.seq}`,
       tick: m.tick,
       kind: m.kind,
       side,
+      mark: ours === null ? null : ours ? 'us' : 'them',
       ours: side === null || ctx.playerSide === null ? null : side === ctx.playerSide,
+      event: m.kind === 'down' || m.kind === 'captain-down' ? 'down' : m.kind === 'overtime' || m.kind === 'end' ? 'end' : 'rule',
+      title: parts.title,
+      detail: parts.detail,
       text: momentText(m, ctx, content),
       time: clock(m.tick * TICK_S),
     };
@@ -78,6 +103,22 @@ const AUTO_WHY: Record<AutoPauseReason, Parameters<typeof t>[0]> = {
   overtime: 'stopAutoOvertime',
   ownHpBelowPct: 'stopAutoOwnHpBelowPct',
 };
+
+/** The cause of an automatic pause for the transport's status ("Kael Dunmere was downed"), or null. */
+export function stopCause(stop: StopKind, ctx: ArenaRoundContext): string | null {
+  if (stop.kind !== 'auto') return null;
+  const name = nameOfUnit(ctx, stop.stop.unit);
+  switch (stop.stop.reason) {
+    case 'ownDowned':
+    case 'enemyDowned':
+    case 'ownCaptainDown':
+      return name ? t('statusDown', { name }) : null;
+    case 'overtime':
+      return t('momentOvertime');
+    default:
+      return t(AUTO_WHY[stop.stop.reason]);
+  }
+}
 
 /** The sentence a stop announces in the polite live region ("Paused: one of yours went down"). */
 export function stopText(stop: StopKind, ctx: ArenaRoundContext): string | null {

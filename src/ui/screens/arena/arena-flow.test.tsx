@@ -90,6 +90,7 @@ describe('ux-001 counted: Play match, then one Enter per round boundary', () => 
       press(k, init);
     };
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
     input(' '); // Play match: Watch is the primary action
     await waitFor(() => expect(location.hash).toBe('#/arena'));
     await arenaReady(m, 1);
@@ -112,7 +113,10 @@ describe('ux-001 counted: Play match, then one Enter per round boundary', () => 
     await waitFor(() => expect(location.hash).toBe('#/arena'));
     await arenaReady(m, 3);
     await playOut(m);
-    // The deciding round commits the match; a win under Streamlined goes Home with a result toast.
+    // The deciding round commits the match: the card says the match result, then Home with the result toast (a win under Streamlined).
+    await waitFor(() => expect(screen.getByTestId('round-end-winner').textContent).toMatch(/win the match/));
+    expect(screen.getByTestId('arena-overlay').textContent).toContain('The match is decided.');
+    expect(screen.getByTestId('arena-overlay').textContent).toContain('Next, back to Home with the result');
     await waitFor(() => expect(location.hash).toBe('#/home'), { timeout: 4000 });
     expect(inputs).toBe(1 + 2);
     expect(m.t.store.game.value!.liveMatch).toBeNull();
@@ -126,6 +130,7 @@ describe('ux-001 counted: Play match, then one Enter per round boundary', () => 
   it('a key pressed on the round-end overlay skips it and is not passed on to the next screen', async () => {
     const m = mountApp();
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
     press(' ');
     await arenaReady(m, 1);
     await playOut(m);
@@ -153,6 +158,7 @@ describe('the viewer opens only after the lock is saved (test-first item 2, thro
       return write(...a);
     };
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
     press(' ');
     await waitFor(() => expect(m.t.store.game.value!.liveMatch).not.toBeNull());
     await new Promise((r) => setTimeout(r, 80));
@@ -172,6 +178,7 @@ describe('the viewer opens only after the lock is saved (test-first item 2, thro
       return write(...a);
     };
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
     press(' ');
     await waitFor(() => expect(toasts.value.some((x) => x.title === 'Could not save the lineup lock')).toBe(true));
     expect(location.hash).toBe('#/codex');
@@ -192,9 +199,11 @@ describe('Play match offers Watch and Simulate side by side (open-020, Q54)', ()
   it('Watch is primary and Simulate one input away (Shift Space)', async () => {
     updateSettings({ ...DEFAULT_SETTINGS, pacing: 'custom', pacingCustom: { ...DEFAULT_SETTINGS.pacingCustom, lineup: false }, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'ask' } });
     const m = mountApp();
-    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
-    expect(screen.getByTestId('continue').textContent).toContain('Watch');
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Watch'));
     expect(screen.getByTestId('continue-other').textContent).toContain('Simulate');
+    // The pair of the mock: Watch is the brass one, Simulate the neutral one.
+    expect(screen.getByTestId('continue-other').className).toContain('continue--secondary');
+    expect(screen.getByTestId('continue').className).not.toContain('continue--secondary');
     await settle();
     press(' ', { shiftKey: true });
     await waitFor(() => expect(m.core.advances).toHaveLength(1));
@@ -225,6 +234,7 @@ describe('routing and resume', () => {
   it("Continue from another screen reads Resume watching and opens the arena instead of advancing (watch.not-shown never reached)", async () => {
     const m = mountApp({ state: 'round-waiting', hash: '#/codex' });
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Resume watching'));
+    await settle();
     press(' ');
     await waitFor(() => expect(location.hash).toBe('#/arena'));
     expect(m.core.advances).toHaveLength(0);
@@ -242,6 +252,7 @@ describe('routing and resume', () => {
   it('after a reload mid-round the arena resumes paused at the last stop and the outcome is still fixed', async () => {
     const m = mountApp({ hash: '#/codex' });
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
     press(' ');
     await arenaReady(m, 1);
     await act(async () => {
@@ -274,6 +285,7 @@ describe('routing and resume', () => {
 describe('committing a round', () => {
   async function toRoundEnd(m: Mounted) {
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
     press(' ');
     await arenaReady(m, 1);
   }
@@ -362,15 +374,21 @@ describe('the live round is simulated once per round (WP-M2B: cache it)', () => 
 });
 
 describe('keyboard only (04 §9, A9)', () => {
-  it('plays a round, picks a fighter, opens the inspector and skips the round without a pointer', async () => {
+  it('plays a round, walks the fighters with Tab (focus is selection), opens the inspector and skips the round without a pointer', async () => {
     const m = mountApp();
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
     press(' ');
     await arenaReady(m, 1);
     const v = m.harness.current();
     const host = screen.getByTestId('arena-host');
-    // The canvas has focus on arrival, so every key below reaches the screen without a click.
+    // The canvas has focus on arrival, so every key below reaches the screen without a click. The shell's keys are gone:
+    // 3 does not leave for Fixtures, S does not open Saves, Space is not Continue.
     await waitFor(() => expect(document.activeElement).toBe(host));
+    await settle();
+    press('3', {}, host);
+    press('s', {}, host);
+    expect(location.hash).toBe('#/arena');
     press('2', {}, host);
     expect(v.speed).toBe(2);
     await act(async () => v.advanceTo(200));
@@ -378,24 +396,26 @@ describe('keyboard only (04 §9, A9)', () => {
     await waitFor(() => expect(v.playing).toBe(false));
     press('ArrowLeft', {}, host);
     expect(v.tick).toBe(198);
-    press('Tab', {}, host); // the first fighter
+    // Tab moves through the ten cards in the normal focus order; focus is selection, so it opens the inspector.
+    const first = screen.getByTestId('strip-unit-0');
+    first.focus();
     await waitFor(() => expect(screen.getByTestId('arena-inspector')).toBeTruthy());
+    expect(first.getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('inspector-name').textContent).toBe(m.w.state.fighters[m.w.prepared.home.active[0]!]!.name.full);
-    press('Tab', {}, host);
+    screen.getByTestId('strip-unit-1').focus();
     await waitFor(() => expect(screen.getByTestId('strip-unit-1').getAttribute('aria-pressed')).toBe('true'));
-    press('Tab', { shiftKey: true }, host);
-    await waitFor(() => expect(screen.getByTestId('strip-unit-0').getAttribute('aria-pressed')).toBe('true'));
+    expect(first.getAttribute('aria-pressed')).toBe('false');
+    // Tab never traps: the canvas is one stop and nothing intercepts the key, so focus can leave in the normal order.
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    host.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    await settle();
     press('Escape', {}, host); // closes the inspector first
     await waitFor(() => expect(screen.queryByTestId('arena-inspector')).toBeNull());
     press('i', {}, host);
     await waitFor(() => expect(screen.getByTestId('arena-inspector')).toBeTruthy());
-    // Tab past the last fighter releases the canvas (default focus movement), so the controls stay reachable.
-    for (let i = 0; i < 12; i++) press('Tab', {}, host);
-    const active = screen.getByTestId('strip-unit-0');
-    expect(active).toBeTruthy();
     press('s', { shiftKey: true }, host);
     await waitFor(() => expect(screen.getByTestId('dialog-skip').hasAttribute('open')).toBe(true));
-    press('Enter', {}, screen.getByTestId('confirm-skip'));
     fireEvent.click(screen.getByTestId('confirm-skip')); // Enter on a focused button is its click
     await waitFor(() => expect(m.t.store.game.value!.liveMatch!.rounds).toHaveLength(1));
   });
@@ -403,6 +423,7 @@ describe('keyboard only (04 §9, A9)', () => {
   it('every control of the arena has an accessible name and a key', async () => {
     const m = mountApp();
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
     press(' ');
     await arenaReady(m, 1);
     const root = screen.getByTestId('screen-arena');
