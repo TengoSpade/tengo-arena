@@ -46,6 +46,7 @@ export class FakeViewer implements ArenaViewer {
     options: ArenaViewerOptions,
     private readonly timeline: Timeline,
     private readonly content: ContentDB,
+    private readonly cues: CueTable = {} as CueTable,
   ) {
     this.options = options;
     this.autoPause = { ownDowned: true, enemyDowned: false, ownCaptainDown: true, overtime: true, ownHpBelowPct: null };
@@ -55,7 +56,7 @@ export class FakeViewer implements ArenaViewer {
     this.calls.push('load');
     this.log = log;
     this.ctx = ctx;
-    this.index = this.timeline.indexFightLog(log, this.content, {} as CueTable, ctx.kind);
+    this.index = this.timeline.indexFightLog(log, this.content, this.cues, ctx.kind);
     this._tick = ctx.startTick;
     this._head = ctx.kind === 'live' ? ctx.startTick : (this.index.endTick ?? 0);
     this._ended = ctx.kind === 'replay' && this.index.endTick !== null && ctx.startTick >= this.index.endTick;
@@ -219,12 +220,12 @@ export interface FakeViewerHarness {
   all: FakeViewer[];
 }
 
-export function createFakeViewerHarness(timeline: Timeline, content: ContentDB, opts: { failLoad?: boolean } = {}): FakeViewerHarness {
+export function createFakeViewerHarness(timeline: Timeline, content: ContentDB, opts: { failLoad?: boolean; cues?: CueTable } = {}): FakeViewerHarness {
   const all: FakeViewer[] = [];
   return {
     factory: async (options) => {
       if (opts.failLoad) throw new Error('viewer chunk failed');
-      const v = new FakeViewer(options, timeline, content);
+      const v = new FakeViewer(options, timeline, content, opts.cues);
       all.push(v);
       return v;
     },

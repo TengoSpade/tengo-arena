@@ -7,11 +7,11 @@ import { installShortcuts } from '../../app/shortcuts';
 import { resetToasts, toasts } from '../../components';
 import { TestProviders, createTestStore } from '../../debug/test-store';
 import { DEFAULT_SETTINGS, settings, updateSettings } from '../../store/settings';
-import ArenaScreen from './index';
+import ArenaScreen, { resetLiveRoundCache } from './index';
 import { resetRoundEnd } from './RoundEnd';
 import { fakeTimeline } from './testing/fake-timeline';
 import { createFakeViewerHarness, type FakeViewer, type FakeViewerHarness } from './testing/fake-viewer';
-import { createScriptedCore, liveWatchState, watchWorld, type ScriptedCore, type WatchWorld } from './testing/world';
+import { createScriptedCore, liveWatchState, watchWorld, type ScriptedCore, type WatchWorld } from '../../debug/arena-test-world';
 import { ViewerFactoryContext } from './viewer-factory';
 
 let dispose: (() => void) | null = null;
@@ -19,6 +19,7 @@ let content: ContentDB;
 beforeEach(() => {
   resetToasts();
   resetRoundEnd();
+  resetLiveRoundCache();
   updateSettings({ ...DEFAULT_SETTINGS, arena: { ...DEFAULT_SETTINGS.arena, autoPause: { ...DEFAULT_SETTINGS.arena.autoPause } } });
   location.hash = '#/arena';
   content = fixtureContent();
@@ -118,6 +119,24 @@ describe('arena screen: a live round', () => {
     await waitFor(async () => expect((await s.saves.list()).some((m) => m.slotId === 'auto-round')).toBe(true));
     expect(s.state().liveMatch!.watch!.cursorTick).toBe(200);
     expect(JSON.parse((await s.saves.read('auto-round'))!).state.liveMatch.watch.cursorTick).toBe(200);
+  });
+
+  it('saves the reveal frontier (the furthest tick shown), not the playhead after a rewind (tech-019)', async () => {
+    const s = await mount();
+    updateSettings({ arena: { ...settings.value.arena, autoPause: { ...settings.value.arena.autoPause, ownDowned: false } } });
+    await advance(s, 300);
+    await act(async () => {
+      s.viewer().seek(100); // a live rewind while the round runs
+    });
+    key(' '); // pause with the playhead at 100 and the head at 300
+    await waitFor(() => expect(s.core.watchCommands.at(-1)?.tick).toBe(300));
+    expect(s.core.watchCommands.every((c) => c.tick === 300)).toBe(true);
+    expect(s.state().liveMatch!.watch!.cursorTick).toBe(300);
+    // A second stop at the same frontier saves nothing new.
+    key(' ');
+    key(' ');
+    await new Promise((r) => setTimeout(r, 30));
+    expect(s.core.watchCommands).toHaveLength(1);
   });
 
   it('auto-pauses when one of ours goes down, says why, lists the moment with its cause and saves the stop', async () => {

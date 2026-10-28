@@ -95,10 +95,15 @@ export function arenaFacade(store: GameStore, engine: GameEngine, content: () =>
     return r.ok ? r : { ok: false, error: { code: r.error.code, message: r.error.message } };
   };
   const dispatchWatch = (state: GameState, tick: number, mode?: MatchViewMode): Result<CommandOutcome, EngineError> => {
-    const w = watching(state);
     const clubId = store.playerClubId.value;
-    if (!w || !clubId) return unavailable('match.not-watching', 'No round is being watched');
-    return store.dispatch({ type: 'match.watch', clubId, fixtureId: w.fixtureId, round: w.round, tick: Math.max(0, Math.ceil(tick)), ...(mode ? { mode } : {}) });
+    const ms = state.liveMatch;
+    const w = watching(state);
+    if (!clubId || !ms) return unavailable('match.not-watching', 'No round is being watched');
+    // A cursor is only accepted while a round waits; a mode switch ("Simulate the rest") also between rounds, naming
+    // the next round (rounds played + 1; WP-M2B).
+    const betweenRounds = !w && mode === 'simulate' && ms.watch?.mode === 'watch';
+    if (!w && !betweenRounds) return unavailable('match.not-watching', 'No round is being watched');
+    return store.dispatch({ type: 'match.watch', clubId, fixtureId: ms.fixtureId, round: w ? w.round : ms.rounds.length + 1, tick: Math.max(0, Math.ceil(tick)), ...(mode ? { mode } : {}) });
   };
   return {
     replayAvailability: (state, fixtureId) => read(engine.replayAvailability ? (c) => engine.replayAvailability!(state, fixtureId, c) : null),

@@ -5,16 +5,16 @@
  * squads (core/testkit fixtureMatchState gives a real MatchState), so the between-round screen and the report run on
  * real state shapes.
  */
-import type { ContentDB } from '../../../../core/content';
-import type { MatchPlayback, ReplayAvailability, RoundPlayback } from '../../../../core/game';
-import type { ClubId, GameState, MatchState, RoundLineups, RoundResult, WeekReport } from '../../../../core/model';
-import type { RoundProbe, UnitProbe } from '../../../../core/sim';
-import { fixtureMatchState } from '../../../../core/testkit';
-import { engineError, err, ok, type EngineError, type Result } from '../../../../core/util';
-import { createDevEngine } from '../../../debug/dev-engine';
-import { buildDevWorld } from '../../../debug/dev-world';
-import type { GameEngine } from '../../../store/engine';
-import { buildFightLog, type LogSpec, type LogUnit } from './fixture-log';
+import type { ContentDB } from '../../core/content';
+import type { MatchPlayback, ReplayAvailability, RoundPlayback } from '../../core/game';
+import type { ClubId, GameState, MatchState, RoundLineups, RoundResult, WeekReport } from '../../core/model';
+import type { RoundProbe, UnitProbe } from '../../core/sim';
+import { fixtureMatchState } from '../../core/testkit';
+import { engineError, err, ok, type EngineError, type Result } from '../../core/util';
+import { createDevEngine } from './dev-engine';
+import { buildDevWorld } from './dev-world';
+import type { GameEngine } from '../store/engine';
+import { buildFightLog, type LogSpec, type LogUnit } from '../screens/arena/testing/fixture-log';
 
 export interface WatchWorld {
   /** The dev world at matchweek 7 with the player's club chosen; no live match yet (Play match is next). */

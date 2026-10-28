@@ -15,6 +15,8 @@ HTML/CSS screens over the pure core. The UI **reads** `GameState` and **dispatch
 
 Status (WP6): frame, store, platform, components, format, text, debug and the screens home, new-game, club-select, squad, fighter and codex are implemented; see each folder's README.
 
+M2 (WP-M2E): the arena screens (`screens/arena`: `#/arena`, `#/replay/:fixtureId`), the watch flow in the store (`store/arena.ts`, `create-store.ts`), Watch or Simulate on Continue, Replay entries (report, fixtures, Home), Settings › Watching, F8 arena metadata and the dev/smoke test hook. See `screens/arena/README.md`.
+
 Rules:
 - Import core through module indexes only (`../../core/game`, never `../../core/game/pipeline`). Enforced by tests/architecture.
 - Use the designer's classes from `styles/components.css`; screen-local CSS only for layout glue, in the screen folder.

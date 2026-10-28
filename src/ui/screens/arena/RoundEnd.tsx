@@ -75,7 +75,7 @@ export function RoundEndOverlay() {
 
   if (!s) return null;
   return (
-    <div class="arena-end" role="status" aria-live="polite" data-testid="arena-overlay" data-phase={s.phase}>
+    <div class="arena-end" role="status" aria-live="polite" aria-busy={s.phase === 'saving' ? 'true' : undefined} data-testid="arena-overlay" data-phase={s.phase}>
       <div class="arena-end__card">
         <h2 class="arena-end__title">{t('endTitle', { n: s.round })}</h2>
         {s.phase === 'saving' && <p class="u-muted">{t('endSaving')}</p>}

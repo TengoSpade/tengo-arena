@@ -232,16 +232,20 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
   // Settings follow the player: auto-pause rules, names, reduced motion and the theme's palette.
   useEffect(() => {
     let theme = effectiveTheme(settings.value);
+    let motion = reducedMotion(settings.value);
     return effect(() => {
       const st = settings.value;
       const v = viewerRef.current;
       if (!v) return;
       v.setAutoPause(st.arena.autoPause);
       v.setLabels(st.arena.labels);
-      v.setReducedMotion(reducedMotion(st));
       const now = effectiveTheme(st);
-      if (now !== theme) {
+      const nowMotion = reducedMotion(st);
+      v.setReducedMotion(nowMotion);
+      // The palette is read from the CSS tokens once per theme or motion change, never per frame.
+      if (now !== theme || nowMotion !== motion) {
         theme = now;
+        motion = nowMotion;
         v.setPalette(readArenaPalette(now));
       }
     });

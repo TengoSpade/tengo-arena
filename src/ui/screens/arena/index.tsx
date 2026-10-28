@@ -9,7 +9,9 @@
 import { signal } from '@preact/signals';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ContentDB } from '../../../core/content';
+import type { MatchPlayback, RoundPlayback } from '../../../core/game';
 import type { FixtureId, GameState } from '../../../core/model';
+import type { EngineError, Result } from '../../../core/util';
 import type { ArenaViewer } from '../../../render/viewer';
 import { afterMatch } from '../../app/after-match';
 import { navigate } from '../../app/router';
@@ -24,7 +26,7 @@ import { registerArenaTicketInfo } from '../../tickets/arena-info';
 import { ArenaLayout } from './Arena';
 import { buildHud, buildRoundContext, fightInputOf } from './context';
 import { readArenaPalette } from './palette';
-import { ROUND_END_MS, RoundEndOverlay, resetRoundEnd, roundEnd } from './RoundEnd';
+import { ROUND_END_MS, RoundEndOverlay, resetRoundEnd, roundEnd, type RoundEndState } from './RoundEnd';
 import { useViewerSession, type StopKind } from './session';
 import { clock, t } from './text';
 
@@ -38,7 +40,7 @@ export function watchingOf(state: GameState | null): { fixtureId: FixtureId; rou
 }
 
 /** The finished round for the overlay: winner, score (the player's side first) and time, from committed state only. */
-function roundOutcome(state: GameState, fixtureId: FixtureId, round: number): NonNullable<ReturnType<typeof roundEnd.peek>>['result'] {
+function roundOutcome(state: GameState, fixtureId: FixtureId, round: number): RoundEndState['result'] {
   const ms = state.liveMatch && state.liveMatch.fixtureId === fixtureId ? state.liveMatch : null;
   const result = state.results[fixtureId];
   const rounds = ms ? ms.rounds : (result?.rounds ?? []);
@@ -53,6 +55,28 @@ function roundOutcome(state: GameState, fixtureId: FixtureId, round: number): No
   const ours = playerHome || playerAway ? (r.winner === 'home') === playerHome : null;
   const [a, b] = playerAway ? [score.away, score.home] : [score.home, score.away];
   return { winner: (winnerId ? state.clubs[winnerId]?.name : undefined) ?? winnerId ?? '', ours, score: `${a}–${b}`, time: clock(r.durationTicks * TICK_S) };
+}
+
+/**
+ * A live round's playback is a full sim (WP-M2B: cache it per round): coming back to the arena (a click on Home, the
+ * resume after the between-round screen's Replay) must not simulate it again. One entry, keyed by what fixes the
+ * round (career seed, match seed, round, rounds played); only the resume point is taken fresh from the state.
+ */
+let liveCache: { key: string; playback: RoundPlayback } | null = null;
+function cachedLiveRound(state: GameState, load: () => Result<RoundPlayback, EngineError> | null): Result<RoundPlayback, EngineError> | null {
+  const ms = state.liveMatch;
+  const round = ms?.watch?.round;
+  if (!ms || !round) return load();
+  const key = `${state.rng.root}|${ms.fixtureId}|${ms.seed}|${round}|${ms.rounds.length}`;
+  if (liveCache?.key === key) return { ok: true, value: { ...liveCache.playback, startTick: ms.watch!.cursorTick } };
+  const r = load();
+  if (r?.ok) liveCache = { key, playback: r.value };
+  return r;
+}
+
+/** Forget the cached round (tests; a changed lock such as a call, later). */
+export function resetLiveRoundCache(): void {
+  liveCache = null;
 }
 
 export default function ArenaScreen(_props: ScreenProps) {
@@ -102,7 +126,7 @@ function NoRound({ state }: { state: GameState | null }) {
   );
 }
 
-type Loaded = { kind: 'ok'; playback: import('../../../core/game').RoundPlayback; ctx: ReturnType<typeof buildRoundContext>; match: import('../../../core/game').MatchPlayback | null } | { kind: 'stub' } | { kind: 'error'; message: string };
+type Loaded = { kind: 'ok'; playback: RoundPlayback; ctx: ReturnType<typeof buildRoundContext>; match: MatchPlayback | null } | { kind: 'stub' } | { kind: 'error'; message: string };
 
 function LiveArena({ store, content, fixtureId, round }: { store: AppStore; content: ContentDB; fixtureId: FixtureId; round: number }) {
   const arena = useArena(store);
@@ -111,7 +135,7 @@ function LiveArena({ store, content, fixtureId, round }: { store: AppStore; cont
   // The round is loaded ONCE per mount: a re-render (the cursor save changes the state) must not simulate it again.
   const loaded = useMemo<Loaded>(() => {
     const state = store.game.value!;
-    const r = arena.liveRound(state);
+    const r = cachedLiveRound(state, () => arena.liveRound(state));
     if (r === null) return { kind: 'stub' };
     if (!r.ok) return { kind: 'error', message: errorText(r.error) };
     const mp = arena.matchPlayback(state, fixtureId);
@@ -188,9 +212,18 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
         return showResult(after, () => navigate('#/between-rounds'));
       case MATCH_WATCHING:
         return showResult(after, () => navigate('#/arena'));
-      case WATCH_MISMATCH:
+      case WATCH_MISMATCH: {
+        // reason 'round': the round is already committed (a stale tab, a second press). Not a defect and never retried:
+        // go where the committed state says.
+        if ((res.error.details as { reason?: string } | undefined)?.reason === 'round') {
+          roundEnd.value = null;
+          const w = watchingOf(after);
+          navigate(w ? '#/arena' : after.liveMatch?.phase === 'between_rounds' ? '#/between-rounds' : '#/home');
+          return;
+        }
         roundEnd.value = { phase: 'mismatch', round, result: null, next: null, retry: null, message: res.error.message };
         return;
+      }
       case WATCH_NOT_SHOWN:
       case SAVE_ROUND_FAILED:
       default:

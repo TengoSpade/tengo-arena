@@ -44,7 +44,7 @@ import { showToast } from '../components/Toast';
 import { configureFormat } from '../format';
 import { t } from '../text';
 import type { GameStore, StorePlatform } from './contract';
-import { MATCH_WATCHING, SAVE_ROUND_FAILED, WATCH_NOT_SHOWN } from './arena';
+import { MATCH_WATCHING, SAVE_ROUND_FAILED, WATCH_MISMATCH, WATCH_NOT_SHOWN } from './arena';
 import { coreEngine, type GameEngine } from './engine';
 import { settings } from './settings';
 
@@ -294,6 +294,9 @@ export function createGameStore(platform: StorePlatform): AppStore {
       if (!result.ok) {
         // A commit with no shown log (Continue from Home, a stale tab): not an error to show; the caller opens #/arena.
         if (result.error.code === WATCH_NOT_SHOWN) return err(result.error);
+        // WP-M2B: a mismatch with reason 'round' means the round is already committed (a stale tab or a second press):
+        // never a defect to show and never retried; the caller routes by the committed state.
+        if (result.error.code === WATCH_MISMATCH && (result.error.details as { reason?: string } | undefined)?.reason === 'round') return err(result.error);
         return fail(result.error);
       }
       const { state, week } = result.value;

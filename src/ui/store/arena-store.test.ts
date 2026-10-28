@@ -9,7 +9,7 @@ import type { GameState } from '../../core/model';
 import { fixtureContent } from '../../core/testkit';
 import { resetToasts } from '../components';
 import { createTestStore } from '../debug/test-store';
-import { createScriptedCore, liveWatchState, watchWorld } from '../screens/arena/testing/world';
+import { createScriptedCore, liveWatchState, watchWorld } from '../debug/arena-test-world';
 import { arenaFacade, MATCH_WATCHING, SAVE_ROUND_FAILED, WATCH_NOT_SHOWN } from './arena';
 import { DEFAULT_SETTINGS, updateSettings } from './settings';
 
@@ -156,5 +156,37 @@ describe('the facade writes', () => {
     expect(core.watchCommands).toEqual([{ tick: 90, mode: 'simulate' }]);
     expect(res.ok).toBe(true);
     expect(core.advances.at(-1)!.options).toBeUndefined();
+  });
+
+  it('simulateRest between rounds names the next round (rounds played + 1), as core asks', async () => {
+    const { w, core, store, arena } = (() => {
+      const w2 = watchWorld(content);
+      const core2 = createScriptedCore(w2);
+      const t = createTestStore({ world: 'none', engine: core2.engine });
+      const st = liveWatchState(w2, { round: 2 });
+      st.liveMatch!.phase = 'between_rounds';
+      st.liveMatch!.watch = { mode: 'watch', round: null, cursorTick: 0, calls: [] };
+      t.store.replaceWorld(st, content);
+      return { w: w2, core: core2, store: t.store, arena: arenaFacade(t.store, core2.engine, () => t.store.content.value) };
+    })();
+    const seen: unknown[] = [];
+    const apply = core.engine.applyCommand;
+    core.engine.applyCommand = ((state, command, c) => (seen.push(command), apply(state, command, c))) as typeof apply;
+    void w;
+    // A cursor is refused between rounds; a mode switch names round 2 (one round was played).
+    expect((await arena.saveCursor(store.game.value!, 50)).ok).toBe(false);
+    await arena.simulateRest(store.game.value!, 0);
+    expect(seen.find((c) => (c as { type: string }).type === 'match.watch')).toMatchObject({ type: 'match.watch', round: 2, mode: 'simulate' });
+  });
+
+  it("a mismatch with reason 'round' (already committed) is passed on quietly: no toast, never a defect", async () => {
+    const { store, core } = facadeSetup();
+    core.failNext = { code: 'watch.mismatch', message: 'already committed', details: { reason: 'round' } };
+    const res = await store.advance({ watched: { round: 1, logHash: 'x' } });
+    expect(!res.ok && res.error.code).toBe('watch.mismatch');
+    expect(store.lastError.value).toBeNull();
+    core.failNext = { code: 'watch.mismatch', message: 'different log', details: { reason: 'hash' } };
+    await store.advance({ watched: { round: 1, logHash: 'x' } });
+    expect(store.lastError.value?.code).toBe('watch.mismatch');
   });
 });
