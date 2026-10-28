@@ -455,6 +455,17 @@ export interface ArenaMetrics {
   labelSizePx: number;
   pipSizePx: number;
   barHeightPx: number;
+  // ---- Token proportions in metres of arena (1 m = a fighter's diameter), unitless tokens (UI polish, 2c20953) ----
+  /** --arena-bar-w: HP, shield and focus bar width, and the cast bar's minimum. */
+  barWidthM: number;
+  /** --arena-plate-r: the role-glyph plate radius. */
+  plateRadiusM: number;
+  /** --arena-glyph: one role glyph. */
+  glyphSizeM: number;
+  /** --arena-plate-r-hybrid: the plate radius for a hybrid (two glyphs and their gap fit inside it). */
+  plateRadiusHybridM: number;
+  /** --arena-glyph-hybrid: each of a hybrid's two glyphs. */
+  glyphSizeHybridM: number;
 }
 
 /** A club's two colours from clubs.json (`colors.primary`, `colors.secondary`) as 0xRRGGBB. */

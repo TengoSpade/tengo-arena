@@ -255,6 +255,11 @@ describe('the default palettes', () => {
         labelSizePx: '--arena-label-size',
         pipSizePx: '--arena-pip-size',
         barHeightPx: '--arena-bar-h',
+        barWidthM: '--arena-bar-w',
+        plateRadiusM: '--arena-plate-r',
+        glyphSizeM: '--arena-glyph',
+        plateRadiusHybridM: '--arena-plate-r-hybrid',
+        glyphSizeHybridM: '--arena-glyph-hybrid',
       };
       for (const [field, token] of Object.entries(metrics)) {
         const raw = t(token);

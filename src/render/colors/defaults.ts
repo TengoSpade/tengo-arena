@@ -46,6 +46,11 @@ export const DEFAULT_ARENA_METRICS: ArenaMetrics = {
   labelSizePx: 12,
   pipSizePx: 15,
   barHeightPx: 6,
+  barWidthM: 1.3,
+  plateRadiusM: 0.33,
+  glyphSizeM: 0.44,
+  plateRadiusHybridM: 0.36,
+  glyphSizeHybridM: 0.34,
 };
 
 /** Dark and light arena palettes: the values tokens.css defines. */
