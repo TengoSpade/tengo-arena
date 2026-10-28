@@ -10,7 +10,7 @@ import { fixtureContent } from '../../core/testkit';
 import { resetToasts } from '../components';
 import { createTestStore } from '../debug/test-store';
 import { createScriptedCore, liveWatchState, watchWorld } from '../debug/arena-test-world';
-import { arenaFacade, MATCH_WATCHING, SAVE_ROUND_FAILED, WATCH_NOT_SHOWN } from './arena';
+import { arenaFacade, MATCH_WATCHING, SAVE_ROUND_FAILED, savedWatch, watchKey, WATCH_NOT_SHOWN } from './arena';
 import { DEFAULT_SETTINGS, updateSettings } from './settings';
 
 const content = fixtureContent();
@@ -55,6 +55,8 @@ describe('Play match (Watch): the lock is saved before anything opens (test-firs
     expect(meta).toBeTruthy();
     expect(JSON.parse((await saves.read('auto-round'))!).state.liveMatch.watch).toEqual({ mode: 'watch', round: 1, cursorTick: 0, calls: [] });
     expect(store.game.value!.liveMatch!.watch!.round).toBe(1);
+    // The gate the arena opens on: set only once the write has succeeded.
+    expect(savedWatch.value).toBe(watchKey({ fixtureId: store.game.value!.liveMatch!.fixtureId, round: 1 }));
   });
 
   it('an interrupted write (never completes) keeps the viewer closed: advance does not resolve', async () => {
@@ -68,6 +70,9 @@ describe('Play match (Watch): the lock is saved before anything opens (test-firs
     await new Promise((r) => setTimeout(r, 60));
     expect(settled).toBe(false);
     expect(store.busy.value).toBe(true);
+    // The lock is in memory, but its round is not saved: the arena's gate is still shut.
+    expect(store.game.value!.liveMatch?.watch?.round).toBe(1);
+    expect(savedWatch.value).toBeNull();
     gate.release();
     const res = await p;
     expect(!res.ok && res.error.code).toBe(MATCH_WATCHING);
@@ -80,7 +85,9 @@ describe('Play match (Watch): the lock is saved before anything opens (test-firs
     const gate = gateSlot(saves, 'auto-round', 'fail');
     const res = await store.advance({ playerMatch: 'watch' });
     expect(!res.ok && res.error.code).toBe(SAVE_ROUND_FAILED);
-    expect(store.lastError.value?.code).toBe(SAVE_ROUND_FAILED);
+    // Quiet: the callers say it once, in their own place (a toast with Retry, the between-round error, the round card).
+    expect(store.lastError.value).toBeNull();
+    expect(savedWatch.value).toBeNull();
     // No round shown or pending: the world in memory is the one the last good save holds.
     expect(store.game.value!.liveMatch).toBeNull();
     expect((await saves.list()).some((m) => m.slotId === 'auto-round')).toBe(false);

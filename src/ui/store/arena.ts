@@ -9,6 +9,7 @@
  * log's hash (create-store.ts keeps the ordering rule: the viewer opens only after the lock's auto-round write
  * succeeded); the cursor is one command plus the round autosave, at stops only.
  */
+import { signal } from '@preact/signals';
 import { useMemo } from 'preact/hooks';
 import type { ContentDB } from '../../core/content';
 import type { CommandOutcome, MatchPlayback, ReplayAvailability, RoundPlayback } from '../../core/game';
@@ -22,6 +23,32 @@ import { safeView, useEngine, type GameEngine } from './engine';
 
 /** store.advance() result while the player's next round waits to be watched: the frame opens #/arena (like MATCH_PAUSED). */
 export const MATCH_WATCHING = 'match.watching';
+
+/** The round waiting to be watched (mode 'watch', round set), or null: between rounds, simulated, or no live match. */
+export function watchingMatch(state: GameState | null): { fixtureId: FixtureId; round: number; cursorTick: number } | null {
+  const ms = state?.liveMatch;
+  const w = ms?.watch;
+  return ms && w && w.mode === 'watch' && w.round !== null ? { fixtureId: ms.fixtureId, round: w.round, cursorTick: w.cursorTick } : null;
+}
+
+/**
+ * The world epoch: bumped whenever the world in memory is replaced (a load, a new game, a rollback of the lock). Anything
+ * derived from a live round (the arena's cached playback) is keyed on it, so it can never outlive the world it came from.
+ */
+export const arenaEpoch = signal(0);
+export function bumpArenaEpoch(): void {
+  arenaEpoch.value += 1;
+}
+
+/**
+ * The round whose lock is SAVED ("fixtureId:round"), or null. The arena opens only for this round (A3, review B3): the
+ * lock is published in memory before its auto-round write completes, and showing the round meanwhile would be a peek
+ * that a failed write then rerolls. Set by the store after a successful required write, after a load (a loaded save is
+ * a saved one) and by replaceWorld; cleared on a rollback.
+ */
+export const savedWatch = signal<string | null>(null);
+export const watchKey = (w: { fixtureId: string; round: number }): string => `${w.fixtureId}:${w.round}`;
+
 /** core/game refusal when a watched round is committed without a shown log (Continue from Home, a stale tab): route to #/arena. */
 export const WATCH_NOT_SHOWN = 'watch.not-shown';
 /** core/game refusal when the committed log's hash differs from the shown one: a defect, reported, never retried silently. */

@@ -47,6 +47,8 @@ export function ArenaHud({
   onToggle,
   onSpeed,
   onReport,
+  reportLabel,
+  onLeave,
 }: {
   info: HudInfo;
   frame: ReadonlySignal<ArenaFrameState | null>;
@@ -55,8 +57,11 @@ export function ArenaHud({
   overtime: { startS: number; capS: number };
   onToggle: () => void;
   onSpeed: (speed: Speed) => void;
-  /** Replay: back to the report. */
+  /** Replay: back to the report (or the match, for a live match's earlier round). */
   onReport?: () => void;
+  reportLabel?: { text: string; tip: string };
+  /** Live: leave the arena (a visible control for the pointer; Esc is the key). */
+  onLeave?: () => void;
 }) {
   const f = frame.value;
   const sn = snap.value;
@@ -85,7 +90,7 @@ export function ArenaHud({
     );
   };
   return (
-    <header class="ahud" aria-label="Match status" data-testid="arena-hud">
+    <header class="ahud" aria-label={t('hudAria')} data-testid="arena-hud">
       {sideView(info.left, false)}
       <div class="ahud__center" data-overtime={inOvertime ? 'true' : undefined}>
         <div class="ahud__round">
@@ -116,20 +121,26 @@ export function ArenaHud({
               {t('hudReplay')}
             </span>
             {onReport && (
-              <button class="btn btn--sm btn--ghost" type="button" onClick={onReport} data-testid="replay-report-link" {...tipAttrs(t('hudReportTip'))}>
+              <button class="btn btn--sm btn--ghost" type="button" onClick={onReport} data-testid="replay-report-link" {...tipAttrs(reportLabel?.tip ?? t('hudReportTip'))}>
                 <Icon name="chevron-left" />
-                {t('hudReport')} <kbd>Esc</kbd>
+                {reportLabel?.text ?? t('hudReport')} <kbd>Esc</kbd>
               </button>
             )}
           </>
+        )}
+        {info.kind === 'live' && onLeave && (
+          <button class="btn btn--sm btn--ghost" type="button" onClick={onLeave} data-testid="arena-leave" {...tipAttrs(t('hudLeaveTip'))}>
+            <Icon name="chevron-left" />
+            {t('hudLeave')} <kbd>Esc</kbd>
+          </button>
         )}
         {/* The calls-left slot (P-01) stays hidden until the calls package lands. */}
         <span class="ahud__calls" hidden data-testid="arena-calls" aria-hidden="true">
           {t('hudCallsLeft')}
         </span>
-        <Segmented<'1' | '2' | '4'> label="Playback speed" value={String(sn.speed) as '1' | '2' | '4'} onChange={(id) => onSpeed(Number(id) as Speed)} options={SPEED_OPTIONS} />
+        <Segmented<'1' | '2' | '4'> label={t('speedGroup')} value={String(sn.speed) as '1' | '2' | '4'} onChange={(id) => onSpeed(Number(id) as Speed)} options={SPEED_OPTIONS} />
         {sn.playing ? (
-          <button class="btn" type="button" onClick={onToggle} data-testid="arena-play" {...tipAttrs(`${t('pause')}. Pausing is free and unlimited.`)}>
+          <button class="btn" type="button" onClick={onToggle} data-testid="arena-play" {...tipAttrs(t('pauseTip'))}>
             <Icon name="pause" />
             {t('pause')} <kbd>Space</kbd>
           </button>

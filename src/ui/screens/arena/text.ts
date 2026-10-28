@@ -290,6 +290,33 @@ const T = {
   leaveConfirm: 'Leave',
   leaveStay: 'Stay',
 
+  // ---- review fixes: saving gate, leaving, strings that were inline ----
+  savingLock: 'Saving the match start',
+  hudAria: 'Match status',
+  speedGroup: 'Playback speed',
+  pauseTip: 'Pause (Space). Pausing is free and unlimited.',
+  hudLeave: 'Leave',
+  hudLeaveTip: 'Leave the arena: the match stays live and Continue reads Resume watching (Esc)',
+  hudBackMatch: 'Match',
+  hudBackMatchTip: 'Back to the match (Esc)',
+  endSimulating: 'Simulating the rest of the match',
+  endLeave: 'Leave',
+  stripRuleTip: 'The rule he is acting on now',
+  stripYours: 'your side',
+  stripOpp: 'opponent',
+  stripFreshTip: '{tag}: starts the round with a Freshness penalty',
+  stripSub: 'sub',
+  frameBackTip: 'Back one frame, 0.1 s (Left). Shift Left: one second. While paused.',
+  frameFwdLiveTip: 'Forward one frame, 0.1 s (Right). Not past the live head.',
+  frameFwdTip: 'Forward one frame, 0.1 s (Right). Shift Right: one second.',
+  skipRoundShort: 'Skip round',
+  simulateRestShort: 'Simulate rest',
+  inspectWhyAria: 'Rules in order, with why each was skipped',
+  inspectCloseTip: 'Close (Esc)',
+  inspectNoPenalty: 'no penalty',
+  dockAria: 'Inspector and key moments',
+  saveNoSlot: 'Every manual slot is in use: open Saves to choose one',
+
   // ---- tickets ----
   ticketKind: 'arena {kind}',
 } as const;

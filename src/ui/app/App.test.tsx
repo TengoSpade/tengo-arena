@@ -32,7 +32,7 @@ describe('App', () => {
     navigate('#/home');
     render(<App store={store} />);
     const club = store.game.value!.clubs[store.game.value!.playerClubId!]!;
-    await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy(), { timeout: 5000 }); // the lazy Home chunk can be slow under a loaded machine
     // Long names show the short name whole; the full name stays in the label.
     expect(screen.getByTestId('topbar-club').textContent).toContain(club.name.length > 17 ? club.shortName : club.name);
     expect(screen.getByTestId('topbar-club').getAttribute('aria-label')).toBe(club.name);

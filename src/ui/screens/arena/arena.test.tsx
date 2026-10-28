@@ -138,9 +138,14 @@ describe('arena screen: a live round', () => {
     key(' ');
     await waitFor(() => expect(s.viewer().playing).toBe(false));
     fireEvent.keyDown(screen.getByTestId('arena-host'), { key: 's', ctrlKey: true });
-    // No manual slot yet for this career: Save as opens, as everywhere (the pause saved the cursor first).
-    await waitFor(() => expect(location.hash).toBe('#/saves'));
+    // No manual slot yet for this career: the first free one is used and the toast says which (the pause saved the cursor first).
+    await waitFor(async () => expect((await s.saves.list()).some((m) => m.slotId === 'manual-1')).toBe(true));
+    expect(toasts.value.map((x) => x.title)).toContain('Saved to slot 1');
+    expect(location.hash).toBe('#/arena');
     expect(s.core.watchCommands.at(-1)?.tick).toBe(100);
+    // The next Ctrl S goes to the same slot.
+    fireEvent.keyDown(screen.getByTestId('arena-host'), { key: 's', ctrlKey: true });
+    await waitFor(() => expect(toasts.value.filter((x) => x.title === 'Saved to slot 1').length).toBe(2));
   });
 
   it('D hides and shows the dock, remembered per device; nothing else changes the layout (A18)', async () => {

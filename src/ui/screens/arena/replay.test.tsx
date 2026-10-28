@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ContentDB } from '../../../core/content';
 import type { ReplayAvailability } from '../../../core/game';
-import type { FixtureId } from '../../../core/model';
+import type { FixtureId, GameState } from '../../../core/model';
 import { fixtureContent } from '../../../core/testkit';
 import { engineError, err } from '../../../core/util';
 import { resetToasts } from '../../components';
@@ -35,13 +35,15 @@ afterEach(() => {
   dispose = null;
 });
 
-function mountReplay(params: Record<string, string>, over: (e: GameEngine, w: WatchWorld) => Partial<GameEngine> = () => ({})) {
+function mountReplay(params: Record<string, string>, over: (e: GameEngine, w: WatchWorld) => Partial<GameEngine> = () => ({}), tweak?: (s: GameState) => void) {
   const w = watchWorld(content);
   const core = createScriptedCore(w);
   const engine = { ...core.engine, ...over(core.engine, w) };
   const t = createTestStore({ world: 'none', engine });
   // Round 3 is being watched; rounds 1 (won) and 2 (lost) are committed and replayable.
-  t.store.replaceWorld(liveWatchState(w, { round: 3, wins: ['home', 'away'] }), content);
+  const st = liveWatchState(w, { round: 3, wins: ['home', 'away'] });
+  tweak?.(st);
+  t.store.replaceWorld(st, content);
   const harness = createFakeViewerHarness(fakeTimeline, content);
   render(
     <TestProviders store={t.store}>
@@ -114,6 +116,28 @@ describe('replay screen', () => {
     expect(screen.queryByTestId('replay-next')).toBeNull(); // round 2 is the last committed round
     fireEvent.click(screen.getByTestId('replay-again'));
     expect(m.viewer().tick).toBe(0);
+  });
+
+  it('a replayed round of the match still being played goes back to the match (Esc and the button), not to a report that does not exist yet', async () => {
+    // Between rounds (the between-round screen is where "Replay round n" is offered).
+    const between = mountReplay({ round: '1' }, undefined, (s) => {
+      s.liveMatch!.phase = 'between_rounds';
+      s.liveMatch!.watch = { mode: 'watch', round: null, cursorTick: 0, calls: [] };
+    });
+    await ready();
+    expect(text('replay-report-link')).toContain('Match');
+    key('Escape');
+    expect(location.hash).toBe('#/between-rounds');
+    location.hash = '#/replay/x';
+    fireEvent.click(screen.getByTestId('replay-report-link'));
+    expect(location.hash).toBe('#/between-rounds');
+    expect(between.viewer()).toBeTruthy();
+    cleanup();
+    // A round waits in the arena (Home's Continue says Resume watching): back goes there.
+    mountReplay({ round: '1' });
+    await ready();
+    key('Escape');
+    expect(location.hash).toBe('#/arena');
   });
 
   it('explains why a match cannot be replayed, with the reason in words', async () => {

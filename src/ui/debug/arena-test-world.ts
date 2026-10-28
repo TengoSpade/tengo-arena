@@ -265,6 +265,8 @@ export function createScriptedCore(w: WatchWorld, opts: { winners?: ('home' | 'a
       if (ms.watch?.round) rounds.push({ round: ms.watch.round, winner: null, durationTicks: null });
       return ok({ fixtureId: fixtureId as MatchPlayback['fixtureId'], bestOf: ms.bestOf, homeClubId: ms.home.clubId, awayClubId: ms.away.clubId, playerSide: 'home', kind: 'live', rounds, betweenRounds: [] });
     }) as GameEngine['matchPlayback'],
+    // The v4 save schema is strict and does not know liveMatch.watch yet (WP-M2B adds v5): a lenient reader for tests that load a watched match.
+    parseSave: ((json: string) => ok({ envelope: JSON.parse(json), warnings: [] })) as unknown as GameEngine['parseSave'],
     replayAvailability: (() => self.availability) as GameEngine['replayAvailability'],
     inspectPlayback: ((_state: GameState, _fixtureId: string, round: number, tick: number) => {
       inspects.push([round, tick]);

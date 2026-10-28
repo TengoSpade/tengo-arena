@@ -17,7 +17,7 @@ import { Callout, Empty, PageHeader } from '../../components';
 import { useStore, type AppStore } from '../../store';
 import { errorText } from '../../store/messages';
 import { effectiveTheme, settings } from '../../store/settings';
-import { useArena } from '../../store/arena';
+import { useArena, watchingMatch } from '../../store/arena';
 import { tipAttrs } from '../../components';
 import { registerArenaTicketInfo } from '../../tickets/arena-info';
 import { useEffect } from 'preact/hooks';
@@ -240,8 +240,11 @@ function ReplayStage({
   void match;
   const roleName = (r: string) => content.combat.archetypes.find((a) => a.id === r)?.name ?? r;
   const next = rounds[rounds.indexOf(round) + 1];
-  // Esc and the Report button: back to the match report (the fixture round of the test hook has none: Home).
-  const toReport = () => navigate(hookSlot.fixture?.fixtureId === fixtureId ? '#/home' : `#/match/${encodeURIComponent(fixtureId)}`);
+  // Esc and the Report button: back to the match report. A round of the match still being played has no report yet: back to the
+  // match (the between-round screen, or the arena when a round waits); the test hook's fixture round has none: Home.
+  const liveMatch = state.liveMatch?.fixtureId === fixtureId;
+  const toReport = () =>
+    navigate(hookSlot.fixture?.fixtureId === fixtureId ? '#/home' : liveMatch ? (watchingMatch(store.game.value ?? state) ? '#/arena' : '#/between-rounds') : `#/match/${encodeURIComponent(fixtureId)}`);
 
   return (
     <ArenaLayout
@@ -258,6 +261,7 @@ function ReplayStage({
       onSkip={() => session.seek(snap.end ?? snap.head)}
       statusSlot={tabs}
       onReport={toReport}
+      reportLabel={liveMatch ? { text: t('hudBackMatch'), tip: t('hudBackMatchTip') } : undefined}
       onEscape={toReport}
       extraKeys={keys}
       overlay={

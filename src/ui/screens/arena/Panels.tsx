@@ -96,7 +96,7 @@ function RuleView({ content, r }: { content: ContentDB; r: RuleRef }) {
 
 function WhyList({ content, lines }: { content: ContentDB; lines: readonly WhyLine[] }) {
   return (
-    <ol class="awhy" aria-label="Rules in order, with why each was skipped" data-testid="inspector-why">
+    <ol class="awhy" aria-label={t('inspectWhyAria')} data-testid="inspector-why">
       {lines.map((l, i) => (
         <li key={i} class="awhy__item" data-fired={l.fired ? 'true' : 'false'} data-reached={l.reached ? 'true' : 'false'} data-testid="trace-line">
           <span class="awhy__mark" aria-hidden="true">
@@ -161,7 +161,7 @@ export function ArenaInspector({
             </span>
           )}
         </div>
-        <button class="icon-btn l-push" type="button" onClick={onClose} aria-label={t('inspectClose')} data-testid="inspector-close" {...tipAttrs('Close (Esc)')}>
+        <button class="icon-btn l-push" type="button" onClick={onClose} aria-label={t('inspectClose')} data-testid="inspector-close" {...tipAttrs(t('inspectCloseTip'))}>
           <Icon name="close" />
         </button>
       </header>
@@ -303,7 +303,7 @@ export function ArenaInspector({
                 {model.freshness && (
                   <div>
                     <dt>{t('inspectFreshnessLine')}</dt>
-                    <dd>{model.freshnessPenalty ? `${model.freshness} · ${model.freshnessPenalty}` : `${model.freshness} · no penalty`}</dd>
+                    <dd>{model.freshnessPenalty ? `${model.freshness} · ${model.freshnessPenalty}` : `${model.freshness} · ${t('inspectNoPenalty')}`}</dd>
                   </div>
                 )}
               </dl>

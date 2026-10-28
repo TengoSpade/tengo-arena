@@ -14,14 +14,14 @@ import type { FixtureId, GameState, WeekReport } from '../../../core/model';
 import type { EngineError, Result } from '../../../core/util';
 import type { ArenaViewer } from '../../../render/viewer';
 import { afterMatch, opensReport } from '../../app/after-match';
-import { quickSaveOrAsk } from '../../app/save-intent';
 import { navigate } from '../../app/router';
 import type { ScreenProps } from '../../app/routes';
 import { Empty, Modal, PageHeader, showToast } from '../../components';
-import { MATCH_PAUSED, MATCH_WATCHING, SAVE_ROUND_FAILED, WATCH_MISMATCH, WATCH_NOT_SHOWN, useStore, type AppStore } from '../../store';
+import { MANUAL_SLOT_IDS, MATCH_PAUSED, MATCH_WATCHING, SAVE_ROUND_FAILED, WATCH_MISMATCH, WATCH_NOT_SHOWN, slotName, useStore, type AppStore } from '../../store';
 import { errorText } from '../../store/messages';
 import { effectiveTheme, settings } from '../../store/settings';
-import { useArena } from '../../store/arena';
+import { arenaEpoch, savedWatch, useArena, watchKey, watchingMatch } from '../../store/arena';
+import { hashString, stableStringify } from '../../../core/util';
 import { t as uiT } from '../../text';
 import { registerArenaTicketInfo } from '../../tickets/arena-info';
 import { ArenaLayout } from './Arena';
@@ -34,11 +34,7 @@ import { clock, t, t as uiText } from './text';
 const TICK_S = 0.05;
 
 /** The round waiting to be watched, from the committed state. */
-export function watchingOf(state: GameState | null): { fixtureId: FixtureId; round: number; cursorTick: number } | null {
-  const ms = state?.liveMatch;
-  const w = ms?.watch;
-  return ms && w && w.mode === 'watch' && w.round !== null ? { fixtureId: ms.fixtureId, round: w.round, cursorTick: w.cursorTick } : null;
-}
+export const watchingOf = watchingMatch;
 
 /** The finished round for the card: winner, match score (the player's side first), time and what opens next, from committed state only. */
 function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId, round: number, report: WeekReport | null): RoundEndResult | null {
@@ -77,16 +73,24 @@ function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId
 
 /**
  * A live round's playback is a full sim (WP-M2B: cache it per round): coming back to the arena (a click on Home, the
- * resume after the between-round screen's Replay) must not simulate it again. One entry, keyed by what fixes the
- * round (career seed, match seed, round, rounds played); only the resume point is taken fresh from the state.
+ * resume after the between-round screen's Replay) must not simulate it again. One entry, keyed by what fixes the round:
+ * a hash of the LOCKED INPUTS (both sides' squads and rows, every fighter's lock-time input, the rounds played with their
+ * lineups, the calls) plus the match seed, the round and the world epoch (bumped by a load, a new game and a rollback).
+ * The match seed alone does not depend on the lineup, so after a load and a re-lock with another lineup it would hit.
+ * Only the resume point is taken fresh from the state.
  */
 let liveCache: { key: string; playback: RoundPlayback } | null = null;
-function cachedLiveRound(state: GameState, load: () => Result<RoundPlayback, EngineError> | null): Result<RoundPlayback, EngineError> | null {
+function lockKey(state: GameState): string | null {
   const ms = state.liveMatch;
   const round = ms?.watch?.round;
-  if (!ms || !round) return load();
-  const key = `${state.rng.root}|${ms.fixtureId}|${ms.seed}|${round}|${ms.rounds.length}`;
-  if (liveCache?.key === key) return { ok: true, value: { ...liveCache.playback, startTick: ms.watch!.cursorTick } };
+  if (!ms || !round) return null;
+  const locked = hashString(stableStringify({ home: ms.home, away: ms.away, inputsById: ms.inputsById, roundLineups: ms.roundLineups, calls: ms.watch!.calls }));
+  return `${arenaEpoch.peek()}|${state.rng.root}|${ms.fixtureId}|${ms.seed}|${round}|${ms.rounds.length}|${locked}`;
+}
+function cachedLiveRound(state: GameState, load: () => Result<RoundPlayback, EngineError> | null): Result<RoundPlayback, EngineError> | null {
+  const key = lockKey(state);
+  if (key === null) return load();
+  if (liveCache?.key === key) return { ok: true, value: { ...liveCache.playback, startTick: state.liveMatch!.watch!.cursorTick } };
   const r = load();
   if (r?.ok) liveCache = { key, playback: r.value };
   return r;
@@ -106,13 +110,29 @@ export default function ArenaScreen(_props: ScreenProps) {
   // the commit, before the card is up, and the card lives inside the round's screen).
   const frozen = useRef<{ fixtureId: FixtureId; round: number } | null>(null);
   const w = watchingOf(state);
+  // The arena opens only for a round whose lock is SAVED (the store sets the gate after the required write): the lock is
+  // in memory before then, and showing the round meanwhile would be a peek that a failed write rerolls (A3).
+  const saved = w !== null && savedWatch.value === watchKey(w);
   if ((over?.phase === 'result' || over?.phase === 'saving') && frozen.current) {
     // keep the frozen round
-  } else frozen.current = w ? { fixtureId: w.fixtureId, round: w.round } : null;
+  } else frozen.current = w && saved ? { fixtureId: w.fixtureId, round: w.round } : null;
   useEffect(() => () => resetRoundEnd(), []);
 
   const shown = frozen.current;
+  if (w && !saved && !shown) return <SavingLock />;
   return state && content && shown ? <LiveArena key={`${shown.fixtureId}:${shown.round}`} store={store} content={content} fixtureId={shown.fixtureId} round={shown.round} /> : <NoRound state={state} />;
+}
+
+/** The lock is being saved: nothing of the round is shown until the write has succeeded. */
+function SavingLock() {
+  return (
+    <section class="page" data-testid="screen-arena-saving" aria-busy="true">
+      <PageHeader eyebrow={t('eyebrowLive')} title={t('title')} />
+      <p class="u-muted" role="status">
+        {t('savingLock')}
+      </p>
+    </section>
+  );
 }
 
 function NoRound({ state }: { state: GameState | null }) {
@@ -176,6 +196,24 @@ function LiveArena({ store, content, fixtureId, round }: { store: AppStore; cont
     );
   }
   return <LiveRound store={store} content={content} fixtureId={fixtureId} round={round} loaded={loaded} hostRef={hostRef} />;
+}
+
+/** Ctrl S in the arena (while paused; the pause has saved the cursor): the current manual slot, else the first free one, else say so. */
+async function saveFromArena(store: AppStore): Promise<void> {
+  if (store.currentSlot.value) {
+    const r = await store.quickSave();
+    if (r.ok) showToast({ kind: 'good', title: uiT('save.saved', { slot: slotName(r.value.slotId) }), sub: r.value.label });
+    return;
+  }
+  const metas = await store.listSaves();
+  const slot = MANUAL_SLOT_IDS.find((id) => !metas.some((m) => m.slotId === id));
+  if (!slot) {
+    showToast({ kind: 'bad', title: t('saveNoSlot') });
+    return;
+  }
+  const r = await store.save(slot);
+  if (r.ok) showToast({ kind: 'good', title: uiT('save.saved', { slot: slotName(slot) }), sub: r.value.label });
+  else showToast({ kind: 'bad', title: uiT('error.title'), sub: errorText(r.error) });
 }
 
 function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { store: AppStore; content: ContentDB; fixtureId: FixtureId; round: number; loaded: Extract<Loaded, { kind: 'ok' }>; hostRef: { current: HTMLElement | null } }) {
@@ -313,9 +351,12 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
   const doSimulate = async () => {
     setConfirm(null);
     setBusy(true);
+    // A card keeps this round on screen while the mode switches and the rest is played (the state moves on under it).
+    roundEnd.value = { phase: 'saving', round, bestOf: ctx.bestOf, result: null, next: null, retry: null, message: 'simulating' };
     const head = Math.ceil(session.snap.peek().head);
     const res = await arena.simulateRest(store.game.value ?? state, head);
     setBusy(false);
+    roundEnd.value = null;
     if (res.ok) afterMatch(store.game.value, res.value);
     else if (res.error.code === MATCH_PAUSED) navigate('#/between-rounds');
     else showToast({ kind: 'bad', title: uiT('error.title'), sub: errorText(res.error) });
@@ -337,7 +378,7 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
       onSkip={askSkip}
       onSimulateRest={askSimulate}
       onEscape={askLeave}
-      onSave={() => void quickSaveOrAsk(store)}
+      onSave={() => void saveFromArena(store)}
       roundOver={roundEnd.value?.phase === 'result'}
       overlay={
         <>

@@ -150,10 +150,10 @@ export function ArenaControls({
           {live ? clock(head * TICK_S) : clock(tick * TICK_S)}
           {!live && <small> / {clock(span * TICK_S)}</small>}
         </span>
-        <button class="btn btn--sm btn--ghost btn--icon" type="button" onClick={() => session.step(-2)} disabled={!ready || sn.playing} aria-label={t('frameBack')} data-testid="arena-frame-back" {...tipAttrs('Back one frame, 0.1 s (Left). Shift Left: one second. While paused.')}>
+        <button class="btn btn--sm btn--ghost btn--icon" type="button" onClick={() => session.step(-2)} disabled={!ready || sn.playing} aria-label={t('frameBack')} data-testid="arena-frame-back" {...tipAttrs(t('frameBackTip'))}>
           <Icon name="step-back" />
         </button>
-        <button class="btn btn--sm btn--ghost btn--icon" type="button" onClick={() => session.step(2)} disabled={!ready || sn.playing} aria-label={t('frameForward')} data-testid="arena-frame-forward" {...tipAttrs(live ? 'Forward one frame, 0.1 s (Right). Not past the live head.' : 'Forward one frame, 0.1 s (Right). Shift Right: one second.')}>
+        <button class="btn btn--sm btn--ghost btn--icon" type="button" onClick={() => session.step(2)} disabled={!ready || sn.playing} aria-label={t('frameForward')} data-testid="arena-frame-forward" {...tipAttrs(t(live ? 'frameFwdLiveTip' : 'frameFwdTip'))}>
           <Icon name="step-fwd" />
         </button>
         {live && (
@@ -165,13 +165,13 @@ export function ArenaControls({
         {live && (
           <button class="btn btn--sm btn--ghost" type="button" onClick={onSkip} disabled={!ready || busy} data-testid="arena-skip" {...tipAttrs(t('skipRoundTip'))}>
             <Icon name="skip-end" />
-            <span class="col-narrow">Skip round</span>
+            <span class="col-narrow">{t('skipRoundShort')}</span>
             <span class="col-wide">{t('skipRound')}</span> <kbd>Shift S</kbd>
           </button>
         )}
         {onSimulateRest && (
           <button class="btn btn--sm btn--ghost" type="button" onClick={onSimulateRest} disabled={!ready || busy} data-testid="arena-simulate-rest" {...tipAttrs(t('simulateRestTip'))}>
-            <span class="col-narrow">Simulate rest</span>
+            <span class="col-narrow">{t('simulateRestShort')}</span>
             <span class="col-wide">{t('simulateRest')}</span> <kbd>Shift Space</kbd>
           </button>
         )}

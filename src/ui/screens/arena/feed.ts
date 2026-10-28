@@ -2,9 +2,10 @@
  * The live feed's sentences (04 §4 "downs name their cause", vis-003): one line per key moment, from the viewer's
  * `keyMoments()` (bounded by the live head) and the round context. Pure.
  *
- * Convention (confirm with src/render/timeline, WP-M2C): for kind 'down' a KeyMoment's `unit` is the downed fighter
- * and `target` the one who downed him (the sim's `unit.down` envelope: unit = victim, target = killer); for
- * 'interrupt' and 'deathward' `unit` is the one affected and `target` the other fighter, when there is one.
+ * Convention (confirmed by the architect; src/render/timeline and the match report use it): `unit` is the ACTING fighter
+ * and `target` the one it happened to. So for a 'down', `unit` is the killer (the credited fighter, null for none) and
+ * `target` the fallen; for 'interrupt', `unit` interrupted `target`; for 'deathward', `unit` saved `target`. Rally,
+ * captain-down, handover and call are about `unit`.
  */
 import type { ContentDB } from '../../../core/content';
 import type { ArenaRoundContext, AutoPauseReason, KeyMoment } from '../../../render';
@@ -38,8 +39,8 @@ export function nameOfUnit(ctx: ArenaRoundContext, unit: number | null): string 
 }
 
 export function momentParts(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB): { title: string; detail: string } {
-  const unit = nameOfUnit(ctx, m.unit);
-  const by = nameOfUnit(ctx, m.target);
+  const unit = nameOfUnit(ctx, m.target);
+  const by = nameOfUnit(ctx, m.unit);
   const ability = m.ability ? abilityName(content, m.ability) : '';
   switch (m.kind) {
     case 'down':
@@ -49,9 +50,16 @@ export function momentParts(m: KeyMoment, ctx: ArenaRoundContext, content: Conte
   }
 }
 
+/** The fighter a moment is ABOUT: the fallen, the interrupted, the saved; else the acting fighter. */
+export function subjectOf(m: KeyMoment): number | null {
+  return m.kind === 'down' || m.kind === 'interrupt' || m.kind === 'deathward' ? m.target : m.unit;
+}
+
 export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: ContentDB): string {
-  const unit = nameOfUnit(ctx, m.unit);
-  const by = nameOfUnit(ctx, m.target);
+  // About whom (the fallen, the interrupted, the saved) and by whom, per the convention above.
+  const affected = subjectOf(m) === m.target && m.target !== null;
+  const unit = nameOfUnit(ctx, affected ? m.target : m.unit);
+  const by = affected ? nameOfUnit(ctx, m.unit) : '';
   const ability = m.ability ? abilityName(content, m.ability) : '';
   switch (m.kind) {
     case 'down':
@@ -77,7 +85,8 @@ export function momentText(m: KeyMoment, ctx: ArenaRoundContext, content: Conten
 
 export function feedItems(moments: readonly KeyMoment[], ctx: ArenaRoundContext, content: ContentDB): FeedItem[] {
   return moments.map((m) => {
-    const side = m.unit !== null ? (ctx.units[m.unit]?.side ?? null) : null;
+    const subject = subjectOf(m);
+    const side = subject !== null ? (ctx.units[subject]?.side ?? null) : null;
     const ours = side === null ? null : side === (ctx.playerSide ?? 0);
     const parts = momentParts(m, ctx, content);
     return {

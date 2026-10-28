@@ -18,6 +18,9 @@ export function ArenaStrip({
   selected,
   downCause,
   onSelect,
+  onToggle,
+  onInspect,
+  onSimulate,
   roleName,
 }: {
   ctx: ArenaRoundContext;
@@ -28,6 +31,12 @@ export function ArenaStrip({
   downCause: (unit: number) => string | null;
   /** Called when a card gets focus or is clicked: the card is the selection. */
   onSelect: (unit: number) => void;
+  /** Space on a focused card plays or pauses (the shell's shortcut map leaves Space and Enter to a focused button). */
+  onToggle: () => void;
+  /** Enter on a focused card opens the inspector. */
+  onInspect: () => void;
+  /** Shift Space on a card: Simulate the rest (live only). */
+  onSimulate?: () => void;
   roleName: (role: string) => string;
 }) {
   const f = frame.value;
@@ -45,7 +54,7 @@ export function ArenaStrip({
     const label = [
       u.name,
       `${u.className} (${u.roles.map(roleName).join(' / ')})`,
-      ours ? 'your side' : 'opponent',
+      t(ours ? 'stripYours' : 'stripOpp'),
       down ? (cause ? `${t('stripDowned')} · ${cause}` : t('stripDowned')) : max > 0 ? `${Math.round(hpFrac * 100)}% HP` : null,
       rule && !down ? t('stripRule', { label: rule }) : null,
       st?.isCaptain ? t('stripCaptain') : null,
@@ -66,6 +75,19 @@ export function ArenaStrip({
         aria-label={label}
         onFocus={() => onSelect(u.unit)}
         onClick={() => onSelect(u.unit)}
+        onKeyDown={(e) => {
+          // Buttons keep Space and Enter for themselves, so the arena's keys are handled here on a focused card.
+          if (e.key === ' ' || e.code === 'Space') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.shiftKey && onSimulate) onSimulate();
+            else onToggle();
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            onInspect();
+          }
+        }}
       >
         <span class="portrait portrait--sm" data-role={u.roles[0] ?? 'melee'} data-race={u.raceId} aria-hidden="true" />
         <span class="afighter__body">
@@ -86,7 +108,7 @@ export function ArenaStrip({
           ) : (
             <span class="afighter__line">
               {rule && (
-                <span class="rule__id" data-testid={`strip-rule-${u.unit}`} {...tipAttrs(rule === 'S' ? t('stripStance') : rule === 'T' ? t('stripForced') : 'The rule he is acting on now')}>
+                <span class="rule__id" data-testid={`strip-rule-${u.unit}`} {...tipAttrs(rule === 'S' ? t('stripStance') : rule === 'T' ? t('stripForced') : t('stripRuleTip'))}>
                   {rule}
                 </span>
               )}
@@ -103,11 +125,11 @@ export function ArenaStrip({
             ))}
             <span class="afighter__class">{u.className}</span>
             {fresh && (
-              <span class="tag tag--warn" data-testid={`strip-fresh-${u.unit}`} {...tipAttrs(`${fresh}: starts the round with a Freshness penalty`)}>
+              <span class="tag tag--warn" data-testid={`strip-fresh-${u.unit}`} {...tipAttrs(t('stripFreshTip', { tag: fresh }))}>
                 {fresh.replace(/[()]/g, '')}
               </span>
             )}
-            {u.entered && <span class="u-xs u-faint" {...tipAttrs(t('stripEntered'))}>sub</span>}
+            {u.entered && <span class="u-xs u-faint" {...tipAttrs(t('stripEntered'))}>{t('stripSub')}</span>}
           </span>
         </span>
       </button>

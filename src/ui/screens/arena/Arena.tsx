@@ -64,6 +64,7 @@ export interface ArenaLayoutProps {
   /** The state of the screen for the stylesheet: 'round-end' while the card shows. */
   roundOver?: boolean;
   onReport?: () => void;
+  reportLabel?: { text: string; tip: string };
 }
 
 /** Tab order of the strip: the player's side first (else home). */
@@ -135,8 +136,9 @@ export function ArenaLayout(p: ArenaLayoutProps) {
   const stop = session.lastStop.value;
   const announcement = stop ? (stop.kind === 'hidden' ? t('stopHidden') : stopText(stop, ctx)) : null;
   const downCause = (unit: number): string | null => {
-    const m = session.moments.value.find((x) => x.kind === 'down' && x.unit === unit);
-    return m && m.target !== null ? nameOfUnit(ctx, m.target) : null;
+    // The moment whose target is the fallen; its unit is the fighter credited with the down.
+    const m = session.moments.value.find((x) => x.kind === 'down' && x.target === unit);
+    return m && m.unit !== null ? nameOfUnit(ctx, m.unit) : null;
   };
   const capTicks = Math.round((p.content.combat.overtime.hardCapS * 1000) / p.content.combat.tick.tickMs);
 
@@ -225,6 +227,8 @@ export function ArenaLayout(p: ArenaLayoutProps) {
         onToggle={() => session.toggle()}
         onSpeed={(s) => session.setSpeed(s)}
         onReport={p.onReport}
+        reportLabel={p.reportLabel}
+        onLeave={p.kind === 'live' ? p.onEscape : undefined}
       />
       <div class="arena-body" data-dock={dockOpen ? 'open' : 'closed'}>
         <div class="arena-main">
@@ -266,7 +270,7 @@ export function ArenaLayout(p: ArenaLayoutProps) {
           />
         </div>
         {dockOpen && (
-          <aside class="arena-dock" aria-label="Inspector and key moments" data-testid="arena-dock">
+          <aside class="arena-dock" aria-label={t('dockAria')} data-testid="arena-dock">
             {inspectorOpen && (
               <ArenaInspector content={p.content} model={model} paused={paused} probe={probe.state} hasSelection={selected !== null} onClose={() => setInspectorOpen(false)} roleName={p.roleName} />
             )}
@@ -287,6 +291,9 @@ export function ArenaLayout(p: ArenaLayoutProps) {
         onSelect={(u) => {
           if (session.selected.peek() !== u) session.select(u);
         }}
+        onToggle={() => session.toggle()}
+        onInspect={() => setInspectorOpen(true)}
+        onSimulate={p.onSimulateRest}
         roleName={p.roleName}
       />
       <p class="u-sr-only" data-testid="arena-keys">

@@ -44,7 +44,7 @@ import { showToast } from '../components/Toast';
 import { configureFormat } from '../format';
 import { t } from '../text';
 import type { GameStore, StorePlatform } from './contract';
-import { MATCH_WATCHING, SAVE_ROUND_FAILED, WATCH_MISMATCH, WATCH_NOT_SHOWN } from './arena';
+import { bumpArenaEpoch, MATCH_WATCHING, SAVE_ROUND_FAILED, savedWatch, watchKey, watchingMatch, WATCH_MISMATCH, WATCH_NOT_SHOWN } from './arena';
 import { coreEngine, type GameEngine } from './engine';
 import { settings } from './settings';
 
@@ -238,7 +238,9 @@ export function createGameStore(platform: StorePlatform): AppStore {
         loadedSlot.value = null;
         ownCareerId.value = `c-${seedFromEntropy([...platform.entropy(), platform.clock.nowMs()])}`;
         dirty.value = true;
+        savedWatch.value = null;
       });
+      bumpArenaEpoch();
       playtimeBase = 0;
       sessionStartMs = platform.clock.nowMs();
       return ok(undefined);
@@ -314,12 +316,19 @@ export function createGameStore(platform: StorePlatform): AppStore {
       if (watch) {
         const saved = await autosave('round', true);
         if (!saved.ok) {
+          const before = watchingMatch(g);
           batch(() => {
             game.value = g;
             dirty.value = wasDirty;
+            // The world before the lock again: what it had saved is the gate (a watched round of it, or none).
+            savedWatch.value = before ? watchKey(before) : null;
           });
-          return fail(engineError(SAVE_ROUND_FAILED, 'The round could not be saved', { fixtureId: watch.fixtureId, round: watch.round, message: saved.error.message }));
+          bumpArenaEpoch();
+          // Quiet: the callers say it in their own place (a toast with Retry, the between-round error, the round card), once.
+          return err(engineError(SAVE_ROUND_FAILED, 'The round could not be saved', { fixtureId: watch.fixtureId, round: watch.round, message: saved.error.message }));
         }
+        // The lock is saved: from here the arena may show the round.
+        savedWatch.value = watchKey(watch);
         return err(engineError(MATCH_WATCHING, 'A round waits to be watched', { fixtureId: watch.fixtureId, round: watch.round, cursorTick: watch.cursorTick }));
       }
       // Every round is committed (P-05): a reload resumes on the between-round screen. A paused match goes to its
@@ -497,7 +506,11 @@ export function createGameStore(platform: StorePlatform): AppStore {
         currentSlot.value = envelope.meta.kind === 'manual' && !isTicketSlot(slotId) ? slotId : null;
         loadedSlot.value = slotId;
         ownCareerId.value = envelope.meta.careerId ?? null;
+        // A loaded save is a saved one: its watched round (if any) may open at once.
+        const w = watchingMatch(envelope.state);
+        savedWatch.value = w ? watchKey(w) : null;
       });
+      bumpArenaEpoch();
       playtimeBase = envelope.meta.playtimeSec;
       sessionStartMs = platform.clock.nowMs();
       // Content changed since the save (core parseSave warnings): say so once, the save still loads.
@@ -620,7 +633,10 @@ export function createGameStore(platform: StorePlatform): AppStore {
       currentSlot.value = null;
       loadedSlot.value = null;
       ownCareerId.value = null;
+      const w = watchingMatch(state);
+      savedWatch.value = w ? watchKey(w) : null;
     });
+    bumpArenaEpoch();
   };
 
   const store: AppStore = {

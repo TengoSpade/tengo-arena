@@ -26,7 +26,7 @@ export { blockerTarget };
 /**
  * How Play match starts the player's match (open-020, owner answer to Q54): `mode` is what Continue and Space do,
  * `offer` shows the other choice as a button beside it (both are one input). Watch is primary; the Streamlined
- * pacing preset (D-L) simulates by default; an explicit Watch preference in Settings › Match day wins over it.
+ * pacing preset (D-L) always simulates (owner answer to Q54), whatever the preference.
  */
 export interface PlayMode {
   mode: MatchViewMode;
@@ -34,9 +34,12 @@ export interface PlayMode {
 }
 
 export function playModeFor(pacing: PacingPreset, preference: WatchPreference): PlayMode {
+  // Streamlined always simulates (owner answer to Q54), whatever the Watch preference; the Watch button beside it still
+  // watches (A18) unless the preference is Always simulate.
+  if (pacing === 'streamlined') return { mode: 'simulate', offer: preference !== 'simulate' };
   if (preference === 'watch') return { mode: 'watch', offer: false };
   if (preference === 'simulate') return { mode: 'simulate', offer: false };
-  return { mode: pacing === 'streamlined' ? 'simulate' : 'watch', offer: true };
+  return { mode: 'watch', offer: true };
 }
 
 export type ContinueAction =

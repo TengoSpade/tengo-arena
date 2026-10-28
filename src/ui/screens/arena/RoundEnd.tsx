@@ -10,6 +10,7 @@
  */
 import { signal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
+import { navigate } from '../../app/router';
 import { Callout } from '../../components';
 import { t } from './text';
 
@@ -65,6 +66,12 @@ export function proceedFromRoundEnd(): void {
   cur.next?.();
 }
 
+/** Leave the arena from a failure card: the match stays live (Continue reads Resume watching). */
+function leave(): void {
+  roundEnd.value = null;
+  navigate('#/home');
+}
+
 export function RoundEndOverlay() {
   const s = roundEnd.value;
   const phase = s?.phase ?? null;
@@ -104,7 +111,7 @@ export function RoundEndOverlay() {
         {s.phase === 'saving' && (
           <>
             <span class="around__kicker">{t('endTitle', { n: s.round })}</span>
-            <span class="around__sub">{t('endSaving')}</span>
+            <span class="around__sub">{t(s.message === 'simulating' ? 'endSimulating' : 'endSaving')}</span>
           </>
         )}
         {s.phase === 'result' && r && (
@@ -142,6 +149,9 @@ export function RoundEndOverlay() {
               <p>
                 <button class="btn btn--primary" type="button" onClick={s.retry} data-testid="round-end-retry" data-autofocus>
                   {t('retry')}
+                </button>{' '}
+                <button class="btn" type="button" onClick={leave} data-testid="round-end-leave">
+                  {t('endLeave')}
                 </button>
               </p>
             )}
@@ -150,6 +160,11 @@ export function RoundEndOverlay() {
         {s.phase === 'mismatch' && (
           <Callout kind="bad" title={t('endMismatch')}>
             {t('endMismatchText')}
+            <p>
+              <button class="btn" type="button" onClick={leave} data-testid="round-end-leave">
+                {t('endLeave')}
+              </button>
+            </p>
           </Callout>
         )}
       </div>

@@ -29,7 +29,9 @@ beforeEach(() => {
   // A player who lets the rounds run: no auto-pause stops, Watch without the offer, no lineup stop.
   updateSettings({
     ...DEFAULT_SETTINGS,
-    pacing: 'streamlined',
+    // Custom stops (no lineup stop, a report only after an injury): Streamlined would always simulate (owner answer to Q54).
+    pacing: 'custom',
+    pacingCustom: { lineup: false, reportAlways: false, reportOnLoss: false, reportOnInjury: true },
     arena: {
       ...DEFAULT_SETTINGS.arena,
       watchPreference: 'watch',
@@ -68,7 +70,7 @@ function mountApp(opts: { winners?: ('home' | 'away')[]; state?: 'prelock' | 'ro
 const press = (k: string, init: KeyboardEventInit = {}, target: Element = document.body) => fireEvent.keyDown(target, { key: k, ...init });
 
 /** Let a freshly loaded screen register its effects (shortcut layers) before a key is pressed. */
-const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 40))));
+const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 100))));
 
 async function arenaReady(m: Mounted, nth: number) {
   await waitFor(() => expect(m.harness.all.length).toBe(nth));
@@ -169,6 +171,36 @@ describe('the viewer opens only after the lock is saved (test-first item 2, thro
     await arenaReady(m, 1);
   });
 
+  it('navigating to #/arena while the lock is still being written shows nothing of the round, and a failed write never shows it', async () => {
+    const m = mountApp();
+    const write = m.t.saves.write.bind(m.t.saves);
+    let release!: (ok: boolean) => void;
+    const gate = new Promise<boolean>((r) => (release = r));
+    m.t.saves.write = async (...a: Parameters<typeof m.t.saves.write>) => {
+      if (a[0] === 'auto-round') {
+        if (!(await gate)) throw new Error('disk full');
+      }
+      return write(...a);
+    };
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
+    press(' ');
+    await waitFor(() => expect(m.t.store.game.value!.liveMatch).not.toBeNull()); // the lock is in memory, the write is pending
+    let asked = 0;
+    const inner = m.core.engine.liveRoundPlayback!;
+    m.core.engine.liveRoundPlayback = ((...a: Parameters<typeof inner>) => (asked++, inner(...a))) as typeof inner;
+    navigate('#/arena');
+    await waitFor(() => expect(screen.getByTestId('screen-arena-saving')).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 80));
+    expect(m.harness.all).toHaveLength(0);
+    expect(asked).toBe(0);
+    // The write fails: the lock rolls back, and the round was never shown.
+    release(false);
+    await waitFor(() => expect(m.t.store.game.value!.liveMatch).toBeNull());
+    expect(m.harness.all).toHaveLength(0);
+    expect(asked).toBe(0);
+  });
+
   it('a failed write keeps the viewer closed with Could not save and Retry; Play match again locks the same round', async () => {
     const m = mountApp();
     const write = m.t.saves.write.bind(m.t.saves);
@@ -187,6 +219,8 @@ describe('the viewer opens only after the lock is saved (test-first item 2, thro
     expect((await m.t.saves.list()).some((x) => x.slotId === 'auto-round')).toBe(false);
     const toast = toasts.value.find((x) => x.title === 'Could not save the lineup lock')!;
     expect(toast.action?.label).toBe('Retry');
+    // One toast, not two: the store stays quiet and Play match says it once.
+    expect(toasts.value).toHaveLength(1);
     failing = false;
     toast.action!.onClick();
     await waitFor(() => expect(location.hash).toBe('#/arena'));
@@ -228,6 +262,18 @@ describe('Play match offers Watch and Simulate side by side (open-020, Q54)', ()
     await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
     expect(screen.queryByTestId('continue-other')).toBeNull();
   });
+
+  it('Streamlined always simulates, with Watch beside it, even when the preference says Always watch', async () => {
+    updateSettings({ ...DEFAULT_SETTINGS, pacing: 'streamlined', arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch' } });
+    const m = mountApp();
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Simulate'));
+    expect(screen.getByTestId('continue-other').textContent).toContain('Watch');
+    await settle();
+    press(' ');
+    await waitFor(() => expect(m.core.advances).toHaveLength(1));
+    expect(m.core.advances[0]!.options).toEqual({ playerMatch: 'simulate' });
+    expect(m.harness.all).toHaveLength(0);
+  });
 });
 
 describe('routing and resume', () => {
@@ -258,9 +304,11 @@ describe('routing and resume', () => {
     await act(async () => {
       m.harness.current().advanceTo(250);
     });
+    await settle();
     press(' '); // pause at 250: the cursor is saved
-    await waitFor(() => expect(m.core.watchCommands.at(-1)?.tick).toBe(250));
-    await waitFor(async () => expect(JSON.parse((await m.t.saves.read('auto-round'))!).state.liveMatch.watch.cursorTick).toBe(250));
+    await waitFor(() => expect(m.harness.current().playing).toBe(false));
+    await waitFor(() => expect(m.core.watchCommands.at(-1)?.tick).toBe(250), { timeout: 4000 });
+    await waitFor(async () => expect(JSON.parse((await m.t.saves.read('auto-round'))!).state.liveMatch.watch.cursorTick).toBe(250), { timeout: 4000 });
     // "Reload": a fresh store and app load the round autosave.
     cleanup();
     const json = (await m.t.saves.read('auto-round'))!;
@@ -300,6 +348,18 @@ describe('committing a round', () => {
     expect(screen.getByTestId('arena-overlay').textContent).toContain('This is a defect');
     expect(m.t.store.game.value!.liveMatch!.rounds).toHaveLength(0);
     expect(m.core.advances).toHaveLength(2);
+  });
+
+  it('the failure cards have a Leave: the match stays live and Continue reads Resume watching', async () => {
+    const m = mountApp();
+    await toRoundEnd(m);
+    m.core.failNext = { code: 'watch.mismatch', message: 'The shown log differs' };
+    await playOut(m);
+    await waitFor(() => expect(screen.getByTestId('arena-overlay').getAttribute('data-phase')).toBe('mismatch'));
+    fireEvent.click(screen.getByTestId('round-end-leave'));
+    await waitFor(() => expect(location.hash).toBe('#/home'));
+    expect(m.t.store.game.value!.liveMatch!.watch!.round).toBe(1);
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Resume watching'));
   });
 
   it("a mismatch with reason 'round' (already committed) is not a defect and is not retried", async () => {
@@ -352,6 +412,10 @@ describe('committing a round', () => {
     await waitFor(() => expect(screen.getByTestId('dialog-simulate').hasAttribute('open')).toBe(true));
     fireEvent.click(screen.getByTestId('confirm-simulate'));
     await waitFor(() => expect(m.core.watchCommands.some((c) => c.mode === 'simulate')).toBe(true));
+    // The mode has switched under the screen, but the round stays on show with a card until the match has moved on: no flash
+    // of the no-round screen.
+    expect(document.body.textContent).not.toContain('No round is waiting to be watched');
+    expect(screen.getByTestId('arena-overlay').textContent).toContain('Simulating the rest of the match');
     await waitFor(() => expect(m.t.store.game.value!.liveMatch).toBeNull());
     expect(m.core.advances.at(-1)!.options).toBeUndefined();
     await waitFor(() => expect(location.hash).not.toBe('#/arena'));

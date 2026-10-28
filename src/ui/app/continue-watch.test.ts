@@ -21,9 +21,16 @@ describe('Play match: Watch or Simulate (open-020, owner answer to Q54)', () => 
     expect(playModeFor('streamlined', 'ask')).toEqual({ mode: 'simulate', offer: true });
   });
 
-  it('an explicit preference decides without an offer, also under Streamlined', () => {
+  it('an explicit preference decides without an offer', () => {
     expect(playModeFor('balanced', 'simulate')).toEqual({ mode: 'simulate', offer: false });
-    expect(playModeFor('streamlined', 'watch')).toEqual({ mode: 'watch', offer: false });
+    expect(playModeFor('balanced', 'watch')).toEqual({ mode: 'watch', offer: false });
+    expect(playModeFor('custom', 'watch')).toEqual({ mode: 'watch', offer: false });
+  });
+
+  it('Streamlined always simulates, whatever the Watch preference (owner answer to Q54); Watch stays one button away', () => {
+    expect(playModeFor('streamlined', 'ask')).toEqual({ mode: 'simulate', offer: true });
+    expect(playModeFor('streamlined', 'watch')).toEqual({ mode: 'simulate', offer: true });
+    expect(playModeFor('streamlined', 'simulate')).toEqual({ mode: 'simulate', offer: false });
   });
 
   it('Continue carries the mode and says what Play match will do', () => {

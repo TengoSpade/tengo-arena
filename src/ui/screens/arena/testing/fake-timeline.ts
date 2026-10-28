@@ -126,7 +126,7 @@ export const fakeTimeline: Timeline = {
     const out: KeyMoment[] = [];
     for (const e of internal(index).events) {
       if (e.tick > untilTick) break;
-      if (e.type === 'unit.down') out.push({ tick: e.tick, seq: e.seq, kind: 'down', unit: e.unit ?? null, target: e.data!.by, ability: e.data!.ability });
+      if (e.type === 'unit.down') out.push({ tick: e.tick, seq: e.seq, kind: 'down', unit: e.data!.by, target: e.unit ?? null, ability: e.data!.ability }); // unit = the killer, target = the fallen (the KeyMoment convention)
       else if (e.type === 'overtime.start') out.push({ tick: e.tick, seq: e.seq, kind: 'overtime', unit: null, target: null, ability: null });
       else if (e.type === 'fight.end') out.push({ tick: e.tick, seq: e.seq, kind: 'end', unit: null, target: null, ability: null });
     }
