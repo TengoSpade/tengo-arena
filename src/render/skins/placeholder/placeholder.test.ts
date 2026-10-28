@@ -42,7 +42,7 @@ describe('placeholder skin', () => {
     expect(body.view.destroyed).toBe(true);
   });
 
-  it('flattens to 45% height at 40% opacity when downed; snaps while paused, eases while playing, never under reduced motion', () => {
+  it('flattens to 60% height at 40% opacity when downed; snaps while paused, eases while playing, never under reduced motion', () => {
     const skin = placeholderSkin();
     const body = skin.createBody(fakeContext().units[0]!, fakeColors(0));
     const disc = body.view.children[0] as Container;
@@ -51,21 +51,21 @@ describe('placeholder skin', () => {
     expect(disc.scale.y).toBe(1);
     body.update(unitState({ standing: false }), FRAME); // paused: snap
     expect(body.view.alpha).toBeCloseTo(0.4, 5);
-    expect(disc.scale.y).toBeCloseTo(0.45, 5);
+    expect(disc.scale.y).toBeCloseTo(0.6, 5);
 
     const eased = skin.createBody(fakeContext().units[0]!, fakeColors(0));
     const easedDisc = eased.view.children[0] as Container;
     eased.update(unitState({ standing: true }), FRAME);
     eased.update(unitState({ standing: false }), { ...FRAME, dtMs: 40 }); // playing: partway
-    expect(easedDisc.scale.y).toBeGreaterThan(0.45);
+    expect(easedDisc.scale.y).toBeGreaterThan(0.6);
     expect(easedDisc.scale.y).toBeLessThan(1);
     eased.update(unitState({ standing: false }), { ...FRAME, dtMs: 400 });
-    expect(easedDisc.scale.y).toBeCloseTo(0.45, 5);
+    expect(easedDisc.scale.y).toBeCloseTo(0.6, 5);
 
     const reduced = skin.createBody(fakeContext().units[0]!, fakeColors(0));
     reduced.update(unitState({ standing: true }), { ...FRAME, reducedMotion: true });
     reduced.update(unitState({ standing: false }), { ...FRAME, dtMs: 16, reducedMotion: true });
-    expect((reduced.view.children[0] as Container).scale.y).toBeCloseTo(0.45, 5);
+    expect((reduced.view.children[0] as Container).scale.y).toBeCloseTo(0.6, 5);
   });
 
   it('ignores facing: a disc has none, and the body is never rotated by the skin either', () => {

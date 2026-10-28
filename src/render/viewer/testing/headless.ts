@@ -72,6 +72,7 @@ export interface Headless {
   scene: ArenaScene;
   timeline: FakeTimeline;
   skin: TrackingSkin;
+  text: ReturnType<typeof createStubTextFactory>;
   frames: ArenaFrameState[];
   stops: PlaybackStop[];
   selections: (UnitIndex | null)[];
@@ -100,6 +101,7 @@ export function assemble(options: HeadlessOptions = {}): Headless {
   const content = options.content ?? fakeContent();
   const cues = fakeCues();
   const text = createStubTextFactory();
+  skin.setPalette(palette); // the real viewer loads the skin with the palette before the first round
   const scene = new ArenaScene({
     skin,
     content,
@@ -109,8 +111,7 @@ export function assemble(options: HeadlessOptions = {}): Headless {
     viewTransform: fakeViewTransform,
     camera: { ...DEFAULT_CAMERA, ...options.camera },
     reducedMotion: options.reducedMotion ?? false,
-    flashLimitPerSecond: 3,
-    uiScale: 1,
+    flashLimitPerSecond: null,
   });
   scene.setViewport(1280, 720);
   let now = 1000;
@@ -119,6 +120,7 @@ export function assemble(options: HeadlessOptions = {}): Headless {
     scene,
     timeline,
     skin,
+    text,
     frames: [],
     stops: [],
     selections: [],

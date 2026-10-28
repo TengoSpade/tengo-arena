@@ -283,33 +283,6 @@ export class ViewerCore {
     this.applyUserSelection(unit);
   }
 
-  /**
-   * Tab / Shift+Tab over the tokens while the canvas has focus. Returns true when the key was used; at either end the
-   * selection clears and the key is left to the browser, so focus moves on (no keyboard trap).
-   */
-  cycleSelection(direction: 1 | -1): boolean {
-    const ctx = this.ctx;
-    if (!ctx || !this.clock) return false;
-    const order = ctx.units.map((u) => u.unit).sort((a, b) => a - b);
-    if (order.length === 0) return false;
-    const at = this.selected === null ? -1 : order.indexOf(this.selected);
-    let next: number;
-    if (at < 0) next = direction === 1 ? 0 : order.length - 1;
-    else next = at + direction;
-    if (next < 0 || next >= order.length) {
-      this.applyUserSelection(null);
-      return false;
-    }
-    this.applyUserSelection(order[next] ?? null);
-    return true;
-  }
-
-  clearSelectionFromKeyboard(): boolean {
-    if (this.selected === null) return false;
-    this.applyUserSelection(null);
-    return true;
-  }
-
   private applyUserSelection(unit: UnitIndex | null): void {
     this.selected = unit;
     this.o.scene.select(unit);

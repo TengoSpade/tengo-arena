@@ -317,6 +317,8 @@ const TELEGRAPHS: Record<string, AbilityCue['telegraph']> = {
   'a.beam': { shape: 'line', sizeCm: 700, spread: 120, minTicks: 6 },
 };
 
+const PIP_OF: Record<string, StatusCue['pip']> = { cc_hard: 'control-hard', cc_soft: 'control-soft', buff: 'buff', debuff: 'debuff', dot: 'dot', hot: 'hot', special: 'special' };
+
 const STATUS_CATEGORY: Record<string, string> = { 's.stun': 'cc_hard', 's.slow': 'cc_soft', 's.haste': 'buff', 's.weak': 'debuff', 's.burn': 'dot', 's.regen': 'hot', 's.mark': 'special', 's.ward': 'shield' };
 
 /** A cue table with fixed answers (a real one comes from buildCueTable). */
@@ -333,7 +335,7 @@ export function fakeCues(): CueTable {
   const status = (id: string): StatusCue => {
     const category = STATUS_CATEGORY[id] ?? 'buff';
     const hard = category === 'cc_hard';
-    return { status: id, category, icon: category, ring: hard ? 'grey' : 'none', priority: hard ? 10 : id === 's.mark' ? 2 : id === 's.ward' ? 1 : 5 };
+    return { status: id, category, icon: category, ring: hard ? 'grey' : 'none', priority: hard ? 10 : id === 's.mark' ? 2 : id === 's.ward' ? 1 : 5, pip: PIP_OF[category] ?? null };
   };
   return { ability, status };
 }

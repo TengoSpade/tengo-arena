@@ -318,34 +318,24 @@ describe('replaceLog (calls)', () => {
 });
 
 describe('selection and input', () => {
-  it('select() is silent; a click and Tab report through onSelect', async () => {
+  it('select() is silent; a click reports through onSelect (the UI focuses that fighter card)', async () => {
     const h = await loaded('replay');
     h.core.select(3);
     expect(h.core.selection).toBe(3);
     expect(h.selections).toEqual([]);
-    expect(h.core.cycleSelection(1)).toBe(true);
-    expect(h.core.selection).toBe(4);
-    expect(h.selections).toEqual([4]);
     const pos = h.scene.tokenPosition(6)!;
     h.core.pointerSelect(pos.x, pos.y);
     expect(h.core.selection).toBe(6);
     h.core.pointerSelect(2, 2); // empty floor
     expect(h.core.selection).toBeNull();
-    expect(h.selections).toEqual([4, 6, null]);
+    h.core.pointerSelect(2, 2); // nothing changes, nothing reported
+    expect(h.selections).toEqual([6, null]);
   });
 
-  it('Tab walks the tokens and lets focus leave at either end (no keyboard trap)', async () => {
+  it('has no keyboard of its own: Tab selection belongs to the fighter strip (A18), so the canvas never traps focus', async () => {
     const h = await loaded('replay');
-    expect(h.core.cycleSelection(1)).toBe(true); // none -> 0
-    expect(h.core.selection).toBe(0);
-    for (let i = 1; i < 10; i++) expect(h.core.cycleSelection(1)).toBe(true);
-    expect(h.core.selection).toBe(9);
-    expect(h.core.cycleSelection(1)).toBe(false); // past the last: cleared, the browser takes Tab
-    expect(h.core.selection).toBeNull();
-    expect(h.core.cycleSelection(-1)).toBe(true); // Shift+Tab from none -> last
-    expect(h.core.selection).toBe(9);
-    expect(h.core.clearSelectionFromKeyboard()).toBe(true);
-    expect(h.core.clearSelectionFromKeyboard()).toBe(false);
+    expect('cycleSelection' in h.core).toBe(false);
+    expect('clearSelectionFromKeyboard' in h.core).toBe(false);
   });
 
   it('describes the arena for the canvas label', async () => {

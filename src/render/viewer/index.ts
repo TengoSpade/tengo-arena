@@ -25,7 +25,7 @@ import { timeline as realTimeline, type Timeline } from '../timeline';
 import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, AutoPauseRules, CameraConfig, CueTable, DecisionSnapshot, KeyMoment, PlaybackStop, Speed, ViewerStats } from '../types';
 import { MAX_DT_MS } from './clock';
 import { ViewerCore } from './core';
-import { canvasResolution, readUiScale, watchDevicePixelRatio } from './host';
+import { canvasResolution, watchDevicePixelRatio } from './host';
 import { attachInput } from './input';
 import { ArenaScene } from './scene/arena-scene';
 import { createPixiTextFactory } from './scene/text';
@@ -63,10 +63,11 @@ export interface ArenaViewerOptions {
   /** The world-to-screen transform (default: src/render/camera viewTransform); tests and the dev harness inject one. */
   viewTransform?: typeof realViewTransform;
   /**
-   * Handle Tab / Shift+Tab (walk the tokens) and Escape (clear the selection) while the canvas has focus (default
-   * true). Pass false when the UI binds those keys itself.
+   * Make the canvas one tab stop (default true: tabindex 0, role img, a label rewritten at each pause). Selection by
+   * keyboard belongs to the fighter strip (A18 decision 3), never to the canvas. Pass false when the host element is
+   * the tab stop instead.
    */
-  canvasKeys?: boolean;
+  tabStop?: boolean;
 }
 
 /**
@@ -149,7 +150,7 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
   }
 
   const canvas = app.canvas;
-  canvas.tabIndex = 0;
+  if (options.tabStop ?? true) canvas.tabIndex = 0;
   canvas.setAttribute('role', 'img');
   canvas.setAttribute('aria-label', 'Arena');
   canvas.style.display = 'block';
@@ -161,7 +162,7 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
   await skin.load({ renderer: app.renderer, content, palette });
 
   const cues = options.cues ?? buildCueTable(content);
-  const textFactory = createPixiTextFactory(resolution);
+  const textFactory = createPixiTextFactory(resolution, palette);
   const camera: CameraConfig = { ...DEFAULT_CAMERA, ...options.camera };
   let cameraConfig = camera;
   const scene = new ArenaScene({
@@ -173,8 +174,7 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
     viewTransform: options.viewTransform ?? realViewTransform,
     camera: cameraConfig,
     reducedMotion: options.reducedMotion,
-    flashLimitPerSecond: options.flashLimitPerSecond ?? 3,
-    uiScale: readUiScale(host),
+    flashLimitPerSecond: options.flashLimitPerSecond ?? null,
   });
   app.stage.addChild(scene.root);
   scene.setViewport(first.width, first.height);
@@ -228,7 +228,6 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
     const { width, height } = size();
     app.renderer.resize(width, height, resolution);
     scene.setViewport(width, height);
-    scene.setUiScale(readUiScale(host));
     core.invalidate();
   };
   const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => applySize()) : null;
@@ -239,7 +238,7 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
     resolution = next;
     applySize();
   });
-  const detachInput = attachInput({ canvas, core, keys: options.canvasKeys ?? true, focusColor: () => palette.text });
+  const detachInput = attachInput({ canvas, core });
 
   const toBlob = (c: HTMLCanvasElement): Promise<Blob | null> => new Promise((resolve) => c.toBlob((b) => resolve(b), 'image/png'));
 
@@ -276,7 +275,6 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
     setPalette(next) {
       palette = next;
       scene.setPalette(next);
-      scene.setUiScale(readUiScale(host));
       core.invalidate();
     },
     setReducedMotion: (on) => core.setReducedMotion(on),

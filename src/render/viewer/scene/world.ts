@@ -1,18 +1,23 @@
 /**
- * The arena's world layers: zones, cast telegraphs and projectiles (04 §7, A5 "Ability cues"). Each is a pool of
- * visuals keyed by the state's own ids (zone id, caster unit, projectile id), reused across frames and released
- * when the key goes away. Static geometry is redrawn only when its inputs change; per frame only transforms,
- * scale (telegraph progress) and alpha move.
+ * The arena's world layers: zones, cast telegraphs and projectiles (04 §7, A5 "Ability cues"; components.css §25.4).
+ * Each is a pool of visuals keyed by the state's own ids (zone id, caster unit, projectile id), reused across frames
+ * and released when the key goes away. Static geometry is redrawn only when its inputs change; per frame only
+ * transforms, scale (telegraph progress) and alpha move.
  *
- * Ground marks (zones, telegraphs, rings) are drawn in px around a screen anchor and squashed vertically by the
+ * Ground marks (zones, telegraphs) are drawn in px around a screen anchor and squashed vertically by the
  * projection's squash (1 for top-down), so an oblique camera turns circles into ellipses without a code path.
+ * Every colour and alpha comes from the palette: zones and telegraphs take the owner's or caster's ring colour (and
+ * the telegraph its ring style: ours solid, theirs double), progress takes `palette.telegraph`.
  */
 import { Container, Graphics } from 'pixi.js';
-import type { AbilityCue, ArenaPalette, CueTable, ProjectileRenderState, TelegraphRenderState, UnitRenderState, ZoneRenderState } from '../../types';
+import type { ContentDB } from '../../../core/content';
+import type { ArenaPalette, CueTable, ProjectileRenderState, TelegraphRenderState, UnitRenderState, ZoneRenderState } from '../../types';
 import { DESTROY_ALL } from '../destroy';
 import { KeyedPool } from '../pool';
-import { toneColor, type Chrome } from '../palette';
+import { toneColor } from '../palette';
 import { sx, sy, type AffineMap } from './affine';
+import { Chip } from './chip';
+import type { TextFactory } from './text';
 
 /** What every world layer needs for a frame. Filled in by the scene; never allocated per frame. */
 export interface WorldEnv {
@@ -22,8 +27,11 @@ export interface WorldEnv {
   /** Vertical squash of the ground plane (1 for top-down). */
   squash: number;
   palette: ArenaPalette;
-  chrome: Chrome;
+  /** Bumped whenever the palette or layout changes (cached chip drawings refresh). */
+  version: number;
   cues: CueTable;
+  content: ContentDB;
+  text: TextFactory;
   units: readonly UnitRenderState[];
   /** The zones in play (a zone-trigger pulse reaches to its zone's edge). */
   zones: readonly ZoneRenderState[];
@@ -33,6 +41,8 @@ export interface WorldEnv {
   nowMs: number;
   /** Colour of a side's ring (the viewer-resolved side colour). */
   sideColor(side: 0 | 1): number;
+  /** The ring style of a side: ours solid, theirs double (the colour-free cue). */
+  ringStyle(side: 0 | 1): 'solid' | 'double';
 }
 
 const cm = (env: WorldEnv, value: number): number => (value / 100) * env.ppm;
@@ -88,16 +98,17 @@ export class ZoneLayer {
   }
 
   update(zones: readonly ZoneRenderState[], env: WorldEnv): void {
+    const p = env.palette;
     this.pool.begin();
     for (const z of zones) {
       const m = this.pool.get(z.id);
       const r = cm(env, z.radius);
       const color = env.sideColor(z.side);
-      const key = `${r.toFixed(1)}|${color}|${env.chrome.outline}`;
+      const key = `${r.toFixed(1)}|${color}|${p.metrics.zoneAlpha}`;
       if (m.drawn !== key) {
         m.drawn = key;
-        // A floor disc in the owner's side colour at low alpha with a firm edge, so it never reads as a body.
-        m.g.clear().circle(0, 0, r).fill({ color, alpha: 0.2 }).circle(0, 0, r).stroke({ width: 2, color, alpha: 0.85 });
+        // A floor disc in the owner's ring colour at the zone alpha with a thin inner edge, so it never reads as a body.
+        m.g.clear().circle(0, 0, r).fill({ color, alpha: p.metrics.zoneAlpha }).circle(0, 0, r - 0.5).stroke({ width: 1, color, alpha: 0.55 });
       }
       m.root.visible = true;
       m.root.position.set(sx(env.map, z.x, z.y), sy(env.map, z.x, z.y));
@@ -125,128 +136,160 @@ export class ZoneLayer {
 
 class TelegraphMark {
   readonly root = new Container();
+  readonly area = new Container();
   readonly outline = new Graphics();
   readonly inner = new Graphics();
+  readonly name: Chip;
   drawn = '';
-  constructor() {
+  constructor(text: TextFactory) {
     this.root.eventMode = 'none';
-    this.root.addChild(this.inner, this.outline);
+    this.area.eventMode = 'none';
+    this.name = new Chip(text, 'label');
+    this.area.addChild(this.inner, this.outline);
+    this.root.addChild(this.area, this.name.view);
     this.root.visible = false;
   }
   destroy(): void {
+    this.name.dispose();
     this.root.destroy(DESTROY_ALL);
   }
 }
 
 export class TelegraphLayer {
   readonly root = new Container();
-  private readonly pool = new KeyedPool<TelegraphMark>(
-    () => {
-      const m = new TelegraphMark();
-      this.root.addChild(m.root);
-      return m;
-    },
-    (m) => {
-      m.drawn = '';
-    },
-    (m) => {
-      m.root.visible = false;
-    },
-    (m) => m.destroy(),
-  );
+  private pool: KeyedPool<TelegraphMark> | null = null;
 
-  constructor() {
+  constructor(private readonly text: TextFactory) {
     this.root.eventMode = 'none';
   }
 
+  private ensurePool(): KeyedPool<TelegraphMark> {
+    if (!this.pool) {
+      this.pool = new KeyedPool<TelegraphMark>(
+        () => {
+          const m = new TelegraphMark(this.text);
+          this.root.addChild(m.root);
+          return m;
+        },
+        (m) => {
+          m.drawn = '';
+        },
+        (m) => {
+          m.root.visible = false;
+        },
+        (m) => m.destroy(),
+      );
+    }
+    return this.pool;
+  }
+
   get liveCount(): number {
-    return this.pool.liveCount;
+    return this.pool?.liveCount ?? 0;
   }
 
   update(list: readonly TelegraphRenderState[], env: WorldEnv): void {
-    this.pool.begin();
+    const pool = this.ensurePool();
+    const p = env.palette;
+    pool.begin();
     for (const t of list) {
-      const m = this.pool.get(t.caster);
-      const cue = env.cues.ability(t.ability);
-      const color = toneColor(cue.tone, env.palette);
-      const size = cm(env, t.size);
+      const m = pool.get(t.caster);
+      const side = env.units[t.caster]?.side ?? 0;
+      const color = env.sideColor(side);
+      const double = env.ringStyle(side) === 'double';
+      const size = t.shape === 'single' ? Math.max(cm(env, t.size), env.ppm * 0.7) : cm(env, t.size);
       const spread = t.shape === 'line' ? cm(env, t.spread) : t.spread;
-      const key = `${t.shape}|${size.toFixed(1)}|${spread.toFixed(3)}|${color}`;
+      const key = `${t.shape}|${size.toFixed(1)}|${spread.toFixed(3)}|${color}|${double}|${env.version}`;
       if (m.drawn !== key) {
         m.drawn = key;
-        drawTelegraph(m, t.shape, size, spread, color, env);
+        drawTelegraph(m, t.shape, size, spread, color, double, p);
       }
       m.root.visible = true;
       m.root.position.set(sx(env.map, t.x, t.y), sy(env.map, t.x, t.y));
-      m.root.scale.set(1, env.squash);
-      const p = Math.max(0, Math.min(1, t.progress));
+      m.area.scale.set(1, env.squash);
       // Progress is information, so it stays under reduced motion; only the direction is sampled.
+      const prog = Math.max(0, Math.min(1, t.progress));
       m.outline.rotation = t.direction;
       m.inner.rotation = t.direction;
-      if (t.shape === 'line') m.inner.scale.set(p, 1);
+      if (t.shape === 'line') m.inner.scale.set(prog, 1);
       else if (t.shape === 'single') m.inner.scale.set(1);
-      else m.inner.scale.set(p);
-      if (t.shape === 'single') drawSingleProgress(m, size, p, color, env);
+      else m.inner.scale.set(prog);
+      if (t.shape === 'single') drawSingleProgress(m, size, prog, p);
+      // The ability's name on a plate chip under the area.
+      const rem = p.metrics.pipSizePx;
+      const name = env.content.abilities.get(t.ability)?.name ?? '';
+      m.name.view.visible = name !== '';
+      if (name !== '') {
+        const h = p.metrics.labelSizePx * 1.35;
+        const w = m.name.set(name, env, { minW: 0, padX: rem * 0.4, h });
+        const below = t.shape === 'circle' ? size * env.squash : env.ppm * 0.7;
+        m.name.view.position.set(-w / 2, below + rem * 0.5);
+      }
     }
-    this.pool.end();
+    pool.end();
   }
 
   clear(): void {
-    this.pool.releaseAll();
+    this.pool?.releaseAll();
   }
   destroy(): void {
-    this.pool.clear();
+    this.pool?.clear();
     this.root.destroy(DESTROY_ALL);
   }
 }
 
-function drawTelegraph(m: TelegraphMark, shape: TelegraphRenderState['shape'], size: number, spread: number, color: number, env: WorldEnv): void {
-  const edge = { width: 2, color, alpha: 0.9 } as const;
-  const dark = { width: 4.5, color: env.chrome.outline, alpha: 0.5 } as const;
+function drawTelegraph(m: TelegraphMark, shape: TelegraphRenderState['shape'], size: number, spread: number, color: number, double: boolean, p: ArenaPalette): void {
   m.outline.clear();
   m.inner.clear();
+  const fill = { color, alpha: p.metrics.telegraphFillAlpha } as const;
+  const progress = { color: p.telegraph, alpha: p.metrics.telegraphProgressAlpha } as const;
+  const edge = (g: Graphics, trace: (g: Graphics) => void): void => {
+    // Ours: a 2 px edge. Theirs: two 2 px lines with a 2 px gap (a 6 px band with the middle taken back to the floor).
+    trace(g);
+    g.stroke({ width: double ? 6 : 2, color, alpha: p.metrics.telegraphEdgeAlpha });
+    if (double) {
+      trace(g);
+      g.stroke({ width: 2, color: p.floor });
+    }
+  };
   switch (shape) {
     case 'circle':
-      m.outline.circle(0, 0, size).fill({ color, alpha: 0.1 }).circle(0, 0, size).stroke(dark).circle(0, 0, size).stroke(edge);
-      m.inner.circle(0, 0, size).fill({ color, alpha: 0.28 });
+      m.outline.circle(0, 0, size).fill(fill);
+      edge(m.outline, (g) => g.circle(0, 0, size));
+      m.inner.circle(0, 0, size).fill(progress);
       break;
     case 'cone': {
       const a = spread / 2;
-      m.outline.moveTo(0, 0).arc(0, 0, size, -a, a).closePath().fill({ color, alpha: 0.1 });
-      m.outline.moveTo(0, 0).arc(0, 0, size, -a, a).closePath().stroke(dark);
-      m.outline.moveTo(0, 0).arc(0, 0, size, -a, a).closePath().stroke(edge);
-      m.inner.moveTo(0, 0).arc(0, 0, size, -a, a).closePath().fill({ color, alpha: 0.28 });
+      const trace = (g: Graphics): Graphics => g.moveTo(0, 0).arc(0, 0, size, -a, a).closePath();
+      trace(m.outline).fill(fill);
+      edge(m.outline, trace);
+      trace(m.inner).fill(progress);
       break;
     }
     case 'line': {
       const half = Math.max(2, spread / 2);
-      m.outline.rect(0, -half, size, half * 2).fill({ color, alpha: 0.1 }).rect(0, -half, size, half * 2).stroke(dark).rect(0, -half, size, half * 2).stroke(edge);
-      m.inner.rect(0, -half, size, half * 2).fill({ color, alpha: 0.28 });
+      m.outline.rect(0, -half, size, half * 2).fill(fill);
+      edge(m.outline, (g) => g.rect(0, -half, size, half * 2));
+      m.inner.rect(0, -half, size, half * 2).fill(progress);
       break;
     }
     case 'single':
-      // A target ring; the progress arc is drawn per frame (drawSingleProgress).
-      m.outline.circle(0, 0, size).stroke(dark).circle(0, 0, size).stroke({ width: 1.5, color, alpha: 0.6 });
+      // A target ring in the same edge style, 2 px; the progress arc is drawn per frame.
+      m.outline.circle(0, 0, size).stroke({ width: 2, color, alpha: p.metrics.telegraphEdgeAlpha });
       break;
   }
 }
 
-function drawSingleProgress(m: TelegraphMark, radius: number, progress: number, color: number, env: WorldEnv): void {
+function drawSingleProgress(m: TelegraphMark, radius: number, progress: number, p: ArenaPalette): void {
   m.inner.clear();
   if (progress <= 0) return;
   const end = -Math.PI / 2 + Math.PI * 2 * progress;
-  m.inner.arc(0, 0, radius, -Math.PI / 2, end).stroke({ width: 5, color: env.chrome.outline, alpha: 0.6 });
-  m.inner.arc(0, 0, radius, -Math.PI / 2, end).stroke({ width: 3, color, alpha: 1 });
+  m.inner.arc(0, 0, radius, -Math.PI / 2, end).stroke({ width: 4, color: p.telegraph, alpha: Math.min(1, p.metrics.telegraphProgressAlpha * 2.5) });
 }
 
 // ---- projectiles -------------------------------------------------------------------------------------------------
 
-/** The smallest projectile glyph (research A4.2: no tiny projectiles). */
-export const MIN_PROJECTILE_PX = 10;
-
 class ProjectileMark {
   readonly root = new Container();
-  readonly tail = new Graphics();
   readonly head = new Graphics();
   lastX = Number.NaN;
   lastY = Number.NaN;
@@ -254,7 +297,8 @@ class ProjectileMark {
   drawn = '';
   constructor() {
     this.root.eventMode = 'none';
-    this.root.addChild(this.tail, this.head);
+    this.head.eventMode = 'none';
+    this.root.addChild(this.head);
     this.root.visible = false;
   }
   destroy(): void {
@@ -289,29 +333,37 @@ export class ProjectileLayer {
   }
 
   update(list: readonly ProjectileRenderState[], env: WorldEnv): void {
+    const p = env.palette;
+    const rem = p.metrics.pipSizePx;
     this.pool.begin();
-    for (const p of list) {
-      const m = this.pool.get(p.id);
-      const cue: AbilityCue = env.cues.ability(p.ability);
-      const size = Math.max(MIN_PROJECTILE_PX, cue.projectile?.sizePx ?? MIN_PROJECTILE_PX);
-      const color = toneColor(cue.tone, env.palette);
-      const key = `${size}|${color}`;
+    for (const proj of list) {
+      const m = this.pool.get(proj.id);
+      const cue = env.cues.ability(proj.ability);
+      // At least 0.9 rem across (research A4.2: no tiny projectiles), an arrow pointing along its path.
+      const w = Math.max(0.9 * rem, 0.5 * env.ppm, cue.projectile?.sizePx ?? 0);
+      const h = Math.max(0.5 * rem, 0.26 * env.ppm);
+      const color = toneColor(cue.tone, p);
+      const key = `${w.toFixed(1)}|${h.toFixed(1)}|${color}|${p.plate}`;
       if (m.drawn !== key) {
         m.drawn = key;
-        const r = size / 2;
-        m.head.clear().circle(0, 0, r + 1.5).fill({ color: env.chrome.outline, alpha: 0.85 }).circle(0, 0, r).fill({ color });
-        m.tail.clear().poly([0, -r * 0.7, -size * 2.4, 0, 0, r * 0.7]).fill({ color, alpha: 0.4 });
+        const pts = [-w / 2, -0.3 * h, 0.12 * w, -0.3 * h, 0.12 * w, -0.5 * h, 0.5 * w, 0, 0.12 * w, 0.5 * h, 0.12 * w, 0.3 * h, -w / 2, 0.3 * h];
+        m.head.clear().poly(pts).fill({ color }).stroke({ width: 2, color: p.plate, alignment: 0, join: 'round' });
       }
-      const x = sx(env.map, p.x, p.y);
-      const y = sy(env.map, p.x, p.y);
+      const x = sx(env.map, proj.x, proj.y);
+      const y = sy(env.map, proj.x, proj.y);
       m.root.visible = true;
       m.root.position.set(x, y);
-      if (!Number.isNaN(m.lastX) && (Math.abs(x - m.lastX) > 0.5 || Math.abs(y - m.lastY) > 0.5)) m.heading = Math.atan2(y - m.lastY, x - m.lastX);
+      if (Number.isNaN(m.lastX)) {
+        // Before it has moved: point from the launcher at the target.
+        const from = env.units[proj.source];
+        const to = proj.target !== null ? env.units[proj.target] : undefined;
+        if (from && to) m.heading = Math.atan2(sy(env.map, to.x, to.y) - sy(env.map, from.x, from.y), sx(env.map, to.x, to.y) - sx(env.map, from.x, from.y));
+      } else if (Math.abs(x - m.lastX) > 0.5 || Math.abs(y - m.lastY) > 0.5) {
+        m.heading = Math.atan2(y - m.lastY, x - m.lastX);
+      }
       m.lastX = x;
       m.lastY = y;
-      m.tail.rotation = m.heading;
-      // No trail under reduced motion (04 §9).
-      m.tail.visible = !env.reducedMotion && env.playing;
+      m.head.rotation = m.heading;
     }
     this.pool.end();
   }

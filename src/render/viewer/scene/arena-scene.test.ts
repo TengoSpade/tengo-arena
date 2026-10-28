@@ -135,9 +135,11 @@ describe('layers', () => {
   it('puts the body and its ring/wedge/glyph together and the bars in the overlay', async () => {
     const h = await shown();
     const token = h.scene.tokenOf(2)!;
-    expect(token.root.children[0]).toBe(token.body.view);
-    expect(token.root.children.length).toBeGreaterThanOrEqual(7);
-    expect(token.overlay.children.length).toBeGreaterThanOrEqual(12);
+    // Bottom to top (arena-notes §1): ring group, wedge, the skin body, the glyph plate, hit wash, brackets, down diamond.
+    const kids = token.root.children;
+    expect(kids).toHaveLength(7);
+    expect(kids.indexOf(token.body.view)).toBe(2);
+    expect(token.overlay.children).toHaveLength(2); // the stack and the crown chip
   });
 });
 
@@ -196,16 +198,16 @@ describe('what a token shows (asset-006, D-J)', () => {
 
   it('shows the name of the selected unit, or of everyone with labels on', async () => {
     const h = await shown();
-    expect(h.scene.tokenOf(1)!.shown().name).toBe(false);
+    expect(h.scene.tokenOf(1)!.shown().name).toBeNull();
     h.core.setLabels('selected');
     h.core.select(1);
-    expect(h.scene.tokenOf(1)!.shown().name).toBe(true);
-    expect(h.scene.tokenOf(2)!.shown().name).toBe(false);
+    expect(h.scene.tokenOf(1)!.shown().name).toBe('Fighter 1');
+    expect(h.scene.tokenOf(2)!.shown().name).toBeNull();
     expect(h.scene.tokenOf(1)!.shown().selected).toBe(true);
     h.core.setLabels('all');
-    expect(h.scene.tokenOf(2)!.shown().name).toBe(true);
+    expect(h.scene.tokenOf(2)!.shown().name).toBe('Fighter 2');
     h.core.setLabels('off');
-    expect(h.scene.tokenOf(1)!.shown().name).toBe(false);
+    expect(h.scene.tokenOf(1)!.shown().name).toBeNull();
   });
 
   it('hit-tests the token under a point, preferring a standing unit over a downed one', async () => {
@@ -270,10 +272,10 @@ describe('cues', () => {
     h.scene.draw(state, { tick: 100, dtMs: 16, speed: 1, playing: true, nowMs: 5000 });
     expect(h.scene.poolStats().effects).toBe(kinds.length);
     expect(Object.keys(LAYER_OF).sort()).toEqual([...kinds].sort());
-    // Reduced motion draws them all too.
+    // Reduced motion: the motion-only cues (dash-trail, displace, heal-pulse, cooldown-reset, focus-gain) are not drawn.
     h.scene.setReducedMotion(true);
     h.scene.draw(state, { tick: 100, dtMs: 16, speed: 1, playing: true, nowMs: 5016 });
-    expect(h.scene.poolStats().effects).toBe(kinds.length);
+    expect(h.scene.poolStats().effects).toBe(kinds.length - 5);
   });
 
   describe("who an effect is about (the render model unit and target convention)", () => {
@@ -345,13 +347,15 @@ describe('cues', () => {
     const numbers = (ids: number[], amounts: number[], target: number) => ids.map((id, i) => effect({ id, kind: 'number', unit: 2, target, amount: amounts[i]!, tone: 'physical', age: 0.1 }));
     const frame = (effects: EffectRenderState[], nowMs: number): void => h.scene.draw({ ...base, effects }, { tick: 50, dtMs: 16, speed: 1, playing: true, nowMs });
     frame([...numbers([1, 2, 3], [10, 20, 30], 7), ...numbers([4], [5], 8)], 1000);
-    let shownNumbers = labelsOf(h).filter((t) => /^\d+$/.test(t));
-    expect(shownNumbers).toContain('60'); // 10 + 20 + 30 on unit 7, one number
-    expect(shownNumbers).toContain('5'); // unit 8 is a different fighter
+    const signed = /^[−+]\d+$/;
+    let shownNumbers = visibleLabels(h).filter((t) => signed.test(t));
+    expect(shownNumbers).toContain('−60'); // 10 + 20 + 30 on unit 7: one number, with its sign
+    expect(shownNumbers).toContain('−5'); // unit 8 is a different fighter
+    expect(shownNumbers).toHaveLength(2);
     // A hit 150 ms later is a new number.
     frame([...numbers([1, 2, 3], [10, 20, 30], 7), ...numbers([9], [7], 7)], 1150);
-    shownNumbers = visibleLabels(h).filter((t) => /^\d+$/.test(t));
-    expect(shownNumbers).toContain('7');
+    shownNumbers = visibleLabels(h).filter((t) => signed.test(t));
+    expect(shownNumbers).toContain('−7');
   });
 });
 
@@ -412,8 +416,7 @@ describe('reduced motion (04 §9)', () => {
     const state = { ...base, units: unit0, projectiles: [{ id: 1, ability: 'a.arrow' as never, source: 2, target: 7, x: 1500, y: 900, progress: 0.4 }] };
     h.scene.draw(state, { tick: 100, dtMs: 16, speed: 1, playing: true, nowMs: 1000 });
     expect(h.scene.tokenOf(3)!.shown().badge).toBe('R2');
-    const badgePlate = h.scene.tokenOf(3)!.overlay.children.find((c) => c.scale.x !== 1 && c.scale.x === c.scale.y);
-    expect(badgePlate).toBeUndefined(); // nothing pulses
+    expect(h.scene.tokenOf(3)!.shown().badgeScale).toBe(1); // nothing pulses
   });
 
   it('pulses the rule badge for a fresh decision otherwise', async () => {
@@ -422,8 +425,7 @@ describe('reduced motion (04 §9)', () => {
     const base = blankState(h.core.currentState!);
     const units = base.units.map((u) => (u.unit === 3 ? { ...u, rule: { label: 'R2', rule: 1, sinceTick: 100, pulse: 1 } } : u));
     h.scene.draw({ ...base, units }, { tick: 100, dtMs: 16, speed: 1, playing: true, nowMs: 1000 });
-    const scaled = h.scene.tokenOf(3)!.overlay.children.filter((c) => c.scale.x > 1.2);
-    expect(scaled.length).toBeGreaterThan(0);
+    expect(h.scene.tokenOf(3)!.shown().badgeScale).toBeGreaterThan(1.2);
   });
 });
 
@@ -462,7 +464,7 @@ describe('camera and palette', () => {
     expect(h.scene.ringColor(1)).toBe(light.sideThem);
     h.scene.setPalette(dark);
     expect(h.scene.ringColor(0)).toBe(dark.sideUs);
-    expect(h.skin.paletteCalls).toBe(2);
+    expect(h.skin.paletteCalls).toBe(3); // the first load plus the two switches
   });
 
   it('a match between other clubs keeps the clubs\' ring colours across a theme switch', async () => {
@@ -496,7 +498,8 @@ describe('teardown (no growth over 20 rounds)', () => {
     expect(h.skin.liveBodies).toBe(10);
     expect(h.skin.bodiesCreated).toBe(10 * 21);
     // Display objects after a round: the tokens, the floor and the pooled cues (a high-water mark): bounded, not growing.
-    expect(countDisplayObjects(h.scene.root)).toBeLessThanOrEqual(objects + 8);
+    // (Pooled cue views keep the number labels they have served, per tone: a bounded high-water mark.)
+    expect(countDisplayObjects(h.scene.root)).toBeLessThanOrEqual(objects * 1.1 + 8);
     expect(h.scene.poolStats().effectsCreated).toBeLessThanOrEqual(effectsCreated + 8);
     expect(h.skin.floorsCreated).toBeLessThanOrEqual(2 * 21 + 3);
     h.core.destroy();
@@ -578,3 +581,4 @@ function stubLabels(h: Headless): StubLabel[] {
   const factory = (h.scene as unknown as { opts: { text: { created: StubLabel[] } } }).opts.text;
   return factory.created;
 }
+

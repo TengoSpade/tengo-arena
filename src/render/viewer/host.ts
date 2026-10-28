@@ -10,17 +10,6 @@ export function canvasResolution(devicePixelRatio: number, maxResolution: number
   return Math.max(1, Math.min(dpr, cap));
 }
 
-/** The interface scale (`--ui-scale`, 0.85 to 1.5 in Settings) read from the host's computed style; 1 when absent. */
-export function readUiScale(host: HTMLElement): number {
-  try {
-    const raw = getComputedStyle(host).getPropertyValue('--ui-scale').trim();
-    const value = Number.parseFloat(raw);
-    return Number.isFinite(value) && value > 0 ? Math.max(0.5, Math.min(2, value)) : 1;
-  } catch {
-    return 1;
-  }
-}
-
 /**
  * Call `onChange` when the device pixel ratio changes (the window moved to another monitor, the browser zoom
  * changed). Re-arms itself on each change. Returns the stop function.

@@ -1,61 +1,48 @@
 /**
- * One fighter's token: the skin's body plus everything with game meaning, drawn by the viewer above any skin
- * (tech-020; asset-006). Two containers per unit:
+ * One fighter's token, drawn by the viewer above any skin (tech-020) to the UI designer's specification
+ * (docs/design/mockups/arena-notes.md §1; components.css §25.3). Every colour, alpha, size and duration comes from
+ * the palette and `palette.metrics`; the only numbers here are the designer's proportions of the disc.
  *
- * - `root` (depth-sorted with the other bodies): body, side ring (solid or double), facing wedge, role plate and
- *   glyph(s), selection ring, hit flash, down marker.
- * - `overlay` (above all bodies, never hidden by one): HP, shield and focus bars, cast bar, status pips, rule
- *   badge, captain crown, name label and the Freshness tag.
+ * Two containers per unit:
+ * - `root` (depth-sorted with the other bodies), bottom to top: side ring with its plate keylines, facing wedge,
+ *   the skin's body, the role-glyph plate and glyph(s), hit wash, selection brackets, the down diamond.
+ * - `overlay` (above all bodies, so a body never hides it): crown chip, and above the disc, bottom to top, the focus
+ *   bar, the HP bar with the hatched shield segment, the row of rule badge and status pips ("+n" for the rest), the
+ *   cast bar, the Freshness tag and the name.
  *
- * Static geometry is drawn at layout time (pxPerMetre or palette changed); per frame only transforms, tints,
- * alpha and visibility change, so a frame allocates nothing here. The viewer translates `root` and never
- * rotates or scales it (bodies pick their own direction from `UnitRenderState.facing`); only the wedge, a mark
- * of ours, rotates.
+ * Static geometry is drawn at layout time (zoom or palette changed); per frame only transforms, scales, alpha and
+ * visibility change. The viewer translates `root` and never rotates or scales it (bodies pick their own direction
+ * from `UnitRenderState.facing`); only its own wedge turns, and a downed fighter's plate and ring are flattened with
+ * the body.
  */
 import { Container, Graphics } from 'pixi.js';
-import type { ArenaPalette, ArenaUnitInfo, RoleId, StatusCue, TeamColors, UnitRenderState } from '../../types';
-import type { BodyFrame, BodyVisual } from '../skin';
+import type { ArenaPalette, ArenaUnitInfo, PipKind, StatusCue, TeamColors, UnitRenderState } from '../../types';
 import { DESTROY_ALL } from '../destroy';
 import type { FlashLimiter } from '../flash-limiter';
-import { mixColor, type Chrome } from '../palette';
-import type { TextFactory, TextLabel } from './text';
+import type { BodyFrame, BodyVisual } from '../skin';
+import { buildGlyph } from './glyphs';
+import { Chip, type ChipEnv } from './chip';
+import type { TextFactory } from './text';
 
-/** Overlay layout in "1080p px" (the overlay container scales with the zoom and the interface scale). */
-const BASE_RADIUS = 26;
-const BAR_W = 46;
-const HP_H = 5;
-const FOCUS_H = 2.5;
-const CAST_H = 3;
-const PIP = 11;
+/** Downed bodies, plates and rings are flattened to this height (notes §1; opacity is `metrics.downOpacity`). */
+export const DOWN_FLATTEN = 0.6;
 const MAX_PIPS = 4;
-const BADGE_W = 22;
-const BADGE_H = 14;
-
-const HP_TOP = -(BASE_RADIUS + 15);
-const FOCUS_TOP = -(BASE_RADIUS + 8.5);
-const CAST_TOP = -(BASE_RADIUS + 23);
-const PIPS_CY = -(BASE_RADIUS + 34);
-const NAME_BOTTOM = -(BASE_RADIUS + 42);
-const TAG_BOTTOM = -(BASE_RADIUS + 56);
-const ROW_CY = HP_TOP + HP_H / 2;
-
-/** A hit flash lasts this many ticks (200 ms of fight time). */
-const FLASH_TICKS = 4;
-/** A flash the limiter refused is drawn at this fraction of its intensity. */
-const REFUSED_FLASH = 0.25;
+const STACK_GAP = 2;
+const ROW_GAP = 4;
 /** The Freshness tag shows for the first 3 s of the round (20 ticks per second). */
 const TAG_TICKS = 60;
+/** A hit is fresh enough to flash while it is within this many ticks of the tick shown (so a seek never flashes). */
+const FRESH_TICKS = 4;
+/** Name chip: at most 11 em wide (arena-notes .alabel); characters at about 0.58 em each. */
+const NAME_MAX_CHARS = 19;
 
-export interface TokenEnv {
+export interface TokenEnv extends ChipEnv {
   palette: ArenaPalette;
-  chrome: Chrome;
   text: TextFactory;
-  /** CSS px per metre. */
+  /** CSS px per metre: the disc is one metre across. */
   pxPerMetre: number;
-  /** Interface scale (--ui-scale), 0.85 to 1.5. */
-  uiScale: number;
-  /** Overlay scale from zoom and interface scale. */
-  overlayScale: number;
+  /** Bumped on every relayout so cached chip drawings refresh. */
+  version: number;
 }
 
 /** What one frame tells a token beyond the unit's own state. */
@@ -65,58 +52,107 @@ export interface TokenFrame {
   tick: number;
   /** Screen angle of the facing wedge (radians). */
   facing: number;
+  /** The side colour (the ring, the wedge and the down diamond). */
   ring: number;
   hardControl: boolean;
-  /** 0..1 of the hit flash, already limited. */
+  /** 0..1 of the hit wash, already limited. */
   flash: number;
   selected: boolean;
-  labels: 'off' | 'selected' | 'all';
   reducedMotion: boolean;
-  /** Pips to draw, highest priority first (at most MAX_PIPS). */
+  labels: 'off' | 'selected' | 'all';
+  /** Pips to draw, hard control first; `pipMore` statuses did not fit. */
   pips: readonly StatusCue[];
   pipCount: number;
-  /** Cast bar progress 0..1, or -1 for none. */
+  pipMore: number;
+  /** Cast bar: progress 0..1 and the ability name, or progress -1 for none. */
   cast: number;
+  castName: string;
   focusMax: number;
   body: BodyFrame;
+}
+
+/** One status pip: a plate chip outlined in the family colour with the family silhouette. */
+class PipSlot {
+  readonly view = new Container();
+  private readonly bg = new Graphics();
+  private glyph: Graphics | null = null;
+  private kind: PipKind | null = null;
+  private version = -1;
+
+  constructor() {
+    this.view.eventMode = 'none';
+    this.view.addChild(this.bg);
+    this.view.visible = false;
+  }
+
+  /** Show `kind` at the palette's size. */
+  show(kind: PipKind, env: TokenEnv): void {
+    this.view.visible = true;
+    if (this.kind === kind && this.version === env.version) return;
+    this.kind = kind;
+    this.version = env.version;
+    const p = env.palette;
+    const s = p.metrics.pipSizePx;
+    const color = p.pipColor[kind];
+    // A 1.5 px outline in the family colour is what keeps the pip 3:1 against the floor.
+    this.bg.clear().roundRect(0, 0, s, s, 3).fill({ color: p.plate }).roundRect(0.75, 0.75, s - 1.5, s - 1.5, 3).stroke({ width: 1.5, color });
+    this.glyph?.destroy(DESTROY_ALL);
+    this.glyph = buildGlyph(p.pipGlyphSvg[kind] ?? '', s * 0.66);
+    this.glyph.tint = color;
+    this.glyph.position.x += s / 2;
+    this.glyph.position.y += s / 2;
+    this.view.addChild(this.glyph);
+  }
+
+  hide(): void {
+    this.view.visible = false;
+  }
 }
 
 export class Token {
   readonly root = new Container();
   readonly overlay = new Container();
-  private readonly ring = new Graphics();
+  // root
+  private readonly ringGroup = new Container();
+  private readonly ringG = new Graphics();
   private readonly wedge = new Graphics();
-  private readonly plate = new Graphics();
-  private readonly glyphLayer = new Container();
-  private readonly selection = new Graphics();
+  private readonly plateGroup = new Container();
+  private readonly plateG = new Graphics();
+  private glyphs: Graphics[] = [];
   private readonly flashDisc = new Graphics();
+  private readonly selection = new Graphics();
   private readonly downMark = new Graphics();
-
+  // overlay
+  private readonly stack = new Container();
+  private readonly bars = new Container();
   private readonly track = new Graphics();
   private readonly hp = new Graphics();
   private readonly shield = new Graphics();
   private readonly focus = new Graphics();
-  private readonly castTrack = new Graphics();
-  private readonly cast = new Graphics();
-  private readonly pipSlots: Graphics[] = [];
-  private readonly pipKeys: string[] = [];
-  private readonly badgePlate = new Graphics();
-  private readonly badge: TextLabel;
-  private readonly crown = new Graphics();
-  private readonly name: TextLabel;
-  private readonly tag: TextLabel;
+  private readonly row = new Container();
+  private readonly badge: Chip;
+  private readonly pipSlots: PipSlot[] = [];
+  private readonly more: Chip;
+  private readonly cast: Chip;
+  private readonly tag: Chip;
+  private readonly name: Chip;
+  private readonly crown = new Container();
+  private readonly crownG = new Graphics();
 
-  private glyphs: Graphics[] = [];
   private env: TokenEnv;
   private colors: TeamColors;
   private drawnRing = -1;
+  private drawnDown = -1;
+  private drawnShieldPx = -1;
+  private barW = 0;
+  private bottomY = 0;
   private badgeText = '';
   private tagText = '';
+  private nameText = '';
   private destroyed = false;
-  /** The last hit already considered for a flash. */
+  /** The last hit already considered for a flash, and the flash in progress (wall ms). */
   private lastHitSeen: number | null = null;
-  private flashStart = -1;
-  private flashStrength = 0;
+  private flashStartMs = Number.NEGATIVE_INFINITY;
 
   constructor(
     readonly info: ArenaUnitInfo,
@@ -126,130 +162,174 @@ export class Token {
   ) {
     this.env = env;
     this.colors = colors;
-    for (const part of [this.ring, this.wedge, this.plate, this.selection, this.flashDisc, this.downMark]) part.eventMode = 'none';
     this.root.eventMode = 'none';
     this.overlay.eventMode = 'none';
-    this.root.addChild(body.view, this.flashDisc, this.ring, this.wedge, this.plate, this.glyphLayer, this.selection, this.downMark);
+    for (const c of [this.ringGroup, this.plateGroup, this.stack, this.bars, this.row, this.crown]) c.eventMode = 'none';
+    for (const g of [this.ringG, this.wedge, this.plateG, this.flashDisc, this.selection, this.downMark, this.track, this.hp, this.shield, this.focus, this.crownG]) g.eventMode = 'none';
 
-    this.badge = env.text.create('small');
-    this.name = env.text.create('normal');
-    this.tag = env.text.create('small');
-    this.badge.setAnchor(0.5, 0.5);
-    this.name.setAnchor(0.5, 1);
-    this.tag.setAnchor(0.5, 1);
-    for (let i = 0; i < MAX_PIPS; i++) {
-      const pip = new Graphics();
-      pip.visible = false;
-      this.pipSlots.push(pip);
-      this.pipKeys.push('');
-    }
-    this.overlay.addChild(
-      this.track,
-      this.hp,
-      this.shield,
-      this.focus,
-      this.castTrack,
-      this.cast,
-      ...this.pipSlots,
-      this.badgePlate,
-      this.badge.view,
-      this.crown,
-      this.name.view,
-      this.tag.view,
-    );
-    this.name.view.visible = false;
-    this.tag.view.visible = false;
-    this.badge.view.visible = false;
-    this.badgePlate.visible = false;
-    this.crown.visible = false;
-    this.castTrack.visible = false;
-    this.cast.visible = false;
-    this.flashDisc.visible = false;
-    this.downMark.visible = false;
-    this.selection.visible = false;
+    this.ringGroup.addChild(this.ringG);
+    this.plateGroup.addChild(this.plateG);
+    this.root.addChild(this.ringGroup, this.wedge, body.view, this.plateGroup, this.flashDisc, this.selection, this.downMark);
+
+    this.badge = new Chip(env.text, 'badge');
+    this.more = new Chip(env.text, 'label');
+    this.cast = new Chip(env.text, 'label');
+    this.tag = new Chip(env.text, 'label');
+    this.name = new Chip(env.text, 'label');
+    for (let i = 0; i < MAX_PIPS; i++) this.pipSlots.push(new PipSlot());
+    this.bars.addChild(this.track, this.focus, this.hp, this.shield);
+    this.row.addChild(this.badge.view, ...this.pipSlots.map((s) => s.view), this.more.view);
+    this.stack.addChild(this.bars, this.row, this.cast.view, this.tag.view, this.name.view);
+    this.crown.addChild(this.crownG);
+    this.overlay.addChild(this.stack, this.crown);
+    for (const v of [this.badge.view, this.more.view, this.cast.view, this.tag.view, this.name.view, this.crown, this.flashDisc, this.selection, this.downMark, this.shield]) v.visible = false;
     this.layout(env, colors);
+  }
+
+  /** Disc radius and ring geometry: shared by drawing and stacking. */
+  private geometry(): { r: number; gap: number; ringW: number; line: number; double: boolean; outer: number } {
+    const m = this.env.palette.metrics;
+    const r = 0.5 * this.env.pxPerMetre;
+    const double = this.colors.ringStyle === 'double';
+    // solid: keyline, ring, 1 px keyline; double: keyline, line, gap, line, 1 px keyline (components.css §25.3)
+    const outer = double ? r + m.ringGapPx * 2 + m.ringLinePx * 2 + 1 : r + m.ringGapPx + m.ringWidthPx + 1;
+    return { r, gap: m.ringGapPx, ringW: m.ringWidthPx, line: m.ringLinePx, double, outer };
   }
 
   /** The palette, zoom or colours changed: redraw the static geometry. */
   layout(env: TokenEnv, colors: TeamColors): void {
     this.env = env;
     this.colors = colors;
-    const { palette, chrome } = env;
-    const r = 0.5 * env.pxPerMetre;
+    const p = env.palette;
+    const m = p.metrics;
+    const g = this.geometry();
+    const diameter = env.pxPerMetre;
     this.drawnRing = -1;
+    this.drawnDown = -1;
+    this.drawnShieldPx = -1;
 
-    // Hit flash: a bright disc over the body (alpha animated).
-    this.flashDisc.clear().circle(0, 0, r).fill({ color: 0xffffff });
-    // Facing wedge: a small triangle just outside the ring, pointing east, rotated by the viewer's own mark.
-    const w = Math.max(6, r * 0.4);
-    this.wedge.clear();
-    this.wedge.poly([r + 3, 0, r - 1 - w * 0.2, -w * 0.62, r - 1 - w * 0.2, w * 0.62]).fill({ color: 0xffffff }).stroke({ width: 1.5, color: chrome.outline, join: 'round' });
-    // Selection: a bright ring with a dark outline, clear of the side ring.
-    const sel = r + 8;
-    this.selection.clear().circle(0, 0, sel).stroke({ width: 5, color: chrome.outline, alpha: 0.9 }).circle(0, 0, sel).stroke({ width: 2.5, color: palette.text });
-    // Down marker: a diamond in the side colour with a dark outline (as in the report).
-    const d = r * 0.5;
-    this.downMark.clear().poly([0, -d, d, 0, 0, d, -d, 0]).fill({ color: 0xffffff }).stroke({ width: 2, color: chrome.outline, join: 'round' });
+    // Hit wash on the body.
+    this.flashDisc.clear().circle(0, 0, g.r).fill({ color: p.hitFlash });
 
-    // Overlay chrome in 1080p px.
-    this.track.clear().rect(-BAR_W / 2 - 1, HP_TOP - 1, BAR_W + 2, HP_H + 2).fill({ color: chrome.outline, alpha: 0.85 }).rect(-BAR_W / 2 - 1, FOCUS_TOP - 0.5, BAR_W + 2, FOCUS_H + 1).fill({ color: chrome.outline, alpha: 0.7 });
-    this.hp.clear().rect(0, 0, 1, HP_H).fill({ color: 0xffffff });
-    this.hp.tint = palette.text;
-    this.shield.clear().rect(0, 0, 1, HP_H).fill({ color: 0xffffff, alpha: 0.45 }).rect(0, 0, 1, HP_H).stroke({ width: 1, color: 0xffffff, alignment: 1 });
-    this.shield.tint = palette.text;
-    this.focus.clear().rect(0, 0, 1, FOCUS_H).fill({ color: 0xffffff });
-    this.focus.tint = palette.textMuted;
-    this.castTrack.clear().rect(-BAR_W / 2 - 1, CAST_TOP - 1, BAR_W + 2, CAST_H + 2).fill({ color: chrome.outline, alpha: 0.85 });
-    this.cast.clear().rect(0, 0, 1, CAST_H).fill({ color: 0xffffff });
-    this.cast.tint = palette.warn;
-    this.badgePlate.clear().roundRect(-BADGE_W / 2, -BADGE_H / 2, BADGE_W, BADGE_H, 4).fill({ color: chrome.textPlate, alpha: 0.92 }).stroke({ width: 1, color: chrome.lift(palette.text), alpha: 0.8 });
-    this.badgePlate.position.set(-(BAR_W / 2 + 4 + BADGE_W / 2), ROW_CY);
-    this.badge.view.position.copyFrom(this.badgePlate.position);
-    this.badge.setTint(chrome.lift(palette.text));
-    this.crown.clear().poly([-6, 4, -7, -5, -3, -1, 0, -7, 3, -1, 7, -5, 6, 4]).fill({ color: 0xffffff }).stroke({ width: 1.5, color: chrome.outline, join: 'round' });
-    this.crown.tint = palette.text;
-    this.crown.position.set(BAR_W / 2 + 4 + 7, ROW_CY);
-    this.name.view.position.set(0, NAME_BOTTOM);
-    this.name.setTint(chrome.lift(palette.text));
-    this.tag.view.position.set(0, TAG_BOTTOM);
-    this.tag.setTint(chrome.lift(palette.warn));
-    for (const pip of this.pipSlots) pip.position.y = PIPS_CY;
-    for (let i = 0; i < this.pipKeys.length; i++) this.pipKeys[i] = '';
+    // Selection: four corner brackets in the selection colour, on a plate halo, around the ring.
+    const half = g.r + (g.double ? g.gap * 2 + g.line * 2 : g.gap + g.ringW) + 7;
+    const len = m.pipSizePx * 0.6;
+    this.selection.clear();
+    for (const [color, width] of [
+      [p.plate, 4],
+      [p.select, 2],
+    ] as const) {
+      for (const sx of [-1, 1]) {
+        for (const sy of [-1, 1]) {
+          this.selection
+            .moveTo(sx * half, sy * (half - len))
+            .lineTo(sx * half, sy * half)
+            .lineTo(sx * (half - len), sy * half)
+            .stroke({ width, color, join: 'miter', cap: 'square' });
+        }
+      }
+    }
 
-    this.drawRoleGlyphs(r);
-    this.overlay.scale.set(env.overlayScale);
+    // Role-glyph plate: a fixed plate behind the glyph(s), so the role hue never depends on the club colours.
+    this.drawPlate(diameter);
+
+    // Bars: a track with an edge hairline around it; fills are unit rects scaled per frame.
+    this.barW = Math.max(1.7 * diameter, 3 * m.pipSizePx);
+    const barH = m.barHeightPx;
+    const focusH = barH * 0.6;
+    this.track
+      .clear()
+      .rect(-1, 0, this.barW + 2, barH + 1 + focusH + 2)
+      .fill({ color: p.edge })
+      .rect(0, 1, this.barW, barH)
+      .fill({ color: p.track })
+      .rect(0, 1 + barH + 1, this.barW, focusH)
+      .fill({ color: p.track });
+    this.hp.clear().rect(0, 0, 1, barH).fill({ color: 0xffffff });
+    this.hp.tint = p.hp;
+    this.focus.clear().rect(0, 0, 1, focusH).fill({ color: 0xffffff });
+    this.focus.tint = p.focus;
+    this.hp.position.set(0, 1);
+    this.focus.position.set(0, 1 + barH + 1);
+    this.shield.position.set(0, 1);
+
+    // Crown chip at the top right of the disc.
+    const cw = Math.max(diameter * 0.42, m.pipSizePx * 0.85);
+    this.crownG.clear().circle(0, 0, cw / 2).fill({ color: p.plate });
+    const k = cw * 0.33;
+    this.crownG.poly([-k, k * 0.6, -k * 1.05, -k * 0.7, -k * 0.4, -k * 0.15, 0, -k, k * 0.4, -k * 0.15, k * 1.05, -k * 0.7, k, k * 0.6]).fill({ color: p.ink });
+    this.crown.position.set(diameter * 0.51, -diameter * 0.51);
+
+    // The stack above the disc: its bottom edge sits a few px above the ring.
+    this.bottomY = -(g.double ? g.r + g.gap * 2 + g.line * 2 + 5 : g.r + g.gap + g.ringW + 4);
+    for (const slot of this.pipSlots) slot.hide();
+    this.badgeText = '';
+    this.tagText = '';
+    this.nameText = '';
   }
 
-  private drawRoleGlyphs(r: number): void {
-    const { palette, chrome } = this.env;
-    for (const g of this.glyphs) {
-      g.destroy();
-    }
+  private drawPlate(diameter: number): void {
+    const p = this.env.palette;
+    for (const gl of this.glyphs) gl.destroy(DESTROY_ALL);
     this.glyphs = [];
     const roles = this.info.roles.slice(0, 2);
-    // The plate stays well inside the disc so the side's body colour still shows around it.
-    const size = roles.length > 1 ? r * 0.5 : r * 0.72;
-    const gap = size * 0.12;
+    // A plate about a third of the disc across (inset 17%); hybrids put two narrower glyphs side by side.
+    this.plateG.clear();
+    if (roles.length > 0) this.plateG.circle(0, 0, diameter * 0.33).fill({ color: p.plate });
+    const size = diameter * (roles.length > 1 ? 0.3 : 0.44);
+    const gap = diameter * 0.03;
     const total = roles.length * size + (roles.length - 1) * gap;
-    const plateW = total + size * 0.34;
-    const plateH = size + size * 0.34;
-    this.plate.clear();
-    if (roles.length > 0) {
-      this.plate.roundRect(-plateW / 2, -plateH / 2, plateW, plateH, Math.min(plateH / 2, size * 0.34)).fill({ color: chrome.plate, alpha: 0.88 });
-    }
     roles.forEach((role, i) => {
-      const g = buildRoleGlyph(role, palette.roleGlyphSvg[role] ?? '', size);
-      g.tint = palette.roles[role];
-      g.position.x += -total / 2 + i * (size + gap) + size / 2;
-      this.glyphLayer.addChild(g);
-      this.glyphs.push(g);
+      const glyph = buildGlyph(p.roleGlyphSvg[role] ?? '', size, role);
+      glyph.tint = p.roles[role];
+      glyph.position.x += -total / 2 + i * (size + gap) + size / 2;
+      this.plateGroup.addChild(glyph);
+      this.glyphs.push(glyph);
     });
   }
 
-  /** Apply one frame. Allocation-free. */
+  /** The ring with its keylines and the wedge, in the current side colour. */
+  private drawRing(color: number): void {
+    const p = this.env.palette;
+    const g = this.geometry();
+    const ring = this.ringG;
+    ring.clear();
+    // A plate keyline between body and ring, the ring (one line, or two), and a 1 px keyline outside.
+    ring.circle(0, 0, g.r + g.gap / 2).stroke({ width: g.gap, color: p.plate });
+    if (g.double) {
+      ring.circle(0, 0, g.r + g.gap + g.line / 2).stroke({ width: g.line, color });
+      ring.circle(0, 0, g.r + g.gap + g.line + g.gap / 2).stroke({ width: g.gap, color: p.plate });
+      ring.circle(0, 0, g.r + g.gap * 2 + g.line + g.line / 2).stroke({ width: g.line, color });
+    } else {
+      ring.circle(0, 0, g.r + g.gap + g.ringW / 2).stroke({ width: g.ringW, color });
+    }
+    ring.circle(0, 0, g.outer - 0.5).stroke({ width: 1, color: p.plate });
+    // Wedge: a small point on the ring in the facing direction (pointing east before it is rotated).
+    const m = this.env.pxPerMetre;
+    const w = m * 0.2;
+    const h = m * 0.26;
+    this.wedge
+      .clear()
+      .poly([g.outer, -h / 2, g.outer + w, 0, g.outer, h / 2])
+      .fill({ color })
+      .stroke({ width: 1, color: p.plate, join: 'round' });
+  }
+
+  private drawDown(color: number): void {
+    const p = this.env.palette;
+    const d = Math.max(this.env.pxPerMetre * 0.5, p.metrics.pipSizePx * 0.9) / 2;
+    this.downMark
+      .clear()
+      .poly([0, -d * 1.2, d * 1.2, 0, 0, d * 1.2, -d * 1.2, 0])
+      .fill({ color })
+      .stroke({ width: 2, color: p.plate, join: 'round' });
+  }
+
+  /** Apply one frame. Allocation-free except when a text or a chip changes. */
   update(u: UnitRenderState, f: TokenFrame): void {
     if (this.destroyed) return;
-    const { palette, chrome } = this.env;
+    const p = this.env.palette;
+    const m = p.metrics;
     const dead = !u.standing;
 
     this.root.position.set(f.x, f.y);
@@ -257,163 +337,221 @@ export class Token {
     this.overlay.position.set(f.x, f.y);
     this.body.update(u, f.body);
 
-    // Side ring: the authoritative side cue; solid for the player's side, double for the other (colour-free cue).
-    const ringColor = f.hardControl ? chrome.grey : f.ring;
-    const ringKey = ringColor * 4 + (this.colors.ringStyle === 'double' ? 1 : 0);
-    if (ringKey !== this.drawnRing) {
-      this.drawnRing = ringKey;
+    // The side ring: ours solid, theirs double (the colour-free cue); hard control greys it and keeps the style.
+    const ringColor = f.hardControl ? p.textMuted : f.ring;
+    if (ringColor !== this.drawnRing) {
+      this.drawnRing = ringColor;
       this.drawRing(ringColor);
     }
-    this.ring.alpha = dead ? 0.35 : 1;
-
+    if (f.ring !== this.drawnDown) {
+      this.drawnDown = f.ring;
+      this.drawDown(f.ring);
+    }
+    const flat = dead ? DOWN_FLATTEN : 1;
+    const alpha = dead ? m.downOpacity : 1;
+    this.ringGroup.scale.y = flat;
+    this.ringGroup.alpha = alpha;
+    this.plateGroup.scale.y = flat;
+    this.plateGroup.alpha = alpha;
     this.wedge.visible = !dead;
     this.wedge.rotation = f.facing;
-    this.wedge.tint = ringColor;
-    this.plate.alpha = dead ? 0.4 : 1;
-    this.glyphLayer.alpha = dead ? 0.4 : 1;
     this.selection.visible = f.selected;
     this.downMark.visible = dead;
-    if (dead) this.downMark.tint = f.ring;
 
-    // Hit flash (limited by the caller; none under reduced motion).
     if (f.flash > 0.001 && !dead) {
       this.flashDisc.visible = true;
-      this.flashDisc.alpha = f.flash * 0.55;
+      this.flashDisc.alpha = f.flash * m.hitFlashAlpha;
     } else {
       this.flashDisc.visible = false;
     }
 
-    // Bars.
-    const showBars = !dead;
-    this.track.visible = showBars;
-    this.hp.visible = showBars;
-    this.focus.visible = showBars && u.focus !== null;
-    if (showBars) {
-      const shield = u.shield !== null && u.shield > 0 ? u.shield : 0;
-      const denom = Math.max(1, u.maxHp, u.hp + shield);
-      const hpW = Math.max(0, Math.min(1, u.hp / denom)) * BAR_W;
-      this.hp.scale.x = Math.max(hpW, u.hp > 0 ? 1 : 0);
-      this.hp.position.set(-BAR_W / 2, HP_TOP);
-      this.shield.visible = shield > 0;
-      if (shield > 0) {
-        this.shield.scale.x = Math.max(1, (shield / denom) * BAR_W);
-        this.shield.position.set(-BAR_W / 2 + hpW, HP_TOP);
-      }
-      if (u.focus !== null) {
-        this.focus.scale.x = Math.max(0, Math.min(1, u.focus / Math.max(1, f.focusMax))) * BAR_W;
-        this.focus.position.set(-BAR_W / 2, FOCUS_TOP);
-      }
-    } else {
-      this.shield.visible = false;
-    }
+    // Everything above the disc is hidden for a downed fighter.
+    this.overlay.visible = !dead;
+    if (dead) return;
+    this.crown.visible = u.isCaptain;
 
-    // Cast bar (casts and channels of 0.3 s or more; the caller passes -1 otherwise).
-    const casting = showBars && f.cast >= 0;
-    this.castTrack.visible = casting;
-    this.cast.visible = casting;
-    if (casting) {
-      this.cast.scale.x = Math.max(0, Math.min(1, f.cast)) * BAR_W;
-      this.cast.position.set(-BAR_W / 2, CAST_TOP);
-    }
-
-    // Status pips: up to four above the bars, by priority (hard control first).
-    for (let i = 0; i < MAX_PIPS; i++) {
-      const pip = this.pipSlots[i]!;
-      if (!showBars || i >= f.pipCount) {
-        pip.visible = false;
-        continue;
+    const barH = m.barHeightPx;
+    const focusH = barH * 0.6;
+    const shield = u.shield !== null && u.shield > 0 ? u.shield : 0;
+    const denom = Math.max(1, u.maxHp, u.hp + shield);
+    const hpW = Math.max(0, Math.min(1, u.hp / denom)) * this.barW;
+    this.hp.scale.x = u.hp > 0 ? Math.max(hpW, 1) : 0;
+    this.shield.visible = shield > 0;
+    if (shield > 0) {
+      const sw = Math.max(2, Math.round((shield / denom) * this.barW));
+      this.shield.position.x = hpW;
+      if (sw !== this.drawnShieldPx) {
+        this.drawnShieldPx = sw;
+        this.drawShield(sw, barH);
       }
-      const cue = f.pips[i]!;
-      const key = `${cue.category}|${cue.icon}`;
-      if (this.pipKeys[i] !== key) {
-        this.pipKeys[i] = key;
-        drawPip(pip, cue, palette, chrome);
-      }
-      pip.visible = true;
-      pip.position.x = (i - (f.pipCount - 1) / 2) * (PIP + 2);
     }
+    this.focus.visible = u.focus !== null;
+    if (u.focus !== null) this.focus.scale.x = Math.max(0, Math.min(1, u.focus / Math.max(1, f.focusMax))) * this.barW;
 
-    // Rule badge (P-22): "R3", "S" or "T"; pulses on a new decision (u.rule.pulse is 0 under reduced motion).
-    const rule = showBars ? u.rule : null;
-    this.badgePlate.visible = rule !== null;
+    // The stack, bottom to top.
+    const blockH = barH + 1 + focusH + 2;
+    let y = this.bottomY;
+    this.bars.position.set(-this.barW / 2, y - blockH);
+    y -= blockH + STACK_GAP;
+
+    // Row: the rule badge, up to four pips (hard control first), "+n" for the rest.
+    const rem = m.pipSizePx;
+    const rule = u.rule;
+    let x = 0;
+    let badgeW = 0;
     this.badge.view.visible = rule !== null;
     if (rule) {
-      if (this.badgeText !== rule.label) {
-        this.badgeText = rule.label;
-        this.badge.setText(rule.label);
+      this.badgeText = rule.label;
+      badgeW = this.badge.set(rule.label, this.env, { minW: rem * 1.45, padX: rem * 0.28, h: rem });
+      x = badgeW;
+    }
+    let shownPips = 0;
+    for (let i = 0; i < MAX_PIPS; i++) {
+      const slot = this.pipSlots[i]!;
+      const kind = i < f.pipCount ? f.pips[i]!.pip : null;
+      if (kind === null || kind === undefined) {
+        slot.hide();
+        continue;
       }
-      const s = f.reducedMotion ? 1 : 1 + 0.35 * rule.pulse;
-      this.badgePlate.scale.set(s);
-      this.badge.view.scale.set(s);
+      slot.show(kind, this.env);
+      x += x > 0 ? (shownPips === 0 ? ROW_GAP : STACK_GAP) : 0;
+      slot.view.position.set(x, 0);
+      x += rem;
+      shownPips++;
+    }
+    this.more.view.visible = f.pipMore > 0;
+    if (f.pipMore > 0) {
+      x += x > 0 ? (shownPips === 0 ? ROW_GAP : STACK_GAP) : 0;
+      const w = this.more.set(`+${f.pipMore}`, this.env, { minW: 0, padX: rem * 0.25, h: rem });
+      this.more.view.position.set(x, 0);
+      x += w;
+    }
+    this.row.position.set(-x / 2, y - rem);
+    if (rule) {
+      // The badge pulses on a new decision (state.pulse is 0 under reduced motion).
+      this.badge.view.pivot.set(badgeW / 2, rem / 2);
+      this.badge.view.position.set(badgeW / 2, rem / 2);
+      this.badge.view.scale.set(f.reducedMotion ? 1 : 1 + 0.35 * rule.pulse);
+    }
+    if (x > 0) y -= rem + STACK_GAP;
+
+    // Cast bar: the ability name over its progress.
+    const lineH = m.labelSizePx * 1.3;
+    const casting = f.cast >= 0;
+    this.cast.view.visible = casting;
+    if (casting) {
+      const w = this.cast.set(f.castName, this.env, { minW: this.barW, padX: rem * 0.35, h: lineH, progress: f.cast });
+      this.cast.view.position.set(-w / 2, y - lineH);
+      y -= lineH + STACK_GAP;
     }
 
-    this.crown.visible = showBars && u.isCaptain;
-
-    // Labels.
+    // Freshness tag (first 3 s), then the name.
+    const tagText = f.tick < TAG_TICKS && this.info.fatigueTag !== null && this.info.freshness !== null ? `${this.info.fatigueTag === 'spent' ? 'Spent' : 'Tired'} (${Math.round(this.info.freshness)})` : '';
+    this.tag.view.visible = tagText !== '';
+    this.tagText = tagText;
+    if (tagText !== '') {
+      const w = this.tag.set(tagText, this.env, { minW: 0, padX: rem * 0.35, h: lineH });
+      this.tag.view.position.set(-w / 2, y - lineH);
+      y -= lineH + STACK_GAP;
+    }
     const showName = f.labels === 'all' || (f.labels === 'selected' && f.selected);
     this.name.view.visible = showName;
-    if (showName) this.name.setText(this.info.name);
-    const tag = f.tick < TAG_TICKS && this.info.fatigueTag !== null && this.info.freshness !== null ? `${this.info.fatigueTag === 'spent' ? 'Spent' : 'Tired'} (${Math.round(this.info.freshness)})` : '';
-    this.tag.view.visible = tag !== '' && !dead;
-    if (tag !== this.tagText) {
-      this.tagText = tag;
-      this.tag.setText(tag);
+    this.nameText = '';
+    if (showName) {
+      const text = this.info.name.length > NAME_MAX_CHARS ? `${this.info.name.slice(0, NAME_MAX_CHARS - 1)}…` : this.info.name;
+      this.nameText = text;
+      const nh = m.labelSizePx * 1.35;
+      const w = this.name.set(text, this.env, { minW: 0, padX: rem * 0.4, h: nh });
+      this.name.view.position.set(-w / 2, y - nh);
     }
   }
 
-  /** Hit flash level for this frame; remembers what it has seen so a seek never flashes. */
+  /** The shield segment: hatched, with 1 px lines along its top and bottom (components.css .abar__shield). */
+  private drawShield(w: number, h: number): void {
+    const color = this.env.palette.shield;
+    const g = this.shield;
+    g.clear();
+    g.rect(0, 0, w, 1).fill({ color }).rect(0, h - 1, w, 1).fill({ color });
+    const pitch = 5.7;
+    for (let a = -h; a < w; a += pitch) {
+      const xs = Math.max(a, 0);
+      const xe = Math.min(a + h, w);
+      if (xe <= xs) continue;
+      g.moveTo(xs, h - (xs - a)).lineTo(xe, h - (xe - a));
+    }
+    g.stroke({ width: 1.4, color });
+  }
+
+  /**
+   * The hit wash level for this frame (0..1). A hit flashes when it is fresh and playing is continuous, for
+   * `metrics.hitFlashMs` of wall time, if the limiter admits it; seeking, pausing and reduced motion never flash.
+   */
   flashLevel(u: UnitRenderState, tick: number, playing: boolean, reducedMotion: boolean, limiter: FlashLimiter, nowMs: number): number {
+    const flashMs = this.env.palette.metrics.hitFlashMs;
     const hit = u.lastHitTick;
     if (hit !== this.lastHitSeen) {
-      const fresh = hit !== null && playing && !reducedMotion && tick >= hit && tick - hit <= FLASH_TICKS;
       this.lastHitSeen = hit;
-      if (fresh) {
-        this.flashStart = hit;
-        this.flashStrength = limiter.admit(u.unit, nowMs) ? 1 : REFUSED_FLASH;
-      } else {
-        this.flashStart = -1;
-      }
+      const fresh = hit !== null && playing && !reducedMotion && flashMs > 0 && tick >= hit && tick - hit <= FRESH_TICKS;
+      // A hit the limiter refuses shows no wash at all (its number and impact still read), and never cuts short one in progress.
+      if (fresh && limiter.admit(u.unit, nowMs)) this.flashStartMs = nowMs;
+      else if (!fresh) this.flashStartMs = Number.NEGATIVE_INFINITY;
     }
-    if (this.flashStart < 0 || reducedMotion || !playing) return 0;
-    const age = tick - this.flashStart;
-    if (age < 0 || age > FLASH_TICKS) return 0;
-    return this.flashStrength * (1 - age / FLASH_TICKS);
-  }
-
-  private drawRing(color: number): void {
-    const r = 0.5 * this.env.pxPerMetre;
-    const { chrome } = this.env;
-    const g = this.ring;
-    g.clear();
-    // Dark outline first so the ring keeps 3:1 against any floor, then the ring itself.
-    if (this.colors.ringStyle === 'double') {
-      g.circle(0, 0, r + 1.5).stroke({ width: 7, color: chrome.outline, alpha: 0.7 });
-      g.circle(0, 0, r + 0.5).stroke({ width: 2, color });
-      g.circle(0, 0, r + 4.5).stroke({ width: 2, color });
-    } else {
-      g.circle(0, 0, r + 1.5).stroke({ width: 6, color: chrome.outline, alpha: 0.7 });
-      g.circle(0, 0, r + 1.5).stroke({ width: 3.5, color });
-    }
+    if (!playing || reducedMotion || flashMs <= 0) return 0;
+    const age = nowMs - this.flashStartMs;
+    if (age < 0 || age >= flashMs) return 0;
+    return 1 - age / flashMs;
   }
 
   /** What the token is showing right now (tests and the dev harness). */
-  shown(): { bars: boolean; hpScaleX: number; shield: boolean; focus: boolean; cast: boolean; pips: number; badge: string | null; crown: boolean; downMark: boolean; selected: boolean; ringAlpha: number; wedge: number; flash: number; tag: string; name: boolean } {
+  shown(): {
+    bars: boolean;
+    hpPx: number;
+    shield: boolean;
+    focus: boolean;
+    cast: boolean;
+    pips: number;
+    more: string | null;
+    badge: string | null;
+    badgeScale: number;
+    crown: boolean;
+    downMark: boolean;
+    selected: boolean;
+    ringAlpha: number;
+    flat: number;
+    wedge: number;
+    flash: number;
+    tag: string;
+    name: string | null;
+    hpTint: number;
+    focusTint: number;
+    barsHeight: number;
+    /** Top y of each stack item (screen up is negative), for the order check. */
+    stackY: { bars: number; row: number; cast: number; tag: number; name: number };
+  } {
+    const up = this.overlay.visible;
     return {
-      bars: this.hp.visible,
-      hpScaleX: this.hp.scale.x,
-      shield: this.shield.visible,
-      focus: this.focus.visible,
-      cast: this.cast.visible,
-      pips: this.pipSlots.filter((p) => p.visible).length,
-      badge: this.badge.view.visible ? this.badgeText : null,
-      crown: this.crown.visible,
+      bars: up,
+      hpPx: this.hp.scale.x,
+      shield: up && this.shield.visible,
+      focus: up && this.focus.visible,
+      cast: up && this.cast.view.visible,
+      pips: up ? this.pipSlots.filter((s) => s.view.visible).length : 0,
+      more: up && this.more.view.visible ? this.more.content : null,
+      badge: up && this.badge.view.visible ? this.badgeText : null,
+      badgeScale: this.badge.view.scale.x,
+      crown: this.overlay.visible && this.crown.visible,
       downMark: this.downMark.visible,
       selected: this.selection.visible,
-      ringAlpha: this.ring.alpha,
+      ringAlpha: this.ringGroup.alpha,
+      flat: this.ringGroup.scale.y,
       wedge: this.wedge.rotation,
       flash: this.flashDisc.visible ? this.flashDisc.alpha : 0,
-      tag: this.tag.view.visible ? this.tagText : '',
-      name: this.name.view.visible,
+      tag: up && this.tag.view.visible ? this.tagText : '',
+      name: up && this.name.view.visible ? this.nameText : null,
+      hpTint: this.hp.tint as number,
+      focusTint: this.focus.tint as number,
+      barsHeight: this.track.height,
+      stackY: { bars: this.bars.y, row: this.row.y, cast: this.cast.view.y, tag: this.tag.view.y, name: this.name.view.y },
     };
   }
 
@@ -428,92 +566,9 @@ export class Token {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    for (const chip of [this.badge, this.more, this.cast, this.tag, this.name]) chip.dispose();
     this.body.destroy();
     this.root.destroy(DESTROY_ALL);
     this.overlay.destroy(DESTROY_ALL);
-  }
-}
-
-// ---- shapes ------------------------------------------------------------------------------------------------------
-
-/** Fallback outlines (24-unit box) of the D-J shapes, used only when the palette carries no usable SVG. */
-const FALLBACK_POLY: Record<RoleId, number[]> = {
-  tank: [12, 1.5, 21, 5, 21, 11.2, 19, 16, 12, 22.5, 5, 16, 3, 11.2, 3, 5],
-  melee: [12, 1, 22.5, 12, 12, 23, 1.5, 12],
-  ranged: [12, 2, 23, 21.5, 1, 21.5],
-  controller: [3, 2, 21, 2, 14, 12, 21, 22, 3, 22, 10, 12],
-  healer: [],
-};
-
-/** A white glyph of `size` px centred on (0, 0), to be tinted with the role hue. Prefers the palette's SVG (one source with the UI). */
-export function buildRoleGlyph(role: RoleId, svg: string, size: number): Graphics {
-  const g = new Graphics();
-  g.eventMode = 'none';
-  const scale = size / 24;
-  let drawn = false;
-  if (svg) {
-    try {
-      // Force a white fill so tint decides the colour; every other attribute (fill-rule) stays.
-      const white = svg.replace(/\sfill=("[^"]*"|'[^']*')/g, '').replace(/<path\s/g, "<path fill='white' ");
-      g.svg(white);
-      drawn = g.context.instructions.length > 0;
-    } catch {
-      drawn = false;
-    }
-  }
-  if (!drawn) {
-    g.clear();
-    if (role === 'healer') {
-      g.circle(12, 12, 10.5).fill({ color: 0xffffff });
-      g.rect(10.3, 6.3, 3.4, 11.4).cut();
-      g.rect(6.3, 10.3, 11.4, 3.4).cut();
-    } else {
-      g.poly(FALLBACK_POLY[role]).fill({ color: 0xffffff });
-    }
-  }
-  g.scale.set(scale);
-  g.position.set(-12 * scale, -12 * scale);
-  return g;
-}
-
-/** A status pip: a shape per category on a dark chip; the hue comes from the palette (shape carries the meaning too). */
-export function drawPip(g: Graphics, cue: StatusCue, palette: ArenaPalette, chrome: Chrome): void {
-  const h = PIP / 2;
-  g.clear();
-  g.roundRect(-h, -h, PIP, PIP, 3).fill({ color: chrome.plate, alpha: 0.92 });
-  let color = palette.text;
-  switch (cue.category) {
-    case 'cc_hard':
-      color = palette.warn;
-      g.rect(-3.2, -3.2, 6.4, 6.4).fill({ color });
-      break;
-    case 'cc_soft':
-      color = palette.warn;
-      g.circle(0, 0, 3.4).stroke({ width: 1.6, color });
-      break;
-    case 'buff':
-      color = palette.good;
-      g.poly([0, -3.6, 3.8, 3, -3.8, 3]).fill({ color });
-      break;
-    case 'debuff':
-      color = palette.bad;
-      g.poly([0, 3.6, 3.8, -3, -3.8, -3]).fill({ color });
-      break;
-    case 'dot':
-      color = palette.bad;
-      g.moveTo(-3, -3).lineTo(3, 3).moveTo(3, -3).lineTo(-3, 3).stroke({ width: 1.8, color });
-      break;
-    case 'hot':
-      color = palette.good;
-      g.moveTo(-3.4, 0).lineTo(3.4, 0).moveTo(0, -3.4).lineTo(0, 3.4).stroke({ width: 1.8, color });
-      break;
-    case 'shield':
-      g.circle(0, 0, 3.4).stroke({ width: 1.6, color }).circle(0, 0, 1.1).fill({ color });
-      break;
-    case 'special':
-      g.poly([0, -4, 3.6, 0, 0, 4, -3.6, 0]).fill({ color });
-      break;
-    default:
-      g.circle(0, 0, 2.6).fill({ color: mixColor(color, chrome.plate, 0.2) });
   }
 }
