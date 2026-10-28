@@ -29,3 +29,14 @@
   pointer-events: auto;
   background: var(--c-overlay);
 }
+/* Long values in the inspector's key-value rows (cooldown and status lists, rule counts) wrap under their label instead of
+   running over it: the designer's .kv dd is nowrap and styles/ is read-only, so the row opts in here. */
+.ainspect .kv > div.is-long {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+}
+.ainspect .kv > div.is-long dd {
+  white-space: normal;
+  text-align: left;
+}

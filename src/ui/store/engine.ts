@@ -97,6 +97,8 @@ export interface GameEngine {
   matchPlayback?: typeof game.matchPlayback;
   replayAvailability?: typeof game.replayAvailability;
   inspectPlayback?: typeof game.inspectPlayback;
+  /** Warm the replay-availability hash at idle after a load, so the first Replay button never costs 55-130 ms in a click. */
+  warmReplayHash?: typeof game.warmReplayHash;
   // saves (core/save)
   saveMetaFor: typeof save.saveMetaFor;
   createSave: typeof save.createSave;
@@ -147,6 +149,7 @@ export const coreEngine: GameEngine = {
   matchPlayback: game.matchPlayback,
   replayAvailability: game.replayAvailability,
   inspectPlayback: game.inspectPlayback,
+  warmReplayHash: game.warmReplayHash,
   saveMetaFor: save.saveMetaFor,
   createSave: save.createSave,
   serializeSave: save.serializeSave,

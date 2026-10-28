@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { GameState } from '../../core/model';
 import { fixtureContent } from '../../core/testkit';
-import { resetToasts } from '../components';
+import { resetToasts, toasts } from '../components';
 import { createTestStore } from '../debug/test-store';
 import { createScriptedCore, liveWatchState, watchWorld } from '../debug/arena-test-world';
 import { arenaFacade, MATCH_WATCHING, SAVE_ROUND_FAILED, savedWatch, watchKey, WATCH_NOT_SHOWN } from './arena';
@@ -117,6 +117,42 @@ describe('Play match (Watch): the lock is saved before anything opens (test-firs
   });
 });
 
+describe('warmReplayHash (tech-025)', () => {
+  it('runs at idle after a load, never inside the click, with the loaded content', async () => {
+    const w = watchWorld(content);
+    const core = createScriptedCore(w);
+    const warmed: unknown[] = [];
+    const queue: (() => void)[] = [];
+    const engine = { ...core.engine, warmReplayHash: (c: unknown) => void warmed.push(c) };
+    const t = createTestStore({ world: 'none', engine, idle: (fn) => queue.push(fn) });
+    t.store.replaceWorld(w.state, content);
+    expect((await t.store.save('manual-1')).ok).toBe(true);
+    expect((await t.store.load('manual-1')).ok).toBe(true);
+    expect(warmed).toHaveLength(0); // scheduled, not run in the click
+    expect(queue.length).toBeGreaterThan(0);
+    queue.splice(0).forEach((fn) => fn());
+    expect(warmed).toEqual([t.store.content.value]);
+  });
+
+  it('a failing warm-up is harmless', async () => {
+    const w = watchWorld(content);
+    const core = createScriptedCore(w);
+    const queue: (() => void)[] = [];
+    const engine = {
+      ...core.engine,
+      warmReplayHash: () => {
+        throw new Error('boom');
+      },
+    };
+    const t = createTestStore({ world: 'none', engine, idle: (fn) => queue.push(fn) });
+    t.store.replaceWorld(w.state, content);
+    await t.store.save('manual-1');
+    await t.store.load('manual-1');
+    expect(() => queue.splice(0).forEach((fn) => fn())).not.toThrow();
+    expect(t.store.lastError.value).toBeNull();
+  });
+});
+
 describe('the facade writes', () => {
   function facadeSetup() {
     const w = watchWorld(content);
@@ -135,6 +171,19 @@ describe('the facade writes', () => {
     expect(store.game.value!.liveMatch!.watch!.cursorTick).toBe(138);
     expect(JSON.parse((await saves.read('auto-round'))!).state.liveMatch.watch.cursorTick).toBe(138);
     expect(store.dirty.value).toBe(false);
+  });
+
+  it('a cursor save while the store is busy is a quiet refusal: nothing dispatched, no toast, no lastError', async () => {
+    const { arena, store, core, w } = facadeSetup();
+    const first = store.advance({ watched: { round: 1, logHash: core.hashOf(store.game.value!, 1) } }); // busy from here
+    expect(store.busy.value).toBe(true);
+    const r = await arena.saveCursor(store.game.value!, 200);
+    expect(!r.ok && r.error.code).toBe('engine.busy');
+    expect(core.watchCommands).toHaveLength(0);
+    expect(store.lastError.value).toBeNull();
+    expect(toasts.value).toHaveLength(0);
+    await first;
+    void w;
   });
 
   it('refuses a cursor save when no round is being watched', async () => {

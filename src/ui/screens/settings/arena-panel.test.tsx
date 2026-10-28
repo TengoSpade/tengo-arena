@@ -28,6 +28,17 @@ describe('Settings › Match day › Watching (05-technical-m2 §A7)', () => {
     expect((screen.getByTestId('arena-pause-hidden') as HTMLInputElement).checked).toBe(true);
   });
 
+  it('says that Streamlined simulates whatever the preference: the Always watch tip and the hint (nit a)', () => {
+    render(<SettingsScreen params={{}} />);
+    const panel = screen.getByTestId('settings-arena');
+    const watch = within(panel).getByText('Always watch');
+    const tip = watch.getAttribute('data-tip') ?? watch.getAttribute('title') ?? watch.closest('[data-tip]')?.getAttribute('data-tip') ?? '';
+    expect(tip).toContain('Play match opens the arena');
+    expect(tip).toMatch(/Streamlined/);
+    expect(tip).toMatch(/simulates/);
+    expect(panel.textContent).toMatch(/Streamlined pacing preset always simulates/);
+  });
+
   it('applies each change at once, per device, with Undo', () => {
     render(<SettingsScreen params={{}} />);
     fireEvent.click(within(screen.getByTestId('settings-arena')).getByText('Always simulate'));

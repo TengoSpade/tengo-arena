@@ -43,6 +43,8 @@ export interface TestStoreOptions {
   playerClubId?: string | null;
   engine?: GameEngine;
   dev?: boolean;
+  /** The store's idle scheduler (warm-ups after a load). Default: none runs. */
+  idle?: (fn: () => void) => void;
   /**
    * M1.1: the player club's between-round pause. Default 'never' so a test that advances weeks gets
    * whole weeks (as in M1); the between-round tests ask for 'always'.
@@ -77,6 +79,7 @@ export function createTestStore(options: TestStoreOptions = {}): TestStore {
     gameVersion: '0.0.0-test',
     dev: options.dev ?? true,
     engine,
+    idle: options.idle ?? (() => undefined),
   });
   const loaded = store.initContent('fixture');
   if (!loaded.ok) throw new Error('fixture content failed to load');

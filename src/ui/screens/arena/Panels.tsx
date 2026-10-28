@@ -250,7 +250,7 @@ export function ArenaInspector({
             {probe === 'loading' && <p class="u-sm u-muted">{t('inspectNowLoading')}</p>}
             {probe === 'ready' && model.now && (
               <dl class="kv">
-                <div>
+                <div class="is-long">
                   <dt>{t('inspectCooldowns')}</dt>
                   <dd>
                     {model.now.cooldowns.map((c, i) => (
@@ -261,14 +261,14 @@ export function ArenaInspector({
                     ))}
                   </dd>
                 </div>
-                <div>
+                <div class="is-long">
                   <dt>{t('inspectStatuses')}</dt>
                   <dd>
                     {model.now.statuses.length === 0 ? (
                       <span class="u-muted">{t('inspectNoStatuses')}</span>
                     ) : (
                       model.now.statuses.map((s) => (
-                        <span key={s.name} class="l-cluster l-cluster--xs" style={{ justifyContent: 'flex-end' }} data-testid="inspector-status">
+                        <span key={s.name} class="l-cluster l-cluster--xs" style={{ justifyContent: 'flex-start' }} data-testid="inspector-status">
                           <span class="u-sm">
                             {s.name} {s.text}
                           </span>
@@ -280,7 +280,7 @@ export function ArenaInspector({
                 </div>
                 {model.fires && (
                   <>
-                    <div data-testid="inspector-fires">
+                    <div class="is-long" data-testid="inspector-fires">
                       <dt>{t('inspectFiredThisRound')}</dt>
                       <dd>
                         {model.fires
@@ -289,7 +289,7 @@ export function ArenaInspector({
                           .join(' · ') || t('inspectFiresNever')}
                       </dd>
                     </div>
-                    <div>
+                    <div class="is-long">
                       <dt>{t('inspectNotFiredYet')}</dt>
                       <dd class="u-warn">
                         {model.fires

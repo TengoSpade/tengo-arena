@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ContentDB } from '../../../core/content';
 import type { RoundPlayback } from '../../../core/game';
 import type { ArenaFrameState, ArenaRoundContext, DecisionSnapshot, KeyMoment, PlaybackStop, Speed } from '../../../render';
-import type { ArenaViewer, ArenaViewerOptions } from '../../../render/viewer';
+import type { ArenaViewer } from '../../../render/viewer';
 import { effectiveTheme, reducedMotion, settings, updateArenaSettings } from '../../store/settings';
 import { hookSlot } from './hook-registry';
 import { readArenaPalette } from './palette';
@@ -95,9 +95,6 @@ function createState(): State {
   };
 }
 
-/** The viewer's optional per-unit history (an additive capability: the inspector's "rules fired so far"). */
-type WithDecisions = ArenaViewer & { decisionsUpTo?: (unit: number) => readonly DecisionSnapshot[] };
-
 export function useViewerSession(hostRef: { current: HTMLElement | null }, opts: SessionOptions): ArenaSession {
   const factory = useViewerFactory();
   const [s] = useState(createState);
@@ -126,8 +123,8 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
         const arena = settings.value.arena;
         const host = hostRef.current;
         if (!host) throw new Error('no host element');
-        // `tabStop: false` (WP-M2D, additive): the host element below is the one tab stop (role img, focus ring outside the
-        // wall), so the viewer's own canvas must not be a second one. Older viewers ignore the option.
+        // `tabStop: false` (ArenaViewerOptionExtras): the host element below is the one tab stop (role img, focus ring outside
+        // the wall), so the viewer's own canvas must not be a second one.
         viewer = await factory({
           tabStop: false,
           host,
@@ -151,7 +148,7 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
           onSelect: (unit) => {
             s.selected.value = unit;
           },
-        } as ArenaViewerOptions);
+        });
         if (disposed) {
           viewer.destroy();
           return;
@@ -353,8 +350,8 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
       return view()?.decisionAt(unit) ?? null;
     },
     decisionsOf(unit) {
-      const v = view() as WithDecisions | null;
-      return v?.decisionsUpTo ? v.decisionsUpTo(unit) : null;
+      // Oldest first, up to the shown tick and never past the live head (ArenaViewerDecisionHistory).
+      return view()?.decisionsUpTo?.(unit) ?? null;
     },
     retry() {
       setAttempt((n) => n + 1);

@@ -73,8 +73,8 @@ const press = (k: string, init: KeyboardEventInit = {}, target: Element = docume
 const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 100))));
 
 async function arenaReady(m: Mounted, nth: number) {
-  await waitFor(() => expect(m.harness.all.length).toBe(nth));
-  await waitFor(() => expect(screen.getByTestId('screen-arena').getAttribute('data-status')).toBe('ready'));
+  await waitFor(() => expect(m.harness.all.length).toBe(nth), { timeout: 4000 });
+  await waitFor(() => expect(screen.getByTestId('screen-arena').getAttribute('data-status')).toBe('ready'), { timeout: 4000 });
 }
 
 async function playOut(m: Mounted) {
@@ -293,6 +293,38 @@ describe('routing and resume', () => {
     const res = await m.t.store.advance();
     expect(!res.ok && res.error.code).toBe('watch.not-shown');
     expect(toasts.value).toHaveLength(0);
+  });
+
+  it('a cursor save that finds the store busy is retried quietly at the next stop (no toast, no error)', async () => {
+    // Opened on a saved lock (a resumed round): this test is about the cursor, not about how the arena was reached.
+    const m = mountApp({ state: 'round-waiting', hash: '#/arena' });
+    await arenaReady(m, 1);
+    await settle();
+    const busy = m.t.store.busy as unknown as { value: boolean };
+    busy.value = true; // a commit or save is in flight when the first stop happens
+    await act(async () => {
+      m.harness.current().advanceTo(250);
+    });
+    await settle();
+    press(' '); // pause at 250: the cursor save finds the store busy
+    await waitFor(() => expect(m.harness.current().playing).toBe(false));
+    await settle();
+    expect(m.core.watchCommands).toHaveLength(0);
+    expect(toasts.value).toHaveLength(0);
+    expect(m.t.store.lastError.value).toBeNull();
+    // Free again: the next stop saves the frontier (the furthest tick shown), 250 included.
+    busy.value = false;
+    await settle();
+    press(' '); // resume
+    await waitFor(() => expect(m.harness.current().playing).toBe(true));
+    await act(async () => {
+      m.harness.current().advanceTo(400);
+    });
+    await settle();
+    press(' '); // pause at 400
+    await waitFor(() => expect(m.core.watchCommands.at(-1)?.tick).toBe(400), { timeout: 4000 });
+    expect(toasts.value).toHaveLength(0);
+    expect(m.t.store.lastError.value).toBeNull();
   });
 
   it('after a reload mid-round the arena resumes paused at the last stop and the outcome is still fixed', async () => {

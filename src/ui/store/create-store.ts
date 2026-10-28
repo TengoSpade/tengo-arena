@@ -160,6 +160,20 @@ export function createGameStore(platform: StorePlatform): AppStore {
     }
   });
 
+  /** Warm the replay hash (core/game warmReplayHash) at idle after a load or a new career: never in a click. */
+  const warm = (): void => {
+    const c = content.value;
+    const run = () => {
+      try {
+        if (c && engine.warmReplayHash) engine.warmReplayHash(c);
+      } catch {
+        // a warm-up only: the first replay check computes it instead
+      }
+    };
+    if (platform.idle) platform.idle(run);
+    else if (!import.meta.env.MODE.startsWith('test') && typeof window !== 'undefined') (window.requestIdleCallback ?? ((fn: () => void) => window.setTimeout(fn, 1500)))(run);
+  };
+
   const commit = (state: GameState): void => {
     game.value = platform.dev ? deepFreeze(state) : state;
   };
@@ -241,6 +255,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
         savedWatch.value = null;
       });
       bumpArenaEpoch();
+      warm();
       playtimeBase = 0;
       sessionStartMs = platform.clock.nowMs();
       return ok(undefined);
@@ -511,6 +526,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
         savedWatch.value = w ? watchKey(w) : null;
       });
       bumpArenaEpoch();
+      warm();
       playtimeBase = envelope.meta.playtimeSec;
       sessionStartMs = platform.clock.nowMs();
       // Content changed since the save (core parseSave warnings): say so once, the save still loads.

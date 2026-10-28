@@ -132,6 +132,9 @@ export function arenaFacade(store: GameStore, engine: GameEngine, content: () =>
     // the next round (rounds played + 1; WP-M2B).
     const betweenRounds = !w && mode === 'simulate' && ms.watch?.mode === 'watch';
     if (!w && !betweenRounds) return unavailable('match.not-watching', 'No round is being watched');
+    // The store is mid-action (a commit, a save): not a failure to announce. The caller keeps its frontier unsaved and retries
+    // quietly at the next stop.
+    if (!mode && store.busy.value) return unavailable('engine.busy', 'The store is busy');
     return store.dispatch({ type: 'match.watch', clubId, fixtureId: ms.fixtureId, round: w ? w.round : ms.rounds.length + 1, tick: Math.max(0, Math.ceil(tick)), ...(mode ? { mode } : {}) });
   };
   return {

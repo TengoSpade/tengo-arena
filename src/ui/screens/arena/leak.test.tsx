@@ -10,9 +10,8 @@
  * with the ROUND-END CARD showing (its saving phase, which is all a live round may show before the commit), and again
  * after the round has played on and stopped (playing ticks, then a pause), each with the log cut at that state's head.
  *
- * Run against the fake timeline always. The real src/render timeline (WP-M2C) is a visible skip until it has merged,
- * and a HARD GATE at integration: flip REAL_TIMELINE_REQUIRED to true when m2/integration contains WP-M2C, and the
- * real-timeline scenarios fail instead of skipping if the timeline is still a stub.
+ * Run against the fake timeline AND the real src/render timeline (WP-M2C). The real-timeline scenarios are a hard gate
+ * (REAL_TIMELINE_REQUIRED): they fail, never skip, if the real timeline is missing or a stub.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -34,8 +33,8 @@ import { fakeTimeline } from './testing/fake-timeline';
 import { createFakeViewerHarness, type FakeViewer } from './testing/fake-viewer';
 import { ViewerFactoryContext } from './viewer-factory';
 
-/** Flip to true at integration (m2/integration contains WP-M2C): the real-timeline scenarios then cannot skip. */
-const REAL_TIMELINE_REQUIRED = false;
+/** A hard gate since integration (m2/integration contains WP-M2C): the real-timeline scenarios cannot skip. */
+const REAL_TIMELINE_REQUIRED = true;
 
 let content: ContentDB;
 beforeEach(() => {
