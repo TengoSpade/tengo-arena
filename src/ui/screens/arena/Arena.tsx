@@ -125,7 +125,7 @@ export function ArenaLayout(p: ArenaLayoutProps) {
           state: frame?.units.find((u) => u.unit === selected) ?? null,
           decision: paused ? session.decisionAt(selected) : null,
           probe: probeUnit,
-          probeTick: probe.value ? { tick: probe.value.tick, evaluatedTick: (probe.value as { evaluatedTick?: number }).evaluatedTick } : null,
+          probeTick: probe.value ? { tick: probe.value.tick, evaluatedTick: probe.value.evaluatedTick } : null,
           decisions: paused ? session.decisionsOf(selected) : null,
           input: p.inputOf(selectedInfo.fighterId),
         })

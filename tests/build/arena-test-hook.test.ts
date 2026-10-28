@@ -27,15 +27,32 @@ async function buildChunks(mode: string): Promise<Chunk[]> {
 const slash = (id: string): string => id.replaceAll('\\', '/');
 const hookModules = (chunks: Chunk[]) => chunks.flatMap((c) => c.moduleIds).filter((id) => /\/screens\/arena\/test-hook\.ts$|\/debug\/arena-fixture\.ts$/.test(slash(id)));
 
+/**
+ * The scripted core (debug/arena-test-world), the fake timeline and the fake viewer (screens/arena/testing/) are test
+ * support: no production chunk may contain any of them (the arena runs the real core, timeline and viewer).
+ */
+const testSupportModules = (chunks: Chunk[]) => chunks.flatMap((c) => c.moduleIds).filter((id) => /\/debug\/arena-test-world\.ts$|\/screens\/arena\/testing\/(fake-timeline|fake-viewer|fixture-log)\.ts$/.test(slash(id)));
+
 describe('arena test hook in builds', () => {
   it('the production build contains no test hook and no fixture round', async () => {
     const chunks = await buildChunks('production');
     expect(hookModules(chunks)).toEqual([]);
+    expect(testSupportModules(chunks)).toEqual([]);
     for (const c of chunks) {
       expect(c.code, c.fileName).not.toContain('loadFixtureRound');
       expect(c.code, c.fileName).not.toContain('__fixture__');
     }
   }, 240_000);
+
+  it('the module check recognises each test-support file (it is not vacuous), on either path separator', () => {
+    const ids = [
+      'C:\\work\\src\\ui\\debug\\arena-test-world.ts',
+      '/work/src/ui/screens/arena/testing/fake-timeline.ts',
+      '/work/src/ui/screens/arena/testing/fake-viewer.ts',
+      'C:\\work\\src\\ui\\screens\\arena\\testing\\fixture-log.ts',
+    ];
+    expect(testSupportModules([{ moduleIds: [...ids, '/work/src/ui/screens/arena/index.tsx', '/work/src/ui/debug/dev-world.ts'] } as unknown as Chunk])).toEqual(ids);
+  });
 
   it('the smoke build mode compiles it in (lazy, outside the startup chunk)', async () => {
     const chunks = await buildChunks('smoke');

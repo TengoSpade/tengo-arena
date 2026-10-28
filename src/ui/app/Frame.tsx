@@ -6,7 +6,7 @@
  * Simulating). Owns the Continue runner and the global shortcut map.
  */
 import type { ComponentChildren } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 // Direct module imports (not the components barrel) keep screen-only components out of the main bundle.
 import { Icon } from '../components/Icon';
 import { Crest, crestLetters } from '../components/basic-marks';
@@ -26,6 +26,7 @@ import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
 import type * as ContinueDialogs from './continue-dialogs';
 import type { ConfirmVariant } from './continue-dialogs';
 import { afterMatch } from './after-match';
+import { useMounted } from './mounted';
 import { expiringUnrenewed } from './expiring';
 import { levelUpRequest, skipToKickOffRequest } from './intents';
 import { openTicketTool, playtestToolsOn, ticketBusy } from '../tickets/launcher';
@@ -51,10 +52,9 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   const ctx = usePlayerClub();
   const { route } = useRoute();
   const routeId = route?.id ?? null;
-  // A step that outlives the frame (the Simulating pause is 600 ms) must not route afterwards: the frame is gone, and so is
-  // the screen it was started from (a stale navigate() would pull the player off whatever he opened meanwhile).
-  const alive = useRef(true);
-  useEffect(() => () => void (alive.current = false), []);
+  // A step that outlives the frame (the Simulating pause is 600 ms; a season step) must not route afterwards: the frame is
+  // gone, and so is the screen it was started from (a stale navigate() would pull the player off whatever he opened meanwhile).
+  const alive = useMounted();
   const [sheet, setSheet] = useState(false);
   const [search, setSearch] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmVariant | null>(null);
@@ -163,6 +163,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       const g = store.game.value;
       if (!g || g.calendar.phase === 'season-end') break;
       const res = await store.advance({ playerMatch: play.mode });
+      if (!alive.current) return;
       if (!res.ok) {
         if (stopped(res.error.code)) return;
         break;
@@ -213,7 +214,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
       }
       if (m.action.kind !== 'advance' || m.action.playsMatch) return;
       const res = await store.advance();
-      if (!res.ok) return;
+      if (!alive.current || !res.ok) return;
       const state = store.game.value!;
       const stop = state.playerClubId ? digestNews(state, state.playerClubId).some((n) => newsNeedsAction(n, state)) : false;
       if (stop || store.blockers.value.length > 0) {
@@ -230,7 +231,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
 
   const runSeasonEnd = async () => {
     const res = await store.finishSeason();
-    if (res.ok) navigate('#/season-review');
+    if (res.ok && alive.current) navigate('#/season-review');
   };
 
   const quickSave = () => quickSaveOrAsk(store);
