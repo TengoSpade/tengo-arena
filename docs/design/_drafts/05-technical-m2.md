@@ -2,6 +2,7 @@
 
 > Addendum to [05](../05-technical-design-principles-and-build-plan.md) (§3, §5, §6, §8, §9.2, §10) for M2. Architect, 2026-10-27. Branch `m2/contracts` from main @ 5eb87cd.
 > **Status: DRAFT, revision 3** (revision 2 plus the reviewer's three minor fixes: the sim-hash scope, the Q60 alternative, the paths without a shown log; and the owner's answer to Q60). It incorporates the owner's answers of 2026-10-27, which approved **Q53–Q59 as recommended** and chose **option A for Q60**, and an independent architecture review ("approve with changes", then approved; tech-015 confirmed). The approved answers are the design here. The lead designer records them in 01 §8.5 and §8.1; this addendum does not edit 01–05, and its question numbers are proposals until then. The only open question it relies on is **Q35** (the reference machine, for the performance targets). The document as a whole still binds no one until the owner approves it, and implementation waits for that. Owner requirements and O-decisions stay REQUIRED: T1, T4, R1, V1, G1, O1, O12, O20, O22, O24, O33, and D-J under O25's confirmation rules. Technical choices are `tech-015` to `tech-027` (§A12); the owner may override any of them.
+> **Revision 4 (2026-10-28):** §A18 records the architect's decisions on the UI designer's arena work (branch `m2/ui-arena-style`, merged with `m2/contract-palette`) and the `ArenaPalette` additions; where it amends an earlier section, that section points to it.
 > The contracts phase (this branch) adds typed stubs, one behaviour-preserving extraction (`prepareRound`) and the rules and tests that pin them. No game behaviour changed; `npm run check` is green and the soak is unaffected (§A1).
 
 ## A0. Summary
@@ -108,7 +109,7 @@ The future-leak point is the only cost of playback, and it is contained in the t
 
 **Seeking (owner answer to Q56, approved).**
 - *Replays:* free seeking on a scrubber with key-moment marks, round tabs, and ← → (one frame, 0.1 s) or Shift ← → (one second) while paused. `#/replay/<id>?round=2&tick=340` from the report's key moments (04 ui-report) starts 2 s before the moment.
-- *Live:* rewinding within the current round is allowed, and "Live" returns to the head. The scrubber spans 0 to the head; it never shows the end or marks beyond the head. Seeking past the head is refused, and calls (later) are possible only at the head.
+- *Live:* rewinding within the current round is allowed, and "Live" returns to the head. The scrubber spans 0 to the time cap (a known constant, so it reveals nothing); nothing past the head is drawn or seekable, and it never shows the end or marks beyond the head (§A18). Seeking past the head is refused, and calls (later) are possible only at the head.
 - Seeking costs a few binary searches, never a re-simulation.
 
 **Skip watching (open-020, approved).** Three levels: Simulate at Play match; "Simulate the rest" in the viewer; "Skip to end of round" (Shift S, asks once when live). All three commit exactly the result the inputs give.
@@ -176,7 +177,7 @@ The pure half is typechecked with the ECMAScript lib only (`tsconfig.core.json`)
 - **Loading.** The arena screens (lazy routes) `import('../../../render/viewer')` on mount; Squad and Home prefetch it at idle in a matchweek. PixiJS and the viewer stay out of the startup JS (bundle test), within a viewer budget of 250 KB gzip (TUNABLE (tech)). PixiJS with Application, Graphics, Container, Text and Sprite minifies to about 165 KB gzip (esbuild measurement; an upper bound, since it includes every module PixiJS loads lazily, such as its WebGPU path). No network at run time (P-15).
 - **Init.** `await app.init({ preference: 'webgl', antialias: true, autoDensity: true, resolution: min(devicePixelRatio, 2), preserveDrawingBuffer: true, backgroundAlpha: 0 })`, with the canvas filling the host. `preserveDrawingBuffer` lets the F8 ticket screenshot (modern-screenshot) and `viewer.snapshot()` read the WebGL canvas. WebGL is the predictable target for both desktop wrappers (05 §8).
 - **Render loop.** PixiJS's ticker drives one callback per display frame: advance the playback clock, `sampleAt`, update the scene (objects reused, keyed by unit index and event seq), render. The HUD gets `onFrame` at ≤ 10 Hz and at every pause, seek and stop. The ticker stops while paused and restarts on play or seek.
-- **Resize and DPR.** A ResizeObserver on the host resizes the renderer and recomputes `viewTransform`: a letterboxed 16:9 arena inside the HUD padding (56 px top, 72 px bottom, 04 §4). A `matchMedia('(resolution: …dppx)')` listener follows DPR changes when the window moves between monitors. The arena never scrolls at zoom 1 (04 §4).
+- **Resize and DPR.** A ResizeObserver on the host resizes the renderer and recomputes `viewTransform`: a letterboxed 16:9 arena inside the stage, the canvas host between the HUD strips, with a 16 px margin for the wall (§A18; the strips are outside the host, not over it). A `matchMedia('(resolution: …dppx)')` listener follows DPR changes when the window moves between monitors. The arena never scrolls at zoom 1 (04 §4).
 - **Loading a round.** `ArenaViewer.load` is async: it awaits `skin.prepare(units)`, so the first frame never waits on a texture.
 - **Teardown.** `destroy()` stops the ticker, destroys textures and the WebGL context, and removes the canvas. Loading a new round destroys the previous round's visuals (no growth across rounds, smoke-tested).
 
@@ -205,7 +206,7 @@ Skins:
 - **Team colours** (`colorsForMatch`, asset-006, research §6).
   - The player's side ring is brass (`--c-side-us`), the opponent's steel blue (`--c-side-them`).
   - Between other clubs, both rings take the clubs' primaries; when the primaries are too close, the away side becomes secondary-dominant.
-  - Every ring and body colour reaches 3:1 against the floor (04 §9). The ring style (player solid, opponent double) is the colour-free side cue.
+  - Every ring, glyph plate, bar and pip reaches 3:1 against the floor (04 §9); body colours keep the club's exact colours, enclosed by the ring and its keylines (§A18). The ring style (player solid, opponent double) is the colour-free side cue.
 - **Role glyphs (D-J).** Shape first, colour second. The five SVG shapes come from the `--glyph-*` tokens in `tokens.css` and the hues from `--c-role-*`, through `ArenaPalette` read by the host from computed style. So the arena and the UI share one source and follow the theme. Hybrids show both glyphs. Role hues are used for nothing else (04 §3).
 - **Bars.** HP in neutral parchment on a dark track (no red/green meaning), a shield segment beyond it, a thin focus bar below. Labels stack above the HP bar (04 §4).
 - **Status pips** (`StatusCue`): up to 4 above the HP bar by priority (hard control first), each a category glyph. Hard control also greys the ring (asset-006).
@@ -311,7 +312,7 @@ From M4 the inspector reads opponents through the viewing club's knowledge (P-13
 - **Keyboard** (04 §9: every action by keyboard). Remappable like the other shortcuts.
   - Space play or pause; 1, 2, 4 speed (or [ ] to cycle).
   - ← → a frame, Shift ← → a second, while paused (replay and live rewind).
-  - Tab and Shift Tab select a fighter; Enter or I opens the inspector; L labels.
+  - Tab and Shift Tab select a fighter by moving through the fighter strip's cards (focus is selection, so Tab never traps; §A18); Enter or I opens the inspector; L labels.
   - Home recentre; Shift S skip to the end of the round; Esc close or back.
 - **Settings › Match day:** Watch preference, speed, auto-pause triggers, labels, pause when hidden.
 - **F8 tickets** on the arena screen add fixture, round, tick, speed and kind to `ticket.json`; the screenshot includes the canvas (`preserveDrawingBuffer`).
@@ -634,3 +635,47 @@ D-O says a result is committed and autosaved before it is shown, so reloading ca
 13. **Mid-fight resume with calls** (02 §3, open-016) needs a reveal bound in fight ticks to keep "no rerolls"; without calls it changes nothing. → §A6, tech-019.
 14. **"Quitting mid-fight resumes at the same tick" (02 §3, open-016)** conflicts with saving the cursor only at stops (tech-019, forced by the 19–39 ms save cost). A quit while playing resumes where playback last stopped, earlier than the shown tick. The outcome is unaffected; 02 should say "resumes where playback last stopped" when M2 is approved.
 15. **"One Enter per between-round pause" (ux-001, 02 §1)** conflicts with a blocking round-end card followed by the between-round screen's Continue, which would be two inputs per boundary. Resolved: the round-end overlay is non-blocking (§A7).
+
+## A18. Design-review decisions (2026-10-28)
+
+The UI designer delivered the arena tokens (`tokens.css` arena group), the screen CSS (`components.css` §25), the mock (`mockups/arena.html`, `arena.js`) and the notes (`mockups/arena-notes.md`) on `m2/ui-arena-style` (3e29ddd). They are merged with `m2/contract-palette`.
+
+**Review against A5, A7, A9 and 04: accepted.**
+- The tokens cover every arena mark in both themes, with measured contrast and colour-vision checks. Overlays sit on a known plate. Reduced motion is handled in the tokens.
+- The palette is read by the UI host from computed style once per theme, motion or scale change (no DOM in the pure half), as A5 requires.
+- The mock follows A7: the leak rules (the live track stops at the head), the non-blocking round end, the save-failure Retry, "Resume watching" and the "Resumed" toast.
+- Deviations are the decisions below; nothing needs the owner. All are within O34 and O35 and 04 v0.8.
+
+| # | Question (notes §7) | Decision |
+| --- | --- | --- |
+| 1 | Round-end overlay: Enter (the brief) or auto-dismiss (A7) | **A7 stands** (04 v0.8 ui-arena, ux-001, D-AE). The overlay is non-blocking: 1.5 s, and any key, Enter included, skips it; that key is consumed. Then the next stop opens by itself, so a boundary costs one input. After a non-deciding round the next stop is the between-round screen per `pauseBetweenRounds`, or the next round's kickoff when it does not pause. After the deciding round the overlay says the match result, then the report per pacing (D-L), or Home with the result toast. |
+| 2 | Feed and inspector have no home; the dock costs arena size | **The designer's right dock is adopted, open by default at every width.** It gives 46 px/m at 1920, 35 at 1440, 27 at 1280 (role glyphs about 12 px at the minimum, asset-003's acceptance size). The 52 px/m in A5 and 04 §4 was a no-dock estimate, not a requirement. **D** hides or shows the dock by the player's choice, remembered per device; the layout never changes on its own (no resize on pause). The smoke screenshots at 1280 × 720 and 1440 × 900 with the dock open are part of the vis-003 proxy check. The viewer's host is the stage only, so the camera padding is 16 px all round for the wall (A5 amended); WP-M2C sets `DEFAULT_CAMERA.padding` to that. |
+| 3 | Key clashes; Simulate has no key; Tab could trap | **The arena owns the keyboard while it is open.** The shell's screen shortcuts stand down on the arena routes: 1–7, Space as Continue, S, [ ], Home, Esc-back. F8 tickets and Ctrl S stay (Ctrl S while paused only; it saves the cursor first). **Shift Space = Simulate** wherever Watch is offered, and **Shift Space in the viewer = Simulate the rest** (asks once: Watch does not come back). **End = Live.** **Tab selection moves through the fighter strip's ten card buttons** (focus is selection; clicking a token focuses its card). So Tab enters and leaves in the normal order and never traps (WCAG 2.1.2). The canvas is one tab stop (`role="img"`) that never cycles internally. Esc: closes the inspector; then, live, asks once and leaves to Home with the match still live (Continue reads "Resume watching"); in a replay, it goes back to the report. Under Streamlined, Continue simulates, and the Watch button on the Squad screen still watches. |
+| 4 | Body colours at 3:1 shift 49 of 96 club colours | **The body is exempt; the club colours stay exact.** 3:1 against the floor binds the side rings, the glyph plate and its glyph, the bars and the pip outlines, which carry meaning. The body is enclosed by the ring and two plate keylines and carries identity only. This is consistent with 04 §5 and §9 (side colours, glyphs and bars) and amends A5's stricter sentence. Exception: in a replay between other clubs the rings take the club primaries (asset-006), so those **rings** are shifted in Lab (hue and chroma kept) until 3:1, never the bodies. |
+| 5 | Role-glyph plate | **Accepted.** The plate (`plate`) is the viewer's mark, like the glyph it carries (tech-020), drawn above the body at about a third of the disc and kept over sprites later. It is what makes the glyph's contrast independent of club colours. |
+| 6 | Overtime vignette and horn | **Horn: none in M2** (O34, Q59; 04 v0.8 §7 already says so). **Vignette: kept, as 04 §7 lists it, but static.** A thin line of `warn` (amber) on the inner edge of the wall band from overtime start: it fades in over 360 ms (instantly under reduced motion) and never pulses. It is not a flash and not full-screen, so A9 holds. It comes with the amber clock and the word "Overtime" (WP-M2D draws it from `ArenaFrameState.overtime`). |
+
+**Other notes §7 items, decided here:**
+- *Live scrubber (4):* a fixed 0 to time-cap track (75 s, a known constant, so nothing leaks). The area past the head is empty and not seekable, and marks do not drift. A7 is amended.
+- *Downed bodies (10):* kept in the round-end frame (they explain the round), removed at the next kickoff (asset-006).
+- *Replay feed (10):* shows the whole round with later moments dimmed (no leak in a replay).
+- *Injuries:* stay out of the live feed. They are rolled at the round's end and shown on the between-round screen.
+- *"Paused automatically":* its cause goes in the transport status, as mocked.
+- *Icons (11):* WP-M2E adds `pause`, `step-back`, `step-fwd` and `skip-end` to `IconName`.
+
+**`ArenaPalette` additions** (`src/render/types.ts`, additions only):
+- colours: `plate`, `ink`, `edge`, `line`, `hp`, `track`, `shield`, `focus`, `select`, `telegraph`, `hitFlash`, `fxTrue`, `fxHeal`, `fxShield`;
+- `pipColor` and `pipGlyphSvg` (records over the new `PipKind`: buff, debuff, control-hard, control-soft, dot, hot, special);
+- `metrics: ArenaMetrics`: ring width, line and gap; down opacity; zone and telegraph alphas; hit-flash alpha and ms; flash limit; fx fade; number merge; number rise; pulse; ease; label, pip and bar sizes.
+
+Also added: `StatusCue.pip: PipKind | null`. The existing `fxPhysical` and `fxArcane` stay as they were.
+
+**Pick-up per package:**
+- **WP-M2C:** `StatusCue.pip` from the category (shield: null); `colorsForMatch` per decision 4, with rings at 3:1 and body colours exact, and the Lab ring shift only for club-primary rings; `DEFAULT_CAMERA.padding` to 16 px all round; tests for the ring contrast over all 48 clubs in both themes.
+- **WP-M2D:** the token per notes §1: wedge, ring with keylines, body, glyph plate, then bars, pips and badge, cast bar, Freshness tag, label, crown and corner brackets. Every colour, alpha, size and duration comes from `palette` and `palette.metrics` (no literals). Also the static overtime edge (decision 6), and the wall band drawn outside the field.
+- **WP-M2E:**
+  - the palette reader in `src/ui` (computed style on the root, `var()` aliases resolved, rem sizes measured with a probe, glyph data URIs decoded), re-run on theme, motion and scale changes;
+  - the layout of the mock, with the dock and **D**;
+  - the keyboard of decision 3 (a key scope that suspends the shell shortcuts on the arena routes, Shift Space, End, Tab through the strip);
+  - the round-end flow of decision 1, the fixed scrubber, the four icons;
+  - the inspector wording of notes §6.
