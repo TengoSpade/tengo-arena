@@ -66,6 +66,7 @@ import { useStore, type GameStore } from '../../store';
 import { clubActions } from '../../store/actions';
 import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from '../../store/views';
+import { usePrefetchViewer } from '../arena/viewer-factory';
 import { format, t } from '../../text';
 import { freshInfo, levelInfo, ratingFromView, type RatingNow } from '../../m11/model';
 import { FreshMeter, LevelChip, RatingEff, freshTip } from '../../m11/parts';
@@ -115,6 +116,7 @@ export default function SquadScreen(_props: ScreenProps) {
   const store = useStore();
   const engine = useEngine();
   const ctx = usePlayerClub();
+  usePrefetchViewer(!!ctx?.fixture);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [dragId, setDragId] = useState<FighterId | null>(null);

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/pr
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetToasts } from '../components';
 import { createTestStore } from '../debug/test-store';
-import { DEFAULT_SETTINGS, updateSettings } from '../store/settings';
+import { DEFAULT_SETTINGS, updateArenaSettings, updateSettings } from '../store/settings';
 import { App } from './App';
 import { navigate } from './router';
 
@@ -32,7 +32,7 @@ describe('App', () => {
     navigate('#/home');
     render(<App store={store} />);
     const club = store.game.value!.clubs[store.game.value!.playerClubId!]!;
-    await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('screen-home')).toBeTruthy(), { timeout: 5000 }); // the lazy Home chunk can be slow under a loaded machine
     // Long names show the short name whole; the full name stays in the label.
     expect(screen.getByTestId('topbar-club').textContent).toContain(club.name.length > 17 ? club.shortName : club.name);
     expect(screen.getByTestId('topbar-club').getAttribute('aria-label')).toBe(club.name);
@@ -57,6 +57,7 @@ describe('App', () => {
   it('commits and autosaves the result before the match report opens (no reroll by reloading)', async () => {
     const { store, saves } = createTestStore({ world: 'dev', weekIndex: 11 });
     updateSettings({ pacing: 'thorough' }); // open every report
+    updateArenaSettings({ watchPreference: 'simulate' }); // this is the Simulate flow's ordering rule (M2: Watch has its own, arena tests)
     const week = store.game.value!.calendar.weekIndex;
     // Hold the autosave write until the test releases it.
     let release!: () => void;
@@ -80,11 +81,13 @@ describe('App', () => {
     const autos = (await saves.list()).filter((m) => m.kind === 'auto');
     expect(autos.some((m) => m.weekIndex === week + 1)).toBe(true);
     updateSettings({ pacing: DEFAULT_SETTINGS.pacing });
+    updateArenaSettings({ watchPreference: DEFAULT_SETTINGS.arena.watchPreference });
   }, 20_000);
 
   it("M1.1: the player's match pauses between rounds; Continue on that screen plays on to the report", async () => {
     const { store } = createTestStore({ world: 'dev', weekIndex: 11, pauseBetweenRounds: 'always' });
     updateSettings({ pacing: 'thorough' }); // open every report
+    updateArenaSettings({ watchPreference: 'simulate' }); // the M1.1 flow (the Watch flow has its own tests)
     const week = store.game.value!.calendar.weekIndex;
     navigate('#/squad');
     render(<App store={store} />);
@@ -110,6 +113,7 @@ describe('App', () => {
     await waitFor(() => expect(location.hash).toMatch(/^#\/match\//), { timeout: 10_000 });
     expect(store.game.value!.calendar.weekIndex).toBe(week + 1);
     updateSettings({ pacing: DEFAULT_SETTINGS.pacing });
+    updateArenaSettings({ watchPreference: DEFAULT_SETTINGS.arena.watchPreference });
   }, 30_000);
 
   it('opens Save / Load with S, as the side navigation shows', async () => {

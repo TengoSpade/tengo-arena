@@ -18,7 +18,7 @@
  */
 import { batch, computed, signal, type ReadonlySignal } from '@preact/signals';
 import { loadContent, type ContentDB, type ContentIssue } from '../../core/content';
-import type { CommandOutcome } from '../../core/game';
+import type { AdvanceOptions, CommandOutcome } from '../../core/game';
 import {
   SAVE_FORMAT,
   STATE_SCHEMA_VERSION,
@@ -44,6 +44,7 @@ import { showToast } from '../components/Toast';
 import { configureFormat } from '../format';
 import { t } from '../text';
 import type { GameStore, StorePlatform } from './contract';
+import { bumpArenaEpoch, MATCH_WATCHING, SAVE_ROUND_FAILED, savedWatch, watchKey, watchingMatch, WATCH_MISMATCH, WATCH_NOT_SHOWN } from './arena';
 import { coreEngine, type GameEngine } from './engine';
 import { settings } from './settings';
 
@@ -109,6 +110,11 @@ export interface AppStore extends GameStore {
   readonly platform: StorePlatform;
   /** Ctrl S: save to the current manual slot, or the first free one. */
   quickSave(): Promise<Result<SaveMeta, SaveError>>;
+  /**
+   * M2: the round autosave (auto-round) of the player's match, now. The arena writes it when playback stops (the
+   * cursor, tech-019). A failure is reported like any save failure (a toast); the caller does not retry.
+   */
+  saveRound(): Promise<Result<SaveMeta | null, SaveError>>;
   /** Clear lastError after it was shown. */
   clearError(): void;
   /** Dev tooling only: replace the world and content (dev fixture world). */
@@ -154,14 +160,29 @@ export function createGameStore(platform: StorePlatform): AppStore {
     }
   });
 
+  /** Warm the replay hash (core/game warmReplayHash) at idle after a load or a new career: never in a click. */
+  const warm = (): void => {
+    const c = content.value;
+    const run = () => {
+      try {
+        if (c && engine.warmReplayHash) engine.warmReplayHash(c);
+      } catch {
+        // a warm-up only: the first replay check computes it instead
+      }
+    };
+    if (platform.idle) platform.idle(run);
+    else if (!import.meta.env.MODE.startsWith('test') && typeof window !== 'undefined') (window.requestIdleCallback ?? ((fn: () => void) => window.setTimeout(fn, 1500)))(run);
+  };
+
   const commit = (state: GameState): void => {
     game.value = platform.dev ? deepFreeze(state) : state;
   };
 
-  const fail = <E extends EngineError | SaveError>(error: E): { readonly ok: false; readonly error: E } => {
+  const failLoud = <E extends EngineError | SaveError>(error: E): { readonly ok: false; readonly error: E } => {
     lastError.value = error;
     return err(error);
   };
+  const fail = failLoud;
 
   const playtimeSec = (): number => playtimeBase + Math.max(0, Math.floor((platform.clock.nowMs() - sessionStartMs) / 1000));
 
@@ -231,7 +252,10 @@ export function createGameStore(platform: StorePlatform): AppStore {
         loadedSlot.value = null;
         ownCareerId.value = `c-${seedFromEntropy([...platform.entropy(), platform.clock.nowMs()])}`;
         dirty.value = true;
+        savedWatch.value = null;
       });
+      bumpArenaEpoch();
+      warm();
       playtimeBase = 0;
       sessionStartMs = platform.clock.nowMs();
       return ok(undefined);
@@ -261,7 +285,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
     return result;
   };
 
-  const advance: GameStore['advance'] = async () => {
+  const advance: GameStore['advance'] = async (options?: AdvanceOptions) => {
     const g = game.value;
     const c = content.value;
     if (!g || !c) return fail(engineError('engine.no-game', 'no game'));
@@ -270,11 +294,13 @@ export function createGameStore(platform: StorePlatform): AppStore {
     try {
       await yieldToUi();
       const t0 = platform.clock.nowMs();
+      const wasDirty = dirty.value;
       // M1.1: Continue is engine.advance (core/game AdvanceOutcome): the week, or the player's match
       // pausing between rounds (state.liveMatch). Engines without it (test fakes) advance whole weeks.
+      // M2: `options` carries the Watch or Simulate choice (playerMatch) and the shown log's hash (watched).
       let result;
       try {
-        if (engine.advance) result = engine.advance(g, c);
+        if (engine.advance) result = engine.advance(g, c, options);
         else {
           const r = engine.advanceWeek(g, c);
           result = r.ok ? ok({ state: r.value.state, week: r.value.report, pause: null }) : r;
@@ -282,14 +308,44 @@ export function createGameStore(platform: StorePlatform): AppStore {
       } catch (e) {
         return fail(engineErrorFrom(e));
       }
-      if (!result.ok) return fail(result.error);
+      if (!result.ok) {
+        // A commit with no shown log (Continue from Home, a stale tab): not an error to show; the caller opens #/arena.
+        if (result.error.code === WATCH_NOT_SHOWN) return err(result.error);
+        // WP-M2B: a mismatch with reason 'round' means the round is already committed (a stale tab or a second press):
+        // never a defect to show and never retried; the caller routes by the committed state.
+        if (result.error.code === WATCH_MISMATCH && (result.error.details as { reason?: string } | undefined)?.reason === 'round') return err(result.error);
+        return fail(result.error);
+      }
       const { state, week } = result.value;
+      const watch = ('watch' in result.value ? result.value.watch : null) ?? null;
       batch(() => {
         commit(state);
         if (week) lastWeekReport.value = week;
         lastAdvanceMs.value = platform.clock.nowMs() - t0;
         dirty.value = true;
       });
+      // M2, Q60 option A: a round that waits to be watched has its lineups, presets and seed locked in this state. The
+      // viewer opens only after the auto-round write has SUCCEEDED, so the outcome is fixed and a reload cannot reroll
+      // it (review B3). On failure the lock is undone in memory (the saved world still has no round shown), so Play
+      // match from here locks the same lineup and plays the same round; nothing opens.
+      if (watch) {
+        const saved = await autosave('round', true);
+        if (!saved.ok) {
+          const before = watchingMatch(g);
+          batch(() => {
+            game.value = g;
+            dirty.value = wasDirty;
+            // The world before the lock again: what it had saved is the gate (a watched round of it, or none).
+            savedWatch.value = before ? watchKey(before) : null;
+          });
+          bumpArenaEpoch();
+          // Quiet: the callers say it in their own place (a toast with Retry, the between-round error, the round card), once.
+          return err(engineError(SAVE_ROUND_FAILED, 'The round could not be saved', { fixtureId: watch.fixtureId, round: watch.round, message: saved.error.message }));
+        }
+        // The lock is saved: from here the arena may show the round.
+        savedWatch.value = watchKey(watch);
+        return err(engineError(MATCH_WATCHING, 'A round waits to be watched', { fixtureId: watch.fixtureId, round: watch.round, cursorTick: watch.cursorTick }));
+      }
       // Every round is committed (P-05): a reload resumes on the between-round screen. A paused match goes to its
       // own slot; the weekly slots rotate only when the week is done.
       await autosave(week ? 'week' : 'round');
@@ -343,7 +399,9 @@ export function createGameStore(platform: StorePlatform): AppStore {
 
   // ---- saves ---------------------------------------------------------------------------------------------
 
-  const writeSlot = async (slotId: string, label: string | undefined, kind: 'manual' | 'auto'): Promise<Result<SaveMeta, SaveError>> => {
+  const writeSlot = async (slotId: string, label: string | undefined, kind: 'manual' | 'auto', quiet = false): Promise<Result<SaveMeta, SaveError>> => {
+    // A quiet write returns its failure without raising lastError (the caller reports it in its own words).
+    const fail = quiet ? (e: SaveError) => err(e) : failLoud;
     const g = game.value;
     if (!g) return fail({ code: 'save.storage', message: 'no game' });
     let meta: SaveMeta;
@@ -401,15 +459,15 @@ export function createGameStore(platform: StorePlatform): AppStore {
    * which holds the match in progress. That one ignores the setting: it is the "no rerolls" safety save (a quit
    * mid-match must not replay a round). Never during a running write.
    */
-  const autosave = async (kind: 'week' | 'round' = 'week'): Promise<void> => {
+  const autosave = async (kind: 'week' | 'round' = 'week', required = false): Promise<Result<SaveMeta | null, SaveError>> => {
     // A ticket reproduction never writes the shared autosave slots (they hold real careers).
-    if (!game.value || isTicketSlot(loadedSlot.value)) return;
+    if (!game.value || isTicketSlot(loadedSlot.value)) return ok(null);
     if (kind === 'round') {
       const rounds = game.value.liveMatch?.rounds.length;
-      await writeSlot(AUTOSAVE_ROUND_SLOT, rounds ? `${defaultSaveLabel()} · ${t('save.afterRound', { n: rounds })}` : undefined, 'auto');
-      return;
+      // `required`: the caller depends on the write (the viewer opens only after it): report its failure quietly, to the caller.
+      return writeSlot(AUTOSAVE_ROUND_SLOT, rounds ? `${defaultSaveLabel()} · ${t('save.afterRound', { n: rounds })}` : undefined, 'auto', required);
     }
-    if (!settings.value.autosave) return;
+    if (!settings.value.autosave) return ok(null);
     let metas: SaveMeta[];
     try {
       metas = await platform.saves.list();
@@ -420,7 +478,13 @@ export function createGameStore(platform: StorePlatform): AppStore {
     const free = AUTOSAVE_SLOTS.find((id) => !autos.some((m) => m.slotId === id));
     const oldest = [...autos].sort((a, b) => (a.savedAt < b.savedAt ? -1 : a.savedAt > b.savedAt ? 1 : a.slotId < b.slotId ? -1 : 1))[0];
     const slot = free ?? oldest?.slotId ?? AUTOSAVE_SLOTS[0];
-    await writeSlot(slot, undefined, 'auto');
+    return writeSlot(slot, undefined, 'auto');
+  };
+
+  /** The round autosave on demand (the arena's cursor save at a stop); null = skipped (a ticket reproduction). */
+  const saveRound = async (): Promise<Result<SaveMeta | null, SaveError>> => {
+    if (!game.value) return fail({ code: 'save.storage', message: 'no game' });
+    return autosave('round');
   };
 
   const load: GameStore['load'] = async (slotId) => {
@@ -457,7 +521,12 @@ export function createGameStore(platform: StorePlatform): AppStore {
         currentSlot.value = envelope.meta.kind === 'manual' && !isTicketSlot(slotId) ? slotId : null;
         loadedSlot.value = slotId;
         ownCareerId.value = envelope.meta.careerId ?? null;
+        // A loaded save is a saved one: its watched round (if any) may open at once.
+        const w = watchingMatch(envelope.state);
+        savedWatch.value = w ? watchKey(w) : null;
       });
+      bumpArenaEpoch();
+      warm();
       playtimeBase = envelope.meta.playtimeSec;
       sessionStartMs = platform.clock.nowMs();
       // Content changed since the save (core parseSave warnings): say so once, the save still loads.
@@ -580,7 +649,10 @@ export function createGameStore(platform: StorePlatform): AppStore {
       currentSlot.value = null;
       loadedSlot.value = null;
       ownCareerId.value = null;
+      const w = watchingMatch(state);
+      savedWatch.value = w ? watchKey(w) : null;
     });
+    bumpArenaEpoch();
   };
 
   const store: AppStore = {
@@ -616,6 +688,7 @@ export function createGameStore(platform: StorePlatform): AppStore {
     careerId,
     platform,
     quickSave,
+    saveRound,
     clearError: () => {
       lastError.value = null;
     },

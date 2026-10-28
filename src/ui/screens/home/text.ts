@@ -6,6 +6,7 @@ export const T = {
   metaLeft: '{n} {n?matchweek|matchweeks} left',
   metaPreseason: 'Preseason · the season kicks off after P4',
   lastReport: 'Last report',
+  lastReplay: 'Replay the last match',
   save: 'Save',
   nextFixture: 'Next fixture',
   fixtureSub: '{stage} · Best of {n}',

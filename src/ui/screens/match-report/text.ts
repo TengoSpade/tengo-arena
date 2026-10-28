@@ -183,6 +183,8 @@ export const REPORT_TEXT = {
   'recaps.fires': '{n}×',
   'recaps.noRules': 'No rule counters recorded',
   'moments.title': 'Key moments',
+  'moments.replayFrom': 'Replay from {time}',
+  'moments.replayName': 'Replay from {time}: {title}',
   'moments.subtitle': '{n} key moments',
   'moments.round': 'Round {n} · {outcome} {time}',
   'moments.roundNeutral': 'Round {n} · {club} {time}',

@@ -9,6 +9,7 @@ const T = {
   roundWon: 'Won round {n}',
   roundLost: 'Lost round {n}',
   roundDetail: '{time} · {standing} standing',
+  replayRound: 'Replay round {n}',
   yourFive: 'Your five',
   yourFiveSub: 'Freshness changes only between rounds · injuries take effect at once',
   colFighter: 'Fighter',

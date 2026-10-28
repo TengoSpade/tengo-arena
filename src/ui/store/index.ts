@@ -22,11 +22,13 @@ export {
 export { coreEngine, EngineContext, useEngine, safeView, type GameEngine } from './engine';
 export { matchDayFacade, useMatchDay, type MatchDayFacade, type PendingLevelUps } from './match-day';
 // M2 contract (05-technical-m2 §A7): the arena viewer's facade (stubs until WP-M2E).
-export { arenaFacade, MATCH_WATCHING, WATCH_NOT_SHOWN, type ArenaFacade, type ArenaSettings, type WatchPreference } from './arena';
+export { arenaFacade, useArena, MATCH_WATCHING, WATCH_NOT_SHOWN, WATCH_MISMATCH, SAVE_ROUND_FAILED, type ArenaFacade, type ArenaSettings, type WatchPreference } from './arena';
+export { DEFAULT_ARENA_SETTINGS } from './arena-settings';
 export { errorText, blockerText } from './messages';
 export {
   settings,
   updateSettings,
+  updateArenaSettings,
   applySettingsToDocument,
   pacingStops,
   effectiveTheme,

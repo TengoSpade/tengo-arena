@@ -19,7 +19,9 @@ import { useShortcuts } from '../../app/shortcuts';
 import { Callout, ConfirmButton, Empty, Icon, Kbd, PageHeader, Panel, Pips, RoleGlyph, Segmented, Tag, tipAttrs } from '../../components';
 import { freshInfo, ratingNow } from '../../m11/model';
 import { FreshMeter, RatingEff } from '../../m11/parts';
-import { MATCH_PAUSED, useStore, type AppStore } from '../../store';
+import { MATCH_PAUSED, MATCH_WATCHING, SAVE_ROUND_FAILED, useStore, type AppStore } from '../../store';
+import { useArena } from '../../store/arena';
+import { errorText } from '../../store/messages';
 import { useEngine } from '../../store/engine';
 import { useMatchDay } from '../../store/match-day';
 import { Crest, clubName } from '../league/lib/club';
@@ -33,6 +35,7 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   const store = useStore() as AppStore;
   const engine = useEngine();
   const md = useMatchDay(store);
+  const arena = useArena(store);
   const state = store.game.value;
   const content = store.content.value;
   const view = state ? md.betweenRoundView(state) : null;
@@ -71,6 +74,10 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
       }
       const res = await store.advance();
       if (res.ok) afterMatch(store.game.value, res.value);
+      // M2: a watched match opens the next round in the arena (after its lock was saved); a lock that could not be
+      // saved stays here, with Continue as the retry.
+      else if (res.error.code === MATCH_WATCHING) navigate('#/arena');
+      else if (res.error.code === SAVE_ROUND_FAILED) setError(errorText(res.error));
       else if (res.error.code !== MATCH_PAUSED) setError(res.error.message);
     } finally {
       setBusy(false);
@@ -123,6 +130,11 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   const roleName = (id: string) => content.vocabulary.roles.find((r) => r.id === id)?.name ?? id;
   const nameOf = (id: FighterId) => state.fighters[id]?.name.full ?? id;
   const swapsAfter = mine.swapsLeft - plan.length;
+  // M2: the rounds already played replay in the arena (the match view lists them; null while core's view is a stub).
+  const replayable = (() => {
+    const mp = arena.matchPlayback(state, ms.fixtureId);
+    return !!mp && mp.ok && mp.value.rounds.some((r) => r.round === view.afterRound && r.winner !== null);
+  })();
 
   const continueLabel = (
     <>
@@ -184,6 +196,12 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
           {myScore}–{theirScore}
         </span>
         <Crest club={otherClub} size="sm" />
+        {replayable && (
+          <a class="btn btn--sm btn--ghost" href={`#/replay/${encodeURIComponent(ms.fixtureId)}?round=${view.afterRound}`} data-testid="br-replay">
+            <Icon name="play" />
+            {t('replayRound', { n: view.afterRound })}
+          </a>
+        )}
       </div>
 
       {error && (

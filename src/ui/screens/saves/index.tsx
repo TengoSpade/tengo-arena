@@ -13,6 +13,8 @@ import { STATE_SCHEMA_VERSION, type SaveError, type SaveMeta } from '../../../co
 import { ConfirmButton, DataTable, Icon, Modal, PageHeader, Panel, showToast, type Column } from '../../components';
 import { formatDateTime, formatPlaytime } from '../../format';
 import { AUTOSAVE_ROUND_SLOT, AUTOSAVE_SLOTS, MANUAL_SLOT_IDS, isAutosaveSlot, isTicketSlot, settings, type AppStore, type GameStore } from '../../store';
+import { navigate } from '../../app/router';
+import { watchingMatch } from '../../store/arena';
 import { go, useOptionalStore } from '../league/lib/store';
 import { Callout, Empty } from '../league/lib/ui';
 import { t } from './text';
@@ -97,7 +99,9 @@ function Saves({ store }: { store: GameStore }) {
       return;
     }
     showToast({ kind: 'good', title: t('toast.loaded', { label: meta.label }) });
-    go('home');
+    // A save with a round waiting to be watched resumes in the arena (A3, A7); anything else on Home.
+    if (watchingMatch(store.game.value)) navigate('#/arena');
+    else go('home');
   };
   const doDelete = async (meta: SaveMeta) => {
     setError(null);
