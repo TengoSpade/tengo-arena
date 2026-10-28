@@ -90,7 +90,7 @@ describe('the down callout over real rounds', () => {
     }
   }, 120_000);
 
-  it('still names the cause when the ability is not in the content (its id stands in) or no fighter is credited', async () => {
+  it('never shows an internal id: an ability the content does not know is left out, and an uncredited down still reads', async () => {
     const h = onRealModel();
     const { log } = loadFixture('a');
     await h.core.load(log, makeCtx(log, 0, 'replay'));
@@ -99,7 +99,7 @@ describe('the down callout over real rounds', () => {
     const down = (id: number, over: Partial<EffectRenderState>): EffectRenderState => ({ id, kind: 'down', unit: 3, target: 8, ability: null, x: 0, y: 0, amount: null, crit: false, tone: 'neutral', age: 0.3, ...over });
     const draw = (effects: EffectRenderState[]): void => h.scene.draw({ ...base, projectiles: [], zones: [], telegraphs: [], effects }, { tick: 250, dtMs: 0, speed: 1, playing: false, nowMs: 90_000 });
     draw([down(1, { ability: 'unknown_ability' as never })]);
-    expect(callouts(h)).toEqual(['Berserker downed by Archer · unknown_ability']);
+    expect(callouts(h)).toEqual(['Berserker downed by Archer']); // no raw id
     draw([down(2, { target: null, ability: null })]);
     expect(callouts(h)).toEqual(['Berserker downed']);
     draw([down(3, { target: null, ability: 'longeye_aimed_shot' as never })]);
