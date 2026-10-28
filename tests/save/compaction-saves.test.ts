@@ -149,11 +149,11 @@ describe('a real v3 save written by main (d440107: state v3, no in-season compac
   if (!parsed.ok) throw new Error(`${parsed.error.code}: ${parsed.error.message}`);
   const start = parsed.value.envelope.state;
 
-  it('loads through the v3 -> v4 step: migratedFrom 3, schema 4, valid, nothing but the version stamped; older results keep their shape', () => {
+  it('loads through the v3 -> v4 and v4 -> v5 steps: migratedFrom 3, schema 5, valid, nothing but the version stamped; older results keep their shape', () => {
     expect((JSON.parse(json) as { schemaVersion: number }).schemaVersion).toBe(3);
     expect(parsed.value.migratedFrom).toBe(3);
-    expect(parsed.value.envelope.schemaVersion).toBe(4);
-    expect(start.schemaVersion).toBe(4);
+    expect(parsed.value.envelope.schemaVersion).toBe(5);
+    expect(start.schemaVersion).toBe(5);
     expect(parsed.value.warnings.every((w) => w.includes('different content'))).toBe(true);
     expect(validateState(start, content)).toEqual([]);
     const original = (JSON.parse(json) as { state: GameState }).state;
