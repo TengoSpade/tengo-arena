@@ -127,11 +127,27 @@ export class PageDriver {
     await this.send('Emulation.setEmulatedVisionDeficiency', { type });
   }
 
+  /**
+   * Wait for the page's next load event around `start`. The waiter is cancelled however `start` ends, and its promise is
+   * marked handled at once, so a failed navigation never leaves a rejection nobody awaits (which would end the process).
+   */
+  private async untilLoaded(what: string, timeoutMs: number, start: () => Promise<void>): Promise<void> {
+    const stop = new AbortController();
+    const loaded = this.client.waitForEvent((e) => e.sessionId === this.sessionId && e.method === 'Page.loadEventFired', timeoutMs, what, stop.signal);
+    loaded.catch(() => undefined);
+    try {
+      await start();
+      await loaded;
+    } finally {
+      stop.abort();
+    }
+  }
+
   async goto(url: string, timeoutMs = 30_000): Promise<void> {
-    const loaded = this.client.waitForEvent((e) => e.sessionId === this.sessionId && e.method === 'Page.loadEventFired', timeoutMs, `the page load of ${url}`);
-    const nav = await this.send<{ errorText?: string }>('Page.navigate', { url });
-    if (nav.errorText) throw new SmokeFailure('page.navigate', `Could not open ${url}: ${nav.errorText}`);
-    await loaded;
+    await this.untilLoaded(`the page load of ${url}`, timeoutMs, async () => {
+      const nav = await this.send<{ errorText?: string }>('Page.navigate', { url });
+      if (nav.errorText) throw new SmokeFailure('page.navigate', `Could not open ${url}: ${nav.errorText}`);
+    });
   }
 
   /** Evaluate an expression in the page; the value comes back by value. Throws with the page's own message. */
@@ -234,9 +250,9 @@ export class PageDriver {
   }
 
   async reload(): Promise<void> {
-    const loaded = this.client.waitForEvent((e) => e.sessionId === this.sessionId && e.method === 'Page.loadEventFired', 30_000, 'the page reload');
-    await this.send('Page.reload');
-    await loaded;
+    await this.untilLoaded('the page reload', 30_000, async () => {
+      await this.send('Page.reload');
+    });
   }
 
   async close(): Promise<void> {

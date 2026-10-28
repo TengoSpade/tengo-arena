@@ -50,8 +50,8 @@ export class Recorder {
   }
 
   /** A check the run could not make because a piece is missing. */
-  skipCheck(id: string, title: string, why: string, ref?: string): void {
-    this.checks.push({ id, title, status: 'skip', ...(ref ? { ref } : {}), detail: why });
+  skipCheck(id: string, title: string, why: string, ref?: string, pending = false): void {
+    this.checks.push({ id, title, status: 'skip', ...(ref ? { ref } : {}), detail: why, ...(pending ? { pending: true } : {}) });
   }
 
   /**

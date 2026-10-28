@@ -13,7 +13,7 @@ import { decodePng } from '../lib/png';
 import { SmokeFailure, sleep, type PageDriver } from '../lib/page';
 import { ROUTE, SEL } from '../lib/selectors';
 import { analyzeSaveTrace } from '../lib/stats';
-import { canvasInfo, frame, logHash, pause, play, projectUnits, requireHook, setSpeed, sideColors, stats, traceCursorSave, type CanvasInfo, type HookInfo } from '../lib/viewer';
+import { canvasInfo, frame, frameOrNull, logHash, pause, play, projectUnits, requireHook, setSpeed, sideColors, stats, traceCursorSave, type CanvasInfo, type HookInfo } from '../lib/viewer';
 import type { JourneyEnv } from './env';
 
 export interface WatchedOptions {
@@ -72,8 +72,10 @@ export async function watchedRoundSteps(page: PageDriver, env: JourneyEnv, opts:
     const viewed = await logHash(page);
     const read = await pageState(page, env, hook);
     if (!read.state) {
-      rec.skipCheck('hash.viewed-eq-headless', 'Viewed round hash equals the headless round hash', `No game state to replay headless in Node: ${read.problem}`, 'vis-009');
-      rec.say(`  no state for the headless reference: ${read.problem}`);
+      const why = `No game state to replay headless in Node: ${read.problem}`;
+      rec.skipCheck('hash.viewed-eq-headless', 'Viewed round hash equals the headless round hash', why, 'vis-009');
+      // Not a pass and not a failure: the comparison could not be made, so the run is blocked until the state can be read.
+      rec.block('smoke.state-missing', why, 'arena.hash');
       return;
     }
     const headless = env.headless ? env.headless(read.state) : headlessRoundHash(read.state, env.content);
@@ -131,60 +133,70 @@ export async function watchedRoundSteps(page: PageDriver, env: JourneyEnv, opts:
   }
 }
 
-/** Keep the match playing at 4x through the rounds until the report (or Home with the result) opens. */
-export async function finishMatch(page: PageDriver, env: JourneyEnv): Promise<void> {
+/** After the last round pacing may take the player Home with a result toast instead of the report; the toast appears a moment after the route changes. */
+const TOAST_GRACE_MS = 6_000;
+
+/**
+ * Keep the match playing at 4x through the rounds until its report opens: the report itself, or Home with the result toast whose
+ * action opens it. Home with neither is not an end the contract allows, so it fails.
+ */
+export async function finishMatch(page: PageDriver, env: JourneyEnv, graceMs = TOAST_GRACE_MS): Promise<void> {
   const { rec } = env;
   const deadline = Date.now() + 6 * 60_000;
   let rounds = 1;
   let lastHash = '';
+  let homeSince = 0;
   while (Date.now() < deadline) {
     const hash = await page.eval<string>('location.hash');
     if (ROUTE.report.test(hash)) break;
     if (ROUTE.home.test(hash)) {
-      // The match is over and pacing took the player home: the result toast opens the report.
+      homeSince = homeSince || Date.now();
       const toast = await page.locate(SEL.openReportToast);
-      if (toast) await page.mouseClick(toast.x, toast.y);
-      else break;
-    } else if (ROUTE.betweenRounds.test(hash)) {
-      if (hash !== lastHash) rec.say(`  between rounds after round ${rounds}`);
-      await page.click(SEL.betweenRoundsContinue, 'Continue on the between-rounds screen');
-      rounds++;
-      await sleep(500);
-    } else if (ROUTE.arena.test(hash)) {
-      if (hash !== lastHash) rec.say(`  arena, round ${rounds}`);
-      // Keep it playing: an auto-pause stop waits for the player.
-      const f = await frame(page).catch(() => null);
-      if (f && !f.ended) {
-        await setSpeed(page, 4).catch(() => undefined);
-        await play(page).catch(() => undefined);
+      if (toast) {
+        await page.mouseClick(toast.x, toast.y);
+        await page.waitForHash(ROUTE.report, 'the match report', 10_000);
+        break;
+      }
+      if (Date.now() - homeSince > graceMs) break;
+    } else {
+      homeSince = 0;
+      if (ROUTE.betweenRounds.test(hash)) {
+        if (hash !== lastHash) rec.say(`  between rounds after round ${rounds}`);
+        await page.click(SEL.betweenRoundsContinue, 'Continue on the between-rounds screen');
+        rounds++;
+        await sleep(500);
+      } else if (ROUTE.arena.test(hash)) {
+        if (hash !== lastHash) rec.say(`  arena, round ${rounds}`);
+        // Keep it playing: an auto-pause stop waits for the player.
+        const f = await frameOrNull(page).catch(() => null);
+        if (f && !f.ended) {
+          await setSpeed(page, 4).catch(() => undefined);
+          await play(page).catch(() => undefined);
+        }
       }
     }
     lastHash = hash;
     await sleep(400);
   }
-  const hash = await page.eval<string>('location.hash');
-  if (ROUTE.home.test(hash)) {
-    const toast = await page.locate(SEL.openReportToast);
-    if (toast) {
-      await page.mouseClick(toast.x, toast.y);
-      await page.waitForHash(ROUTE.report, 'the match report', 10_000);
-    }
-  }
   const end = await page.eval<string>('location.hash');
-  if (!ROUTE.report.test(end) && !ROUTE.home.test(end)) {
-    throw new SmokeFailure('career.no-report', `The match did not reach its report within 6 minutes (the page is at ${end}, ${rounds} round(s) seen).`);
-  }
   await sleep(600);
   await page.screenshot(join(env.outDir, 'shots', 'career-after-match.png'));
   rec.screenshots.push({ file: 'shots/career-after-match.png', label: 'After the match', width: page.viewport.width, height: page.viewport.height, tags: { path: 'career', hash: end } });
   rec.measurements['career.rounds'] = rounds;
-  // The match is committed: the hash comparison at commit passed if the report exists. Say it as a check.
+  if (!ROUTE.report.test(end)) {
+    throw new SmokeFailure(
+      'career.no-report',
+      ROUTE.home.test(end)
+        ? `The match ended at Home with neither the report nor the result toast that opens it (${rounds} round(s) seen).`
+        : `The match did not reach its report within 6 minutes (the page is at ${end}, ${rounds} round(s) seen).`,
+    );
+  }
   rec.check({
     id: 'career.watch-flow',
     title: 'Play match, Watch, the rounds, between rounds and the report',
-    status: ROUTE.report.test(end) || ROUTE.home.test(end) ? 'pass' : 'fail',
+    status: 'pass',
     ref: 'A11',
     expected: 'the watched match commits and reaches its report',
-    actual: `${rounds} round(s) watched, ended at ${end}`,
+    actual: `${rounds} round(s) watched, report at ${end}`,
   });
 }

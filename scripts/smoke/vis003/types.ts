@@ -20,7 +20,10 @@ export interface KeyDown {
   tick: number;
   seconds: number;
   victim: number;
-  /** The unit that struck the last blow, or null (status, zone or other damage with no unit). */
+  /**
+   * The fighter credited with the down, or null (status, zone or other damage with no unit). The sim credits the unit whose
+   * single largest hit of that tick took the victim down (core/sim resolve.ts maxHitSrc); assists are not credited.
+   */
   killer: number | null;
   ability: string | null;
   abilityName: string | null;
@@ -48,21 +51,41 @@ export interface FightKey {
 
 export type PromptKind = 'tank' | 'healer' | 'down';
 
+/** A scored item: tank.us, tank.them, healer.us, healer.them, then one per down of the fight (down.<n>). */
 export interface Prompt {
-  /** tank.us, tank.them, healer.us, healer.them, down.<n>. */
   id: string;
   kind: PromptKind;
   /** The side asked about (tank, healer) or the victim's side (down). */
   side: SideNo;
-  /** down only: the victim, to find the moment. */
+  /** down only: the victim, for the scorer. Observers are never told it. */
   victim?: number;
+  /** For the scorer and the key sheet. Observers are shown observerPrompts() instead (no victims, no times). */
   text: string;
 }
 
-/** One observer's answers: fight number to prompt id to free text. */
+/** What an observer is asked: four role prompts and one list prompt for the downs. It names no victim and no time. */
+export interface ObserverPrompt {
+  id: 'tank.us' | 'tank.them' | 'healer.us' | 'healer.them' | 'downs';
+  text: string;
+}
+
+/** One fighter that went down, as the observer saw it: who went down and who or what downed them. */
+export interface DownAnswer {
+  victim: string;
+  cause: string;
+}
+
+export interface FightAnswers {
+  /** tank.us, tank.them, healer.us, healer.them: free text. */
+  roles: Record<string, string>;
+  /** Every down the observer saw, in any order. */
+  downs: DownAnswer[];
+}
+
+/** One observer's answers: fight number to that fight's answers. */
 export interface ObserverAnswers {
   observer: string;
-  fights: Record<string, Record<string, string>>;
+  fights: Record<string, FightAnswers>;
   notes?: string;
 }
 
@@ -88,6 +111,8 @@ export interface ScoreSummary {
   /** vis-003's bar: at least 90% of prompts. */
   pass: boolean;
   unanswered: number;
+  /** Downs the observer listed that no key down matched (reported, not counted against). */
+  extraDowns: number;
 }
 
 /** The visible DOM at a capture: text, live regions, and role glyph carriers with the text of their row. */

@@ -1,13 +1,15 @@
 /**
- * npm run smoke:vis003 -- <command> --run <run folder or its vis003 folder> [options]
+ * npx tsx scripts/smoke/vis003/cli.ts <command> --run <run folder or its vis003 folder> [options]
+ * (the package script `smoke:vis003` is to be added by the architect)
  *
- *   score      --answers <file> [--answers <file> ...] [--strict-ability]
+ *   score      --answers <file> [--answers <file> ...] [--strict-ability] [--min 90]
  *              score observers' answers (the agent observers' JSON replies, or a person's transcription) against the key
  *   precheck   re-score the automated on-screen evidence (roles and causes) from the captured evidence
- *   sheet      rewrite owner-sheet.md, owner-answer-key.md and answers-template.json from the keys
+ *   sheet      rewrite sheets/fight-N.md, owner-tally.md, owner-answer-key.md and answers-template.json from the keys
  *   template   [--observer <name>]  write an empty answers file for an observer
  *
- * The run folder is reports/smoke/<run id> (a `--only vis003` run of `npm run smoke:arena`); `latest` picks the newest.
+ * The run folder is reports/smoke/<run id> (a `--only vis003` run of `npx tsx scripts/smoke/run.ts`); `latest` picks the
+ * newest run made from the real game (a self-test on the mock arena is never picked; name its folder to use it).
  * Exit codes: 0 every observer reached 90%, 1 one did not, 2 usage or missing files.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -15,8 +17,9 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { intArg, parseArgs, stringArg } from '../../lib/args';
 import { REPO_ROOT } from '../../lib/node-content';
 import { mergeAnswers, parseAnswerFile } from './answers';
+import { latestRealVisDir, visRuns, visSourceOf } from './runs';
 import { scoreEvidence, summarizeEvidence } from './evidence';
-import { answersTemplate, renderAnswerKey, renderOwnerSheet } from './packet';
+import { answersTemplate, renderAnswerKey, renderObserverSheet, renderTally } from './packet';
 import { scoreObserver } from './score';
 import type { Capture, FightKey, ObserverAnswers, PromptResult, ScoreSummary } from './types';
 
@@ -29,13 +32,17 @@ export function resolveVisDir(runArg: string): string {
   const reports = join(REPO_ROOT, 'reports', 'smoke');
   let dir = runArg;
   if (runArg === 'latest') {
-    const runs = existsSync(reports) ? readdirSync(reports, { withFileTypes: true }).filter((d) => d.isDirectory() && existsSync(join(reports, d.name, 'vis003'))).map((d) => d.name).sort() : [];
-    if (runs.length === 0) die(`No run with a vis003 folder under ${reports}. Run: npm run smoke:arena -- --only vis003`);
-    dir = join(reports, runs[runs.length - 1]!);
+    const latest = latestRealVisDir(reports);
+    if (!latest) {
+      const onlyMock = visRuns(reports).length > 0;
+      die(`No run of the real game with a vis003 folder under ${reports}${onlyMock ? ' (there are self-test runs on the mock arena; name one with --run <folder> to use it)' : ''}. Run: npx tsx scripts/smoke/run.ts --only vis003`);
+    }
+    dir = latest;
   }
   dir = resolve(dir);
   if (basename(dir) !== 'vis003' && existsSync(join(dir, 'vis003'))) dir = join(dir, 'vis003');
   if (!existsSync(join(dir, 'keys'))) die(`${dir} has no keys/ folder: not a vis-003 folder`);
+  if (visSourceOf(dir) === 'mock') console.warn('warning: this folder is from a SELF-TEST on the mock arena, not from the game');
   return dir;
 }
 
@@ -56,13 +63,13 @@ function pct(n: number): string {
 }
 
 function scoreMarkdown(summaries: readonly ScoreSummary[], results: Map<string, PromptResult[]>, strict: boolean): string {
-  const lines: string[] = ['# vis-003 agent observer score', '', `Counting rule: a down prompt is right when the killer is named${strict ? ' and the ability' : ''}. The bar is at least 90% of prompts for each observer.`, ''];
+  const lines: string[] = ['# vis-003 agent observer score', '', `Counting rule: a down is right when the observer lists its victim and names the one fighter credited with it${strict ? ' and the ability' : ''} (several enemies named is wrong; "unclear" and "unknown" are wrong). The bar is at least 90% of prompts for each observer.`, ''];
   lines.push('| Observer | Right | Of | Rate | Tanks | Healers | Downs | Result |');
   lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
   for (const s of summaries) lines.push(`| ${s.observer} | ${s.correct} | ${s.total} | ${pct(s.rate)} | ${s.byKind.tank.correct}/${s.byKind.tank.total} | ${s.byKind.healer.correct}/${s.byKind.healer.total} | ${s.byKind.down.correct}/${s.byKind.down.total} | ${s.pass ? 'PASS' : 'FAIL'} |`);
   for (const s of summaries) {
     lines.push('', `## ${s.observer}`, '');
-    lines.push(`By fight: ${s.byFight.map((f) => `fight ${f.fight} ${f.correct}/${f.total}`).join(', ')}${s.unanswered ? `; ${s.unanswered} unanswered` : ''}`, '');
+    lines.push(`By fight: ${s.byFight.map((f) => `fight ${f.fight} ${f.correct}/${f.total}`).join(', ')}${s.unanswered ? `; ${s.unanswered} unanswered` : ''}${s.extraDowns ? `; ${s.extraDowns} listed down(s) matched none of the fight's downs (not counted)` : ''}`, '');
     const wrong = (results.get(s.observer) ?? []).filter((r) => !r.correct);
     if (wrong.length === 0) lines.push('Every prompt right.');
     else {
@@ -86,10 +93,12 @@ async function main(): Promise<number> {
   if (keys.length === 0) die(`No keys in ${join(visDir, 'keys')}`);
 
   if (command === 'sheet') {
-    writeFileSync(join(visDir, 'owner-sheet.md'), renderOwnerSheet(keys));
-    writeFileSync(join(visDir, 'owner-answer-key.md'), renderAnswerKey(keys));
+    const source = visSourceOf(visDir) === 'mock' ? 'mock' : 'game';
+    for (const k of keys) writeFileSync(join(visDir, 'sheets', `fight-${k.fight}.md`), renderObserverSheet(k, source));
+    writeFileSync(join(visDir, 'owner-tally.md'), renderTally(keys, source));
+    writeFileSync(join(visDir, 'owner-answer-key.md'), renderAnswerKey(keys, source));
     writeFileSync(join(visDir, 'answers-template.json'), `${JSON.stringify(answersTemplate(keys, 'agent-1'), null, 2)}\n`);
-    console.log(`wrote the owner sheet, answer key and answers template for ${keys.length} fights in ${visDir}`);
+    console.log(`wrote the observer sheets, the tally, the answer key and the answers template for ${keys.length} fights in ${visDir}`);
     return 0;
   }
   if (command === 'template') {

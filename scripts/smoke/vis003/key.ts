@@ -1,7 +1,8 @@
 /**
  * The vis-003 answer key of a fight, computed from its full-level fight log and the content: who the tanks and healers
- * are (classes' archetypes, D-J) and every down with its cause (`unit.down`: the unit and the ability that struck the
- * last blow). Pure; unit-tested on logs the sim produces.
+ * are (classes' archetypes, D-J) and every down with its cause (`unit.down`: the fighter credited with it, which the sim
+ * takes to be the source of the largest single hit of that tick, and that hit's ability). Pure; unit-tested on logs the sim
+ * produces.
  */
 import type { ContentDB } from '../../../src/core/content';
 import type { FightLog } from '../../../src/core/model';

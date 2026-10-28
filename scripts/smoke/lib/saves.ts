@@ -17,7 +17,7 @@ export async function readSavedState(page: PageDriver, content: ContentDB, slot 
   const rec = await page.probe<{ slotId: string; savedAt: string | null; json: string } | null>('readSave', slot).catch((e: unknown) => {
     throw new Error(`could not read the page's saves: ${e instanceof Error ? e.message : String(e)}`);
   });
-  if (!rec) return { state: null, problem: 'the page has no saves in IndexedDB yet' };
+  if (!rec) return { state: null, problem: `the page has no "${slot}" save in IndexedDB (only that slot is read: no other save stands in for it)` };
   const parsed = parseSave(rec.json, content);
   if (!parsed.ok) return { state: null, problem: `the ${rec.slotId} save does not load in Node: ${parsed.error.code}: ${parsed.error.message}` };
   return { state: parsed.value.envelope.state, source: `IndexedDB ${rec.slotId}${rec.savedAt ? ` saved ${rec.savedAt}` : ''}` };

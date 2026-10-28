@@ -109,7 +109,14 @@ export class CdpClient {
         reject(new Error(`CDP ${method} timed out after ${timeoutMs} ms`));
       }, timeoutMs);
       this.pending.set(id, { method, resolve: resolve as (v: unknown) => void, reject, timer });
-      this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
+      try {
+        this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
+      } catch (e) {
+        // A socket that cannot send: forget the request now, so its timer does not outlive it.
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
     });
   }
 
@@ -119,19 +126,36 @@ export class CdpClient {
     return () => this.handlers.delete(handler);
   }
 
-  /** Resolve with the first event for which `match` is true (for the session, when given). */
-  waitForEvent(match: (event: CdpEvent) => boolean, timeoutMs: number, what: string): Promise<CdpEvent> {
+  /**
+   * Resolve with the first event for which `match` is true. Rejects on timeout, and when `signal` aborts (the caller no
+   * longer needs the event: its listener and timer are released at once, so nothing is left running or rejecting later).
+   */
+  waitForEvent(match: (event: CdpEvent) => boolean, timeoutMs: number, what: string, signal?: AbortSignal): Promise<CdpEvent> {
     return new Promise((resolve, reject) => {
-      const off = this.on((e) => {
-        if (!match(e)) return;
+      let settled = false;
+      const done = (): void => {
+        settled = true;
         clearTimeout(timer);
         off();
+        signal?.removeEventListener('abort', onAbort);
+      };
+      const off = this.on((e) => {
+        if (settled || !match(e)) return;
+        done();
         resolve(e);
       });
       const timer = setTimeout(() => {
-        off();
+        if (settled) return;
+        done();
         reject(new Error(`timed out after ${timeoutMs} ms waiting for ${what}`));
       }, timeoutMs);
+      const onAbort = (): void => {
+        if (settled) return;
+        done();
+        reject(new Error(`stopped waiting for ${what}`));
+      };
+      if (signal?.aborted) onAbort();
+      else signal?.addEventListener('abort', onAbort);
     });
   }
 

@@ -3,9 +3,9 @@
  * return its DevTools endpoint. Zero dependencies: Node's child_process, fs and fetch.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 export class SmokeSetupError extends Error {
   constructor(
@@ -138,8 +138,23 @@ function killTree(child: ChildProcess): void {
   else child.kill('SIGKILL');
 }
 
+/** The only profile folder names this driver creates (mkdtemp: the prefix and six letters or digits). */
+export const PROFILE_NAME = /^arena-smoke-profile-[A-Za-z0-9]{6}$/;
+
+/**
+ * True for a folder this driver made: a direct child of the temp folder named like PROFILE_NAME. Everything that kills
+ * browsers or deletes folders goes through this, so an empty or odd name can never become a match-everything pattern
+ * (-like '**') and a person's own profile can never be touched.
+ */
+export function isOwnProfile(userDataDir: string, temp: string = tmpdir()): boolean {
+  if (!userDataDir) return false;
+  const same = (x: string, y: string): boolean => (process.platform === 'win32' ? resolve(x).toLowerCase() === resolve(y).toLowerCase() : resolve(x) === resolve(y));
+  return PROFILE_NAME.test(basename(userDataDir)) && same(dirname(resolve(userDataDir)), temp);
+}
+
 /** The PowerShell that stops every Edge or Chrome process whose command line names this profile folder. */
 export function killByProfileScript(profileName: string): string {
+  if (!PROFILE_NAME.test(profileName)) throw new Error(`refusing to build a kill pattern from "${profileName}"`);
   return [
     'Get-CimInstance Win32_Process',
     `| Where-Object { $_.CommandLine -like '*${profileName}*' -and $_.Name -match '^(msedge|chrome)\\.exe$' }`,
@@ -150,20 +165,89 @@ export function killByProfileScript(profileName: string): string {
 /**
  * Kill every browser process that was started with this profile folder, even when the launcher process is already
  * gone (a browser that re-launches itself is no longer in the launcher's tree). Matches on the folder's unique name
- * only, so a person's own browser is never touched.
+ * only, so a person's own browser is never touched. Refuses (returns false, runs nothing) for any folder that is not one
+ * this driver made.
  */
-export function killByProfile(userDataDir: string): void {
+export function killByProfile(userDataDir: string): boolean {
+  if (!isOwnProfile(userDataDir)) return false;
   const name = basename(userDataDir);
   if (process.platform === 'win32') {
     spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', killByProfileScript(name)], { stdio: 'ignore', timeout: 30_000 });
   } else {
     spawnSync('pkill', ['-9', '-f', name], { stdio: 'ignore' });
   }
+  return true;
+}
+
+/** Delete a profile folder (own folders only), retrying while the dying browser still holds files; false if it is still there. */
+async function removeProfile(userDataDir: string, attempts = 40, delayMs = 500): Promise<boolean> {
+  if (!isOwnProfile(userDataDir)) return false;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      rmSync(userDataDir, { recursive: true, force: true });
+    } catch {
+      /* still locked */
+    }
+    if (!existsSync(userDataDir)) return true;
+    await sleep(delayMs);
+  }
+  return false;
+}
+
+/** Every browser this process launched and has not closed: profile folder to launcher (null before it is spawned). */
+const launched = new Map<string, ChildProcess | null>();
+
+/**
+ * Stop everything this process launched and delete the profile folders, synchronously: for Ctrl+C, a kill, or a crash,
+ * including the moment between creating the profile and the browser answering.
+ */
+export function cleanupLaunchedSync(): void {
+  for (const [dir, child] of launched) {
+    if (child) killTree(child);
+    killByProfile(dir);
+    if (isOwnProfile(dir)) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* a locked file: the next run's sweep takes it */
+      }
+    }
+  }
+  launched.clear();
+}
+
+/**
+ * Delete profile folders left by earlier runs that were killed hard: arena-smoke-profile-* in the temp folder, older than
+ * `maxAgeMs` (an hour by default, so a run in progress is never touched). Returns what it removed.
+ */
+export function sweepStaleProfiles(maxAgeMs = 3_600_000, temp: string = tmpdir(), now: number = Date.now()): string[] {
+  const removed: string[] = [];
+  let names: string[];
+  try {
+    names = readdirSync(temp);
+  } catch {
+    return removed;
+  }
+  for (const name of names) {
+    if (!PROFILE_NAME.test(name)) continue;
+    const dir = join(temp, name);
+    try {
+      if (now - statSync(dir).mtimeMs < maxAgeMs) continue;
+      killByProfile(dir);
+      rmSync(dir, { recursive: true, force: true });
+      if (!existsSync(dir)) removed.push(dir);
+    } catch {
+      /* in use or locked: leave it */
+    }
+  }
+  return removed;
 }
 
 export async function launchBrowser(opts: LaunchOptions): Promise<LaunchedBrowser> {
   const userDataDir = mkdtempSync(join(tmpdir(), 'arena-smoke-profile-'));
+  launched.set(userDataDir, null);
   const child = spawn(opts.exe, browserArgs(opts, userDataDir), { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, env: browserEnv() });
+  launched.set(userDataDir, child);
   let stderr = '';
   child.stderr?.on('data', (d: Buffer) => {
     stderr = (stderr + d.toString()).slice(-4000);
@@ -179,15 +263,10 @@ export async function launchBrowser(opts: LaunchOptions): Promise<LaunchedBrowse
     closed = true;
     killTree(child);
     killByProfile(userDataDir);
-    // The profile folder can stay locked for a moment after the tree dies.
-    for (let i = 0; i < 10; i++) {
-      try {
-        rmSync(userDataDir, { recursive: true, force: true });
-        return;
-      } catch {
-        await sleep(200);
-      }
-    }
+    // The profile folder stays locked until the dying browser lets go of its files: keep trying for up to 20 s, and say so.
+    const gone = await removeProfile(userDataDir);
+    launched.delete(userDataDir);
+    if (!gone) console.warn(`warning: could not delete the browser profile ${userDataDir}; the next run removes it once it is an hour old`);
   };
 
   const timeoutMs = opts.timeoutMs ?? 20_000;

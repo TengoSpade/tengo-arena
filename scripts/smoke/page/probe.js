@@ -229,7 +229,8 @@
 
   /**
    * The game's own saves, as the page's IndexedDB holds them (src/platform/save-store.idb.ts: database arena-league,
-   * store saves, records { slotId, meta, json }): the slot asked for, else the newest. Opening a database that does not exist
+   * store saves, records { slotId, meta, json }): the slot asked for and only that one (null when it is not there: a
+   * stale or different save must never stand in for it); with no slot given, the newest. Opening a database that does not exist
    * would create it empty and break the app's own first open, so the page asks which databases exist first.
    */
   S.readSave = async (slot) => {
@@ -249,7 +250,7 @@
           req.onerror = () => reject(req.error);
         });
       let rec = slot ? await ask(store.get(slot)) : undefined;
-      if (!rec) {
+      if (!rec && !slot) {
         const all = await ask(store.getAll());
         all.sort((a, b) => String((b.meta && b.meta.savedAt) || '').localeCompare(String((a.meta && a.meta.savedAt) || '')));
         rec = all[0];

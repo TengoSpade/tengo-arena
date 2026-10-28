@@ -13,6 +13,9 @@ export const TARGETS = {
   maxIntervalMs: 33.5,
   /** Our CPU per frame (clock + sampleAt + scene update), p95. */
   cpuFrameMsP95Max: 4,
+  /** Round load (the sim at full plus indexFightLog): median and p99, ms. */
+  roundLoadMedianMsMax: 15,
+  roundLoadP99MsMax: 30,
   /** First viewer open (lazy chunk + PixiJS init + prepare), local files. */
   firstOpenMsMax: 500,
   /** JS heap growth while viewing (20 round loads). */

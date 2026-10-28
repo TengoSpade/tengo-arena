@@ -28,6 +28,30 @@ describe('cross-runtime cases', () => {
     }
   });
 
+  it('repeats every case and finds the same hashes each time', () => {
+    expect(a.repeatMismatches).toBe(0);
+    expect(a.timings.passes).toBe(5);
+    expect(a.timings.coldSimMs).toHaveLength(6);
+    expect(a.timings.simMs).toHaveLength(6 * 4);
+  });
+
+  it('times indexFightLog too when the render model is there, and says why when it is not', () => {
+    const t = a.timings;
+    if (t.indexProblem === null) {
+      expect(t.loadMs).toHaveLength(6 * 4);
+      expect(t.indexMs).toHaveLength(6 * 4);
+    } else {
+      expect(t.loadMs).toBeNull();
+      expect(t.indexMs).toBeNull();
+      expect(t.indexProblem).toMatch(/Not implemented|render\./);
+    }
+  });
+
+  it('a repeat that differs from the first pass is a difference', () => {
+    const bad: CrossRun = { ...a, repeatMismatches: 2 };
+    expect(compareCrossRuns(a, bad).differences.join('\n')).toMatch(/2 repeated simulations differed/);
+  });
+
   it('different rounds give different hashes', () => {
     expect(new Set(a.results.map((r) => r.hash)).size).toBe(6);
   });

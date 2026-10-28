@@ -40,7 +40,7 @@ describe('the page\'s saves', () => {
   it('says so when the page has no saves yet', async () => {
     const r = await readSavedState(page(null), content);
     expect(r.state).toBeNull();
-    expect(r.state === null && r.problem).toMatch(/no saves/);
+    expect(r.state === null && r.problem).toMatch(/no "auto-round" save/);
   });
 
   it('says so when a save does not load, with the core/save code', async () => {

@@ -4,7 +4,7 @@
  */
 import type { Rgba } from './png';
 import type { CheckResult, CheckStatus } from './report';
-import { TARGETS, type HeapAnalysis, type IntervalSummary, type TraceAnalysis } from './stats';
+import { TARGETS, median, percentile, type HeapAnalysis, type IntervalSummary, type TraceAnalysis } from './stats';
 
 const ms = (v: number): string => (Number.isFinite(v) ? `${v.toFixed(1)} ms` : 'n/a');
 const fps = (v: number): string => (Number.isFinite(v) ? `${v.toFixed(1)} fps` : 'n/a');
@@ -55,6 +55,28 @@ export function checkCpuFrame(p95Ms: number | null, ctx: PerfContext): CheckResu
     expected: `p95 <= ${TARGETS.cpuFrameMsP95Max} ms`,
     actual: `p95 ${ms(p95Ms)}`,
     ...(status === 'warn' ? { detail: SOFTWARE_NOTE } : {}),
+  };
+}
+
+/**
+ * A10 "round load": the sim at record level full plus indexFightLog, median at most 15 ms and p99 at most 30 ms. It is CPU
+ * work, measured in the browser's JavaScript engine over warm passes, so a GPU or software WebGL makes no difference and a miss
+ * is a failure. The sim alone is only a lower bound of that budget, so without indexFightLog (the render model is not
+ * implemented yet) the check is not made, and the run is blocked rather than passed on the lower bound.
+ */
+export function checkRoundLoad(t: { simMs: readonly number[]; indexMs: readonly number[] | null; loadMs: readonly number[] | null; indexProblem: string | null }, where: string): CheckResult {
+  const base = { id: 'perf.round-load', title: `Round load: the sim at full plus indexFightLog, in ${where}`, ref: 'A10 round load', expected: `median <= ${TARGETS.roundLoadMedianMsMax} ms, p99 <= ${TARGETS.roundLoadP99MsMax} ms` };
+  if (!t.loadMs || t.loadMs.length === 0) {
+    const simMed = median(t.simMs);
+    return { ...base, status: 'skip', actual: `indexFightLog could not be timed; the sim alone is ${ms(simMed)} median`, detail: `indexFightLog is not available (${t.indexProblem ?? 'no timings'}), so the budget (sim plus indexFightLog) cannot be checked; the sim alone (${ms(simMed)} median) is a lower bound and is not accepted for it. Delivered by WP-M2C (the render model).` };
+  }
+  const med = median(t.loadMs);
+  const p99 = percentile(t.loadMs, 99);
+  const ok = med <= TARGETS.roundLoadMedianMsMax && p99 <= TARGETS.roundLoadP99MsMax;
+  return {
+    ...base,
+    status: ok ? 'pass' : 'fail',
+    actual: `${t.loadMs.length} warm loads: median ${ms(med)}, p99 ${ms(p99)} (sim ${ms(median(t.simMs))} + index ${ms(median(t.indexMs ?? []))} median)`,
   };
 }
 

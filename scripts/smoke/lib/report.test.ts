@@ -2,16 +2,17 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { countChecks, exitCodeOf, renderMarkdown, runIdFor, verdictOf, writeSmokeReport, type CheckResult, type SmokeReport } from './report';
+import { countChecks, exitCodeOf, renderMarkdown, runIdFor, unmadeChecks, verdictOf, writeSmokeReport, type CheckResult, type SmokeReport } from './report';
 
 const pass = (id: string): CheckResult => ({ id, title: `Check ${id}`, status: 'pass' });
 const fail = (id: string): CheckResult => ({ id, title: `Check ${id}`, status: 'fail', actual: 'it broke' });
 const warn = (id: string): CheckResult => ({ id, title: `Check ${id}`, status: 'warn', detail: 'software GL' });
-const skip = (id: string): CheckResult => ({ id, title: `Check ${id}`, status: 'skip' });
+const skip = (id: string): CheckResult => ({ id, title: `Check ${id}`, status: 'skip', detail: 'no state to read' });
+const pending = (id: string): CheckResult => ({ id, title: `Check ${id}`, status: 'skip', pending: true, detail: 'a later step' });
 const blocked = { code: 'smoke.hook-missing', message: 'window.__arena.viewer is not in this build', step: 'fixture.hook' };
 
 function report(over: Partial<SmokeReport> = {}): SmokeReport {
-  const checks = over.checks ?? [pass('a'), warn('b'), skip('c')];
+  const checks = over.checks ?? [pass('a'), warn('b'), pending('c')];
   return {
     format: 'arena-league-smoke',
     version: 1,
@@ -38,9 +39,14 @@ function report(over: Partial<SmokeReport> = {}): SmokeReport {
 }
 
 describe('verdict and exit codes', () => {
-  it('pass when nothing failed, warnings and skips included', () => {
-    expect(verdictOf([pass('a'), warn('b'), skip('c')], [])).toBe('pass');
+  it('pass when nothing failed; warnings and skips that are pending by design do not matter', () => {
+    expect(verdictOf([pass('a'), warn('b'), pending('c')], [])).toBe('pass');
     expect(exitCodeOf('pass')).toBe(0);
+  });
+
+  it('a check that was wanted and not made is never a pass, whether or not a step recorded a block', () => {
+    expect(verdictOf([pass('a'), skip('c')], [])).toBe('blocked');
+    expect(unmadeChecks([pass('a'), skip('c'), pending('d')]).map((c) => c.id)).toEqual(['c']);
   });
   it('fail wins over blocked', () => {
     expect(verdictOf([pass('a'), fail('b')], [blocked])).toBe('fail');
@@ -60,6 +66,8 @@ describe('markdown report', () => {
     const md = renderMarkdown(report());
     expect(md).toContain('# Arena smoke report 20261028-101530');
     expect(md).toContain('**Verdict: PASS** (1 pass, 0 fail, 1 warn, 1 skipped)');
+    expect(md).not.toContain('## Blocked');
+    expect(md).not.toContain('SELF-TEST');
     expect(md).toContain('| WARN | Check b |');
     expect(md).toContain('- **b** (warn): software GL');
     expect(md).toContain('`cursor-save-trace.json`');
@@ -73,6 +81,29 @@ describe('markdown report', () => {
     expect(md).toContain('`fixture.hook`');
     expect(md).toContain('smoke.hook-missing');
     expect(md).toContain('window.__arena.viewer is not in this build');
+  });
+
+  it('lists the checks that were not made under Blocked, with their reason', () => {
+    const md = renderMarkdown(report({ checks: [pass('a'), skip('hash.x')] }));
+    expect(md).toContain('## Blocked');
+    expect(md).toContain('Check not made, `hash.x`: no state to read');
+    expect(md).toContain('**Verdict: BLOCKED**');
+  });
+
+  it('a self-test says so at the top and never takes the place of the last real run', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'smoke-report-'));
+    try {
+      const real = report();
+      writeSmokeReport(dir, real);
+      const mock = report({ runId: '20261028-120000' });
+      mock.build.source = 'mock';
+      const out = writeSmokeReport(dir, mock);
+      expect(readFileSync(out.md, 'utf8')).toContain('> **SELF-TEST on the mock arena.**');
+      expect(JSON.parse(readFileSync(join(dir, 'latest.json'), 'utf8')).runId).toBe('20261028-101530');
+      expect(JSON.parse(readFileSync(join(dir, 'latest-selftest.json'), 'utf8')).runId).toBe('20261028-120000');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('flags software rendering next to the renderer', () => {

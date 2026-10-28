@@ -12,7 +12,7 @@ import type { FightLog, GameState } from '../../../src/core/model';
 import { NotImplementedError } from '../../../src/core/util';
 import { PageDriver, SmokeFailure, sleep } from '../lib/page';
 import { MATCHDAY_MAIN, ROUTE, SEL } from '../lib/selectors';
-import { canvasInfo, frame, pause, play, requireHook, setSpeed } from '../lib/viewer';
+import { canvasInfo, frame, logHash, pause, play, requireHook, setSpeed } from '../lib/viewer';
 import { buildFightKey } from '../vis003/key';
 import { writeVis003Files, frameFile, packetDir, type PacketFight } from '../vis003/packet';
 import { planCaptures } from '../vis003/plan';
@@ -29,7 +29,7 @@ export async function continueToPlayMatch(page: PageDriver, say: (s: string) => 
     const c = await continueState(page);
     say(`  continue: "${c.main}" / "${c.sub}"`);
     if (MATCHDAY_MAIN.test(c.main)) return;
-    if (/^Decide first$/i.test(c.main)) throw new SmokeFailure('career.blocked-by-game', `The career stopped on "Decide first: ${c.sub}".`);
+    if (/^Decide first$/i.test(c.main)) throw new SmokeFailure('career.blocked-by-game', `The career stopped on "Decide first: ${c.sub}" before the next match. The smoke makes no decisions: use another --seed, or extend the journey.`, true);
     if ((await page.locate({ css: SEL.continueConfirm })) !== null) await page.click(SEL.continueConfirmPrimary, 'the confirmation');
     else await page.click(SEL.continueButton, 'Continue');
     await sleep(500);
@@ -55,6 +55,18 @@ export function keyFromState(state: GameState, content: ContentDB, fight: number
     clubNames: [state.clubs[home]?.name ?? 'Home', state.clubs[live.away.clubId]?.name ?? 'Away'],
   });
   return { key, log: r.value.log };
+}
+
+/**
+ * The key is only the key of THIS fight when the log it came from is the log on screen: a stale auto-round save would key a
+ * different fight. The viewer's hash must equal the key's, as in the arena.hash step.
+ */
+export function assertKeyIsOnScreen(viewed: string | null, key: FightKey, source: string): void {
+  if (viewed === key.logHash) return;
+  throw new SmokeFailure(
+    'vis003.stale-key',
+    `The viewer shows log ${viewed ?? 'none'} but the answer key was computed from log ${key.logHash} (${source}): the saved state is not the fight on screen, so the key would be for another fight. Nothing was captured.`,
+  );
 }
 
 export interface CaptureRun {
@@ -159,6 +171,7 @@ export async function runVis003Capture(env: JourneyEnv): Promise<void> {
             if (e instanceof NotImplementedError) throw new SmokeFailure('smoke.core-stub', `${e.message}: core/game's playback functions are not implemented yet (WP-M2B).`, true);
             throw e;
           }
+          assertKeyIsOnScreen(await logHash(page), keyed.key, read.source);
           const run = await captureFight(page, env, keyed.key, root);
           rec.say(`  fight ${n}: ${run.captures.length} frames, ${keyed.key.downs.length} downs${run.ended ? '' : ' (did not see the end)'}`);
           fights.push({ key: keyed.key, captures: run.captures });
@@ -179,11 +192,11 @@ export function finish(env: JourneyEnv, root: string, fights: readonly PacketFig
     rec.skipCheck('vis003.evidence', 'vis-003 pre-check: roles and causes identifiable from the screen', 'no fight was captured (see the blocked or failed steps)', 'A11 vis-003');
     return;
   }
-  writeVis003Files(root, fights, { seed: env.opts.seed, commit: env.commit });
+  writeVis003Files(root, fights, { seed: env.opts.seed, commit: env.commit, source: env.opts.selfTest ? 'mock' : 'game' });
   const results = fights.flatMap((f) => scoreEvidence(f.key, f.captures));
   const summary = summarizeEvidence(results);
   writeFileSync(join(root, 'evidence-score.json'), `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
-  rec.artifacts.push('vis003/manifest.json', 'vis003/owner-sheet.md', 'vis003/owner-answer-key.md', 'vis003/evidence-score.json');
+  rec.artifacts.push('vis003/manifest.json', 'vis003/sheets/', 'vis003/owner-tally.md', 'vis003/owner-answer-key.md', 'vis003/evidence-score.json');
   rec.measurements['vis003.evidence'] = { roles: summary.roles, causes: summary.causes, fights: fights.length, frames: fights.reduce((s, f) => s + f.captures.length, 0) };
   rec.check({
     id: 'vis003.roles-identifiable',
@@ -203,5 +216,5 @@ export function finish(env: JourneyEnv, root: string, fights: readonly PacketFig
     actual: `${summary.causes.named} of ${summary.causes.total} named (${summary.causes.persistent} still in the feed later)`,
     ...(summary.causes.named === summary.causes.total ? {} : { detail: summary.results.filter((r) => r.kind === 'down' && !r.identifiable).slice(0, 4).map((r) => `fight ${r.fight} ${r.prompt}: ${r.why}`).join('; ') }),
   });
-  rec.skipCheck('vis003.agent-observer', 'vis-003 agent observer pre-check scored >= 90%', 'Capture done: give each packets/fight-N/observer-brief.md to an observer agent and score its answers with `npm run smoke:vis003 -- score` (see scripts/smoke/README.md).', 'A11 vis-003 (2)');
+  rec.skipCheck('vis003.agent-observer', 'vis-003 agent observer pre-check scored >= 90%', 'Capture done: give each packets/fight-N/observer-brief.md to an observer agent and score its answers with `npx tsx scripts/smoke/vis003/cli.ts score` (see scripts/smoke/README.md).', 'A11 vis-003 (2)', true);
 }

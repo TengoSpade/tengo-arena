@@ -1,4 +1,4 @@
-/** Command-line options of the smoke driver (`tsx scripts/smoke/run.ts`, package script `smoke:arena`). */
+/** Command-line options of the smoke driver (`npx tsx scripts/smoke/run.ts`; the package script `smoke:arena` is to be added). */
 import { join } from 'node:path';
 import { intArg, parseArgs, stringArg } from '../../lib/args';
 import { REPO_ROOT } from '../../lib/node-content';
@@ -43,7 +43,7 @@ export interface RunOptions {
   quiet: boolean;
 }
 
-const HELP = `usage: npm run smoke:arena -- [options]   (tsx scripts/smoke/run.ts)
+const HELP = `usage: npx tsx scripts/smoke/run.ts [options]   (the package script smoke:arena is to be added)
 
   --only cross,fixture,career,vis003   journeys to run (default cross,fixture,career; vis003 captures the observer packets)
   --no-build            reuse the build in reports/smoke/build

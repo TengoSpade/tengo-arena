@@ -40,7 +40,7 @@ export async function newCareerToMatchday(page: PageDriver, baseUrl: string, see
     say(`  continue: "${c.main}" / "${c.sub}"`);
     if (MATCHDAY_MAIN.test(c.main)) return;
     if (/^Decide first$/i.test(c.main)) {
-      throw new SmokeFailure('career.blocked-by-game', `The career stopped on "Decide first: ${c.sub}" before the first match. The smoke does not make decisions; pick a seed whose club starts clean (--seed) or extend the journey.`);
+      throw new SmokeFailure('career.blocked-by-game', `The career stopped on "Decide first: ${c.sub}" before the first match. The smoke does not make decisions; pick a seed whose club starts clean (--seed) or extend the journey.`, true);
     }
     if ((await page.locate({ css: SEL.continueConfirm })) !== null) {
       await page.click(SEL.continueConfirmPrimary, 'the kick-off confirmation');

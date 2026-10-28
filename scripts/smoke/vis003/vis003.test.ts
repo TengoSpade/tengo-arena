@@ -2,6 +2,9 @@
  * The vis-003 kit on real fight logs: the answer key, the prompts, the capture plan, the scoring of observers' answers,
  * answer-file parsing, and the on-screen evidence proxy. The logs come from the sim on content/default (full record level).
  */
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadContent, type ContentDB } from '../../../src/core/content';
 import type { FightLog } from '../../../src/core/model';
@@ -11,11 +14,12 @@ import { CROSS_CASES } from '../cross/cases';
 import { extractJson, mergeAnswers, parseAnswerFile } from './answers';
 import { CALLOUT_TICKS, scoreEvidence, shownRoles, summarizeEvidence, type EvidenceCapture } from './evidence';
 import { buildFightKey } from './key';
-import { answersTemplate, frameFile, renderAnswerKey, renderObserverBrief, renderOwnerSheet } from './packet';
+import { DOWN_ROWS, answersTemplate, frameFile, renderAnswerKey, renderObserverBrief, renderObserverSheet, renderTally, writeVis003Files } from './packet';
 import { planCaptures } from './plan';
-import { promptsFor } from './prompts';
-import { normalize, scoreFight, scoreObserver, summarize, unitsMentioned } from './score';
-import type { FightKey, ScreenEvidence } from './types';
+import { DOWNS_PROMPT, observerPrompts, promptsFor } from './prompts';
+import { latestRealVisDir, visRuns, visSourceOf } from './runs';
+import { normalize, scoreFight, scoreFightDetailed, scoreObserver, summarize, unitsMentioned } from './score';
+import type { DownAnswer, FightAnswers, FightKey, ObserverAnswers, PromptResult, ScreenEvidence } from './types';
 
 const loaded = loadContent('default', loadRawContentFromDisk('default').raw);
 if (!loaded.ok) throw new Error('content/default is invalid');
@@ -79,25 +83,36 @@ describe('the answer key', () => {
 
 describe('the prompts', () => {
   const key = keyOf();
-  const prompts = promptsFor(key);
+  const scored = promptsFor(key);
+  const asked = observerPrompts(key);
 
-  it('four role prompts and one per down, never saying the answer', () => {
-    expect(prompts.filter((p) => p.kind !== 'down').map((p) => p.id)).toEqual(['tank.us', 'tank.them', 'healer.us', 'healer.them']);
-    expect(prompts.filter((p) => p.kind === 'down')).toHaveLength(key.downs.length);
-    const text = prompts.map((p) => p.text).join('\n');
+  it('what is scored: four role prompts and one item per down', () => {
+    expect(scored.filter((p) => p.kind !== 'down').map((p) => p.id)).toEqual(['tank.us', 'tank.them', 'healer.us', 'healer.them']);
+    expect(scored.filter((p) => p.kind === 'down')).toHaveLength(key.downs.length);
     const d = key.downs[0]!;
-    if (d.killer !== null) expect(prompts.find((p) => p.id === 'down.1')!.text).not.toContain(key.units[d.killer]!.name);
-    for (const u of key.units.filter((x) => x.roles.includes('healer'))) expect(prompts[0]!.text + prompts[1]!.text).not.toContain(u.name);
-    expect(text).toContain('solid brass rings');
-    expect(text).toContain('double steel-blue rings');
-  });
-
-  it('the down prompt names the victim and the time', () => {
-    const d = key.downs[0]!;
-    const p = prompts.find((x) => x.id === 'down.1')!;
+    const p = scored.find((x) => x.id === 'down.1')!;
     expect(p.text).toContain(key.units[d.victim]!.name);
     expect(p.text).toContain(`${d.seconds.toFixed(0)} s`);
     expect(p.victim).toBe(d.victim);
+  });
+
+  it('what an observer is asked names no victim, no time and no count', () => {
+    expect(asked.map((p) => p.id)).toEqual(['tank.us', 'tank.them', 'healer.us', 'healer.them', 'downs']);
+    const text = asked.map((p) => p.text).join('\n');
+    for (const d of key.downs) {
+      const v = key.units[d.victim]!;
+      expect(text).not.toContain(v.name);
+      expect(text).not.toContain(`${d.seconds.toFixed(0)} s`);
+    }
+    expect(text).not.toContain(`${key.downs.length} downs`);
+    expect(text).toContain('solid brass rings');
+    expect(text).toContain('double steel-blue rings');
+    expect(asked.find((p) => p.id === 'downs')!.text).toBe(DOWNS_PROMPT);
+  });
+
+  it('never says who holds a role', () => {
+    const text = asked.map((p) => p.text).join('\n');
+    for (const u of key.units.filter((x) => x.roles.includes('healer') || x.roles.includes('tank'))) expect(text).not.toContain(u.name);
   });
 });
 
@@ -154,22 +169,29 @@ describe('matching answers to fighters', () => {
   });
 });
 
+const roles = (key: FightKey): Record<string, string> => {
+  const name = (u: number): string => key.units[u]!.name;
+  const holder = (list: readonly number[]): string => (list.length ? name(list[0]!) : 'none');
+  return { 'tank.us': holder(key.tanks[0]), 'tank.them': holder(key.tanks[1]), 'healer.us': holder(key.healers[0]), 'healer.them': holder(key.healers[1]) };
+};
+
+/** What a perfect observer writes for the downs: every victim by name with the credited fighter and the ability. */
+function perfectDowns(key: FightKey): DownAnswer[] {
+  const name = (u: number): string => key.units[u]!.name;
+  return key.downs.map((d) => ({ victim: name(d.victim), cause: `${d.killer === null ? 'status damage' : name(d.killer)}${d.abilityName ? ` with ${d.abilityName}` : ''}` }));
+}
+
+function perfect(key: FightKey): FightAnswers {
+  return { roles: roles(key), downs: perfectDowns(key) };
+}
+
+const down = (r: PromptResult[], n: number): PromptResult => r.find((x) => x.prompt === `down.${n}`)!;
+
 describe('scoring one fight', () => {
   const key = keyOf();
 
-  function perfect(): Record<string, string> {
-    const a: Record<string, string> = {};
-    const name = (u: number): string => key.units[u]!.name;
-    a['tank.us'] = name(key.tanks[0][0]!);
-    a['tank.them'] = name(key.tanks[1][0]!);
-    a['healer.us'] = name(key.healers[0][0]!);
-    a['healer.them'] = name(key.healers[1][0]!);
-    for (const d of key.downs) a[`down.${d.index}`] = `${d.killer === null ? 'status damage' : name(d.killer)}${d.abilityName ? ` with ${d.abilityName}` : ''}`;
-    return a;
-  }
-
   it('perfect answers by name score 100%', () => {
-    const results = scoreFight(key, perfect());
+    const results = scoreFight(key, perfect(key));
     expect(results.every((r) => r.correct)).toBe(true);
     const s = summarize('obs', results);
     expect(s.rate).toBe(1);
@@ -179,65 +201,125 @@ describe('scoring one fight', () => {
   });
 
   it('class names score too (a class holding the role on that side)', () => {
-    const a = perfect();
-    a['tank.us'] = key.units[key.tanks[0][0]!]!.className;
+    const a = perfect(key);
+    a.roles['tank.us'] = key.units[key.tanks[0][0]!]!.className;
     expect(scoreFight(key, a).find((r) => r.prompt === 'tank.us')!.correct).toBe(true);
   });
 
-  it('naming the wrong fighter, or the other side\'s, is wrong', () => {
-    const a = perfect();
-    a['healer.us'] = key.units[key.tanks[0][0]!]!.name;
-    a['tank.them'] = key.units[key.tanks[0][0]!]!.name;
+  it("naming the wrong fighter, or the other side's, is wrong", () => {
+    const a = perfect(key);
+    a.roles['healer.us'] = key.units[key.tanks[0][0]!]!.name;
+    a.roles['tank.them'] = key.units[key.tanks[0][0]!]!.name;
     const r = scoreFight(key, a);
     expect(r.find((x) => x.prompt === 'healer.us')!.correct).toBe(false);
     expect(r.find((x) => x.prompt === 'tank.them')!.correct).toBe(false);
-    expect(r.find((x) => x.prompt === 'healer.us')!.why).toMatch(/not the healer|not only the healer/);
+    expect(r.find((x) => x.prompt === 'healer.us')!.why).toMatch(/is not the healer/);
   });
 
   it('naming a tank and a non-tank together is wrong', () => {
-    const a = perfect();
+    const a = perfect(key);
     const nonTank = key.units.find((u) => u.side === 0 && !u.roles.includes('tank'))!;
-    a['tank.us'] = `${key.units[key.tanks[0][0]!]!.name} and ${nonTank.name}`;
+    a.roles['tank.us'] = `${key.units[key.tanks[0][0]!]!.name} and ${nonTank.name}`;
     expect(scoreFight(key, a).find((x) => x.prompt === 'tank.us')!.correct).toBe(false);
   });
 
-  it('unanswered and "unclear" prompts are wrong', () => {
-    const a = perfect();
-    delete a['tank.us'];
-    a['healer.them'] = 'unclear';
+  it('unanswered, "unclear" and "unknown" are wrong, for roles and for causes alike', () => {
+    const a = perfect(key);
+    delete a.roles['tank.us'];
+    a.roles['healer.them'] = 'unclear';
+    a.roles['healer.us'] = 'Unknown.';
+    a.downs[0]!.cause = 'unclear';
+    a.downs[1]!.cause = "I don't know";
     const r = scoreFight(key, a);
     expect(r.find((x) => x.prompt === 'tank.us')).toMatchObject({ correct: false, why: 'no answer' });
-    expect(r.find((x) => x.prompt === 'healer.them')!.correct).toBe(false);
+    expect(r.find((x) => x.prompt === 'healer.them')).toMatchObject({ correct: false, why: 'unclear' });
+    expect(r.find((x) => x.prompt === 'healer.us')).toMatchObject({ correct: false, why: 'unclear' });
+    expect(down(r, 1)).toMatchObject({ correct: false, why: 'the cause is unclear' });
+    expect(down(r, 2).correct).toBe(false);
     expect(summarize('o', r).unanswered).toBe(1);
   });
 
-  it('the killer is what counts for a down; the ability only when strict', () => {
+  it('"unclear" and "unknown" are wrong for a down with no fighter behind it too', () => {
+    const none: FightKey = { ...key, downs: [{ ...key.downs[0]!, killer: null, ability: null, abilityName: null }] };
+    const victim = none.units[none.downs[0]!.victim]!.name;
+    const ask = (cause: string): boolean => scoreFight(none, { roles: roles(none), downs: [{ victim, cause }] }).find((x) => x.prompt === 'down.1')!.correct;
+    for (const cause of ['unclear', 'unknown', 'no idea']) expect(ask(cause)).toBe(false);
+    for (const cause of ['burning damage over time', 'a status effect', 'the zone']) expect(ask(cause)).toBe(true);
+    expect(ask('Garrow Ashdown')).toBe(false);
+  });
+
+  it('the credited fighter is what counts for a down; the ability only when strict', () => {
     const d = key.downs.find((x) => x.killer !== null && x.abilityName)!;
-    const killer = key.units[d.killer!]!.name;
-    const a = { ...perfect(), [`down.${d.index}`]: killer };
-    expect(scoreFight(key, a).find((x) => x.prompt === `down.${d.index}`)!.correct).toBe(true);
-    const strict = scoreFight(key, a, { strictAbility: true }).find((x) => x.prompt === `down.${d.index}`)!;
+    const a = perfect(key);
+    a.downs[d.index - 1]!.cause = key.units[d.killer!]!.name;
+    expect(down(scoreFight(key, a), d.index).correct).toBe(true);
+    const strict = down(scoreFight(key, a, { strictAbility: true }), d.index);
     expect(strict.correct).toBe(false);
     expect(strict.abilityNamed).toBe(false);
   });
 
-  it('a down answer that names the victim and the killer still scores; one naming only the victim does not', () => {
-    const d = key.downs.find((x) => x.killer !== null)!;
-    const victim = key.units[d.victim]!.name;
-    const killer = key.units[d.killer!]!.name;
-    expect(scoreFight(key, { ...perfect(), [`down.${d.index}`]: `${victim} was killed by ${killer}` }).find((x) => x.prompt === `down.${d.index}`)!.correct).toBe(true);
-    expect(scoreFight(key, { ...perfect(), [`down.${d.index}`]: `${victim} died` }).find((x) => x.prompt === `down.${d.index}`)!.correct).toBe(false);
-  });
-
-  it('listing most of the enemy team is not an answer', () => {
+  it("naming several enemies for one down is wrong, even with the credited fighter among them (the protocol's rule)", () => {
     const d = key.downs.find((x) => x.killer !== null)!;
     const victimSide = key.units[d.victim]!.side;
-    const everyone = key.units.filter((u) => u.side !== victimSide).map((u) => u.name).join(', ');
-    expect(scoreFight(key, { ...perfect(), [`down.${d.index}`]: everyone }).find((x) => x.prompt === `down.${d.index}`)!.correct).toBe(false);
+    const other = key.units.find((u) => u.side !== victimSide && u.unit !== d.killer && u.className !== key.units[d.killer!]!.className)!;
+    const a = perfect(key);
+    a.downs[d.index - 1]!.cause = `${key.units[d.killer!]!.name} and ${other.name}`;
+    const r = down(scoreFight(key, a), d.index);
+    expect(r.correct).toBe(false);
+    expect(r.why).toMatch(/names several enemies/);
+    // an assist the key lists is not credited either
+    const assist = d.assists.map((u) => key.units[u]!).find((u) => u.className !== key.units[d.killer!]!.className);
+    if (assist) {
+      a.downs[d.index - 1]!.cause = `${key.units[d.killer!]!.name} (with help from ${assist.name})`;
+      expect(down(scoreFight(key, a), d.index).correct).toBe(false);
+    }
+  });
+
+  it('a class name that two enemies share is one answer, not several', () => {
+    const d = key.downs.find((x) => x.killer !== null)!;
+    const a = perfect(key);
+    a.downs[d.index - 1]!.cause = key.units[d.killer!]!.className;
+    expect(down(scoreFight(key, a), d.index).correct).toBe(true);
+  });
+
+  it("a name inside the ability's name is not read as a fighter", () => {
+    const d = key.downs.find((x) => x.killer !== null && x.abilityName)!;
+    const a = perfect(key);
+    a.downs[d.index - 1]!.cause = `${key.units[d.killer!]!.name} with ${d.abilityName}`;
+    expect(down(scoreFight(key, a), d.index).correct).toBe(true);
+  });
+
+  it('a down the observer did not list is a missed prompt; one that never happened is reported, not counted', () => {
+    const a = perfect(key);
+    a.downs.splice(2, 1);
+    a.downs.push({ victim: 'Nobody Real', cause: 'a ghost' });
+    const { results, extraDowns } = scoreFightDetailed(key, a);
+    expect(down(results, 3).correct).toBe(false);
+    expect(down(results, 3).why).toMatch(/no listed down names/);
+    expect(extraDowns).toBe(1);
+    expect(results).toHaveLength(promptsFor(key).length);
+    expect(summarize('o', results, extraDowns).extraDowns).toBe(1);
+  });
+
+  it('one listed entry cannot answer two downs', () => {
+    const a = perfect(key);
+    a.downs = [a.downs[0]!, a.downs[0]!];
+    const r = scoreFight(key, a).filter((x) => x.kind === 'down');
+    expect(r.filter((x) => x.correct)).toHaveLength(1);
+  });
+
+  it('a victim named without the cause, or the victim as the cause, is wrong', () => {
+    const d = key.downs.find((x) => x.killer !== null)!;
+    const victim = key.units[d.victim]!.name;
+    const a = perfect(key);
+    a.downs[d.index - 1] = { victim, cause: '' };
+    expect(down(scoreFight(key, a), d.index).correct).toBe(false);
+    a.downs[d.index - 1] = { victim, cause: victim };
+    expect(down(scoreFight(key, a), d.index).correct).toBe(false);
   });
 
   it('90% is the bar, per observer', () => {
-    const results = scoreFight(key, perfect());
+    const results = scoreFight(key, perfect(key));
     const n = results.length;
     const wrongCount = Math.floor(n * 0.1);
     const bent = results.map((r, i) => (i < wrongCount ? { ...r, correct: false } : r));
@@ -250,12 +332,21 @@ describe('scoring one fight', () => {
 describe('scoring across fights', () => {
   it('scores five fights and counts the ones not answered as wrong', () => {
     const keys = [0, 1, 2, 3, 4].map((i) => keyOf(i, i + 1));
-    const answers = { observer: 'agent-1', fights: { '1': { 'tank.us': keys[0]!.units[keys[0]!.tanks[0][0]!]!.name } } };
+    const answers: ObserverAnswers = { observer: 'agent-1', fights: { '1': { roles: { 'tank.us': keys[0]!.units[keys[0]!.tanks[0][0]!]!.name }, downs: [] } } };
     const { results, summary } = scoreObserver(keys, answers);
     expect(results.length).toBe(keys.reduce((s, k) => s + promptsFor(k).length, 0));
     expect(summary.correct).toBe(1);
     expect(summary.byFight).toHaveLength(5);
     expect(summary.pass).toBe(false);
+  });
+
+  it('a perfect observer on all five fights passes', () => {
+    const keys = [0, 1, 2, 3, 4].map((i) => keyOf(i, i + 1));
+    const answers: ObserverAnswers = { observer: 'agent-1', fights: Object.fromEntries(keys.map((k) => [String(k.fight), perfect(k)])) };
+    const { summary } = scoreObserver(keys, answers);
+    expect(summary.rate).toBe(1);
+    expect(summary.pass).toBe(true);
+    expect(summary.extraDowns).toBe(0);
   });
 });
 
@@ -267,22 +358,34 @@ describe('answer files', () => {
     expect(() => extractJson('{"a": 1')).toThrow(/not closed/);
   });
 
-  it('reads per-fight and combined files and merges by observer', () => {
-    const a = parseAnswerFile('{"observer":"agent-1","fight":1,"answers":{"tank.us":"A"}}');
+  it('reads a fight reply: role strings and the list of downs', () => {
+    const a = parseAnswerFile('{"observer":"agent-1","fight":1,"answers":{"tank.us":"A","downs":[{"victim":"Corva","cause":"Garrow with Mace Strike"},{"victim":"Knight","cause":"Archer"}]}}');
+    expect(a.fights['1']).toEqual({ roles: { 'tank.us': 'A' }, downs: [{ victim: 'Corva', cause: 'Garrow with Mace Strike' }, { victim: 'Knight', cause: 'Archer' }] });
+  });
+
+  it('accepts a down as a line of text, and drops empty rows', () => {
+    const a = parseAnswerFile('{"observer":"o","fight":1,"answers":{"downs":["Corva Vale downed by Garrow Ashdown","Esk: Falk","Hesta only",{"victim":"","cause":""}]}}');
+    expect(a.fights['1']!.downs).toEqual([{ victim: 'Corva Vale', cause: 'Garrow Ashdown' }, { victim: 'Esk', cause: 'Falk' }, { victim: 'Hesta only', cause: '' }]);
+  });
+
+  it('reads combined files and merges per-fight files by observer', () => {
+    const a = parseAnswerFile('{"observer":"agent-1","fight":1,"answers":{"tank.us":"A","downs":[{"victim":"x","cause":"y"}]}}');
     const b = parseAnswerFile('{"observer":"agent-1","fight":2,"answers":{"tank.us":"B"}}');
-    const c = parseAnswerFile('{"observer":"person","fights":{"1":{"tank.us":"C"},"2":{"healer.us":"D"}}}');
+    const c = parseAnswerFile('{"observer":"person","fights":{"1":{"tank.us":"C"},"2":{"healer.us":"D","downs":[{"victim":"v","cause":"w"}]}}}');
     const merged = mergeAnswers([a, b, c]);
     expect(merged).toHaveLength(2);
-    expect(merged.find((m) => m.observer === 'agent-1')!.fights).toEqual({ '1': { 'tank.us': 'A' }, '2': { 'tank.us': 'B' } });
-    expect(merged.find((m) => m.observer === 'person')!.fights['2']).toEqual({ 'healer.us': 'D' });
+    const one = merged.find((m) => m.observer === 'agent-1')!;
+    expect(one.fights['1']).toEqual({ roles: { 'tank.us': 'A' }, downs: [{ victim: 'x', cause: 'y' }] });
+    expect(one.fights['2']!.roles).toEqual({ 'tank.us': 'B' });
+    expect(merged.find((m) => m.observer === 'person')!.fights['2']!.downs).toEqual([{ victim: 'v', cause: 'w' }]);
   });
 
   it('an observer left as the template placeholder falls back to the file name', () => {
     expect(parseAnswerFile('{"observer":"<your name>","fight":1,"answers":{}}', 'file-name').observer).toBe('file-name');
   });
 
-  it('non-string answers become text and a malformed file is refused', () => {
-    expect(parseAnswerFile('{"observer":"o","fight":1,"answers":{"a":null,"b":5}}').fights['1']).toEqual({ a: '', b: '5' });
+  it('non-string role answers become text and a malformed file is refused', () => {
+    expect(parseAnswerFile('{"observer":"o","fight":1,"answers":{"a":null,"b":5}}').fights['1']!.roles).toEqual({ a: '', b: '5' });
     expect(() => parseAnswerFile('{"observer":"o"}')).toThrow(/expected/);
   });
 });
@@ -290,35 +393,111 @@ describe('answer files', () => {
 describe('packet documents', () => {
   const keys = [keyOf(0, 1), keyOf(1, 2)];
 
-  it('the observer brief carries the rules, every prompt and the answer format, and never the key', () => {
+  it('the observer brief carries the rules, every prompt and the answer format, and never the key or a victim', () => {
     const brief = renderObserverBrief({ key: keys[0]!, captures: [] });
     expect(brief).toContain('Open **nothing else**');
-    for (const p of promptsFor(keys[0]!)) expect(brief).toContain(`\`${p.id}\``);
-    expect(brief).toContain('"answers"');
-    const holder = keys[0]!.units[keys[0]!.tanks[0][0]!]!;
-    expect(brief).not.toContain(`Tank: ${holder.name}`);
+    for (const p of observerPrompts(keys[0]!)) expect(brief).toContain(`\`${p.id}\``);
+    expect(brief).toContain('"downs"');
+    expect(brief).toContain('Naming several fighters for one down counts as wrong');
     expect(brief).not.toContain(keys[0]!.logHash);
+    for (const d of keys[0]!.downs) expect(brief).not.toContain(`${d.seconds.toFixed(0)} s`);
+    expect(brief).not.toContain('SELF-TEST');
   });
 
-  it('the owner sheet has blank answer lines, a total and the 90% number; the key sheet has the answers', () => {
-    const sheet = renderOwnerSheet(keys);
+  it('a mock run says so at the top of every document', () => {
+    expect(renderObserverBrief({ key: keys[0]!, captures: [] }, 'mock')).toContain('SELF-TEST on the mock arena');
+    expect(renderObserverSheet(keys[0]!, 'mock')).toContain('SELF-TEST on the mock arena');
+    expect(renderTally(keys, 'mock')).toContain('SELF-TEST on the mock arena');
+    expect(renderAnswerKey(keys, 'mock')).toContain('SELF-TEST on the mock arena');
+  });
+
+  it('the observer sheet is one fight, with role rows and blank down rows, and no victim, time or count', () => {
+    const sheet = renderObserverSheet(keys[0]!);
+    expect(sheet).toContain('# Fight 1');
+    expect(sheet).not.toContain('Fight 2');
+    expect(sheet).toContain('| Who went down | Who or what downed them |');
+    expect((sheet.match(/^\| \| \|$/gm) ?? []).length).toBe(DOWN_ROWS);
+    expect(DOWN_ROWS).toBeGreaterThan(keys[0]!.downs.length);
+    for (const d of keys[0]!.downs) expect(sheet).not.toContain(`${d.seconds.toFixed(0)} s`);
+  });
+
+  it('the tally has the totals and the 90% line; the key sheet has the answers with the credited fighter', () => {
     const total = keys.reduce((s, k) => s + promptsFor(k).length, 0);
-    expect(sheet).toContain(`____ of ${total}`);
-    expect(sheet).toContain(`${Math.ceil(total * 0.9)} of ${total}`);
-    expect(sheet).toContain('## Fight 2');
+    const tally = renderTally(keys);
+    expect(tally).toContain(`**${total}**`);
+    expect(tally).toContain(`${Math.ceil(total * 0.9)} of ${total}`);
+    expect(tally).toContain('| 2 | |');
     const key = renderAnswerKey(keys);
     expect(key).toContain(keys[0]!.units[keys[0]!.tanks[0][0]!]!.name);
-    expect(key).toContain('with ');
-    // The sheet asks; it never lists who holds a role.
-    expect(sheet).not.toContain("holds the tank");
+    expect(key).toContain('credited: ');
+    expect(key).toContain('not credited');
   });
 
-  it('the answers template has every prompt of every fight, empty', () => {
+  it('the answers template has the roles empty and one empty down row per fight', () => {
     const t = answersTemplate(keys, 'agent-9');
     expect(t.observer).toBe('agent-9');
     expect(Object.keys(t.fights)).toEqual(['1', '2']);
-    expect(Object.values(t.fights['1']!).every((v) => v === '')).toBe(true);
-    expect(Object.keys(t.fights['1']!)).toEqual(promptsFor(keys[0]!).map((p) => p.id));
+    expect(t.fights['1']!.roles).toEqual({ 'tank.us': '', 'tank.them': '', 'healer.us': '', 'healer.them': '' });
+    expect(t.fights['1']!.downs).toEqual([{ victim: '', cause: '' }]);
+  });
+
+  it('writes the sheet per fight, the manifest with its source, and the key apart from the packets', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vis003-files-'));
+    try {
+      writeVis003Files(dir, keys.map((key) => ({ key, captures: [] })), { seed: 's', commit: 'abc', source: 'mock' });
+      const files = (d: string): string[] => readdirSync(join(dir, d)).sort();
+      expect(files('sheets')).toEqual(['fight-1.md', 'fight-2.md']);
+      expect(files('keys')).toEqual(['fight-1.key.json', 'fight-2.key.json']);
+      expect(files('packets/fight-1')).toEqual(['observer-brief.md', 'prompts.json']);
+      const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { source: string };
+      expect(manifest.source).toBe('mock');
+      expect(visSourceOf(dir)).toBe('mock');
+      expect(readFileSync(join(dir, 'owner-tally.md'), 'utf8')).toContain('SELF-TEST');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('finding the run to use', () => {
+  const make = (root: string, run: string, source: 'game' | 'mock'): void => {
+    mkdirSync(join(root, run, 'vis003', 'keys'), { recursive: true });
+    writeFileSync(join(root, run, 'vis003', 'manifest.json'), JSON.stringify({ source }));
+  };
+
+  it('latest is the newest run of the real game; a newer self-test is never picked', () => {
+    const root = mkdtempSync(join(tmpdir(), 'vis003-runs-'));
+    try {
+      make(root, '20261028-090000', 'game');
+      make(root, '20261028-100000', 'game');
+      make(root, '20261028-110000', 'mock');
+      expect(latestRealVisDir(root)).toBe(join(root, '20261028-100000', 'vis003'));
+      expect(visRuns(root).map((r) => `${r.name}:${r.source}`)).toEqual(['20261028-090000:game', '20261028-100000:game', '20261028-110000:mock']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('with only self-test runs there is no latest', () => {
+    const root = mkdtempSync(join(tmpdir(), 'vis003-runs-'));
+    try {
+      make(root, '20261028-110000', 'mock');
+      expect(latestRealVisDir(root)).toBeNull();
+      expect(latestRealVisDir(join(root, 'missing'))).toBeNull();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('a folder without a manifest counts as real (unknown), not as a self-test', () => {
+    const root = mkdtempSync(join(tmpdir(), 'vis003-runs-'));
+    try {
+      mkdirSync(join(root, 'r1', 'vis003', 'keys'), { recursive: true });
+      expect(visSourceOf(join(root, 'r1', 'vis003'))).toBe('unknown');
+      expect(latestRealVisDir(root)).toBe(join(root, 'r1', 'vis003'));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

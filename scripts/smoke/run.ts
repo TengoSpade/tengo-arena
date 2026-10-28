@@ -1,5 +1,5 @@
 /**
- * npm run smoke:arena -- [options]      (tsx scripts/smoke/run.ts; the package script is added by the architect)
+ * npx tsx scripts/smoke/run.ts [options]      (the package script `smoke:arena` is to be added by the architect)
  *
  * The M2 arena smoke (WP-M2F, 05-technical-m2 §A11): builds `vite build --mode smoke`, serves it with `vite preview`,
  * launches headless Edge (or Chrome) over the DevTools protocol, and drives the game through the test hook and through
@@ -13,7 +13,7 @@ import { cpus, totalmem } from 'node:os';
 import { join, relative } from 'node:path';
 import { loadThemeOrExit } from '../lib/cli-content';
 import { REPO_ROOT } from '../lib/node-content';
-import { SmokeSetupError, findBrowser, killByProfile, launchBrowser, type LaunchedBrowser } from './lib/browser';
+import { SmokeSetupError, cleanupLaunchedSync, findBrowser, launchBrowser, sweepStaleProfiles, type LaunchedBrowser } from './lib/browser';
 import { CdpClient } from './lib/cdp';
 import { DEFAULT_CONSOLE_ALLOW, checkConsole, splitConsole, type PerfContext } from './lib/checks';
 import { HELP, parseOptions, type RunOptions } from './lib/options';
@@ -58,17 +58,31 @@ async function main(): Promise<number> {
   let client: CdpClient | null = null;
   let setupFailure: string | null = null;
 
-  // Ctrl+C or a kill: never leave the browser (it is a tree of processes) or the preview server behind.
-  const onSignal = (code: number) => (): void => {
-    if (browser) {
-      browser.child.kill();
-      killByProfile(browser.userDataDir);
-    }
+  // Ctrl+C, a kill, a crash: never leave the browser (a tree of processes), its profile folder or the preview server behind.
+  // The browser module keeps the list of what it launched (from the moment its profile folder exists), so this also covers
+  // the seconds before the browser has answered.
+  const emergency = (): void => {
+    cleanupLaunchedSync();
     void served?.close();
-    process.exit(code);
   };
-  process.once('SIGINT', onSignal(130));
-  process.once('SIGTERM', onSignal(143));
+  process.once('SIGINT', () => {
+    emergency();
+    process.exit(130);
+  });
+  process.once('SIGTERM', () => {
+    emergency();
+    process.exit(143);
+  });
+  for (const event of ['unhandledRejection', 'uncaughtException'] as const) {
+    process.on(event, (e: unknown) => {
+      console.error(`
+${event}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
+      emergency();
+      process.exit(1);
+    });
+  }
+  const swept = sweepStaleProfiles();
+  if (swept.length > 0) console.log(`removed ${swept.length} stale browser profile folder(s) left by earlier runs`);
 
   try {
     console.log(`arena smoke ${runId}: ${[...opts.only].join(', ')}${opts.selfTest ? ' (self-test on the mock arena)' : ''}`);

@@ -8,6 +8,7 @@ import {
   checkFrameRate,
   checkHashEqual,
   checkHeap,
+  checkRoundLoad,
   checkSaveTrace,
   checkTokens,
   colorDistance,
@@ -237,5 +238,34 @@ describe('pixel checks', () => {
     expect(topLeft.y).toBeCloseTo(56, 5);
     expect(bottomRight.y).toBeCloseTo(1080 - 72, 5);
     expect(topLeft.x + (1920 - bottomRight.x)).toBeCloseTo(2 * topLeft.x, 5);
+  });
+});
+
+describe('round load (A10: the sim at full plus indexFightLog, median 15 ms, p99 30 ms)', () => {
+  const t = (sim: number[], index: number[] | null, problem: string | null = null) => ({ simMs: sim, indexMs: index, loadMs: index ? sim.map((v, i) => v + index[i]!) : null, indexProblem: problem });
+
+  it('passes a load within both numbers', () => {
+    const c = checkRoundLoad(t(Array(24).fill(8), Array(24).fill(3)), 'Chromium');
+    expect(c.status).toBe('pass');
+    expect(c.id).toBe('perf.round-load');
+    expect(c.actual).toMatch(/median 11\.0 ms/);
+  });
+
+  it('fails a slow median, and a slow tail', () => {
+    expect(checkRoundLoad(t(Array(24).fill(12), Array(24).fill(6)), 'Chromium').status).toBe('fail');
+    const tail = [...Array(23).fill(8), 40];
+    expect(checkRoundLoad(t(tail, Array(24).fill(3)), 'Chromium').status).toBe('fail');
+  });
+
+  it('is a CPU measurement: software WebGL does not turn a miss into a warning', () => {
+    expect(checkRoundLoad(t(Array(24).fill(30), Array(24).fill(10)), 'Chromium').status).toBe('fail');
+  });
+
+  it('without indexFightLog the sim alone is a lower bound and is not accepted: the check is not made', () => {
+    const c = checkRoundLoad(t(Array(24).fill(4), null, 'Not implemented yet: render.indexFightLog'), 'Chromium');
+    expect(c.status).toBe('skip');
+    expect(c.pending).toBeUndefined();
+    expect(c.detail).toMatch(/lower bound/);
+    expect(c.detail).toMatch(/render.indexFightLog/);
   });
 });

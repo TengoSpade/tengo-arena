@@ -18,6 +18,8 @@ export interface CheckResult {
   expected?: string;
   actual?: string;
   detail?: string;
+  /** A skip that is by design (a later step of the protocol), not a piece that is missing: it does not make the verdict blocked. */
+  pending?: boolean;
 }
 
 /** The run could not go on: something it needs is not there yet (the viewer, the test hook, a route). */
@@ -83,10 +85,18 @@ export function countChecks(checks: readonly CheckResult[]): Record<CheckStatus,
   return counts;
 }
 
-/** fail if any check failed; else blocked when the run stopped for a missing piece; else pass (warnings do not fail). */
+/** Checks that were not made although they were wanted: a skip that is not marked as pending by design. */
+export function unmadeChecks(checks: readonly CheckResult[]): CheckResult[] {
+  return checks.filter((c) => c.status === 'skip' && !c.pending);
+}
+
+/**
+ * fail if any check failed; else blocked when a piece is missing or a wanted check could not be made (a silent skip is
+ * never a pass); else pass (warnings do not fail).
+ */
 export function verdictOf(checks: readonly CheckResult[], blocked: readonly BlockedInfo[]): Verdict {
   if (checks.some((c) => c.status === 'fail')) return 'fail';
-  if (blocked.length > 0) return 'blocked';
+  if (blocked.length > 0 || unmadeChecks(checks).length > 0) return 'blocked';
   return 'pass';
 }
 
@@ -105,14 +115,20 @@ export function renderMarkdown(r: SmokeReport): string {
   const lines: string[] = [];
   lines.push(`# Arena smoke report ${r.runId}`);
   lines.push('');
+  if (r.build.source === 'mock') {
+    lines.push('> **SELF-TEST on the mock arena.** This run tests the smoke driver, not the game: none of it says anything about the arena viewer.');
+    lines.push('');
+  }
   lines.push(`**Verdict: ${r.verdict.toUpperCase()}** (${r.counts.pass} pass, ${r.counts.fail} fail, ${r.counts.warn} warn, ${r.counts.skip} skipped) in ${(r.durationMs / 1000).toFixed(1)} s`);
   lines.push('');
-  if (r.blocked.length > 0) {
+  const unmade = unmadeChecks(r.checks);
+  if (r.blocked.length > 0 || unmade.length > 0) {
     lines.push('## Blocked');
     lines.push('');
-    lines.push('The run needed pieces that are not in this build yet; everything else ran.');
+    lines.push('The run needed pieces that are not in this build yet, or could not make some checks; everything else ran.');
     lines.push('');
     for (const b of r.blocked) lines.push(`- Step \`${b.step}\`: **${b.code}**. ${b.message.replace(/\r?\n/g, ' ')}`);
+    for (const c of unmade) lines.push(`- Check not made, \`${c.id}\`: ${(c.detail ?? c.actual ?? 'no reason given').replace(/\r?\n/g, ' ')}`);
     lines.push('');
   }
   lines.push('## Setup');
@@ -167,8 +183,10 @@ export function writeSmokeReport(reportsDir: string, report: SmokeReport): { dir
   const md = join(dir, 'report.md');
   writeFileSync(json, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   writeFileSync(md, renderMarkdown(report), 'utf8');
-  copyFileSync(json, join(reportsDir, 'latest.json'));
-  copyFileSync(md, join(reportsDir, 'latest.md'));
+  // A self-test never takes the place of the last real run.
+  const latest = report.build.source === 'mock' ? 'latest-selftest' : 'latest';
+  copyFileSync(json, join(reportsDir, `${latest}.json`));
+  copyFileSync(md, join(reportsDir, `${latest}.md`));
   return { dir, json, md };
 }
 
