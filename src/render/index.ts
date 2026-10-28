@@ -15,7 +15,9 @@ import type { AutoPauseRules } from './types';
 export type * from './types';
 export { autoPauseStops, decisionAt, eventsBetween, indexFightLog, keyMoments, sampleAt, samePrefix, timeline, type PlaybackIndex, type Timeline } from './timeline';
 export { buildCueTable, TELEGRAPH_MIN_TICKS } from './cues';
-export { colorsForMatch, contrastRatio, parseHexColor } from './colors';
+// Every export of the colours module is public (WP-M2C's default palettes, PRIMARY_CLASH_DELTA_E and contrast helpers
+// included): src/ui may not deep-import (render-deep-import), and a star export needs no index change as it grows.
+export * from './colors';
 export { DEFAULT_CAMERA, viewTransform } from './camera';
 
 /** Auto-pause defaults (P-01; approved by the owner as recommended, Q58, 2026-10-27). Each is a Settings › Match day switch. */
