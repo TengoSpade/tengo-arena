@@ -232,6 +232,7 @@ const T = {
   statusSelect: 'Select a fighter to see why it acted',
   scrubLive: 'Round position, live',
   scrubLiveValue: '{time}, at the live head',
+  scrubLiveBehind: '{time}, {behind} behind the live head',
   scrubReplayValue: '{time} of {end}',
   roundTabs: 'Round',
   dock: 'Dock',
@@ -280,6 +281,7 @@ const T = {
   endScoreLabel: 'Match score {a} to {b}',
   endSubElim: 'Won by elimination: {n} of {who} standing.',
   endSubCap: 'Won at the time cap: {n} of {who} standing.',
+  endDecidingDown: 'The last to fall: {down}.',
   endNextRound: 'The match goes to round {n}.',
   endDecided: 'The match is decided.',
   endFootAny: 'Any key skips this card',
@@ -296,6 +298,9 @@ const T = {
 
   // ---- review fixes: saving gate, leaving, strings that were inline ----
   savingLock: 'Saving the match start',
+  saveWhilePlaying: 'Pause first, then save',
+  saveWhilePlayingSub: 'Space pauses the round; Ctrl S then saves the game.',
+  saveNote: 'Your place could not be saved; the next pause tries again.',
   hudAria: 'Match status',
   speedGroup: 'Playback speed',
   pauseTip: 'Pause (Space). Pausing is free and unlimited.',

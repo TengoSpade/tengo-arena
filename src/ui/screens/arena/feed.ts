@@ -130,6 +130,18 @@ const AUTO_WHY: Record<AutoPauseReason, Parameters<typeof t>[0]> = {
   ownHpBelowPct: 'stopAutoOwnHpBelowPct',
 };
 
+/**
+ * The down that ended an elimination round, read from the viewer's key moments at the end tick: a stop on the end tick is
+ * the round end only (WP-M2D) and carries no cause, so the card and the status look here. The last down, if it is on the end
+ * tick (or the tick before it); null for a round that ended at the time cap.
+ */
+export function decidingDown(moments: readonly KeyMoment[], endTick: number | null): KeyMoment | null {
+  if (endTick === null) return null;
+  let last: KeyMoment | null = null;
+  for (const m of moments) if (m.kind === 'down' && m.target !== null && m.tick <= endTick && (last === null || m.tick > last.tick || (m.tick === last.tick && m.seq > last.seq))) last = m;
+  return last !== null && endTick - last.tick <= 1 ? last : null;
+}
+
 /** The cause of an automatic pause for the transport's status ("Kael Dunmere was downed"), or null. */
 export function stopCause(stop: StopKind, ctx: ArenaRoundContext): string | null {
   if (stop.kind !== 'auto') return null;

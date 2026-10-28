@@ -9,7 +9,7 @@
  *   with the tone colour and the plate stroke baked in (a tint cannot recolour a stroke separately).
  * Fonts are re-baked when the palette (theme) or the label size (interface scale) changes (`configure`).
  */
-import { BitmapFont, BitmapText, Container } from 'pixi.js';
+import { BitmapFont, BitmapText, Cache, Container } from 'pixi.js';
 import type { ArenaPalette } from '../../types';
 import { toneColor, type Tone } from '../palette';
 
@@ -51,6 +51,25 @@ const CRIT_SCALE = 1.3;
 const NUMBER_STROKE_PX = 4;
 
 let factorySeq = 0;
+
+/**
+ * Uninstall a bitmap font without PixiJS's "[BindGroup] a 'textureSource' was destroyed while still bound to a shader"
+ * warnings. A label of 50 or more glyphs is too big to batch and is drawn as a graphic of its own, whose texture bind
+ * group PixiJS caches for good; that group lists the font's page (its source and sampler) and listens to them, so
+ * destroying the page warns, one pair per font, whenever such a label was ever drawn (a long "Captain X downed by Y ·
+ * Ability" callout, a long name). Nothing draws the font any more when it is released: drop those listeners first.
+ */
+export function uninstallFont(name: string): void {
+  const key = `${name}-bitmap`;
+  if (!Cache.has(key)) return; // (Cache.get and BitmapFont.uninstall warn about a font that is not installed)
+  const font = Cache.get<{ pages?: { texture?: { source?: { removeAllListeners(event?: string): unknown; style?: { removeAllListeners(event?: string): unknown } | null } } }[] } | undefined>(key);
+  for (const page of font?.pages ?? []) {
+    const source = page.texture?.source;
+    source?.style?.removeAllListeners('change');
+    source?.removeAllListeners('change');
+  }
+  BitmapFont.uninstall(name);
+}
 
 type Spec = { kind: 'label' | 'badge' } | { kind: 'number'; tone: Tone; crit: boolean };
 
@@ -141,10 +160,10 @@ export function createPixiTextFactory(resolution: number, initial: ArenaPalette)
       fonts = [];
       version++;
       for (const label of labels) label.restyle();
-      for (const name of old) BitmapFont.uninstall(name);
+      for (const name of old) uninstallFont(name);
     },
     destroy() {
-      for (const name of fonts) BitmapFont.uninstall(name);
+      for (const name of fonts) uninstallFont(name);
       fonts = [];
       labels.clear();
     },

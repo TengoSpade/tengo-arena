@@ -26,6 +26,7 @@ import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
 import type * as ContinueDialogs from './continue-dialogs';
 import type { ConfirmVariant } from './continue-dialogs';
 import { afterMatch } from './after-match';
+import { showLockFailedToast } from './lock-failed';
 import { useMounted } from './mounted';
 import { expiringUnrenewed } from './expiring';
 import { levelUpRequest, skipToKickOffRequest } from './intents';
@@ -130,13 +131,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
     else if (code === MATCH_WATCHING || code === WATCH_NOT_SHOWN) navigate('#/arena'); // a round waits to be watched (M2)
     else if (code === SAVE_ROUND_FAILED) {
       // The lock could not be saved, so nothing started and nothing opened (the viewer needs the write). Play match again retries.
-      showToast({
-        kind: 'bad',
-        title: t('continue.saveFailedTitle'),
-        sub: t('continue.saveFailedSub'),
-        durationMs: 15000,
-        action: { label: t('continue.retry'), onClick: () => void advanceRef.current(true, 'watch') },
-      });
+      showLockFailedToast(() => void advanceRef.current(true, 'watch'));
     } else return false;
     return true;
   };

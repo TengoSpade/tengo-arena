@@ -138,7 +138,11 @@ export class FakeViewer implements ArenaViewer {
     this.calls.push('palette');
   }
 
-  setReducedMotion(): void {
+  /** The last value handed to setReducedMotion (null before any call). */
+  reducedMotion: boolean | null = null;
+
+  setReducedMotion(on = false): void {
+    this.reducedMotion = on;
     this.calls.push('motion');
   }
 
@@ -194,11 +198,12 @@ export class FakeViewer implements ArenaViewer {
     const endTick = end ? end.tick : Number.POSITIVE_INFINITY;
     let to = tick;
     let stop: PlaybackStop | null = null;
-    if (first && first.tick <= to && first.tick <= endTick) {
+    // At the same tick the end wins over an auto-pause (the deciding down is the end: one stop, one press; WP-M2D).
+    if (first && first.tick <= to && first.tick < endTick) {
       to = first.tick;
       stop = { kind: 'auto', stop: first };
     }
-    if (endTick <= to && (!first || endTick < first.tick)) {
+    if (endTick <= to) {
       to = endTick;
       stop = { kind: 'end', tick: endTick };
     }
