@@ -649,3 +649,57 @@ describe('the on-screen evidence proxy', () => {
     expect(abilityRows[0]!.why).toMatch(/does not name the ability/);
   });
 });
+
+describe('the evidence scorer on the evidence recorded from a real run (20261028-072400, fight 1, down 5)', () => {
+  interface Recorded {
+    tick: number;
+    down: { tick: number; victim: string; victimClass: string; killer: string; killerClass: string; ability: string };
+    evidence: Pick<ScreenEvidence, 'text' | 'live'>;
+  }
+  const rec = JSON.parse(readFileSync(new URL('../fixtures/evidence-fight1-down5.json', import.meta.url), 'utf8')) as Recorded;
+
+  /** A key with the ten fighters of that fight's feed; the victim and the killer are the ones of the recorded down. */
+  function recordedKey(): FightKey {
+    const names: [string, string][] = [
+      ['Yenen of the Bright Hour', 'Warlock'], ['Torrok Stoneeye', 'Ranger'], [rec.down.killer, rec.down.killerClass], ['Perwen Dunmere', 'Bladeturner'], ['Yorisa Ashwood', 'Cleric'],
+      ['Moketh Redmane', 'Warrior'], ['Belon Colelow', 'Leechblade'], ['Borda Deepmark', 'Galeshaper'], ['Solae Sootstep', 'Mage'], [rec.down.victim, rec.down.victimClass],
+    ];
+    return {
+      fight: 1,
+      fixtureId: null,
+      round: 1,
+      ourSide: 0,
+      clubNames: ['A', 'B'],
+      units: names.map(([name, className], unit) => ({ unit, side: unit < 5 ? 0 : 1, fighterId: `f${unit}`, name, className, roles: ['melee'] })),
+      tanks: [[], []],
+      healers: [[], []],
+      downs: [{ index: 1, tick: rec.down.tick, seconds: 45.7, victim: 9, killer: 2, ability: 'hushweaver_muting_needle', abilityName: rec.down.ability, assists: [] }],
+      winnerSide: 0,
+      durationTicks: 1092,
+      logHash: 'recorded',
+    };
+  }
+  // The recorded excerpt has no role rows (they play no part in a down); the rest of the shape is filled in.
+  const named = (e: Pick<ScreenEvidence, 'text' | 'live'>): boolean => scoreEvidence(recordedKey(), [{ tick: rec.tick, reason: 'after-down', evidence: { roles: [], canvasLabel: null, ...e } }]).find((r) => r.prompt === 'down.1')!.identifiable;
+
+  it('finds the down in the feed text, past the interrupt by the same fighter just before it', () => {
+    expect(named({ ...rec.evidence, live: [] })).toBe(true);
+  });
+
+  it('finds it in the collapsed live region too', () => {
+    expect(named({ ...rec.evidence, text: '' })).toBe(true);
+  });
+
+  it('does not find it when the ability line is not there (the same text with the ability taken out)', () => {
+    const without = (t: string): string => t.split('Muting Needle').join('');
+    expect(named({ ...rec.evidence, text: without(rec.evidence.text), live: rec.evidence.live.map(without) })).toBe(false);
+  });
+
+  it('the recorded text really has the pattern that broke the first scorer: two lines naming the pair, the ability only after the second', () => {
+    const lines = rec.evidence.text.split('\n');
+    const pair = lines.filter((l) => l.includes(rec.down.victim) && l.includes(rec.down.killer));
+    expect(pair).toHaveLength(2);
+    expect(pair.some((l) => /interrupted by/.test(l))).toBe(true);
+    expect(lines[lines.indexOf(pair[1]!) + 1]).toBe(rec.down.ability);
+  });
+});
