@@ -21,6 +21,23 @@ export async function continueState(page: PageDriver): Promise<ContinueState> {
   };
 }
 
+/**
+ * Continue says "Decide first" (an injured starter, an incomplete lineup): press it as a player does, which opens the Squad screen,
+ * then press Auto-pick, the lineup the AI would choose, which applies at once. That is the only decision the smoke makes, and
+ * only that one; anything the Squad screen cannot fix with Auto-pick is a career the smoke cannot play (blocked). `attempt`
+ * counts how many times this journey has done it, so a blocker that Auto-pick does not clear cannot loop.
+ */
+export async function resolveDecideFirst(page: PageDriver, reason: string, attempt: number): Promise<void> {
+  const blocked = (why: string): SmokeFailure => new SmokeFailure('career.blocked-by-game', `The career stopped on "Decide first: ${reason}" and ${why}. The smoke makes only one decision, Auto-pick on the Squad screen: use another --seed, or extend the journey.`, true);
+  if (attempt >= 4) throw blocked('Auto-pick did not clear it');
+  await page.click(SEL.continueButton, 'Continue (opens what needs deciding)');
+  await sleep(500);
+  const auto = await page.locate(SEL.autoPick);
+  if (!auto) throw blocked('the screen it opened has no Auto-pick');
+  await page.mouseClick(auto.x, auto.y);
+  await sleep(500);
+}
+
 /** Title screen to the day of the first match: new career with a typed seed, first club of the lowest tier, preseason, kick-off, lineup. Ends with the Continue button on "Play match" (M1.1) or "Watch" (M2). */
 export async function newCareerToMatchday(page: PageDriver, baseUrl: string, seed: string, say: (s: string) => void = () => {}): Promise<void> {
   await page.goto(`${baseUrl}/?theme=dark#/new-game`);
@@ -35,12 +52,14 @@ export async function newCareerToMatchday(page: PageDriver, baseUrl: string, see
   await page.click(SEL.startCareerConfirm, 'the Start career confirmation');
   await page.waitForHash(ROUTE.home, 'the home screen');
   // Continue through the preseason weeks, the kick-off confirmation and the lineup stop, up to "Play match".
+  let decided = 0;
   for (let i = 0; i < 24; i++) {
     const c = await continueState(page);
     say(`  continue: "${c.main}" / "${c.sub}"`);
     if (MATCHDAY_MAIN.test(c.main)) return;
     if (/^Decide first$/i.test(c.main)) {
-      throw new SmokeFailure('career.blocked-by-game', `The career stopped on "Decide first: ${c.sub}" before the first match. The smoke does not make decisions; pick a seed whose club starts clean (--seed) or extend the journey.`, true);
+      await resolveDecideFirst(page, c.sub, decided++);
+      continue;
     }
     if ((await page.locate({ css: SEL.continueConfirm })) !== null) {
       await page.click(SEL.continueConfirmPrimary, 'the kick-off confirmation');

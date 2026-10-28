@@ -13,24 +13,28 @@ import { NotImplementedError } from '../../../src/core/util';
 import { PageDriver, SmokeFailure, sleep } from '../lib/page';
 import { MATCHDAY_MAIN, ROUTE, SEL } from '../lib/selectors';
 import { pressPlayIfPaused } from '../lib/arena-ui';
-import { canvasInfo, frame, logHash, pause, play, requireHook, setSpeed } from '../lib/viewer';
+import { canvasInfo, frame, frameOrNull, logHash, pause, play, requireHook, setSpeed } from '../lib/viewer';
 import { buildFightKey } from '../vis003/key';
 import { writeVis003Files, frameFile, packetDir, type PacketFight } from '../vis003/packet';
 import { planCaptures, type PlannedCapture } from '../vis003/plan';
 import { scoreEvidence, summarizeEvidence } from '../vis003/evidence';
 import type { Capture, FightKey, ScreenEvidence } from '../vis003/types';
-import { continueState, newCareerToMatchday, playMatchAndWatch } from './career';
+import { continueState, newCareerToMatchday, playMatchAndWatch, resolveDecideFirst } from './career';
 import { pageState } from './arena-steps';
 import type { JourneyEnv } from './env';
 import { writeFileSync } from 'node:fs';
 
 /** Press Continue until the button says "Play match" (after a match: the report or Home, then the next week). */
 export async function continueToPlayMatch(page: PageDriver, say: (s: string) => void = () => {}): Promise<void> {
+  let decided = 0;
   for (let i = 0; i < 24; i++) {
     const c = await continueState(page);
     say(`  continue: "${c.main}" / "${c.sub}"`);
     if (MATCHDAY_MAIN.test(c.main)) return;
-    if (/^Decide first$/i.test(c.main)) throw new SmokeFailure('career.blocked-by-game', `The career stopped on "Decide first: ${c.sub}" before the next match. The smoke makes no decisions: use another --seed, or extend the journey.`, true);
+    if (/^Decide first$/i.test(c.main)) {
+      await resolveDecideFirst(page, c.sub, decided++);
+      continue;
+    }
     if ((await page.locate({ css: SEL.continueConfirm })) !== null) await page.click(SEL.continueConfirmPrimary, 'the confirmation');
     else await page.click(SEL.continueButton, 'Continue');
     await sleep(500);
@@ -131,6 +135,7 @@ export async function captureFight(page: PageDriver, key: FightKey, outRoot: str
     }
     await sleep(25);
   }
+  if (!ended) ended = !!(await frameOrNull(page).catch(() => null))?.ended;
   await pause(page).catch(() => undefined);
   return { captures, ended };
 }

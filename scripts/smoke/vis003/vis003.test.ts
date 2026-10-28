@@ -626,6 +626,20 @@ describe('the on-screen evidence proxy', () => {
     expect(none[0]!.why).toMatch(/no capture within the callout window/);
   });
 
+  it('reads a feed entry whose ability is on the line after it, past other lines that name the same two fighters', () => {
+    // As the real feed prints: an interrupt by the same killer first, then the down, with the ability on its own line.
+    const d = key.downs.find((x) => x.killer !== null && x.abilityName)!;
+    const v = key.units[d.victim]!.name;
+    const k = key.units[d.killer!]!.name;
+    const text = ['0:33', `${v} interrupted by ${k}`, '0:45', 'Overtime begins', '0:45', `${v} downed by ${k}`, d.abilityName, 'Paused: overtime starts'].join('\n');
+    const evidence: ScreenEvidence = { text, live: [], roles: [], canvasLabel: null };
+    const r = scoreEvidence(key, [{ tick: d.tick + 2, reason: 'down', evidence }]).find((x) => x.prompt === `down.${d.index}`)!;
+    expect(r.identifiable).toBe(true);
+    // ...and not when the ability line is missing
+    const without = { ...evidence, text: text.replace(d.abilityName!, 'something else') };
+    expect(scoreEvidence(key, [{ tick: d.tick + 2, reason: 'down', evidence: without }]).find((x) => x.prompt === `down.${d.index}`)!.identifiable).toBe(false);
+  });
+
   it('fails a cause whose ability is not named', () => {
     const withAbility = key.downs.filter((d) => d.abilityName);
     expect(withAbility.length).toBeGreaterThan(0);

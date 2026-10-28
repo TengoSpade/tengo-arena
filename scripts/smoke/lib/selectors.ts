@@ -28,6 +28,8 @@ export const SEL = {
   betweenRoundsContinue: { css: '[data-testid="br-continue"]' } satisfies Locator,
   // M2 (WP-M2E): Play match offers Watch (primary) and Simulate; the arena screen
   watch: { css: 'button, a, [role="button"]', text: '^\\s*Watch\\b' } satisfies Locator,
+  // squad screen: the lineup the AI would pick (what a player presses when Continue says "Decide first")
+  autoPick: { css: 'button', text: '^\\s*Auto-pick' } satisfies Locator,
   arenaScreen: '[data-testid="screen-arena"]',
   openReportToast: { css: 'button, a', text: 'Open report' } satisfies Locator,
 } as const;
