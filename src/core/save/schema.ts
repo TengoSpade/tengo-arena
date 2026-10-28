@@ -399,7 +399,21 @@ const roundSideLineup = z.strictObject({
   freshnessAfter: z.array(int.min(0).max(100)).length(SAVE_BOUNDS.squadStarters).optional(),
   entered: z.array(z.boolean()).length(SAVE_BOUNDS.squadStarters),
 });
-const roundLineups = z.strictObject({ round: int.min(1), home: roundSideLineup, away: roundSideLineup });
+// ---- M2 (save v5): call plans (RESERVED for the calls package, P-01) and the watch cursor ----
+const fightCall = z.strictObject({ tick: int.min(1), kind: id, target: int.min(0).nullable().optional() });
+const sideCallPlan = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('none') }),
+  z.strictObject({ mode: z.literal('policy') }),
+  z.strictObject({ mode: z.literal('explicit'), calls: z.array(fightCall).max(SAVE_BOUNDS.callsPerRound) }),
+]);
+const roundCalls = z.strictObject({ home: sideCallPlan, away: sideCallPlan });
+const liveWatch = z.strictObject({
+  mode: z.enum(['watch', 'simulate']),
+  round: int.min(1).nullable(),
+  cursorTick: nonNegInt,
+  calls: z.array(fightCall).max(SAVE_BOUNDS.callsPerRound),
+});
+const roundLineups = z.strictObject({ round: int.min(1), home: roundSideLineup, away: roundSideLineup, calls: roundCalls.optional() });
 
 const roundResult = z.strictObject({
   round: int,
@@ -475,6 +489,7 @@ const matchResult = z.strictObject({
   fighterStats: z.record(z.string(), fighterMatchStats),
   mvpFighterId: nullableId,
   hiredBladeIds: z.array(id),
+  simHash: str.optional(),
   squads: z.strictObject({ home: matchSquad, away: matchSquad }).optional(),
   reserveInputs: z.strictObject({ home: z.array(fightFighterInput), away: z.array(fightFighterInput) }).optional(),
   roundLineups: z.array(roundLineups).optional(),
@@ -514,6 +529,7 @@ const matchState = z.strictObject({
   fighterStats: z.record(z.string(), fighterMatchStats),
   hiredBladeIds: z.array(id),
   playerDecisions: z.array(swapDecision).nullable(),
+  watch: liveWatch.optional(),
 });
 
 // ---- market, ledger, news, history ------------------------------------------------------------------------------

@@ -274,6 +274,17 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
       const s = live[side];
       for (const fid of [...s.active, ...s.squad.reserves, ...s.withdrawn, ...s.emergencyEntrants]) if (!fighters[fid]) add(`liveMatch.${side}`, `unknown fighter "${fid}"`);
     }
+    // M2 (v5): a round is watched only in mode 'watch', while it is the pending round; the cursor is a fight tick.
+    const w = live.watch;
+    if (w) {
+      if (w.round !== null && w.mode !== 'watch') add('liveMatch.watch.round', `a round is watched only in mode "watch" (mode "${w.mode}")`);
+      if (w.round !== null && (live.phase !== 'round_pending' || w.round !== live.rounds.length + 1)) {
+        add('liveMatch.watch.round', `round ${w.round} is not the pending round (phase ${live.phase}, ${live.rounds.length} played)`);
+      }
+      if (w.mode === 'watch' && w.round === null && live.phase === 'round_pending') add('liveMatch.watch.round', 'a watched match waits for its pending round to be watched');
+      const cap = Math.round(content.combat.overtime.hardCapS * content.combat.tick.ticksPerSecond);
+      if (w.cursorTick > cap) add('liveMatch.watch.cursorTick', `${w.cursorTick} is past the time cap (${cap} ticks)`);
+    }
   }
 
   // market
