@@ -2,8 +2,9 @@ import { defineConfig, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config.ts';
 
 // Two projects:
-//  - "core": pure simulation/engine code, architecture checks, scripts. Node env, no DOM.
-//  - "ui":   Preact components and screens. happy-dom env.
+//  - "core": pure simulation/engine code, architecture checks, scripts, and the pure half of src/render
+//            (render-state model, cues, colours, camera; M2). Node env, no DOM.
+//  - "ui":   Preact components and screens, and the PixiJS half of src/render (viewer, skins). happy-dom env.
 //
 // Timeouts: Vitest's 5 s default suits an idle machine. The whole suite runs one worker per core, often next
 // to other builds and agents, and a test that takes a second alone (architecture scans, every route, ticket
@@ -22,7 +23,13 @@ export default mergeConfig(
             name: 'core',
             ...TIMEOUTS,
             environment: 'node',
-            include: ['src/core/**/*.test.ts', 'tests/**/*.test.ts', 'scripts/**/*.test.ts'],
+            include: [
+              'src/core/**/*.test.ts',
+              'tests/**/*.test.ts',
+              'scripts/**/*.test.ts',
+              'src/render/*.test.ts',
+              'src/render/{timeline,cues,colors,camera}/**/*.test.ts',
+            ],
           },
         },
         {
@@ -34,7 +41,7 @@ export default mergeConfig(
             include: [
               'src/ui/**/*.test.{ts,tsx}',
               'src/platform/**/*.test.{ts,tsx}',
-              'src/render/**/*.test.{ts,tsx}',
+              'src/render/{viewer,skins}/**/*.test.{ts,tsx}',
             ],
           },
         },

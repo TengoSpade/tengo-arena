@@ -22,14 +22,16 @@ import type {
   RoundAftermath,
   RoundInput,
   RoundResult,
+  RuleTraceEntry,
   SideInput,
+  UnitIndex,
 } from '../model';
 import type { Seed } from '../rng';
 import { SIM_ENGINE_VERSION, modifiedStat } from './fight';
 import { runFight, runMatch } from './match';
 import { staticValues } from './profile';
 import { BP, ST, kitFor, simTables } from './tables';
-import { InvariantError } from '../util';
+import { InvariantError, notImplemented } from '../util';
 
 /**
  * Version of the fight rules implementation. Bump on ANY change that can
@@ -186,3 +188,71 @@ export { eligiblePerks, eligibleRankSteps, perkEligible, perkPool } from './skil
 
 /** Additive (M1.1 integration): per-round stats summed over a match, and the PROVISIONAL MVP score; core/game's orchestrator assembles round-by-round results with them. */
 export { mergeStats, mvpScore } from './match';
+
+// ---- M2 contract (docs/design/_drafts/05-technical-m2.md §A5, tech-022; WP-M2A implements) ----------------
+
+/** One unit at a probed tick (the pause inspector's "now" column). Amounts in points, time in ticks. */
+export interface UnitProbe {
+  unit: UnitIndex;
+  standing: boolean;
+  hp: number;
+  maxHp: number;
+  /** Total shield points. */
+  shield: number;
+  /** Focus in whole points. */
+  focus: number;
+  /** Ticks until each active ability is ready (0 = ready). */
+  cooldownTicks: { a1: number; a2: number };
+  /** Active statuses with the ticks they have left. */
+  statuses: { status: string; ticksLeft: number; stacks: number; source: UnitIndex | null }[];
+  /** The committed decision (rule index; ruleCount = the stance, -1 = forced by taunt). */
+  committed: { rule: number; action: string; target: UnitIndex | null } | null;
+  /** A decision waiting out the reaction delay, with its commit tick. */
+  pending: { rule: number; action: string; target: UnitIndex | null; commitTick: number } | null;
+  /**
+   * A fresh evaluation of his rule list against the probed tick's state: what he would decide now, with every
+   * rule's skip reason and observed value (03 sys-tactics trace). Null when he cannot evaluate (see blockedBy).
+   */
+  evaluation: { rule: number; action: string; target: UnitIndex | null; trace: RuleTraceEntry[] } | null;
+  /** Why he does not evaluate now: 'downed', 'stunned', 'asleep', 'displaced', 'winding_up', 'casting', 'channelling', 'taunted'; null when free. */
+  blockedBy: string | null;
+}
+
+export interface RoundProbe {
+  /** The probed tick: the state at the END of this tick (what a frame at this tick shows). */
+  tick: number;
+  units: UnitProbe[];
+}
+
+/**
+ * M2 pause inspector (P-22): re-simulate the round to the end of `tick` (record 'none') and report every unit's
+ * state and a traced evaluation of his rules against that state. Read-only: it never changes a result, and the
+ * evaluation it returns is not a decision the sim made (the recorded `unit.decide` trace explains those).
+ * Cost: one partial round, at most a full round's sim time (05 §8: ≤ 6 ms at 'full').
+ */
+export function inspectRoundAt(input: RoundInput, roundSeed: Seed, content: ContentDB, tick: number): RoundProbe {
+  return notImplemented('sim.inspectRoundAt', input, roundSeed, content, tick);
+}
+
+/**
+ * M2 (05-technical-m2 §A4, tech-026; owner answer to Q56; WP-M2A implements): a hash of exactly the content the
+ * fight reads, so replay availability follows "replays end at a balance-changing update" rather than any edit.
+ *
+ * Not a hand-kept key list (review: a list misses reads such as development.captaincy.grades and
+ * actingCaptainCqPenalty, which change outcomes, or levels.freshness.labels). It is the hash of a canonical
+ * serialization (sorted keys and map entries) of (a) what simTables(content) compiles, ranked kits and compiled
+ * presets included, and (b) every value core/sim and core/tactics read from ContentDB outside simTables during a
+ * fight (preset rules and stance, vocabulary, tactics limits, perk rules, and any other direct read). WP-M2A first
+ * moves the direct reads into simTables where it can, so (a) covers nearly everything.
+ *
+ * Guards (WP-M2A tests): (1) a read-set test runs a corpus of seeded rounds on a ContentDB whose objects record
+ * every property path the fight touches, and fails if a touched path is outside the hashed set; (2) changing
+ * development.captaincy.grades, actingCaptainCqPenalty, levels.freshness.labels, an ability coefficient, a preset
+ * rule or a combat constant changes the hash; (3) changing any excluded key (names, descriptions, icons, economy,
+ * leagues, calendar, development outside captaincy, docs) leaves the hash AND the round checksums of the corpus
+ * unchanged. The career content hash (core/content hashContent, saves, GameState.content) is unchanged. Cached
+ * per ContentDB.
+ */
+export function simContentHash(content: ContentDB): string {
+  return notImplemented('sim.simContentHash', content);
+}

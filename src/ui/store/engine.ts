@@ -91,6 +91,12 @@ export interface GameEngine {
   weeklyRest10?: typeof fighters.weeklyRest10;
   levelEtaMatches?: typeof fighters.levelEtaMatches;
   effectiveLevelUpMode?: typeof fighters.effectiveLevelUpMode;
+  // ---- M2 (optional so test fakes can omit them; screens read them through store/arena.ts; 05-technical-m2 §A7) ----
+  liveRoundPlayback?: typeof game.liveRoundPlayback;
+  roundPlayback?: typeof game.roundPlayback;
+  matchPlayback?: typeof game.matchPlayback;
+  replayAvailability?: typeof game.replayAvailability;
+  inspectPlayback?: typeof game.inspectPlayback;
   // saves (core/save)
   saveMetaFor: typeof save.saveMetaFor;
   createSave: typeof save.createSave;
@@ -136,6 +142,11 @@ export const coreEngine: GameEngine = {
   weeklyRest10: fighters.weeklyRest10,
   levelEtaMatches: fighters.levelEtaMatches,
   effectiveLevelUpMode: fighters.effectiveLevelUpMode,
+  liveRoundPlayback: game.liveRoundPlayback,
+  roundPlayback: game.roundPlayback,
+  matchPlayback: game.matchPlayback,
+  replayAvailability: game.replayAvailability,
+  inspectPlayback: game.inspectPlayback,
   saveMetaFor: save.saveMetaFor,
   createSave: save.createSave,
   serializeSave: save.serializeSave,

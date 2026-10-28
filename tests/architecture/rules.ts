@@ -9,6 +9,12 @@
  *   and only through their index.ts (no deep imports across modules).
  * - src/ui, src/platform and src/render import core modules through index.ts
  *   only; render and platform must not import ui.
+ * - M2: render and platform must not import each other; src/ui reaches
+ *   src/render only through src/render/index.ts (pure) and
+ *   src/render/viewer/index.ts (PixiJS; dynamic import() or import type only);
+ *   the pure half of src/render (all but viewer/ and skins/) imports no pixi.js
+ *   and touches no DOM, clock, timer or randomness global; src/render imports
+ *   core/sim as types only.
  *
  * ESLint mirrors some of these rules for editor feedback; this file decides.
  * Changing the tables below is an architect-owned change (docs/design 05 §11).
@@ -51,6 +57,45 @@ export const CORE_ALLOWED_PACKAGES: readonly string[] = ['zod'];
 export const CORE_TEST_ALLOWED_PACKAGES: readonly string[] = ['vitest'];
 /** Core modules src/render may import (read-only consumer of the event stream). */
 export const RENDER_ALLOWED_CORE: readonly string[] = ['util', 'rng', 'model', 'content', 'sim'];
+/** M2 (tech-009): of those, core modules src/render may import as TYPES only (it must never run the sim). */
+export const RENDER_TYPE_ONLY_CORE: readonly string[] = ['sim'];
+
+/**
+ * M2 (docs/design/_drafts/05-technical-m2.md §A8): src/render has a PixiJS half (these folders) and a pure half
+ * (everything else: types, timeline, cues, colors, camera). The pure half imports no pixi.js, nothing from the
+ * PixiJS half and no DOM, clock or randomness global, so the render-state model is deterministic and runs in
+ * Node tests without a GPU.
+ */
+export const RENDER_PIXI_DIRS: readonly string[] = ['src/render/viewer/', 'src/render/skins/'];
+/** The two entries src/ui may import: the pure index (statically) and the viewer (dynamic import() or import type only). */
+export const RENDER_PURE_ENTRY = 'src/render';
+export const RENDER_VIEWER_ENTRY = 'src/render/viewer';
+/** Globals the pure half of src/render must not touch (DOM, clocks, timers, entropy). */
+export const RENDER_PURE_BANNED_GLOBALS: ReadonlySet<string> = new Set([
+  'window',
+  'document',
+  'navigator',
+  'location',
+  'localStorage',
+  'sessionStorage',
+  'indexedDB',
+  'fetch',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
+  'setTimeout',
+  'setInterval',
+  'clearTimeout',
+  'clearInterval',
+  'performance',
+  'Date',
+  'crypto',
+  'globalThis',
+  'self',
+  'matchMedia',
+  'getComputedStyle',
+  'devicePixelRatio',
+  'ResizeObserver',
+]);
 
 /** Identifiers that must not be referenced in core (platform globals, clocks, entropy, output). */
 export const BANNED_GLOBALS: ReadonlySet<string> = new Set([
@@ -205,6 +250,33 @@ function collectImports(sf: ts.SourceFile): { spec: string; node: ts.Node }[] {
   return found;
 }
 
+/** How an import is used: erased types, a dynamic import(), or a static value import (side-effect imports included). */
+function importKind(node: ts.Node): 'type' | 'dynamic' | 'value' {
+  if (ts.isCallExpression(node)) return 'dynamic';
+  if (ts.isImportTypeNode(node)) return 'type';
+  if (ts.isImportDeclaration(node)) {
+    const clause = node.importClause;
+    if (!clause) return 'value';
+    if (clause.isTypeOnly) return 'type';
+    if (clause.name) return 'value';
+    const bindings = clause.namedBindings;
+    if (bindings && ts.isNamedImports(bindings) && bindings.elements.length > 0 && bindings.elements.every((e) => e.isTypeOnly)) return 'type';
+    return 'value';
+  }
+  if (ts.isExportDeclaration(node)) {
+    if (node.isTypeOnly) return 'type';
+    const clause = node.exportClause;
+    if (clause && ts.isNamedExports(clause) && clause.elements.length > 0 && clause.elements.every((e) => e.isTypeOnly)) return 'type';
+    return 'value';
+  }
+  return 'value';
+}
+
+/** True for a src/render file of the pure half (not under RENDER_PIXI_DIRS). */
+export function isRenderPure(relPath: string): boolean {
+  return relPath.startsWith('src/render/') && !RENDER_PIXI_DIRS.some((d) => relPath.startsWith(d));
+}
+
 function isDeclarationName(node: ts.Identifier): boolean {
   const p = node.parent;
   if (!p) return false;
@@ -277,16 +349,36 @@ export function checkSource(relPath: string, text: string): Violation[] {
         add(node, 'deep-import', `import core/${target.coreModule} through its index.ts, not "${spec}"`);
       }
     } else if (area.kind === 'ui' || area.kind === 'platform' || area.kind === 'render') {
+      const renderPure = area.kind === 'render' && !isTest && isRenderPure(relPath);
       if (!relative) {
         if (area.kind === 'render' || area.kind === 'platform' || area.kind === 'ui') {
           // Packages are governed by package.json review; PixiJS only in render.
           if (packageName(spec) === 'pixi.js' && area.kind !== 'render') {
             add(node, 'pixi-outside-render', `only src/render may import pixi.js (M2 viewer)`);
           }
+          if (packageName(spec) === 'pixi.js' && renderPure) {
+            add(node, 'render-pure', `the pure half of src/render may not import pixi.js; only ${RENDER_PIXI_DIRS.join(', ')} may`);
+          }
         }
         continue;
       }
       const target = resolveTarget(relPath, spec);
+      // M2 (05-technical-m2 §A8): who may reach into src/render, and how.
+      const intoRender = target.rel === RENDER_PURE_ENTRY || target.rel.startsWith(`${RENDER_PURE_ENTRY}/`);
+      if (area.kind === 'ui' && intoRender) {
+        const isPure = target.rel === RENDER_PURE_ENTRY || target.rel === `${RENDER_PURE_ENTRY}/index`;
+        const isViewer = target.rel === RENDER_VIEWER_ENTRY || target.rel === `${RENDER_VIEWER_ENTRY}/index`;
+        if (!isPure && !isViewer) {
+          add(node, 'render-deep-import', `import src/render through src/render/index.ts or src/render/viewer/index.ts, not "${spec}"`);
+        } else if (isViewer && importKind(node) === 'value') {
+          add(node, 'ui-render-viewer-static', `load src/render/viewer with import() (or import type): PixiJS must stay out of the startup JS ("${spec}")`);
+        }
+      }
+      if (area.kind === 'platform' && intoRender) add(node, 'platform-imports-render', `src/platform must not import src/render ("${spec}")`);
+      if (area.kind === 'render' && target.rel.startsWith('src/platform/')) add(node, 'render-imports-platform', `src/render must not import src/platform ("${spec}")`);
+      if (renderPure && RENDER_PIXI_DIRS.some((d) => `${target.rel}/`.startsWith(d))) {
+        add(node, 'render-pure', `the pure half of src/render may not import the PixiJS half ("${spec}")`);
+      }
       if (target.coreModule === TESTKIT && !isTest && !relPath.startsWith(TESTKIT_DEV_DIR)) {
         add(node, 'testkit-in-production', `core/testkit may only be imported from test files and ${TESTKIT_DEV_DIR} (dev tooling)`);
       }
@@ -294,11 +386,27 @@ export function checkSource(relPath: string, text: string): Violation[] {
         if (!target.isIndex) add(node, 'deep-import', `import core/${target.coreModule} through its index.ts, not "${spec}"`);
         if (area.kind === 'render' && !RENDER_ALLOWED_CORE.includes(target.coreModule)) {
           add(node, 'render-dependency', `src/render may only read core/{${RENDER_ALLOWED_CORE.join(',')}}, not core/${target.coreModule}`);
+        } else if (area.kind === 'render' && RENDER_TYPE_ONLY_CORE.includes(target.coreModule) && importKind(node) !== 'type') {
+          add(node, 'render-sim-value', `src/render may import core/${target.coreModule} as types only: the viewer never simulates (tech-009)`);
         }
       } else if ((area.kind === 'render' || area.kind === 'platform') && target.rel.startsWith('src/ui/')) {
         add(node, `${area.kind}-imports-ui`, `src/${area.kind} must not import src/ui ("${spec}")`);
       }
     }
+  }
+
+  // ---- M2: the pure half of src/render (no DOM, clocks, timers or randomness) ---------------------------
+  if (area.kind === 'render' && !isTest && isRenderPure(relPath)) {
+    const visitRender = (node: ts.Node): void => {
+      if (ts.isIdentifier(node) && RENDER_PURE_BANNED_GLOBALS.has(node.text) && !isDeclarationName(node)) {
+        add(node, 'render-pure', `"${node.text}" is not available in the pure half of src/render (render-state model: deterministic, GPU- and DOM-free)`);
+      }
+      if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Math' && node.name.text === 'random') {
+        add(node, 'render-pure', 'Math.random is not allowed in the pure half of src/render: sampling must be a pure function of (log, tick)');
+      }
+      ts.forEachChild(node, visitRender);
+    };
+    visitRender(sf);
   }
 
   if (area.kind !== 'core') return violations;

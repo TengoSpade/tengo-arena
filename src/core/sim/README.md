@@ -65,3 +65,9 @@ Depends on: `util`, `rng`, `model`, `content`, `tactics`.
 
 ## R2 box score (T001): healing received
 `Tally.healingReceived` counts the **effective** healing a unit received (overheal excluded), added where heals land in the commit phase (and for Deathward's heal above the 1 HP floor), the mirror of `healingDone` (which stays as it was: Deathward credits the warder the uncapped heal). It is copied into `FighterMatchStats.healingReceived` (optional in the model; `mergeStats` sums it) and is in no event, no recap and not in the round checksum, so event hashes and the pinned goldens did not move and `ENGINE_VERSION` stays 2.
+
+## M2 contract (stubs; docs/design/_drafts/05-technical-m2.md §A2, §A5, WP-M2A)
+- `inspectRoundAt(input, roundSeed, content, tick): RoundProbe` (stub): the pause inspector's view at a tick, read-only.
+- `simContentHash(content)` (stub): a hash of exactly what the fight reads (what `simTables` compiles plus every direct ContentDB read of sim and tactics, guarded by a read-set test), for replay availability (owner answer to Q56: replays end at a balance-changing update); the career content hash is unchanged.
+- Log format 2 (planned): frames gain `shield` and `focus` and a closing frame at the end tick; `FightHeader.logFormat` names the format (`FIGHT_LOG_FORMAT_VERSION` in core/model). No outcome or round checksum may change; full-level goldens are re-pinned with the format bump and `ENGINE_VERSION` stays 2 (tech-016).
+- `RoundInput.calls` is reserved for the calls package: until then WP-M2A makes the sim refuse any plan other than absent or none for both sides (today it ignores the field).

@@ -84,4 +84,15 @@ export default defineConfig(
       ],
     },
   },
+  {
+    // M2: the pure half of src/render (docs/design/_drafts/05-technical-m2.md §A8). tests/architecture decides.
+    files: ['src/render/**/*.ts'],
+    ignores: ['src/render/viewer/**', 'src/render/skins/**', 'src/render/**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ group: ['pixi.js', 'pixi.js/*', '**/viewer', '**/viewer/**', '**/skins/**'], message: 'The pure half of src/render imports no PixiJS (05-technical-m2 §A8).' }] },
+      ],
+    },
+  },
 );

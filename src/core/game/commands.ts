@@ -33,7 +33,7 @@ const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set([
  * itself, settings and news. Everything that could change a squad, a roster or money waits until
  * the match (and so the week) is over; level-up picks too (levelup.choose, 05 M1.1 addendum).
  */
-const LIVE_MATCH_ALLOWED: ReadonlySet<Command['type']> = new Set(['match.swap', 'news.markRead', 'news.setRead', 'shortlist.toggle', 'levelup.policy', 'autoswap.set', 'pacing.set']);
+export const LIVE_MATCH_ALLOWED: ReadonlySet<Command['type']> = new Set(['match.swap', 'news.markRead', 'news.setRead', 'shortlist.toggle', 'levelup.policy', 'autoswap.set', 'pacing.set']);
 
 function clubCheck(state: GameState, clubId: ClubId): EngineError | null {
   return getOwn(state.clubs, clubId) ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };
@@ -160,6 +160,13 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
       ms.playerDecisions = cmd.swaps.map((d) => ({ ...d }));
       return ok(null);
     }
+
+    // M2 contracts (docs/design/_drafts/05-technical-m2.md): WP-M2B implements the watch cursor (add 'match.watch'
+    // to LIVE_MATCH_ALLOWED); calls stay refused until the calls package (P-01; staged after M2, Q53).
+    case 'match.watch':
+      return fail('match.watch-unavailable', 'Watching a match arrives with the M2 arena viewer', { fixtureId: cmd.fixtureId });
+    case 'match.call':
+      return fail('match.calls-unavailable', 'Calls are not part of this build (P-01; staged after M2, owner answer to Q53)', { fixtureId: cmd.fixtureId });
 
     case 'autoswap.set': {
       const e = autoSwapRulesError(cmd.rules);

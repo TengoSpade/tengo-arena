@@ -1,10 +1,10 @@
 {
-  "//": "Purity gate for the simulation core: ECMAScript lib only. No DOM, no Node, no Vite globals, so window/document/console/setTimeout/process fail to typecheck here. Test files are excluded (they import vitest) and are typechecked by tsconfig.json.",
+  "//": "Purity gate for the simulation core: ECMAScript lib only. No DOM, no Node, no Vite globals, so window/document/console/setTimeout/process fail to typecheck here. Test files are excluded (they import vitest) and are typechecked by tsconfig.json. M2: the pure half of src/render (all but viewer/ and skins/) is checked here too, without DOM types (docs/design/_drafts/05-technical-m2.md §A8).",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"],
     "types": []
   },
-  "include": ["src/core/**/*.ts"],
-  "exclude": ["src/core/**/*.test.ts"]
+  "include": ["src/core/**/*.ts", "src/render/*.ts", "src/render/timeline/**/*.ts", "src/render/cues/**/*.ts", "src/render/colors/**/*.ts", "src/render/camera/**/*.ts"],
+  "exclude": ["src/core/**/*.test.ts", "src/render/**/*.test.ts"]
 }
