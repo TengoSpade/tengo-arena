@@ -258,6 +258,8 @@ export interface CPerk {
 export interface CClass {
   id: string;
   def: ClassDef;
+  /** The class's combat base values (copied from def.base so they belong to what the sim compiled; simContentHash). */
+  base: ClassDef['base'];
   roles: ('tank' | 'melee' | 'ranged' | 'controller' | 'healer')[];
   powerW: [number, number][];
   supportW: [number, number][];
@@ -278,6 +280,12 @@ export interface CTrait {
 export interface SimTables {
   content: ContentDB;
   tps: number;
+  /** combat.json tick.tickMs (the fight header). */
+  tickMs: number;
+  /** combat.json derived.focus.startFull: fighters start with full focus. */
+  focusStartFull: boolean;
+  /** perks.json rules.perkCap: perks a fighter may hold in a round. */
+  perkCap: number;
   arena: { widthMm: number; heightMm: number; radiusMm: number; homeFront: number; homeBack: number; awayFront: number; awayBack: number; laneCenterMm: number; laneSpacingMm: number };
   bands: { melee: number; close: number; mid: number; long: number };
   derived: {
@@ -465,6 +473,7 @@ function build(content: ContentDB): SimTables {
     classes.set(k.id, {
       id: k.id,
       def: k,
+      base: { ...k.base },
       roles: [...k.archetypes],
       powerW: weights(k.powerAttrs),
       supportW: k.supportAttrs ? weights(k.supportAttrs) : [],
@@ -502,6 +511,9 @@ function build(content: ContentDB): SimTables {
   return {
     content,
     tps,
+    tickMs: c.tick.tickMs,
+    focusStartFull: c.derived.focus.startFull,
+    perkCap: content.perkRules.perkCap,
     arena: {
       widthMm: toMm(c.arena.widthM),
       heightMm: toMm(c.arena.heightM),
@@ -682,10 +694,14 @@ export function kitFor(tb: SimTables, classId: string, ranks: { a1: number; a2: 
   const key = `${classId}:${r1}${r2}${rp}`;
   const hit = tb.kits.get(key);
   if (hit) return hit;
-  const ranked = (ab: CAbility, r: number): CAbility => (r === 1 ? ab : compileAbility(rankedAbilityDef(tb.content, ab.def, r), tb.buildCtx, tb.content));
-  const kit: CClass = { ...cls, a1: ranked(cls.a1, r1), a2: ranked(cls.a2, r2), passive: ranked(cls.passive, rp) };
+  const kit: CClass = { ...cls, a1: rankedAbility(tb, cls.a1, r1), a2: rankedAbility(tb, cls.a2, r2), passive: rankedAbility(tb, cls.passive, rp) };
   tb.kits.set(key, kit);
   return kit;
+}
+
+/** An ability at a rank (rank 1 = itself): its definition with the rank rows' changes applied, compiled. */
+export function rankedAbility(tb: SimTables, ab: CAbility, rank: number): CAbility {
+  return rank === 1 ? ab : compileAbility(rankedAbilityDef(tb.content, ab.def, rank), tb.buildCtx, tb.content);
 }
 
 function clampRank(r: number | undefined): number {

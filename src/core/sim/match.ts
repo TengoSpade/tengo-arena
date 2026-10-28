@@ -3,7 +3,7 @@
  * boundary contract 2, schema note 7).
  */
 import type { ContentDB } from '../content';
-import type { AbilityId, FightLog, FighterId, FighterMatchStats, MatchInput, RecordLevel, RoundRecap, RoundResult, RuleSkipReason } from '../model';
+import type { AbilityId, FightLog, FighterId, FighterMatchStats, MatchInput, RecordLevel, RoundCalls, RoundRecap, RoundResult, RuleSkipReason } from '../model';
 import { deriveSeed } from '../rng';
 import { InvariantError } from '../util';
 import { Fight } from './fight';
@@ -22,6 +22,22 @@ export interface FightRun {
   fighterStats: Record<FighterId, FighterMatchStats>;
   log: FightLog | null;
   fight: Fight;
+}
+
+/**
+ * Calls (P-01) are staged after M2 (05-technical-m2 §A6): until the calls package, a round's call plan must be absent
+ * or { none, none } for both sides. The sim refuses anything else instead of ignoring it, so a plan can never be
+ * silently dropped from a replay.
+ */
+export function refuseCalls(input: { calls?: RoundCalls | null | undefined }): void {
+  const c = input.calls;
+  if (c == null) return;
+  // Optional chaining: a malformed plan (no side, no mode) is refused like any other, never a bare TypeError.
+  const home = (c as Partial<RoundCalls>).home?.mode;
+  const away = (c as Partial<RoundCalls>).away?.mode;
+  if (home !== 'none' || away !== 'none') {
+    throw new InvariantError(`sim: call plans are not available yet (home ${String(home)}, away ${String(away)}); only { none, none } or no plan is accepted until the calls package`);
+  }
 }
 
 export function runFight(content: ContentDB, seed: string, round: number, input: Pick<MatchInput, 'home' | 'away'>, record: RecordLevel): FightRun {
