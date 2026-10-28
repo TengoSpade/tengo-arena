@@ -92,3 +92,8 @@ All additive and optional; nothing here is an event, so no event hash and no gol
 ## R2 effective rating and next-season wage room (T002, T006)
 - **`FighterView.freshness`, `effectiveRating`, `freshnessRatingDelta`, `freshnessRating`** (all optional in the type, always set by core): the Freshness now and what his rating is worth at it (core/fighters `ratingAtFreshness`: the sim's penalty curve priced at the class's rating weights; the approximation is documented in `fighters/freshness-rating.ts`). Roster rows read them from `fighterView` like every other column. `ports.fighters.ratingAtFreshness(fighter, anyFreshness, content)` answers "what at Freshness 40?" for a tooltip.
 - **Renewals** are judged on next season's wage room by core/economy (`economy.nextSeasonWage`, `FinanceView.nextSeasonWageRoom` and `nextSeason`; see core/economy README). `contract.renew` and `checkOffer` use it for the player and the AI alike.
+
+## M2 contract (stubs; docs/design/_drafts/05-technical-m2.md §A3, WP-M2B)
+- `advance(state, content, options?)`: `AdvanceOptions.playerMatch` ('watch' | 'simulate', default 'simulate') is accepted and ignored until WP-M2B; `AdvanceOutcome.watch` (a `WatchPause`) will report a round waiting to be watched.
+- `playback.ts` stubs (throw `NotImplementedError`): `liveRoundPlayback`, `roundPlayback`, `matchPlayback`, `replayAvailability`, `inspectPlayback`, with `RoundPlayback`, `MatchPlayback`, `ReplayAvailability`.
+- Commands `match.watch` (the watch cursor) and `match.call` (reserved for calls) are refused with `match.watch-unavailable` and `match.calls-unavailable` until their packages land.

@@ -16,6 +16,18 @@ import { captaincyPreview, fighterView, freeAgents, getBlockers, releasePreview,
 import { processWeek, type LiveWeekOutcome, type WeekOutcome } from './week';
 import { advanceLoggedWith, advanceWith, betweenRoundViewWith, levelUpViewWith, type AdvanceOutcome, type LevelUpView } from './live';
 import type { BetweenRoundView } from './orchestrator';
+import type { RoundProbe } from '../sim';
+import {
+  inspectPlaybackWith,
+  liveRoundPlaybackWith,
+  matchPlaybackWith,
+  replayAvailabilityWith,
+  roundPlaybackWith,
+  type AdvanceOptions,
+  type MatchPlayback,
+  type ReplayAvailability,
+  type RoundPlayback,
+} from './playback';
 import { createWorld, type NewGameParams } from './world';
 import type { OfferResponse, NewsId } from '../model';
 
@@ -45,11 +57,17 @@ export interface GameEngine {
   releasePreview(state: GameState, clubId: ClubId, fighterId: FighterId, content: ContentDB): ReleasePreview | null;
   captaincyPreview(state: GameState, clubId: ClubId, captainId: FighterId | null, viceCaptainId: FighterId | null, content: ContentDB): CaptaincyPreview | null;
   // ---- M1.1 ----
-  /** Continue: the week, or the next pause of the player's match (05 M1.1 addendum). */
-  advance(state: GameState, content: ContentDB): Result<AdvanceOutcome, EngineError>;
+  /** Continue: the week, or the next pause of the player's match (05 M1.1 addendum). M2: `options` (05-technical-m2 §A3). */
+  advance(state: GameState, content: ContentDB, options?: AdvanceOptions): Result<AdvanceOutcome, EngineError>;
   advanceLogged(state: GameState, content: ContentDB): Result<LiveWeekOutcome, EngineError>;
   betweenRoundView(state: GameState, content: ContentDB): BetweenRoundView | null;
   levelUpView(state: GameState, fighterId: FighterId, content: ContentDB): LevelUpView | null;
+  // ---- M2 contract (stubs until WP-M2B; 05-technical-m2 §A3) ----
+  liveRoundPlayback(state: GameState, content: ContentDB): Result<RoundPlayback, EngineError>;
+  roundPlayback(state: GameState, fixtureId: FixtureId, round: number, content: ContentDB): Result<RoundPlayback, EngineError>;
+  matchPlayback(state: GameState, fixtureId: FixtureId, content: ContentDB): Result<MatchPlayback, EngineError>;
+  replayAvailability(state: GameState, fixtureId: FixtureId, content: ContentDB): ReplayAvailability;
+  inspectPlayback(state: GameState, fixtureId: FixtureId, round: number, tick: number, content: ContentDB): Result<RoundProbe, EngineError>;
 }
 
 export function createGameEngine(ports: GamePorts): GameEngine {
@@ -95,9 +113,14 @@ export function createGameEngine(ports: GamePorts): GameEngine {
     suggestLineup: (state, clubId, content) => suggestLineup(ports, state, clubId, content),
     releasePreview: (state, clubId, fighterId, content) => releasePreview(ports, state, clubId, fighterId, content),
     captaincyPreview: (state, clubId, captainId, viceCaptainId, content) => captaincyPreview(ports, state, clubId, captainId, viceCaptainId, content),
-    advance: (state, content) => withDerivedMemo(() => advanceWith(ports, state, content)),
+    advance: (state, content, options) => withDerivedMemo(() => advanceWith(ports, state, content, options)),
     advanceLogged: (state, content) => withDerivedMemo(() => advanceLoggedWith(ports, state, content)),
     betweenRoundView: (state, content) => betweenRoundViewWith(ports, state, content),
     levelUpView: (state, fighterId, content) => levelUpViewWith(ports, state, fighterId, content),
+    liveRoundPlayback: (state, content) => liveRoundPlaybackWith(ports, state, content),
+    roundPlayback: (state, fixtureId, round, content) => roundPlaybackWith(ports, state, fixtureId, round, content),
+    matchPlayback: (state, fixtureId, content) => matchPlaybackWith(ports, state, fixtureId, content),
+    replayAvailability: (state, fixtureId, content) => replayAvailabilityWith(ports, state, fixtureId, content),
+    inspectPlayback: (state, fixtureId, round, tick, content) => inspectPlaybackWith(ports, state, fixtureId, round, tick, content),
   };
 }

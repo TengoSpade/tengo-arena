@@ -27,13 +27,16 @@ export type RouteId =
   | 'season-review'
   | 'saves'
   | 'settings'
-  | 'between-rounds';
+  | 'between-rounds'
+  // M2 (05-technical-m2 §A7): the arena viewer, live (the player's match being watched) and replay.
+  | 'arena'
+  | 'replay';
 
 export interface RouteDef {
   id: RouteId;
   path: string;
-  /** Work package that owns the screen folder (src/ui/screens/<id>). */
-  owner: 'WP6' | 'WP7';
+  /** Work package that owns the screen folder (src/ui/screens/<id>); M2 screens: WP-M2E (src/ui/screens/arena). */
+  owner: 'WP6' | 'WP7' | 'WP-M2E';
   /** Shown in the side navigation. */
   nav: boolean;
   load: () => Promise<{ default: ComponentType<ScreenProps> }>;
@@ -55,6 +58,9 @@ export const ROUTES: readonly RouteDef[] = [
   { id: 'saves', path: 'saves', owner: 'WP7', nav: true, load: () => import('../screens/saves') },
   { id: 'settings', path: 'settings', owner: 'WP7', nav: true, load: () => import('../screens/settings') },
   { id: 'between-rounds', path: 'between-rounds', owner: 'WP7', nav: false, load: () => import('../screens/between-rounds') },
+  { id: 'arena', path: 'arena', owner: 'WP-M2E', nav: false, load: () => import('../screens/arena') },
+  // "#/replay/<fixtureId>?round=2&tick=340" (round and tick optional: a key moment of the report jumps there, 04 ui-report).
+  { id: 'replay', path: 'replay/:fixtureId', owner: 'WP-M2E', nav: false, load: () => import('../screens/arena/replay') },
 ];
 
 /**

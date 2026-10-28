@@ -95,6 +95,35 @@ describe('architecture: the checker catches violations (guards against a vacuous
     expect(rulesOf('src/render/arena/Stage.ts', `import { x } from '../../ui/store';`)).toEqual(['render-imports-ui']);
     expect(rulesOf('src/platform/storage.ts', `import { x } from '../ui/store';`)).toEqual(['platform-imports-ui']);
     expect(rulesOf('src/ui/app/App.tsx', `import { Application } from 'pixi.js';`)).toEqual(['pixi-outside-render']);
-    expect(rulesOf('src/render/arena/Stage.ts', `import { Application } from 'pixi.js';`)).toEqual([]);
+    expect(rulesOf('src/render/viewer/Stage.ts', `import { Application } from 'pixi.js';`)).toEqual([]);
+  });
+
+  it('M2: keeps the pure half of src/render free of PixiJS, the DOM, clocks and randomness', () => {
+    expect(rulesOf('src/render/timeline/sample.ts', `import { Container } from 'pixi.js';`)).toEqual(['render-pure']);
+    expect(rulesOf('src/render/timeline/sample.ts', `import type { Container } from 'pixi.js';`)).toEqual(['render-pure']);
+    expect(rulesOf('src/render/timeline/sample.ts', `import { x } from '../viewer/scene';`)).toEqual(['render-pure']);
+    expect(rulesOf('src/render/timeline/sample.ts', `const t = performance.now();`)).toEqual(['render-pure']);
+    expect(rulesOf('src/render/cues/a.ts', `const w = window.innerWidth;`)).toEqual(['render-pure']);
+    expect(rulesOf('src/render/cues/a.ts', `const r = Math.random();`)).toEqual(['render-pure']);
+    expect(rulesOf('src/render/cues/a.ts', `const o = { document: 1 }; const v = o.document + Math.floor(1.5);`)).toEqual([]);
+    expect(rulesOf('src/render/timeline/sample.ts', `import { x } from '../../core/model';`)).toEqual([]);
+    expect(rulesOf('src/render/timeline/sample.test.ts', `const t = performance.now();`)).toEqual([]);
+    expect(rulesOf('src/render/viewer/scene.ts', `import { Container } from 'pixi.js'; requestAnimationFrame(() => 1);`)).toEqual([]);
+    expect(rulesOf('src/render/skins/placeholder/body.ts', `import { Graphics } from 'pixi.js';`)).toEqual([]);
+  });
+
+  it('M2: src/ui loads the PixiJS viewer only lazily, and render and platform stay apart', () => {
+    const ui = 'src/ui/screens/arena/index.tsx';
+    expect(rulesOf(ui, `import { sampleAt } from '../../../render';`)).toEqual([]);
+    expect(rulesOf(ui, `import type { ArenaViewer } from '../../../render/viewer';`)).toEqual([]);
+    expect(rulesOf(ui, `import { type ArenaViewer } from '../../../render/viewer';`)).toEqual([]);
+    expect(rulesOf(ui, `const m = await import('../../../render/viewer');`)).toEqual([]);
+    expect(rulesOf(ui, `import { createArenaViewer } from '../../../render/viewer';`)).toEqual(['ui-render-viewer-static']);
+    expect(rulesOf(ui, `import '../../../render/viewer';`)).toEqual(['ui-render-viewer-static']);
+    expect(rulesOf(ui, `export { createArenaViewer } from '../../../render/viewer';`)).toEqual(['ui-render-viewer-static']);
+    expect(rulesOf(ui, `import { sampleAt } from '../../../render/timeline';`)).toEqual(['render-deep-import']);
+    expect(rulesOf(ui, `const m = await import('../../../render/skins/placeholder');`)).toEqual(['render-deep-import']);
+    expect(rulesOf('src/platform/save-store.ts', `import type { Speed } from '../render';`)).toEqual(['platform-imports-render']);
+    expect(rulesOf('src/render/viewer/scene.ts', `import { x } from '../../platform/browser';`)).toEqual(['render-imports-platform']);
   });
 });

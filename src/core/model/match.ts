@@ -60,6 +60,56 @@ export interface RoundInput {
   round: number;
   home: SideInput;
   away: SideInput;
+  /**
+   * M2 contract, RESERVED for the calls package (P-01; 05-technical-m2 §A6): how each side's calls are made this
+   * round. Absent = no calls for either side, the M1/M1.1 behaviour (bit-identical). Until the calls package
+   * lands the sim must refuse any plan other than absent or { none, none } (InvariantError; WP-M2A adds the check, today the field is ignored).
+   */
+  calls?: RoundCalls;
+}
+
+// ---- M2: calls (P-01), RESERVED until the owner answers Q17 and sys-calls is specified --------------
+
+/**
+ * One call (P-01, 03 §3.5 sys-calls): a committed input that takes effect at the START of `tick`, before that
+ * tick's timers. A call made while the viewer is paused on frame tick f applies at f + 1, so every event up to
+ * and including tick f is unchanged by it (the prefix property the viewer relies on, 05-technical-m2 §A2).
+ */
+export interface FightCall {
+  /** The tick at whose start the call applies (1 ≤ tick < the time cap). */
+  tick: number;
+  /** sys-calls call kind id (content); no kind exists before the calls package. */
+  kind: string;
+  /** Unit index the call names (for example a focus target), when the kind takes one. */
+  target?: number | null;
+}
+
+/**
+ * How one side's calls are made in a round: none; by the AI call policy inside the sim (every AI club, and the
+ * player's side when the player does not watch, open-020); or explicitly (the player, watching).
+ */
+export type SideCallPlan = { mode: 'none' } | { mode: 'policy' } | { mode: 'explicit'; calls: FightCall[] };
+
+export interface RoundCalls {
+  home: SideCallPlan;
+  away: SideCallPlan;
+}
+
+/** M2: how the player's match is played, fixed at Play match with the squad lock (open-020, Q54 working assumption). */
+export type MatchViewMode = 'watch' | 'simulate';
+
+/**
+ * M2: the player's match as watched (MatchState.watch). Absent = 'simulate' (the M1.1 flow). While a round is
+ * being watched, GameState.liveMatch stays in phase 'round_pending' with `round` set.
+ */
+export interface LiveWatch {
+  mode: MatchViewMode;
+  /** The round waiting to be watched or being watched (rounds played + 1), or null between rounds. */
+  round: number | null;
+  /** The furthest tick the player has watched in that round (0 before kickoff); a reload resumes there, paused. Monotonic. */
+  cursorTick: number;
+  /** The player's calls in that round so far (RESERVED: always empty before the calls package). */
+  calls: FightCall[];
 }
 
 /** M1.1: what one round did to a fighter who started it (sim RoundOutput.aftermath): input to drain, XP and immediate injuries. */
@@ -219,6 +269,11 @@ export interface RoundLineups {
   round: number;
   home: RoundSideLineup;
   away: RoundSideLineup;
+  /**
+   * M2 (additive, optional; RESERVED until the calls package): the call plans the round was played with, so a
+   * replay re-simulates it exactly (roundInputOf copies it into RoundInput.calls). Absent = no calls.
+   */
+  calls?: RoundCalls;
 }
 
 export type MatchPhase = 'round_pending' | 'between_rounds' | 'done';
@@ -268,6 +323,11 @@ export interface MatchState {
   hiredBladeIds: FighterId[];
   /** The player's decisions for the pending between-round step (match.swap); null = accept the auto-swap suggestions. */
   playerDecisions: SwapDecision[] | null;
+  /**
+   * M2 (additive, optional; written from save schema v5 by WP-M2B): how the player watches this match and where.
+   * Absent = 'simulate', the M1.1 flow.
+   */
+  watch?: LiveWatch;
 }
 
 export type RoundTiebreakStep = 'fighters_standing' | 'hp_fraction_sum' | 'damage_dealt' | 'first_down' | 'seeded_coin';
@@ -288,7 +348,11 @@ export interface RoundResult {
   finalHp: number[];
   /** Hash of the final fight state; identical at every RecordLevel. */
   checksum: string;
-  /** hashEventStream of the full log when recorded at 'full', else null. */
+  /**
+   * hashEventStream of the full log when recorded at 'full', else null. M2: a round the player watched is
+   * committed at 'full' and keeps the hash of the log he saw (diagnostics and determinism tests; replays are
+   * verified by `checksum`, because the hash also depends on FIGHT_LOG_FORMAT_VERSION).
+   */
   eventHash: string | null;
 }
 

@@ -32,6 +32,8 @@ import { realGamePorts } from './ports';
 import type { CaptaincyPreview, FighterView, ReleasePreview } from './views';
 import type { AdvanceOutcome, LevelUpView } from './live';
 import type { BetweenRoundView } from './orchestrator';
+import type { AdvanceOptions, MatchPlayback, ReplayAvailability, RoundPlayback } from './playback';
+import type { RoundProbe } from '../sim';
 import type { NewGameParams } from './world';
 
 export { createGameEngine } from './engine';
@@ -144,8 +146,8 @@ export type { LiveWeekOutcome } from './week';
  * With a live match, play on from the pending step (the player's match.swap decisions, else the
  * auto-swap suggestions). `week` is the report once the whole week has run. advanceWeek never pauses.
  */
-export function advance(state: GameState, content: ContentDB): Result<AdvanceOutcome, EngineError> {
-  return engine.advance(state, content);
+export function advance(state: GameState, content: ContentDB, options?: AdvanceOptions): Result<AdvanceOutcome, EngineError> {
+  return engine.advance(state, content, options);
 }
 
 /** The between-round screen of the player's live match, or null when no match is waiting. */
@@ -156,4 +158,36 @@ export function betweenRoundView(state: GameState, content: ContentDB): BetweenR
 /** The level-up dialog of one fighter: his pending offers (oldest first), stat and rating after each stat pick, the auto-pick. Null when none is pending. */
 export function levelUpView(state: GameState, fighterId: FighterId, content: ContentDB): LevelUpView | null {
   return engine.levelUpView(state, fighterId, content);
+}
+
+// ---- M2 contract (docs/design/_drafts/05-technical-m2.md §A3; WP-M2B implements, stubs until then) ---------
+
+export type { AdvanceOptions, MatchPlayback, ReplayAvailability, ReplayUnavailableReason, RoundPlayback, WatchPause } from './playback';
+
+/**
+ * The round the player is watching, as a full-level log from the same sim call headless play uses (vis-009).
+ * Its outcome is never returned separately (RoundPlayback.result is null), so no screen can show it early.
+ */
+export function liveRoundPlayback(state: GameState, content: ContentDB): Result<RoundPlayback, EngineError> {
+  return engine.liveRoundPlayback(state, content);
+}
+
+/** A committed round re-simulated at 'full' from its record (no policy runs); checksum-verified. */
+export function roundPlayback(state: GameState, fixtureId: FixtureId, round: number, content: ContentDB): Result<RoundPlayback, EngineError> {
+  return engine.roundPlayback(state, fixtureId, round, content);
+}
+
+/** The playable rounds of a match (replay round tabs, the live match's earlier rounds), without simulating. */
+export function matchPlayback(state: GameState, fixtureId: FixtureId, content: ContentDB): Result<MatchPlayback, EngineError> {
+  return engine.matchPlayback(state, fixtureId, content);
+}
+
+/** Whether a match can be replayed on this build, and if not why (Replay buttons; no simulation). */
+export function replayAvailability(state: GameState, fixtureId: FixtureId, content: ContentDB): ReplayAvailability {
+  return engine.replayAvailability(state, fixtureId, content);
+}
+
+/** The pause inspector at a tick of a live or replayed round (sim inspectRoundAt on the round's exact input). */
+export function inspectPlayback(state: GameState, fixtureId: FixtureId, round: number, tick: number, content: ContentDB): Result<RoundProbe, EngineError> {
+  return engine.inspectPlayback(state, fixtureId, round, tick, content);
 }

@@ -13,7 +13,7 @@ import type { ReadonlySignal } from '@preact/signals';
 import { createContext } from 'preact';
 import { useContext } from 'preact/hooks';
 import type { ContentDB, ContentIssue, RawContentFiles } from '../../core/content';
-import type { CommandOutcome } from '../../core/game';
+import type { AdvanceOptions, CommandOutcome } from '../../core/game';
 import type {
   Blocker,
   ClubId,
@@ -54,8 +54,12 @@ export interface GameStore {
   newGame(params?: { seed?: string }): Promise<Result<void, EngineError>>;
   /** Apply one command for the player's club (or 'club.choose'). */
   dispatch(command: Command): Result<CommandOutcome, EngineError>;
-  /** advanceWeek + autosave. */
-  advance(): Promise<Result<WeekReport, EngineError>>;
+  /**
+   * advanceWeek + autosave. M2 (additive, optional): `options.playerMatch` 'watch' starts the player's match in
+   * the arena viewer (core/game AdvanceOptions; the store's result is MATCH_WATCHING from store/arena.ts while a
+   * round waits to be watched). Implementations that ignore it keep the M1.1 flow (WP-M2E wires it).
+   */
+  advance(options?: AdvanceOptions): Promise<Result<WeekReport, EngineError>>;
   /** runSeasonEnd + autosave. */
   finishSeason(): Promise<Result<SeasonEndReport, EngineError>>;
   /** Read-only match report for a played fixture. */

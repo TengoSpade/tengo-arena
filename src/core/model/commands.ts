@@ -2,7 +2,7 @@ import type { LineupEntry, TacticsAssignment } from './club';
 import type { TrainingEmphasis } from './fighter';
 import type { ClubId, FighterId, FixtureId, NewsId } from './ids';
 import type { Gold } from './ledger';
-import type { SwapDecision } from './match';
+import type { FightCall, MatchViewMode, SwapDecision } from './match';
 import type { AutoSwapRules, LevelUpModeSetting, LevelUpPacing, PauseBetweenRounds } from './progression';
 
 /**
@@ -52,7 +52,21 @@ export type Command =
   /** Auto-swap rules of the club. */
   | { type: 'autoswap.set'; clubId: ClubId; rules: AutoSwapRules }
   /** Pacing: when level-up dialogs open and when the club's matches pause between rounds. */
-  | { type: 'pacing.set'; clubId: ClubId; levelUpPacing: LevelUpPacing; pauseBetweenRounds: PauseBetweenRounds };
+  | { type: 'pacing.set'; clubId: ClubId; levelUpPacing: LevelUpPacing; pauseBetweenRounds: PauseBetweenRounds }
+  // ---- M2 (docs/design/_drafts/05-technical-m2.md; implemented by WP-M2B) --------------------------------
+  /**
+   * The player has watched his live round up to `tick` (monotonic: a lower tick is refused). Moves
+   * liveMatch.watch.cursorTick so a reload resumes there; changes no result. Sent at pauses, auto-pauses and
+   * periodically while playing (tech-019). `mode: 'simulate'` switches the rest of the match to Simulate (the
+   * current round still finishes with its calls); 'watch' never comes back mid-match. Refused with
+   * 'match.watch-unavailable' until WP-M2B lands.
+   */
+  | { type: 'match.watch'; clubId: ClubId; fixtureId: FixtureId; round: number; tick: number; mode?: MatchViewMode }
+  /**
+   * RESERVED for the calls package (P-01, Q17): one call for the player's side in the watched round, at
+   * call.tick ≥ the cursor. Refused with 'match.calls-unavailable' until that package lands.
+   */
+  | { type: 'match.call'; clubId: ClubId; fixtureId: FixtureId; round: number; call: FightCall };
 
 export type CommandType = Command['type'];
 

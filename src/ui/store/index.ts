@@ -21,6 +21,8 @@ export {
 } from './create-store';
 export { coreEngine, EngineContext, useEngine, safeView, type GameEngine } from './engine';
 export { matchDayFacade, useMatchDay, type MatchDayFacade, type PendingLevelUps } from './match-day';
+// M2 contract (05-technical-m2 §A7): the arena viewer's facade (stubs until WP-M2E).
+export { arenaFacade, MATCH_WATCHING, type ArenaFacade, type ArenaSettings, type WatchPreference } from './arena';
 export { errorText, blockerText } from './messages';
 export {
   settings,

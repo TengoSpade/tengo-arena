@@ -18,6 +18,8 @@ import { ROOT } from '../architecture/rules';
  * builds the project in memory (nothing is written) with the real vite.config.ts and checks all of it.
  */
 const BUDGET_BYTES = 250 * 1000; // Vite reports kB as 1000 bytes: the stricter reading of "250 KB"
+/** M2 arena viewer: the lazy chunks holding PixiJS and src/render/{viewer,skins}, loaded on the first Watch or Replay (tech-025, TUNABLE (tech)). */
+const VIEWER_BUDGET_BYTES = 250 * 1000;
 
 type Chunk = Rollup.OutputChunk;
 
@@ -63,6 +65,14 @@ describe('production bundle', () => {
 
     const startupGzip = startup.reduce((sum, c) => sum + gzipBytes(c), 0);
     expect(startupGzip, `startup JS ${(startupGzip / 1000).toFixed(1)} kB gzip`).toBeLessThanOrEqual(BUDGET_BYTES);
+
+    // M2 (05-technical-m2 §A8, tech-025): PixiJS and the PixiJS half of src/render are lazy chunks, never startup JS,
+    // and together stay within the viewer budget (TUNABLE (tech)) once they exist.
+    const isViewerModule = (id: string): boolean => /\/node_modules\/pixi\.js\/|\/src\/render\/(viewer|skins)\//.test(slash(id));
+    const startupViewer = startup.flatMap((c) => c.moduleIds.filter(isViewerModule));
+    expect(startupViewer, 'PixiJS / viewer modules in the startup JS').toEqual([]);
+    const viewerGzip = chunks.filter((c) => c.moduleIds.some(isViewerModule)).reduce((sum, c) => sum + gzipBytes(c), 0);
+    expect(viewerGzip, `viewer chunks ${(viewerGzip / 1000).toFixed(1)} kB gzip`).toBeLessThanOrEqual(VIEWER_BUDGET_BYTES);
   }, 120_000);
 
   it('ships the content without documentation keys, valid, with the hash of the source files', async () => {

@@ -22,14 +22,16 @@ import type {
   RoundAftermath,
   RoundInput,
   RoundResult,
+  RuleTraceEntry,
   SideInput,
+  UnitIndex,
 } from '../model';
 import type { Seed } from '../rng';
 import { SIM_ENGINE_VERSION, modifiedStat } from './fight';
 import { runFight, runMatch } from './match';
 import { staticValues } from './profile';
 import { BP, ST, kitFor, simTables } from './tables';
-import { InvariantError } from '../util';
+import { InvariantError, notImplemented } from '../util';
 
 /**
  * Version of the fight rules implementation. Bump on ANY change that can
@@ -186,3 +188,48 @@ export { eligiblePerks, eligibleRankSteps, perkEligible, perkPool } from './skil
 
 /** Additive (M1.1 integration): per-round stats summed over a match, and the PROVISIONAL MVP score; core/game's orchestrator assembles round-by-round results with them. */
 export { mergeStats, mvpScore } from './match';
+
+// ---- M2 contract (docs/design/_drafts/05-technical-m2.md §A5, tech-022; WP-M2A implements) ----------------
+
+/** One unit at a probed tick (the pause inspector's "now" column). Amounts in points, time in ticks. */
+export interface UnitProbe {
+  unit: UnitIndex;
+  standing: boolean;
+  hp: number;
+  maxHp: number;
+  /** Total shield points. */
+  shield: number;
+  /** Focus in whole points. */
+  focus: number;
+  /** Ticks until each active ability is ready (0 = ready). */
+  cooldownTicks: { a1: number; a2: number };
+  /** Active statuses with the ticks they have left. */
+  statuses: { status: string; ticksLeft: number; stacks: number; source: UnitIndex | null }[];
+  /** The committed decision (rule index; ruleCount = the stance, -1 = forced by taunt). */
+  committed: { rule: number; action: string; target: UnitIndex | null } | null;
+  /** A decision waiting out the reaction delay, with its commit tick. */
+  pending: { rule: number; action: string; target: UnitIndex | null; commitTick: number } | null;
+  /**
+   * A fresh evaluation of his rule list against the probed tick's state: what he would decide now, with every
+   * rule's skip reason and observed value (03 sys-tactics trace). Null when he cannot evaluate (see blockedBy).
+   */
+  evaluation: { rule: number; action: string; target: UnitIndex | null; trace: RuleTraceEntry[] } | null;
+  /** Why he does not evaluate now: 'downed', 'stunned', 'asleep', 'displaced', 'winding_up', 'casting', 'channelling', 'taunted'; null when free. */
+  blockedBy: string | null;
+}
+
+export interface RoundProbe {
+  /** The probed tick: the state at the END of this tick (what a frame at this tick shows). */
+  tick: number;
+  units: UnitProbe[];
+}
+
+/**
+ * M2 pause inspector (P-22): re-simulate the round to the end of `tick` (record 'none') and report every unit's
+ * state and a traced evaluation of his rules against that state. Read-only: it never changes a result, and the
+ * evaluation it returns is not a decision the sim made (the recorded `unit.decide` trace explains those).
+ * Cost: one partial round, at most a full round's sim time (05 §8: ≤ 6 ms at 'full').
+ */
+export function inspectRoundAt(input: RoundInput, roundSeed: Seed, content: ContentDB, tick: number): RoundProbe {
+  return notImplemented('sim.inspectRoundAt', input, roundSeed, content, tick);
+}

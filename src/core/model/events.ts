@@ -16,6 +16,16 @@ import type { AbilityId, ClassId, ClubId, FighterId } from './ids';
 export const FIGHT_LOG_FORMAT = 'arena-league-fight';
 
 /**
+ * M2 contract (docs/design/_drafts/05-technical-m2.md, tech-016): the version of the RECORDED SHAPE of
+ * events, separate from the sim's ENGINE_VERSION (which covers outcomes). 1 = M1/M1.1 (frames
+ * [x, y, hp, stateBits], no `FightHeader.logFormat`). 2 (planned, WP-M2A) = frames also carry shield and
+ * focus, and the header names its format. A format bump changes full-level event hashes (goldens are
+ * re-pinned) but never a result, a round checksum or the replayability of a stored match, because replays
+ * are verified by round checksums, which are identical at every record level.
+ */
+export const FIGHT_LOG_FORMAT_VERSION = 1;
+
+/**
  * How much the sim records. The OUTCOME must be identical at every level
  * (REQUIRED, T4 / vis-009; tested): recording never draws randomness.
  * - none:    results and checksum only (AI-vs-AI matches, balance runs)
@@ -55,6 +65,8 @@ export interface FightHeader {
   /** Arena size in cm. */
   arena: { width: number; height: number };
   units: FightUnitInfo[];
+  /** M2 (additive, optional): FIGHT_LOG_FORMAT_VERSION of this log; absent = 1. */
+  logFormat?: number;
 }
 
 /** Envelope shared by every event. */
@@ -86,8 +98,12 @@ export interface UnitSpawn {
   enteredThisRound?: boolean;
 }
 
-/** [x cm, y cm, hp, stateBits]. stateBits: 1 casting, 2 stunned/asleep, 4 rooted, 8 silenced, 16 downed. */
-export type FrameUnit = [x: number, y: number, hp: number, stateBits: number];
+/**
+ * [x cm, y cm, hp, stateBits, shield, focus]. stateBits: 1 casting, 2 stunned/asleep, 4 rooted, 8 silenced, 16 downed.
+ * M2 (log format 2, WP-M2A): `shield` (total shield points) and `focus` (whole points) are appended so the
+ * viewer's shield segment and focus bar are exact; format-1 logs have four elements (the viewer then hides both).
+ */
+export type FrameUnit = [x: number, y: number, hp: number, stateBits: number, shield?: number, focus?: number];
 
 /** Why a rule was skipped (P-22 inspector / recap). */
 export type RuleSkipReason =
@@ -105,6 +121,19 @@ export interface RuleTraceEntry {
   rule: number;
   fired: boolean;
   skip: RuleSkipReason | null;
+  // ---- Detail the sim has recorded since engine 1 at 'full' (core/tactics TraceEntry); typed here for the
+  // M2 pause inspector (P-22). Additive and optional: summary recaps and hand-built traces omit them. ----
+  /**
+   * The doc-level reason (03 sys-tactics; core/tactics TraceReason): 'rule_cooldown', 'cond_false', 'cooldown',
+   * 'no_focus', 'silenced', 'blocked', 'no_target', 'only_filtered', 'out_of_range'; null on the fired entry.
+   */
+  reason?: string | null;
+  /** Index of the failing condition within the rule (cond_false). */
+  cond?: number;
+  /** Observed value of the failing check (HP bp, gap mm, a count, focus points, fight ticks), when meaningful. */
+  observed?: number | null;
+  /** Ticks until the ability is ready (cooldown). */
+  readyInTicks?: number;
 }
 
 export interface RoundRecap {
@@ -193,6 +222,11 @@ export interface FightEventData {
   /** S */ 'unit.down': { by: UnitIndex | null; ability: AbilityId | null; hit: number; overkill: number; assists: UnitIndex[] };
   /** S */ 'fight.end': { winner: Side; reason: 'elimination' | 'time-limit'; tiebreakStep: RoundTiebreakStep | null };
   /** S */ 'round.summary': { units: RoundRecap[] };
+  /**
+   * S, RESERVED for the calls package (P-01, sys-calls; 05-technical-m2 §A6): a call took effect at the start of
+   * this tick. unit = the acting captain who relays it. Never emitted before that package (no hash changes).
+   */
+  'call.issue': { side: Side; kind: string; target: UnitIndex | null; index: number };
 }
 
 export type FightEventType = keyof FightEventData;

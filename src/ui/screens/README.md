@@ -18,5 +18,7 @@ One folder per screen (`index.tsx` default-exports the screen component; local C
 | `season-review/` | `#/season-review` | WP7 |
 | `saves/` | `#/saves` | WP7 |
 | `settings/` | `#/settings` | WP7 |
+| `between-rounds/` | `#/between-rounds` (M1.1) | WP7 |
+| `arena/` | `#/arena` (the live round) and `#/replay/:fixtureId` (M2; contract placeholders until WP-M2E, docs/design/_drafts/05-technical-m2.md) | WP-M2E |
 
 Screens read `useStore()` signals and call store actions; they never mutate GameState. Tests provide a store through `StoreContext` (state from `core/testkit` `buildFixtureWorld()`).

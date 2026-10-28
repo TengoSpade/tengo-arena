@@ -13,6 +13,7 @@ import type { LevelUpChoice } from '../fighters';
 import type { FighterId, GameState, LevelOption, LevelUpMode, TraitId, WeekReport } from '../model';
 import { ok, type EngineError, type Result } from '../util';
 import { betweenRounds, type BetweenRoundView } from './orchestrator';
+import type { AdvanceOptions, WatchPause } from './playback';
 import type { GamePorts } from './ports';
 import { processWeekLive, type LiveWeekOutcome } from './week';
 
@@ -22,9 +23,18 @@ export interface AdvanceOutcome {
   week: WeekReport | null;
   /** The between-round screen when the player's match pauses (state.liveMatch is set); null otherwise. */
   pause: BetweenRoundView | null;
+  /**
+   * M2 (additive, optional; WP-M2B): set when the player's next round waits to be watched (AdvanceOptions
+   * playerMatch 'watch'); then `week` and `pause` are null. Absent or null otherwise.
+   */
+  watch?: WatchPause | null;
 }
 
-export function advanceWith(ports: GamePorts, state: GameState, content: ContentDB): Result<AdvanceOutcome, EngineError> {
+/**
+ * Continue. M2 contract: `options.playerMatch` ('watch' | 'simulate', default 'simulate') is accepted now and
+ * ignored until WP-M2B implements the watch flow (05-technical-m2 §A3), so every caller keeps the M1.1 flow.
+ */
+export function advanceWith(ports: GamePorts, state: GameState, content: ContentDB, _options?: AdvanceOptions): Result<AdvanceOutcome, EngineError> {
   const r = advanceLoggedWith(ports, state, content);
   return r.ok ? ok({ state: r.value.state, week: r.value.report, pause: r.value.pause }) : r;
 }
