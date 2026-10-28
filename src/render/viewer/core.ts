@@ -376,7 +376,8 @@ export class ViewerCore {
       clock.markEnd(state.endTick);
       if (state.endTick <= target) {
         target = state.endTick;
-        if (!stop) stop = { kind: 'end', tick: target };
+        // The end subsumes an auto-pause that lands on the same tick (the deciding down): one stop, one press (ux-001).
+        if (!stop || (stop.kind === 'auto' && stop.stop.tick >= target)) stop = { kind: 'end', tick: target };
         if (target !== state.tick) state = this.sample(index, ctx, target);
       }
     }
@@ -397,7 +398,8 @@ export class ViewerCore {
     const c1 = dNext + lag;
 
     // The first of: an auto-pause stop, the end, the live head after a rewind, in the revealed range (c0, c1].
-    // At the same tick an auto-pause wins over the end, and the end over the head.
+    // At the same tick the end wins over an auto-pause (the deciding down is the end: one stop, one press, ux-001), and
+    // an auto-pause over the head.
     let stop: PlaybackStop | null = null;
     let at = Number.POSITIVE_INFINITY;
     let rank = 3;
@@ -409,21 +411,21 @@ export class ViewerCore {
       }
     };
     if (clock.atEnd) {
-      consider(clock.tick, 1, { kind: 'end', tick: clock.tick });
+      consider(clock.tick, 0, { kind: 'end', tick: clock.tick });
     } else {
       // Asked up to the tick about to be revealed, once per whole tick (stops sit on whole ticks): never further.
       this.stops.ensure(Math.floor(c1), (u) => this.o.timeline.autoPauseStops(index, this.autoPause, ctx, u));
       const hit = this.stops.firstIn(c0, c1);
-      if (hit) consider(hit.tick, 0, { kind: 'auto', stop: hit });
+      if (hit) consider(hit.tick, 1, { kind: 'auto', stop: hit });
       // (a hair of tolerance: float noise must not let the frame that lands on the head slip past it)
       if (c0 < h0 - HAIR && c1 >= h0 - HAIR) consider(h0, 2, { kind: 'head', tick: h0 });
       const known = clock.end;
       if (known !== null) {
-        if (c1 >= known - HAIR && known > c0) consider(known, 1, { kind: 'end', tick: known });
-      } else if (!stop && c1 > h0) {
+        if (c1 >= known - HAIR && known > c0) consider(known, 0, { kind: 'end', tick: known });
+      } else if ((!stop || (stop as PlaybackStop).kind === 'auto') && c1 > h0) {
         // The end is learned only when the revealed range reaches it: a probe at the new frontier.
         const probe = this.sample(index, ctx, c1, c1);
-        if (probe.ended && probe.endTick !== null && probe.endTick <= c1) consider(probe.endTick, 1, { kind: 'end', tick: probe.endTick });
+        if (probe.ended && probe.endTick !== null && probe.endTick <= c1) consider(probe.endTick, 0, { kind: 'end', tick: probe.endTick });
       }
     }
 
