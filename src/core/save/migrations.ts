@@ -154,9 +154,23 @@ export function migrateV3ToV4(raw: unknown): unknown {
   return raw;
 }
 
+/**
+ * v4 -> v5 (M2 arena viewer; docs/design/_drafts/05-technical-m2.md §A3, tech-023): three additive optional fields,
+ * `MatchState.watch` (how the player watches his live match and the reveal frontier, `LiveWatch`),
+ * `RoundLineups.calls` (RESERVED for the calls package) and `MatchResult.simHash` (core/sim simContentHash of the
+ * content that played the match, for replay availability). A v4 state holds none of them, so the step is the identity
+ * and the runner stamps the new version: a v4 live match (always between rounds, or none) is a simulated match, and
+ * v4 results fall back to their content hash for replays. The bump exists for older builds, whose strict schema would
+ * call a save holding the new fields damaged; a version past theirs is reported as `save.too-new`.
+ */
+export function migrateV4ToV5(raw: unknown): unknown {
+  return raw;
+}
+
 /** Ordered migrations up to STATE_SCHEMA_VERSION. */
 export const MIGRATIONS: readonly Migration[] = [
   { from: 1, to: 2, migrate: migrateV1ToV2 },
   { from: 2, to: 3, migrate: migrateV2ToV3 },
   { from: 3, to: 4, migrate: migrateV3ToV4 },
+  { from: 4, to: 5, migrate: migrateV4ToV5 },
 ];

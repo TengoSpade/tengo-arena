@@ -28,10 +28,11 @@ import type {
 } from '../model';
 import type { Seed } from '../rng';
 import { SIM_ENGINE_VERSION, modifiedStat } from './fight';
-import { runFight, runMatch } from './match';
+import { probeRound } from './probe';
+import { refuseCalls, runFight, runMatch } from './match';
 import { staticValues } from './profile';
 import { BP, ST, kitFor, simTables } from './tables';
-import { InvariantError, notImplemented } from '../util';
+import { InvariantError } from '../util';
 
 /**
  * Version of the fight rules implementation. Bump on ANY change that can
@@ -159,6 +160,7 @@ export interface RoundOutput {
  * simulateFight (sim/round.test.ts, sim/m11.test.ts).
  */
 export function simulateRound(input: RoundInput, roundSeed: Seed, content: ContentDB, options?: SimOptions): RoundOutput {
+  refuseCalls(input);
   const run = runFight(content, roundSeed, input.round, input, options?.record ?? 'none');
   const aftermath: RoundAftermath[] = [];
   for (const u of run.fight.units) {
@@ -212,15 +214,31 @@ export interface UnitProbe {
   /**
    * A fresh evaluation of his rule list against the probed tick's state: what he would decide now, with every
    * rule's skip reason and observed value (03 sys-tactics trace). Null when he cannot evaluate (see blockedBy).
+   * Implemented as the sim's own next decision phase (tick + 1: its timers, his due pending commit, a traced evaluation,
+   * ignoring the decision cadence and the reaction delay), so it equals the evaluation the sim records where it makes one.
+   * Every value in it (the trace's `readyInTicks`, `observed` focus, hp, gaps and ticks) is as of `RoundProbe.evaluatedTick`
+   * (tick + 1, after that tick's timers), not of the probed tick: `cooldownTicks` here is one more than a trace's `readyInTicks`.
    */
   evaluation: { rule: number; action: string; target: UnitIndex | null; trace: RuleTraceEntry[] } | null;
-  /** Why he does not evaluate now: 'downed', 'stunned', 'asleep', 'displaced', 'winding_up', 'casting', 'channelling', 'taunted'; null when free. */
+  /**
+   * Why he does not evaluate now: 'downed', 'stunned', 'asleep', 'displaced', 'winding_up', 'casting', 'channelling', 'taunted'
+   * (additive: 'round_over' for a survivor once the round has ended); null when free. The evaluation is null exactly when this is set.
+   */
   blockedBy: string | null;
 }
 
 export interface RoundProbe {
-  /** The probed tick: the state at the END of this tick (what a frame at this tick shows). */
+  /**
+   * The probed tick: the state at the END of this tick (what a frame at this tick shows). The requested tick floored,
+   * clamped to 0 and to the round's end tick. `shield` is what the unit holds going into the next tick: a shield whose
+   * `expiresTick` equals this tick is already gone here (and in the frame of that tick), although it absorbed hits during it.
+   */
   tick: number;
+  /**
+   * Additive: the tick the evaluations are as of, always `tick + 1` (the decision phase after `tick`, with its timers
+   * applied). The state fields are as of `tick`; the `evaluation` traces (readyInTicks, observed values) are as of this tick.
+   */
+  evaluatedTick: number;
   units: UnitProbe[];
 }
 
@@ -231,11 +249,11 @@ export interface RoundProbe {
  * Cost: one partial round, at most a full round's sim time (05 §8: ≤ 6 ms at 'full').
  */
 export function inspectRoundAt(input: RoundInput, roundSeed: Seed, content: ContentDB, tick: number): RoundProbe {
-  return notImplemented('sim.inspectRoundAt', input, roundSeed, content, tick);
+  return probeRound(input, roundSeed, content, tick);
 }
 
 /**
- * M2 (05-technical-m2 §A4, tech-026; owner answer to Q56; WP-M2A implements): a hash of exactly the content the
+ * M2 (05-technical-m2 §A4, tech-026; owner answer to Q56; implemented in simhash.ts): a hash of exactly the content the
  * fight reads, so replay availability follows "replays end at a balance-changing update" rather than any edit.
  *
  * Not a hand-kept key list (review: a list misses reads such as development.captaincy.grades and
@@ -253,6 +271,4 @@ export function inspectRoundAt(input: RoundInput, roundSeed: Seed, content: Cont
  * unchanged. The career content hash (core/content hashContent, saves, GameState.content) is unchanged. Cached
  * per ContentDB.
  */
-export function simContentHash(content: ContentDB): string {
-  return notImplemented('sim.simContentHash', content);
-}
+export { simContentHash } from './simhash';
