@@ -36,23 +36,29 @@ export function loadNote(load: MainThreadLoad | null): string | null {
 }
 
 /**
- * Frame rate (A10: 60 fps median, p95 interval 20 ms, nothing over 33 ms). The viewer is judged against two things: the
- * target, and what this browser session can deliver at all, measured on a bare full-window WebGL canvas (`baseline`). A
- * session whose empty canvas already runs under the target (a headless browser's frame cadence follows its display) cannot show
- * the target: if the viewer keeps up with that empty canvas (median within 3%, p95 within 2 ms, nothing over 33 ms) the
- * check warns "environment-limited" instead of failing the product, and says so; a viewer slower than the empty canvas fails.
+ * Frame rate (A10: 60 fps median, p95 interval 20 ms, nothing over 33 ms), judged in three steps.
+ * 1. The target as written: median at least 58 fps (the 60 target with 2 fps of timer slack), p95 at most 20 ms, nothing over
+ *    33.5 ms. Met: pass.
+ * 2. Missed: is the viewer slower than what this browser session can deliver at all? A bare full-window WebGL canvas (antialias,
+ *    preserved drawing buffer, nothing else) is measured in the same session as `baseline`. A viewer slower than that (median
+ *    more than 3% over, p95 more than 2 ms over, or any frame over 33.5 ms) fails: the product costs frame time.
+ * 3. A viewer that keeps up with an empty canvas in a session whose empty canvas is itself under 58 fps has not missed the target
+ *    for a reason of its own, but has not shown it either. That is never a pass: it is a warning, and under --strict-perf the
+ *    check is NOT MADE, which makes the run's verdict blocked. The criterion therefore stays A10's 60 fps median; the baseline
+ *    only decides who to blame for a miss.
  */
 export function checkFrameRate(id: 'perf.fps-1x' | 'perf.fps-4x', speedLabel: string, s: IntervalSummary, ctx: PerfContext, load: MainThreadLoad | null = null, baseline: IntervalSummary | null = null): CheckResult {
   const enough = s.frames >= 60;
   const ok = enough && s.medianFps >= TARGETS.fpsMedianMin && s.p95Ms <= TARGETS.p95IntervalMsMax && s.over33 === 0;
   const keepsUp = baseline !== null && baseline.frames >= 30 && s.medianMs <= baseline.medianMs * 1.03 && s.p95Ms <= baseline.p95Ms + 2 && s.over33 === 0;
   const environmentLimited = enough && !ok && keepsUp && baseline!.medianFps < TARGETS.fpsMedianMin;
-  const status: CheckStatus = !enough ? 'fail' : environmentLimited ? 'warn' : perfStatus(ok, ctx);
+  // Never a pass: the session cannot show the target. A warning normally; under --strict-perf the check is not made, which blocks the verdict.
+  const status: CheckStatus = !enough ? 'fail' : environmentLimited ? (ctx.strict ? 'skip' : 'warn') : perfStatus(ok, ctx);
   const baseNote = baseline ? `An empty full-window WebGL canvas in this browser session runs at ${fps(baseline.medianFps)} (median ${ms(baseline.medianMs)}, p95 ${ms(baseline.p95Ms)}); the viewer at ${fps(s.medianFps)} (median ${ms(s.medianMs)}, p95 ${ms(s.p95Ms)}).` : null;
   const detail = !enough
     ? `Only ${s.frames} playing frames were recorded (at least 60 needed): the fight clock did not advance long enough.`
     : environmentLimited
-      ? `Environment-limited, not a product miss: ${baseNote} The viewer keeps up with it, so the ${TARGETS.fpsMedianMin}-60 fps target cannot be shown in this session; run it on the reference machine or on a 60 Hz display. ${loadNote(load) ?? ''}`.trim()
+      ? `NOT DEMONSTRATED in this session (the viewer is not slower than the browser, but the browser cannot reach the target): ${baseNote} The viewer keeps up with the empty canvas, so its frame time is not what holds it under ${TARGETS.fpsMedianMin} fps, but the 60 fps median of A10 is not shown either; run it on the reference machine or on a 60 Hz display.${loadNote(load) ? ` ${loadNote(load)}` : ''}`
       : status === 'warn'
         ? [SOFTWARE_NOTE, baseNote, loadNote(load)].filter(Boolean).join(' ')
         : status === 'fail'
@@ -110,8 +116,9 @@ export function checkRoundLoad(t: { simMs: readonly number[]; indexMs: readonly 
 /**
  * First viewer open (A10: lazy chunk + PixiJS init + prepare, at most 500 ms, local files). One sample is noise of about
  * +-70 ms around the target (437, 437, 450, 456, 510, 591 ms were seen on one machine), so the driver opens the round in
- * three pages: the first is the cold one (nothing cached yet in the session), the others find the chunk cached. The target is
- * judged on the median of the opens; a cold open over the target with the median under it warns, with every sample listed.
+ * three pages: the first is the cold one (nothing cached yet in the session), the others find the chunk cached. Normally the target is
+ * judged on the median of the opens and a cold open over it with the median under it warns, with every sample listed; under
+ * --strict-perf the cold open is the gate, as A10 words it (the first open), and fails.
  */
 export function checkFirstOpen(samplesMs: readonly number[] | number | null, ctx: PerfContext): CheckResult {
   const samples = samplesMs === null ? [] : typeof samplesMs === 'number' ? [samplesMs] : [...samplesMs];
@@ -126,7 +133,8 @@ export function checkFirstOpen(samplesMs: readonly number[] | number | null, ctx
     return { ...base, status, actual, ...(status === 'warn' ? { detail: SOFTWARE_NOTE } : {}) };
   }
   if (cold > TARGETS.firstOpenMsMax) {
-    return { ...base, status: 'warn', actual, detail: `The cold open (${ms(cold)}) is over the ${TARGETS.firstOpenMsMax} ms target; the median is under it. The target is for a viewer prefetched at idle in a matchweek (A5, tech-025); the fixture path opens it cold, with no prefetch.` };
+    // Strict: the target as written is the first open, which is the cold one.
+    return { ...base, status: ctx.strict ? 'fail' : 'warn', actual, detail: `The cold open (${ms(cold)}) is over the ${TARGETS.firstOpenMsMax} ms target; the median is under it. The target is for a viewer prefetched at idle in a matchweek (A5, tech-025); the fixture path opens it cold, with no prefetch.` };
   }
   return { ...base, status: 'pass', actual };
 }

@@ -360,14 +360,18 @@ describe('frame rate against what the browser session can deliver', () => {
     const viewer = summarizeIntervals(steady(550, 17.6));
     const c = checkFrameRate('perf.fps-1x', '1x', viewer, gpu, { wallS: 10, task: 0.08, script: 0.05, layout: 0, style: 0 }, baseSlow);
     expect(c.status).toBe('warn');
-    expect(c.detail).toMatch(/Environment-limited, not a product miss/);
+    expect(c.detail).toMatch(/NOT DEMONSTRATED in this session/);
     expect(c.detail).toMatch(/empty full-window WebGL canvas.*55\.9 fps/);
     expect(c.detail).toMatch(/reference machine/);
     expect(c.actual).toMatch(/empty-canvas baseline 55\.9 fps/);
   });
 
-  it('strict mode does not turn an environment-limited miss into a failure of the product', () => {
-    expect(checkFrameRate('perf.fps-4x', '4x', summarizeIntervals(steady(550, 17.6)), { softwareGl: false, strict: true }, null, baseSlow).status).toBe('warn');
+  it('under strict an environment-limited miss is not made (it is not a pass and not the product\'s failure): the run is blocked', () => {
+    const c = checkFrameRate('perf.fps-4x', '4x', summarizeIntervals(steady(550, 17.6)), { softwareGl: false, strict: true }, null, baseSlow);
+    expect(c.status).toBe('skip');
+    expect(c.pending).toBeUndefined();
+    expect(c.detail).toMatch(/NOT DEMONSTRATED/);
+    expect(c.detail).toMatch(/60 fps median of A10 is not shown/);
   });
 
   it('a viewer slower than the empty canvas fails, with the comparison', () => {
@@ -402,6 +406,11 @@ describe('first viewer open over several opens', () => {
     expect(c.status).toBe('warn');
     expect(c.actual).toMatch(/591\.0 ms, 437\.0 ms, 450\.0 ms/);
     expect(c.detail).toMatch(/cold open.*prefetch/);
+  });
+
+  it('under strict the cold open is the gate, as A10 words it', () => {
+    expect(checkFirstOpen([591, 437, 450], { softwareGl: false, strict: true }).status).toBe('fail');
+    expect(checkFirstOpen([450, 437, 450], { softwareGl: false, strict: true }).status).toBe('pass');
   });
 
   it('fails when the median is over the target', () => {
