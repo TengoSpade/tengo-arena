@@ -91,13 +91,16 @@ export function frameAtOrBefore(ft: FrameTable, tick: number): number {
   return Math.max(0, bisectRight(ft.ticks, tick) - 1);
 }
 
-/** Position of a unit at a (fractional) tick: linear between the surrounding frames, held after the last. */
-export function positionAt(ft: FrameTable, unit: number, tick: number, out: Pos): void {
+/**
+ * Position of a unit at a (fractional) tick: linear between the surrounding frames, held after the last. A frame later
+ * than `known` (the tick the log is known up to, a live head) is not used: the position holds at the frame before it.
+ */
+export function positionAt(ft: FrameTable, unit: number, tick: number, out: Pos, known: number = Infinity): void {
   const xs = ft.x[unit]!;
   const ys = ft.y[unit]!;
   const k = frameAtOrBefore(ft, tick);
   const t0 = ft.ticks[k]!;
-  if (k >= ft.count - 1 || tick <= t0) {
+  if (k >= ft.count - 1 || tick <= t0 || ft.ticks[k + 1]! > known) {
     out.x = xs[k]!;
     out.y = ys[k]!;
     return;

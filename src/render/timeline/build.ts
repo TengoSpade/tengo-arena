@@ -118,16 +118,17 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
   let overtimeTick: number | null = null;
   let overtimeSeq = -1;
   let endTick: number | null = null;
-  let lastTick = frames.ticks[frames.count - 1]!;
 
+  // Index-time decisions that read a position use it held at the event tick (the latest frame at or before it), so what
+  // is decided never depends on a frame after the event. Drawing positions are resolved at sample time (see EffectRec.anchor).
   const pos: Pos = { x: 0, y: 0 };
-  const at = (unit: number | undefined, tick: number): Pos => {
+  const atHeld = (unit: number | undefined, tick: number): Pos => {
     if (unit === undefined || unit < 0 || unit >= unitCount) {
       pos.x = 0;
       pos.y = 0;
       return pos;
     }
-    positionAt(frames, unit, tick, pos);
+    positionAt(frames, unit, tick, pos, tick);
     return pos;
   };
 
@@ -140,22 +141,25 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
     kindOf: EffectKind,
     ev: FightEvent,
     slot: number,
-    where: { x: number; y: number },
-    fields: { unit?: number | null; target?: number | null; ability?: AbilityId | null; amount?: number | null; crit?: boolean; tone?: EffectRenderState['tone']; life?: number } = {},
+    where: number | { x: number; y: number },
+    fields: { unit?: number | null; target?: number | null; ability?: AbilityId | null; amount?: number | null; crit?: boolean; tone?: EffectRenderState['tone']; life?: number; startTick?: number; needsStanding?: readonly number[] } = {},
   ): EffectRec => {
+    const start = fields.startTick ?? ev.tick;
     const rec: EffectRec = {
       id: companionId(ev.seq, slot),
       kind: kindOf,
       unit: fields.unit === undefined ? (ev.unit ?? null) : fields.unit,
       target: fields.target === undefined ? (ev.target ?? null) : fields.target,
       ability: fields.ability ?? null,
-      x: where.x,
-      y: where.y,
+      anchor: typeof where === 'number' ? where : null,
+      x: typeof where === 'number' ? 0 : where.x,
+      y: typeof where === 'number' ? 0 : where.y,
       amount: fields.amount ?? null,
       crit: fields.crit ?? false,
       tone: fields.tone ?? 'neutral',
-      tick: ev.tick,
-      end: ev.tick + Math.max(1, fields.life ?? EFFECT_LIFETIME_TICKS[kindOf]),
+      tick: start,
+      end: start + Math.max(1, fields.life ?? EFFECT_LIFETIME_TICKS[kindOf]),
+      needsStanding: fields.needsStanding ?? [],
     };
     effects.push(rec);
     return rec;
@@ -213,7 +217,6 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
   };
 
   for (const ev of events) {
-    if (ev.tick > lastTick) lastTick = ev.tick;
     if (ev.tick !== releaseTick) {
       releaseTick = ev.tick;
       releases = [];
@@ -233,7 +236,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
         if (!classId) break;
         const basic = content.classAbility(classId, 'basic');
         const planned = ev.tick + Math.max(1, ev.data.windupTicks);
-        beginCast(u, { kind: 'windup', ability: basic.id as AbilityId, start: ev.tick, planned, end: planned, target: ev.target ?? null, center: null });
+        beginCast(u, { kind: 'windup', ability: basic.id as AbilityId, start: ev.tick, planned, end: planned, target: ev.target ?? null, center: null, cue: null });
         break;
       }
       case 'attack.cancel': {
@@ -249,7 +252,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
         }
         const def = content.abilities.get(ev.data.ability);
         const planned = ev.tick + ev.data.castTicks;
-        beginCast(u, { kind: 'cast', ability: ev.data.ability, start: ev.tick, planned, end: planned, target: ev.target ?? null, center: def ? areaCenterOf(def) : null });
+        beginCast(u, { kind: 'cast', ability: ev.data.ability, start: ev.tick, planned, end: planned, target: ev.target ?? null, center: def ? areaCenterOf(def) : null, cue: cueOf(ev.data.ability) });
         break;
       }
       case 'cast.release': {
@@ -262,25 +265,25 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
         const target = ev.target ?? u;
         if (def?.channel) {
           const planned = ev.tick + ticksOf(def.channel.durationS);
-          beginCast(u, { kind: 'channel', ability, start: ev.tick, planned, end: planned, target: ev.target ?? null, center: areaCenterOf(def) });
+          beginCast(u, { kind: 'channel', ability, start: ev.tick, planned, end: planned, target: ev.target ?? null, center: areaCenterOf(def), cue });
         }
         if (!cue) break;
         releases.push({ unit: u, side: sides[u]!, ability, cue });
         if (cue.effects.some((e) => e.type === 'chain')) chainWatch.set(u, { ability, until: ev.tick + CHAIN_WINDOW_TICKS, last: target });
         switch (cue.release) {
           case 'swing':
-            pushEffect('swing', ev, 0, at(target, ev.tick), { unit: u, target, ability, tone: cue.tone });
+            pushEffect('swing', ev, 0, target, { unit: u, target, ability, tone: cue.tone });
             break;
           case 'beam':
-            pushEffect('beam', ev, 0, at(target, ev.tick), { unit: u, target, ability, tone: cue.tone });
+            pushEffect('beam', ev, 0, target, { unit: u, target, ability, tone: cue.tone });
             break;
           case 'area-flash': {
             const centre = def?.area?.center === 'target' ? target : u;
-            pushEffect('splash', ev, 0, at(centre, ev.tick), { unit: u, target, ability, tone: cue.tone });
+            pushEffect('splash', ev, 0, centre, { unit: u, target, ability, tone: cue.tone });
             break;
           }
           case 'self-pulse':
-            pushEffect('splash', ev, 0, at(u, ev.tick), { unit: u, target: u, ability, tone: cue.tone });
+            pushEffect('splash', ev, 0, u, { unit: u, target: u, ability, tone: cue.tone });
             break;
           case 'projectile':
           case 'dash-trail':
@@ -288,12 +291,12 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
             break;
         }
         if (cue.effects.some((e) => e.type === 'splash') && cue.release !== 'area-flash' && cue.release !== 'self-pulse') {
-          pushEffect('splash', ev, 2, at(target, ev.tick), { unit: u, target, ability, tone: cue.tone });
+          pushEffect('splash', ev, 2, target, { unit: u, target, ability, tone: cue.tone });
         }
         if (cue.effects.some((e) => e.type === 'guard') && def) {
           const guard = collectEffects(def).find((e) => e.type === 'guard');
           if (guard && guard.type === 'guard' && target !== u) {
-            pushEffect('guard-link', ev, 0, at(target, ev.tick), { unit: u, target, ability, life: ticksOf(guard.durationS) });
+            pushEffect('guard-link', ev, 3, target, { unit: u, target, ability, life: ticksOf(guard.durationS), needsStanding: [u, target] });
           }
         }
         break;
@@ -303,7 +306,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
         if (u === undefined || !ev.data || u >= unitCount) break;
         closeOpen(u, ev.tick);
         if (ev.data.by !== null) {
-          pushEffect('interrupt', ev, 0, at(u, ev.tick), { unit: ev.data.by, target: u, ability: ev.data.ability });
+          pushEffect('interrupt', ev, 0, u, { unit: ev.data.by, target: u, ability: ev.data.ability });
           keyMoment(ev, 'interrupt', ev.data.by, u, ev.data.ability);
         }
         break;
@@ -311,7 +314,6 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
       case 'projectile.launch': {
         const u = ev.unit;
         if (u === undefined || !ev.data || u >= unitCount) break;
-        const p = at(u, ev.tick);
         projectiles.push({
           id: ev.seq,
           ability: ev.data.ability,
@@ -319,8 +321,6 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
           target: ev.target ?? null,
           launch: ev.tick,
           land: Math.max(ev.data.landTick, ev.tick + 1),
-          sx: p.x,
-          sy: p.y,
         });
         break;
       }
@@ -329,7 +329,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
         const d = ev.data;
         if (recv === undefined || !d || recv >= unitCount) break;
         hitTicks[recv]!.push(ev.tick);
-        const where = at(recv, ev.tick);
+        const where = recv;
         const ability = d.ability;
         pushEffect('impact', ev, 0, where, { unit: ev.unit ?? null, target: recv, ability, crit: d.crit, tone: d.damageType });
         const total = d.amount + d.toShield;
@@ -345,26 +345,26 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
       }
       case 'evade': {
         if (ev.unit === undefined || ev.unit >= unitCount) break;
-        pushEffect('evade', ev, 0, at(ev.unit, ev.tick), { unit: ev.unit, target: ev.target ?? null, ability: ev.data?.ability ?? null });
+        pushEffect('evade', ev, 0, ev.unit, { unit: ev.target ?? null, target: ev.unit, ability: ev.data?.ability ?? null });
         break;
       }
       case 'heal': {
         const healed = ev.target;
         const d = ev.data;
         if (healed === undefined || !d || healed >= unitCount || d.amount <= 0) break;
-        const where = at(healed, ev.tick);
+        const where = healed;
         pushEffect('heal-pulse', ev, 0, where, { unit: ev.unit ?? null, target: healed, ability: d.ability, tone: 'heal' });
         pushEffect('number', ev, 1, where, { unit: ev.unit ?? null, target: healed, ability: d.ability, amount: d.amount, tone: 'heal' });
         break;
       }
       case 'shield.gain': {
         if (ev.unit === undefined || ev.unit >= unitCount || !ev.data) break;
-        pushEffect('shield-gain', ev, 0, at(ev.unit, ev.tick), { unit: ev.target ?? null, target: ev.unit, ability: ev.data.ability, tone: 'shield' });
+        pushEffect('shield-gain', ev, 0, ev.unit, { unit: ev.target ?? null, target: ev.unit, ability: ev.data.ability, tone: 'shield' });
         break;
       }
       case 'shield.break': {
         if (ev.unit === undefined || ev.unit >= unitCount) break;
-        pushEffect('shield-break', ev, 0, at(ev.unit, ev.tick), { unit: ev.target ?? null, target: ev.unit, tone: 'shield' });
+        pushEffect('shield-break', ev, 0, ev.unit, { unit: ev.target ?? null, target: ev.unit, tone: 'shield' });
         break;
       }
       case 'status.apply': {
@@ -396,7 +396,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
           list.push({ status: d.status, stacking, source, ability, endsTick: ends, seg });
         }
         // Applied by an ability (not by the captain model): a flash on the target. Control reads stronger through the ability's cue.
-        if (ability !== null) pushEffect('status-apply', ev, 0, at(u, ev.tick), { unit: ev.target ?? null, target: u, ability });
+        if (ability !== null) pushEffect('status-apply', ev, 0, u, { unit: ev.target ?? null, target: u, ability });
         break;
       }
       case 'status.expire': {
@@ -423,7 +423,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
               const key = `${wantKind}:${u}`;
               if (cleansed.has(key)) break;
               cleansed.add(key);
-              pushEffect(wantKind, ev, 0, at(u, ev.tick), { unit: r.unit, target: u, ability: r.ability });
+              pushEffect(wantKind, ev, 0, u, { unit: r.unit, target: u, ability: r.ability });
               break;
             }
           }
@@ -432,7 +432,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
       }
       case 'status.resist': {
         if (ev.unit === undefined || ev.unit >= unitCount) break;
-        pushEffect('status-resist', ev, 0, at(ev.unit, ev.tick), { unit: ev.target ?? null, target: ev.unit });
+        pushEffect('status-resist', ev, 0, ev.unit, { unit: ev.target ?? null, target: ev.unit });
         break;
       }
       case 'displace': {
@@ -443,8 +443,17 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
         displaces[u]!.push({ kind: d.kind, start: ev.tick, end: ev.tick + ticks });
         const life = Math.max(6, ticks + 4);
         const from = { x: d.from[0], y: d.from[1] };
-        if (d.kind === 'dash' || d.kind === 'leap') pushEffect('dash-trail', ev, 0, from, { unit: u, target: ev.target ?? null, life });
-        else pushEffect('displace', ev, 0, from, { unit: u, target: ev.target ?? null, life });
+        if (d.kind === 'dash' || d.kind === 'leap') {
+          pushEffect('dash-trail', ev, 0, from, { unit: u, target: ev.target ?? null, life });
+          // An ability that dashes or leaps and then strikes an area (released this very tick) flashes that area where it lands.
+          const release = [...releases].reverse().find((r) => r.unit === u);
+          const area = release ? content.abilities.get(release.ability)?.area : null;
+          if (release && area) {
+            const landing = ev.tick + ticks;
+            const centre: number | { x: number; y: number } = area.center === 'target' && ev.target !== undefined ? ev.target : { x: d.to[0], y: d.to[1] };
+            pushEffect('splash', ev, 2, centre, { unit: u, target: ev.target ?? null, ability: release.ability, tone: release.cue.tone, startTick: landing, needsStanding: [u] });
+          }
+        } else pushEffect('displace', ev, 0, from, { unit: u, target: ev.target ?? null, life });
         break;
       }
       case 'zone.spawn': {
@@ -494,21 +503,21 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
         if (owner === undefined || owner >= unitCount) break;
         const list = openZones[owner]!;
         if (list.length === 0) break;
-        const who = at(ev.target, ev.tick);
+        // Which zone: the owner's nearest to whoever triggered it, by positions held at the event tick (no look-ahead).
+        const who = atHeld(ev.target, ev.tick);
         const wx = who.x;
         const wy = who.y;
         let best = list[0]!;
         let bestD = Infinity;
         for (const z of list) {
-          const zp = z.follow ? at(owner, ev.tick) : { x: z.x, y: z.y };
+          const zp = z.follow ? atHeld(owner, ev.tick) : { x: z.x, y: z.y };
           const dd = (zp.x - wx) ** 2 + (zp.y - wy) ** 2;
           if (dd < bestD) {
             bestD = dd;
             best = z;
           }
         }
-        const c = best.follow ? at(owner, ev.tick) : { x: best.x, y: best.y };
-        pushEffect('zone-trigger', ev, 0, { x: c.x, y: c.y }, { unit: owner, target: ev.target ?? null, ability: best.ability });
+        pushEffect('zone-trigger', ev, 0, best.follow ? owner : { x: best.x, y: best.y }, { unit: owner, target: ev.target ?? null, ability: best.ability });
         break;
       }
       case 'unit.down': {
@@ -527,21 +536,21 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
           z.expire = ev.tick;
           openZones[u]!.splice(openZones[u]!.indexOf(z), 1);
         }
-        pushEffect('down', ev, 0, at(u, ev.tick), { unit: u, target: d.by, ability: d.ability });
+        pushEffect('down', ev, 0, u, { unit: u, target: d.by, ability: d.ability });
         keyMoment(ev, 'down', d.by, u, d.ability);
         break;
       }
       case 'deathward.save': {
         const u = ev.unit;
         if (u === undefined || u >= unitCount) break;
-        pushEffect('deathward', ev, 0, at(u, ev.tick), { unit: u, target: ev.data?.by ?? null });
+        pushEffect('deathward', ev, 0, u, { unit: u, target: ev.data?.by ?? null });
         keyMoment(ev, 'deathward', ev.data?.by ?? null, u, null);
         break;
       }
       case 'captain.rally': {
         const u = ev.unit;
         if (u === undefined || u >= unitCount) break;
-        pushEffect('rally', ev, 0, at(u, ev.tick), { unit: u, target: null });
+        pushEffect('rally', ev, 0, u, { unit: u, target: null });
         keyMoment(ev, 'rally', u, null, null);
         break;
       }
@@ -550,7 +559,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
         if (u === undefined || u >= unitCount) break;
         captains[sides[u]!].push({ tick: ev.tick, unit: null });
         captainDowns.push({ tick: ev.tick, seq: ev.seq, unit: u, side: sides[u]! });
-        pushEffect('captain-down', ev, 0, at(u, ev.tick), { unit: u, target: null });
+        pushEffect('captain-down', ev, 0, u, { unit: u, target: null });
         keyMoment(ev, 'captain-down', u, null, null);
         break;
       }
@@ -572,7 +581,7 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
       case 'call.issue': {
         const u = ev.unit;
         if (u === undefined || u >= unitCount) break;
-        pushEffect('call', ev, 0, at(u, ev.tick), { unit: u, target: ev.data?.target ?? null });
+        pushEffect('call', ev, 0, u, { unit: u, target: ev.data?.target ?? null });
         keyMoment(ev, 'call', u, ev.data?.target ?? null, null);
         break;
       }
@@ -593,14 +602,8 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
     }
   }
 
-  // Guard links end when either fighter goes down.
-  for (const e of effects) {
-    if (e.kind !== 'guard-link') continue;
-    for (const u of [e.unit, e.target]) {
-      const d = u === null ? null : downTick[u];
-      if (d !== null && d !== undefined && d >= e.tick && d < e.end) e.end = d;
-    }
-  }
+  // Effects that start later than their event (a leap's landing) keep the list in start order.
+  effects.sort((x, y) => x.tick - y.tick); // a stable sort: events keep their order within a tick
   // Projectiles' flights and effects' lifetimes bound the windows a sample scans.
   let maxFlight = 1;
   for (const p of projectiles) maxFlight = Math.max(maxFlight, p.land - p.launch);
@@ -644,7 +647,6 @@ export function buildTimelineData(log: FightLog, content: ContentDB, cues: CueTa
     overtimeTick,
     overtimeSeq,
     endTick,
-    lastTick,
     moments,
     momentTicks,
     downs,

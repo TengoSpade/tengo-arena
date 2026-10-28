@@ -114,3 +114,8 @@ export function withEvents(log: FightLog, extra: readonly Omit<FightEvent, 'seq'
   }
   return { ...log, events: merged.map((e, seq) => ({ ...e, seq }) as FightEvent) };
 }
+
+/** The log with only its start and frames: a bare arena to which a test adds exactly the events it wants (use withEvents). */
+export function skeletonLog(log: FightLog): FightLog {
+  return { header: log.header, events: log.events.filter((e) => e.type === 'fight.start' || e.type === 'frame'), hash: 'skeleton' };
+}

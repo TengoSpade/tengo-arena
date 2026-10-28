@@ -1,6 +1,6 @@
 /** Internal shape of an indexed log (`PlaybackIndex.internal`). PURE; opaque outside src/render/timeline. */
 import type { AbilityId, FightEvent, FightHeader, Side, UnitIndex } from '../../core/model';
-import type { CueTable, KeyMoment } from '../types';
+import type { AbilityCue, CueTable, KeyMoment } from '../types';
 import type { EffectRec } from './effects';
 import type { FrameTable } from './frames';
 
@@ -16,6 +16,8 @@ export interface CastRec {
   target: UnitIndex | null;
   /** Where the area of a telegraph is centred; null for an ability without an area or zone. */
   center: 'self' | 'target' | null;
+  /** The ability's cue (telegraph geometry); null for a windup, and for an ability the content set does not know. */
+  cue: AbilityCue | null;
 }
 
 /** A displacement (dash, leap, knockback, pull) of one unit. */
@@ -55,8 +57,6 @@ export interface ProjectileRec {
   target: UnitIndex | null;
   launch: number;
   land: number;
-  sx: number;
-  sy: number;
 }
 
 export interface ZoneRec {
@@ -116,8 +116,6 @@ export interface TimelineData {
   overtimeSeq: number;
   /** Tick of `fight.end`, or null when the log has none (yet). */
   endTick: number | null;
-  /** The last tick the log knows of (its last event or frame). */
-  lastTick: number;
   moments: readonly KeyMoment[];
   momentTicks: Float64Array;
   downs: readonly DownRec[];

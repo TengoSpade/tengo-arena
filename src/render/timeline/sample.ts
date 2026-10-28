@@ -1,12 +1,18 @@
 /**
  * sampleAt: the arena at one (fractional) tick, a pure function of (log, tick, context, options). PURE.
  *
- * - Positions interpolate linearly between the surrounding frames (the only look past the tick: at most one frame
- *   interval); HP, shield and focus step at the last frame at or before the tick; a down shows at its own tick.
- * - Everything discrete (actions, casts, statuses, rule badge, effects, captains, standing counts, the end) comes
- *   from intervals and events with tick ≤ the sampled tick, so a log truncated after a tick samples the same there.
- * - Reduced motion (04 §9) zeroes the rule badge pulse and leaves out the motion-only effects (MOTION_ONLY_EFFECTS);
- *   telegraph progress, projectiles and every marker stay: they are information.
+ * - Positions interpolate linearly between the surrounding frames: the only look past the sampled tick, at most one
+ *   frame interval. `options.knownUntilTick` (a live round's head) forbids it: a frame later than that tick is never
+ *   used and positions hold at the frame before it. HP, shield and focus step at the last frame at or before the tick;
+ *   a down shows at its own tick.
+ * - Everything else (actions, casts, statuses, rule badge, effects and their ages, captains, standing counts, the end)
+ *   comes from intervals and events with tick ≤ the sampled tick, and nothing is ever shortened or lengthened by a later
+ *   event. So a log truncated after tick H samples exactly as the full log does with `knownUntilTick: H`, for every
+ *   tick up to H (tested on every fixture).
+ * - Reduced motion (04 §9) sets pulses and animated ages to their end states: the rule badge pulse is 0, effects of
+ *   the motion-only kinds (MOTION_ONLY_EFFECTS) are left out, and every other effect is at its end state (`age` 1)
+ *   while it lasts, except a number, whose age keeps running because it fades in place (A9). Telegraph progress,
+ *   projectiles and every marker stay: they are information.
  */
 import type { Side } from '../../core/model';
 import type {
@@ -24,7 +30,7 @@ import type {
 } from '../types';
 import type { CastRec, DecisionRec, StatusSeg, TimelineData } from './data';
 import { MOTION_ONLY_EFFECTS } from './effects';
-import { MOVE_MIN_CM2, frameAtOrBefore } from './frames';
+import { MOVE_MIN_CM2, frameAtOrBefore, positionAt, type Pos } from './frames';
 import { bisectLeft, bisectRight, lastAtOrBefore } from './util';
 import type { PlaybackIndex } from './model';
 
@@ -57,9 +63,15 @@ interface MergedStatus {
   ends: number;
 }
 
-export function sampleAt(index: PlaybackIndex, tick: number, ctx: ArenaRoundContext, options?: { reducedMotion?: boolean }): ArenaFrameState {
+/**
+ * The arena at `tick` (fractional allowed; clamped to the round). `ArenaFrameState.endTick` is set only once the
+ * tick has reached the end. `reducedMotion` sets pulses and animated ages to their end states (04 §9). `knownUntilTick`
+ * is the tick the log is known up to (a live round's head): positions never use a frame after it. Pure.
+ */
+export function sampleAt(index: PlaybackIndex, tick: number, ctx: ArenaRoundContext, options?: { reducedMotion?: boolean; knownUntilTick?: number }): ArenaFrameState {
   const data = dataOf(index);
   const reduced = options?.reducedMotion === true;
+  const known = options?.knownUntilTick ?? Infinity;
   const n = data.unitCount;
   const ft = data.frames;
   // Clamped to the round once its end is known (a replay, or a live log that has reached it); a live log with no end yet never clamps upward: the caller holds the head.
@@ -67,7 +79,7 @@ export function sampleAt(index: PlaybackIndex, tick: number, ctx: ArenaRoundCont
   const T = data.endTick === null ? asked : Math.min(data.endTick, asked);
   const k = frameAtOrBefore(ft, T);
   const t0 = ft.ticks[k]!;
-  const alpha = k < ft.count - 1 && T > t0 ? (T - t0) / (ft.ticks[k + 1]! - t0) : 0;
+  const alpha = k < ft.count - 1 && T > t0 && ft.ticks[k + 1]! <= known ? (T - t0) / (ft.ticks[k + 1]! - t0) : 0;
   const pulseTicks = RULE_PULSE_MS / data.header.tickMs;
 
   // Positions first: facing, telegraphs and zones read other units' positions.
@@ -170,7 +182,7 @@ export function sampleAt(index: PlaybackIndex, tick: number, ctx: ArenaRoundCont
       };
       // A telegraph for casts and channels that read as one (04 §7): an area, or a line to the target.
       if (cast.kind !== 'windup') {
-        const tele = data.cues.ability(cast.ability).telegraph;
+        const tele = cast.cue?.telegraph ?? null;
         if (tele && cast.planned - cast.start >= tele.minTicks) {
           const tgt = cast.target !== null && cast.target < n ? cast.target : null;
           const aimsAtOther = tgt !== null && tgt !== u;
@@ -232,15 +244,17 @@ export function sampleAt(index: PlaybackIndex, tick: number, ctx: ArenaRoundCont
 
   // Projectiles in flight: homing from where the launcher stood toward the target's current position.
   const projectiles: ProjectileRenderState[] = [];
+  const anchor: Pos = { x: 0, y: 0 };
   const pj = lastAtOrBefore(data.projectiles, T, (p) => p.launch);
   for (let i = pj; i >= 0; i--) {
     const p = data.projectiles[i]!;
     if (p.launch < T - data.maxFlight) break;
     if (T >= p.land) continue;
     const progress = Math.min(1, Math.max(0, (T - p.launch) / (p.land - p.launch)));
-    const tx = p.target !== null && p.target < n ? xs[p.target]! : p.sx;
-    const ty = p.target !== null && p.target < n ? ys[p.target]! : p.sy;
-    projectiles.push({ id: p.id, ability: p.ability, source: p.source, target: p.target, x: p.sx + (tx - p.sx) * progress, y: p.sy + (ty - p.sy) * progress, progress });
+    positionAt(ft, p.source, p.launch, anchor, known);
+    const tx = p.target !== null && p.target < n ? xs[p.target]! : anchor.x;
+    const ty = p.target !== null && p.target < n ? ys[p.target]! : anchor.y;
+    projectiles.push({ id: p.id, ability: p.ability, source: p.source, target: p.target, x: anchor.x + (tx - anchor.x) * progress, y: anchor.y + (ty - anchor.y) * progress, progress });
   }
   projectiles.reverse();
 
@@ -268,19 +282,17 @@ export function sampleAt(index: PlaybackIndex, tick: number, ctx: ArenaRoundCont
     const e = data.effects[i]!;
     if (T >= e.end) continue;
     if (reduced && MOTION_ONLY_EFFECTS.has(e.kind)) continue;
-    effects.push({
-      id: e.id,
-      kind: e.kind,
-      unit: e.unit,
-      target: e.target,
-      ability: e.ability,
-      x: e.x,
-      y: e.y,
-      amount: e.amount,
-      crit: e.crit,
-      tone: e.tone,
-      age: Math.min(1, Math.max(0, (T - e.tick) / (e.end - e.tick))),
-    });
+    if (e.needsStanding.some(isDown)) continue;
+    let x = e.x;
+    let y = e.y;
+    if (e.anchor !== null) {
+      positionAt(ft, e.anchor, e.tick, anchor, known);
+      x = anchor.x;
+      y = anchor.y;
+    }
+    // Reduced motion: effects sit at their end state; a number keeps its age (it fades in place, A9).
+    const age = reduced && e.kind !== 'number' ? 1 : Math.min(1, Math.max(0, (T - e.tick) / (e.end - e.tick)));
+    effects.push({ id: e.id, kind: e.kind, unit: e.unit, target: e.target, ability: e.ability, x, y, amount: e.amount, crit: e.crit, tone: e.tone, age });
   }
 
   let home = 0;

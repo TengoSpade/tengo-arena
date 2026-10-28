@@ -3,13 +3,15 @@
  * selection rules, no future leaks, format 1 and 2 frames, reduced motion. Fixture logs are real simulator output
  * (fixtures/make-fixtures.mjs); synthetic edits of them exercise the cases the simulator does not produce yet.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { checkSource, listSourceFiles } from '../../../tests/architecture/rules';
 import { InvariantError } from '../../core/util';
 import type { FightEvent, FightLog } from '../../core/model';
 import { DEFAULT_AUTO_PAUSE } from '../index';
 import type { ArenaFrameState, AutoPauseRules, KeyMoment } from '../types';
 import { COMPANION_ID_OFFSET, EFFECT_LIFETIME_TICKS, MOTION_ONLY_EFFECTS, autoPauseStops, decisionAt, effectEventSeq, eventsBetween, indexFightLog, keyMoments, sampleAt, samePrefix, timeline } from './index';
-import { FIXTURE_NAMES, defaultContent, defaultCues, eventsOf, loadFixture, makeCtx, truncateLog, withEvents, type FixtureName } from './support.mts';
+import { FIXTURE_NAMES, defaultContent, defaultCues, eventsOf, loadFixture, makeCtx, skeletonLog, truncateLog, withEvents, type FixtureName } from './support.mts';
 
 const content = defaultContent();
 const cues = defaultCues();
@@ -182,34 +184,46 @@ describe('no future leaks (review B1)', () => {
   const { log, index, ctx } = fixture('a');
   const endTick = indexOf(log).endTick!;
 
-  it('a log truncated after tick H samples the same at every tick up to H (even H exactly; positions at an odd H differ only in the last tick)', () => {
-    const heads = [0, 1, 2, 3, 10, 57, 100, 101, 200, 333, 400, 401, endTick - 3];
-    for (const head of heads) {
-      const live = indexOf(truncateLog(log, head), 'live');
-      expect(live.endTick).toBeNull();
-      const strictUpTo = head % 2 === 0 ? head : head - 1;
-      const ticks = new Set<number>();
-      for (let t = 0; t <= head; t += 0.5) ticks.add(t);
-      ticks.add(head);
-      for (const t of ticks) {
-        const a = sampleAt(index, t, ctx);
-        const b = sampleAt(live, t, ctx);
-        if (t <= strictUpTo) {
-          expect(b).toEqual(a);
-        } else {
-          // Between the last whole frame and an odd head the next frame is not known: only positions may differ.
-          const discrete = (s: ArenaFrameState) => ({
-            ...s,
-            units: s.units.map((u) => ({ ...u, x: 0, y: 0, facing: 0 })),
-            projectiles: [],
-            zones: s.zones.map((z) => ({ ...z, x: 0, y: 0 })),
-            telegraphs: [],
-            effects: s.effects.map((e) => ({ ...e, x: 0, y: 0 })),
-          });
-          expect(discrete(b)).toEqual(discrete(a));
+  it('a log truncated after tick H samples exactly as the full log with knownUntilTick H, on every fixture, whole sample (effects and ages included)', () => {
+    let compared = 0;
+    for (const name of FIXTURE_NAMES) {
+      const f = fixture(name);
+      const end = f.index.endTick!;
+      const heads = new Set<number>();
+      for (let h = 0; h < end; h += name === 'long' ? 23 : 7) heads.add(h);
+      // Where a future event could reach back: around every down, and every guard-link or leap that a down may shorten.
+      for (const down of eventsOf(f.log, 'unit.down')) for (const d of [-2, -1, 0, 1]) if (down.tick + d >= 0 && down.tick + d < end) heads.add(down.tick + d);
+      for (const head of heads) {
+        const live = indexOf(truncateLog(f.log, head), 'live');
+        const picks = new Set<number>([head, head - 0.5, head - 1, head - 1.7, head - 3, head - 9, head * 0.3, head * 0.6]);
+        for (const t of picks) {
+          if (t < 0) continue;
+          for (const reducedMotion of [false, true]) {
+            const full = sampleAt(f.index, t, f.ctx, { knownUntilTick: head, reducedMotion });
+            const truncated = sampleAt(live, t, f.ctx, { reducedMotion });
+            expect(truncated, name + ': head ' + head + ', tick ' + t + (reducedMotion ? ' (reduced motion)' : '')).toEqual(full);
+            compared++;
+          }
         }
       }
     }
+    expect(compared).toBeGreaterThan(5000);
+  });
+
+  it('knownUntilTick keeps positions from using a frame after it; without it they interpolate toward the next frame', () => {
+    const frames = eventsOf(log, 'frame');
+    const f0 = frames.find((f) => f.tick === 100)!;
+    const f1 = frames.find((f) => f.tick === 102)!;
+    const moving = [...Array(10).keys()].find((u) => f0.data!.u[u]![0] !== f1.data!.u[u]![0])!;
+    const held = sampleAt(index, 101, ctx, { knownUntilTick: 101 }).units[moving]!;
+    const open = sampleAt(index, 101, ctx).units[moving]!;
+    expect(held.x).toBe(f0.data!.u[moving]![0]);
+    expect(open.x).toBeCloseTo((f0.data!.u[moving]![0] + f1.data!.u[moving]![0]) / 2, 9);
+    // Known up to the next frame: interpolation resumes (no seam at the frame).
+    expect(sampleAt(index, 101, ctx, { knownUntilTick: 102 }).units[moving]!.x).toBeCloseTo(open.x, 9);
+    // Everything but positions is the same whatever the head.
+    const strip = (s: ArenaFrameState) => ({ ...s, units: s.units.map((u) => ({ ...u, x: 0, y: 0, facing: 0 })), effects: s.effects.map((e) => ({ ...e, x: 0, y: 0 })), telegraphs: [], projectiles: [] });
+    expect(strip(sampleAt(index, 101, ctx, { knownUntilTick: 101 }))).toEqual(strip(sampleAt(index, 101, ctx)));
   });
 
   it('a live round reports no end until reached, and none for a head before the end', () => {
@@ -813,23 +827,226 @@ describe('sampleAt: effects', () => {
     expect(sampleAt(index, 100 + EFFECT_LIFETIME_TICKS.rally, ctx).effects.some((e) => e.kind === 'rally')).toBe(false);
   });
 
-  it('reduced motion leaves out the motion-only effects and keeps the rest', () => {
+  it('reduced motion leaves out the motion-only effects, sets the others at their end state (age 1) and keeps numbers fading in place', () => {
     const { log, index, ctx } = fixture('b');
     let dropped = 0;
+    let settled = 0;
+    let numbers = 0;
     for (const t of new Set(log.events.map((e) => e.tick))) {
-      const normal = sampleAt(index, t, ctx).effects;
-      const reduced = sampleAt(index, t, ctx, { reducedMotion: true }).effects;
-      expect(reduced.every((e) => !MOTION_ONLY_EFFECTS.has(e.kind))).toBe(true);
-      expect(reduced).toEqual(normal.filter((e) => !MOTION_ONLY_EFFECTS.has(e.kind)));
-      dropped += normal.length - reduced.length;
-      // Telegraph progress, projectiles and units are information: untouched.
-      const a = sampleAt(index, t, ctx);
-      const b = sampleAt(index, t, ctx, { reducedMotion: true });
-      expect(b.telegraphs).toEqual(a.telegraphs);
-      expect(b.projectiles).toEqual(a.projectiles);
-      expect(b.zones).toEqual(a.zones);
+      for (const dt of [0, 2]) {
+        const normal = sampleAt(index, t + dt, ctx).effects;
+        const reduced = sampleAt(index, t + dt, ctx, { reducedMotion: true }).effects;
+        expect(reduced.every((e) => !MOTION_ONLY_EFFECTS.has(e.kind))).toBe(true);
+        expect(reduced.map((e) => e.id)).toEqual(normal.filter((e) => !MOTION_ONLY_EFFECTS.has(e.kind)).map((e) => e.id));
+        for (const e of reduced) {
+          const real = normal.find((n) => n.id === e.id)!;
+          expect({ ...e, age: 0 }).toEqual({ ...real, age: 0 });
+          if (e.kind === 'number') {
+            expect(e.age).toBe(real.age);
+            numbers++;
+          } else {
+            expect(e.age).toBe(1);
+            settled++;
+          }
+        }
+        dropped += normal.length - reduced.length;
+        // Telegraph progress, projectiles and zones are information: untouched.
+        const a = sampleAt(index, t + dt, ctx);
+        const b = sampleAt(index, t + dt, ctx, { reducedMotion: true });
+        expect(b.telegraphs).toEqual(a.telegraphs);
+        expect(b.projectiles).toEqual(a.projectiles);
+        expect(b.zones).toEqual(a.zones);
+      }
     }
     expect(dropped).toBeGreaterThan(0);
+    expect(settled).toBeGreaterThan(50);
+    expect(numbers).toBeGreaterThan(50);
+  });
+
+  it('gives each effect a fresh id at every event tick, across all fixtures (a guard link no longer shares its event\'s id)', () => {
+    for (const name of FIXTURE_NAMES) {
+      const { log, index, ctx } = fixture(name);
+      for (const t of new Set(log.events.map((e) => e.tick))) {
+        const ids = sampleAt(index, t, ctx).effects.map((e) => e.id);
+        expect(new Set(ids).size, name + ' tick ' + t).toBe(ids.length);
+      }
+    }
+    const { log, index, ctx } = fixture('a');
+    const release = eventsOf(log, 'cast.release').find((e) => e.data!.ability === 'oathguard_interpose');
+    if (release) {
+      const guard = sampleAt(index, release.tick, ctx).effects.find((e) => e.kind === 'guard-link');
+      if (guard) expect(guard.id).toBe(release.seq + 3 * COMPANION_ID_OFFSET);
+    }
+  });
+
+  it('names the actor first for an evade, as for an impact, a shield break and a resist: unit = attacker, target = evader', () => {
+    let seen = 0;
+    for (const name of FIXTURE_NAMES) {
+      const { log, index, ctx } = fixture(name);
+      for (const e of eventsOf(log, 'evade')) {
+        const fx = sampleAt(index, e.tick, ctx).effects.find((x) => x.id === e.seq)!;
+        expect(fx.kind).toBe('evade');
+        expect(fx.unit).toBe(e.target ?? null);
+        expect(fx.target).toBe(e.unit);
+        // The mark sits on the evader.
+        const evader = sampleAt(index, e.tick, ctx).units[e.unit!]!;
+        expect(Math.hypot(fx.x - evader.x, fx.y - evader.y)).toBeLessThan(1e-6);
+        seen++;
+      }
+      for (const e of eventsOf(log, 'status.resist')) {
+        const fx = sampleAt(index, e.tick, ctx).effects.find((x) => x.id === e.seq)!;
+        expect([fx.unit, fx.target]).toEqual([e.target ?? null, e.unit]);
+      }
+    }
+    expect(seen).toBeGreaterThan(5);
+  });
+
+  it('keeps every effect lifetime within the 400 ms rule (8 ticks) except the down callout, the guard link and the motion streaks', () => {
+    const exceptions = new Set(['down', 'guard-link']);
+    for (const [kind, ticks] of Object.entries(EFFECT_LIFETIME_TICKS)) {
+      if (!exceptions.has(kind)) expect(ticks * 50, kind + ' lifetime in ms').toBeLessThanOrEqual(400);
+    }
+    expect(EFFECT_LIFETIME_TICKS.down * 50).toBe(2000);
+    expect(EFFECT_LIFETIME_TICKS.cleanse * 50).toBe(400);
+    expect(EFFECT_LIFETIME_TICKS.dispel * 50).toBe(400);
+  });
+});
+
+describe('effects that outlive their event: a guard link and a leap\'s landing never read the future', () => {
+  const base = loadFixture('a').log;
+  const skeleton = skeletonLog(base);
+  const down = (tick: number, unit: number): Omit<FightEvent, 'seq'> => ({ tick, type: 'unit.down', unit, target: 5, data: { by: 5, ability: null, hit: 10, overkill: 0, assists: [] } });
+  const guardCast: Omit<FightEvent, 'seq'> = { tick: 40, type: 'cast.release', unit: 0, target: 1, data: { ability: 'oathguard_interpose' as never, focusSpent: 0, cooldownTicks: 0 } };
+
+  it('a guard link keeps its age and lifetime whatever happens later, and is dropped from the tick either fighter is down', () => {
+    const quiet = withEvents(skeleton, [guardCast]);
+    const cut = withEvents(skeleton, [guardCast, down(60, 1)]);
+    const quietIdx = indexOf(quiet);
+    const cutIdx = indexOf(cut);
+    const ctx = makeCtx(quiet, content);
+    const life = content.abilities.require('oathguard_interpose').effects.flatMap((e) => (e.type === 'guard' ? [Math.round(e.durationS * 20)] : []))[0]!;
+    expect(life).toBe(80);
+    for (let t = 40; t < 60; t += 1.5) {
+      const a = sampleAt(quietIdx, t, ctx).effects.find((e) => e.kind === 'guard-link')!;
+      const b = sampleAt(cutIdx, t, ctx).effects.find((e) => e.kind === 'guard-link')!;
+      expect(b.age).toBe(a.age);
+      expect(a.age).toBeCloseTo((t - 40) / life, 9);
+    }
+    expect(sampleAt(quietIdx, 60, ctx).effects.some((e) => e.kind === 'guard-link')).toBe(true);
+    expect(sampleAt(cutIdx, 60, ctx).effects.some((e) => e.kind === 'guard-link')).toBe(false);
+    expect(sampleAt(cutIdx, 59.9, ctx).effects.some((e) => e.kind === 'guard-link')).toBe(true);
+    // The guard going down ends it too.
+    const guardDown = indexOf(withEvents(skeleton, [guardCast, down(50, 0)]));
+    expect(sampleAt(guardDown, 49, ctx).effects.some((e) => e.kind === 'guard-link')).toBe(true);
+    expect(sampleAt(guardDown, 50, ctx).effects.some((e) => e.kind === 'guard-link')).toBe(false);
+  });
+
+  it('a leap that strikes an area flashes it where it lands, and not when the leaper is down before landing', () => {
+    const release: Omit<FightEvent, 'seq'> = { tick: 100, type: 'cast.release', unit: 0, target: 5, data: { ability: 'chaffcutter_reaping_leap' as never, focusSpent: 0, cooldownTicks: 0 } };
+    const leap: Omit<FightEvent, 'seq'> = { tick: 100, type: 'displace', unit: 0, target: 5, data: { kind: 'leap', from: [500, 900], to: [900, 900], ticks: 6 } };
+    const landed = withEvents(skeleton, [release, leap]);
+    const idx = indexOf(landed);
+    const ctx = makeCtx(landed, content);
+    const flashes = (t: number) => sampleAt(idx, t, ctx).effects.filter((e) => e.kind === 'splash' && e.ability === 'chaffcutter_reaping_leap');
+    expect(flashes(100)).toEqual([]);
+    expect(flashes(105.5)).toEqual([]);
+    const landing = flashes(106);
+    expect(landing).toHaveLength(1);
+    expect(landing[0]!.age).toBe(0);
+    expect(landing[0]!.unit).toBe(0);
+    expect(landing[0]!.target).toBe(5);
+    const target = sampleAt(idx, 106, ctx).units[5]!;
+    expect([landing[0]!.x, landing[0]!.y]).toEqual([target.x, target.y]);
+    expect(flashes(106 + EFFECT_LIFETIME_TICKS.splash)).toEqual([]);
+    // The trail is drawn at once; the flash waits for the landing and is dropped when the leaper never lands.
+    expect(sampleAt(idx, 100, ctx).effects.some((e) => e.kind === 'dash-trail')).toBe(true);
+    const slain = indexOf(withEvents(skeleton, [release, leap, down(103, 0)]));
+    expect(sampleAt(slain, 106, ctx).effects.filter((e) => e.kind === 'splash')).toEqual([]);
+    expect(sampleAt(slain, 102, ctx).effects.some((e) => e.kind === 'dash-trail')).toBe(true);
+    // Effects stay ordered by start (the landing is later than the event after it).
+    for (let t = 99; t < 120; t += 0.5) {
+      const ids = sampleAt(idx, t, ctx).effects.map((e) => e.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
+});
+
+describe('every active ability is visible when released (sampleAt, not just a cue-table entry)', () => {
+  it('produces an effect or a projectile at the release of each of the 84 actives, of the kind its cue names', () => {
+    const base = skeletonLog(loadFixture('long').log);
+    const actives = content.abilities.list.filter((a) => a.kind === 'active');
+    expect(actives).toHaveLength(84);
+    const spacing = 16;
+    const plan = actives.map((def, i) => {
+      const tick = 30 + spacing * i;
+      const cue = cues.ability(def.id as never);
+      const target = def.target === 'self' ? 0 : def.target === 'enemy' ? 5 : 1;
+      const events: Omit<FightEvent, 'seq'>[] = [{ tick, type: 'cast.release', unit: 0, target, data: { ability: def.id as never, focusSpent: 0, cooldownTicks: 0 } }];
+      if (cue.release === 'projectile') events.push({ tick, type: 'projectile.launch', unit: 0, target: 5, data: { ability: def.id as never, landTick: tick + 8 } });
+      if (cue.release === 'dash-trail') events.push({ tick, type: 'displace', unit: 0, target: 5, data: { kind: def.delivery.type === 'leap' ? 'leap' : 'dash', from: [500, 900], to: [900, 900], ticks: 5 } });
+      return { def, cue, tick, events };
+    });
+    const log = withEvents(base, plan.flatMap((p) => p.events));
+    const index = indexOf(log);
+    const ctx = makeCtx(log, content);
+    const expectedKind: Record<string, string | null> = { swing: 'swing', beam: 'beam', 'area-flash': 'splash', 'self-pulse': 'splash', projectile: null, 'dash-trail': 'dash-trail', none: null };
+    let visible = 0;
+    const kinds = new Map<string, number>();
+    for (const p of plan) {
+      const s = sampleAt(index, p.tick, ctx);
+      const ids = s.effects.map((e) => e.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      if (p.cue.release === 'projectile') {
+        expect(s.projectiles.some((x) => x.ability === p.def.id), p.def.id + ' projectile').toBe(true);
+      } else {
+        const want = expectedKind[p.cue.release]!;
+        const fx = s.effects.filter((e) => e.kind === want && (want === 'dash-trail' || e.ability === p.def.id));
+        expect(fx.length, p.def.id + ' ' + p.cue.release).toBeGreaterThan(0);
+      }
+      visible++;
+      kinds.set(p.cue.release, (kinds.get(p.cue.release) ?? 0) + 1);
+    }
+    expect(visible).toBe(84);
+    expect([...kinds.keys()].sort()).toEqual(['area-flash', 'beam', 'dash-trail', 'projectile', 'self-pulse', 'swing']);
+  });
+});
+
+describe('unknown ability and status ids are tolerated the same way at index and sample time', () => {
+  it('indexes and samples a log whose abilities and statuses the content does not know (no throw, no telegraph, a plain pip)', () => {
+    const skeleton = skeletonLog(loadFixture('a').log);
+    const ghost = 'no_such_ability' as never;
+    const log = withEvents(skeleton, [
+      { tick: 20, type: 'cast.start', unit: 0, target: 5, data: { ability: ghost, castTicks: 10 } },
+      { tick: 30, type: 'cast.release', unit: 0, target: 5, data: { ability: ghost, focusSpent: 0, cooldownTicks: 0 } },
+      { tick: 30, type: 'projectile.launch', unit: 0, target: 5, data: { ability: ghost, landTick: 36 } },
+      { tick: 36, type: 'hit', unit: 0, target: 5, data: { ability: ghost, amount: 10, toShield: 0, overkill: 0, damageType: 'physical', crit: false, guardRedirect: false, preMitigation: 10 } },
+      { tick: 36, type: 'status.apply', unit: 5, target: 0, data: { status: 'no_such_status', ability: ghost, durationTicks: 20, magnitude: 0, stacks: 1, drStep: null } },
+      { tick: 40, type: 'status.expire', unit: 5, data: { status: 'no_such_status' } },
+    ]);
+    const index = indexOf(log);
+    const ctx = makeCtx(log, content);
+    const mid = sampleAt(index, 25, ctx);
+    expect(mid.units[0]!.cast).toMatchObject({ ability: 'no_such_ability', kind: 'cast', progress: 0.5 });
+    expect(mid.telegraphs).toEqual([]);
+    expect(sampleAt(index, 33, ctx).projectiles).toHaveLength(1);
+    const hit = sampleAt(index, 36, ctx);
+    expect(hit.effects.some((e) => e.kind === 'impact' && e.ability === 'no_such_ability')).toBe(true);
+    expect(hit.units[5]!.statuses).toEqual([{ status: 'no_such_status', category: 'special', stacks: 1, appliedTick: 36, endsTick: 56 }]);
+    expect(sampleAt(index, 40, ctx).units[5]!.statuses).toEqual([]);
+  });
+});
+
+describe('the test support is held to the pure-half rules', () => {
+  it('is scanned by the architecture rules (it is a source file of src/render, not a test file), and they would catch a simulator import in it', () => {
+    const files = listSourceFiles('src/render');
+    expect(files).toContain('src/render/timeline/support.mts');
+    const here = new URL('./support.mts', import.meta.url);
+    const text = readFileSync(here, 'utf8');
+    expect(checkSource('src/render/timeline/support.mts', text)).toEqual([]);
+    expect(checkSource('src/render/timeline/support.mts', text + "\nimport { simulateRound } from '../../core/sim';").map((v) => v.rule)).toEqual(['render-sim-value']);
+    expect(checkSource('src/render/timeline/support.mts', text + '\nconst t = performance.now();').map((v) => v.rule)).toEqual(['render-pure']);
+    // And nothing under src/render value-imports the simulator: the generator lives in scripts/.
+    for (const file of files) expect(checkSource(file, readFileSync(new URL('../../../' + file, import.meta.url), 'utf8')), file).toEqual([]);
   });
 });
 

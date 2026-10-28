@@ -24,7 +24,8 @@ export function effectEventSeq(id: number): number {
 /**
  * How many ticks (50 ms) each effect lives, unless its event gives a better one (a dash trail lasts as long as the
  * dash, a guard link as long as the guard). TUNABLE by the UI designer: 04 §7 / vis-003 want effects gone within
- * 400 ms (8 ticks) at 1x, a down callout stays 2 s.
+ * 400 ms (8 ticks) at 1x; the exceptions are the down callout (2 s), the guard link (while it lasts) and the motion
+ * streaks (as long as the motion).
  */
 export const EFFECT_LIFETIME_TICKS: Readonly<Record<EffectKind, number>> = {
   swing: 4,
@@ -40,8 +41,8 @@ export const EFFECT_LIFETIME_TICKS: Readonly<Record<EffectKind, number>> = {
   interrupt: 8,
   'dash-trail': 8,
   displace: 8,
-  cleanse: 10,
-  dispel: 10,
+  cleanse: 8,
+  dispel: 8,
   'guard-link': 80,
   'chain-arc': 6,
   splash: 6,
@@ -49,10 +50,10 @@ export const EFFECT_LIFETIME_TICKS: Readonly<Record<EffectKind, number>> = {
   'focus-gain': 8,
   'zone-trigger': 8,
   down: 40,
-  deathward: 20,
-  rally: 16,
-  'captain-down': 16,
-  call: 16,
+  deathward: 8,
+  rally: 8,
+  'captain-down': 8,
+  call: 8,
 };
 
 /**
@@ -61,20 +62,25 @@ export const EFFECT_LIFETIME_TICKS: Readonly<Record<EffectKind, number>> = {
  */
 export const MOTION_ONLY_EFFECTS: ReadonlySet<EffectKind> = new Set<EffectKind>(['dash-trail', 'displace', 'heal-pulse', 'cooldown-reset', 'focus-gain']);
 
-/** An effect as the index stores it (positions fixed at the event tick). */
+/** An effect as the index stores it. */
 export interface EffectRec {
   id: number;
   kind: EffectKind;
   unit: UnitIndex | null;
   target: UnitIndex | null;
   ability: AbilityId | null;
+  /** The unit whose position at `tick` anchors the effect (read at sample time, so a log's look-ahead rules apply), or null. */
+  anchor: number | null;
+  /** The fixed anchor when `anchor` is null. */
   x: number;
   y: number;
   amount: number | null;
   crit: boolean;
   tone: EffectRenderState['tone'];
-  /** Event tick: the effect exists from here. */
+  /** The tick the effect starts (its event's, or later when the event announces it: a leap's landing). */
   tick: number;
-  /** First tick it no longer exists (lifetime, or earlier when a down or an interrupt ends it). */
+  /** First tick it no longer exists: tick + lifetime. Never shortened by a later event (that would leak it into ages). */
   end: number;
+  /** Units that must still be standing: the effect is dropped from the tick any of them is down (a guard link, a leap's landing). */
+  needsStanding: readonly UnitIndex[];
 }
