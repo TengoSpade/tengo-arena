@@ -162,11 +162,11 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
     }
 
     // M2 contracts (docs/design/_drafts/05-technical-m2.md): WP-M2B implements the watch cursor (add 'match.watch'
-    // to LIVE_MATCH_ALLOWED); calls stay refused until the calls package (P-01, Q17).
+    // to LIVE_MATCH_ALLOWED); calls stay refused until the calls package (P-01; staged after M2, Q53).
     case 'match.watch':
       return fail('match.watch-unavailable', 'Watching a match arrives with the M2 arena viewer', { fixtureId: cmd.fixtureId });
     case 'match.call':
-      return fail('match.calls-unavailable', 'Calls are not part of this build (P-01, owner question Q17)', { fixtureId: cmd.fixtureId });
+      return fail('match.calls-unavailable', 'Calls are not part of this build (P-01; staged after M2, owner answer to Q53)', { fixtureId: cmd.fixtureId });
 
     case 'autoswap.set': {
       const e = autoSwapRulesError(cmd.rules);

@@ -18,6 +18,8 @@ import { safeView, type GameEngine } from './engine';
 
 /** store.advance() result while the player's next round waits to be watched: the frame opens #/arena (like MATCH_PAUSED). */
 export const MATCH_WATCHING = 'match.watching';
+/** core/game refusal when a watched round is committed without a shown log (Continue from Home, a stale tab): route to #/arena. */
+export const WATCH_NOT_SHOWN = 'watch.not-shown';
 
 /** Play match default (owner answer to Q54, 2026-10-27: both offered, Watch primary; Streamlined pacing simulates). */
 export type WatchPreference = 'ask' | 'watch' | 'simulate';
@@ -56,6 +58,8 @@ export interface ArenaFacade {
   finishRound(watched: { round: number; logHash: string }): Promise<Result<WeekReport, EngineError>>;
   /** 'match.watch' with the cursor, then the round autosave: only when playback stops (pause, auto-pause, round end, window hidden; tech-019). */
   saveCursor(state: GameState, tick: number): Promise<Result<CommandOutcome, EngineError>>;
+  /** "Simulate the rest": 'match.watch' with mode 'simulate' at the current tick, then store.advance() without a hash (the round finishes headless from its locked inputs). */
+  simulateRest(state: GameState, tick: number): Promise<Result<WeekReport, EngineError>>;
   /** RESERVED for the calls package ('match.call'); refused until then. */
   call(state: GameState, call: FightCall): Result<CommandOutcome, EngineError>;
 }
@@ -78,6 +82,7 @@ export function arenaFacade(_store: GameStore, engine: GameEngine, content: () =
     playMatch: async (_mode) => unavailable(),
     finishRound: async (_watched) => unavailable(),
     saveCursor: async (_state, _tick) => unavailable(),
+    simulateRest: async (_state, _tick) => unavailable(),
     call: (_state, _call) => unavailable(),
   };
 }

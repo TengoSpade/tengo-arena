@@ -63,7 +63,7 @@ export type Command =
    */
   | { type: 'match.watch'; clubId: ClubId; fixtureId: FixtureId; round: number; tick: number; mode?: MatchViewMode }
   /**
-   * RESERVED for the calls package (P-01, Q17): one call for the player's side in the watched round, at
+   * RESERVED for the calls package (P-01; staged after M2, Q53): one call for the player's side in the watched round, at
    * call.tick ≥ the cursor. Refused with 'match.calls-unavailable' until that package lands.
    */
   | { type: 'match.call'; clubId: ClubId; fixtureId: FixtureId; round: number; call: FightCall };

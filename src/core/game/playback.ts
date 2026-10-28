@@ -21,22 +21,26 @@ export interface AdvanceOptions {
    */
   playerMatch?: MatchViewMode;
   /**
-   * Committing a watched round (review B2): the hash of the log the viewer showed. In every build (not only dev),
-   * `advance` plays the round from prepareRound at 'full' and refuses with 'watch.mismatch' (no state) unless its
-   * log hash equals this. Required when liveMatch.watch.round is set; the hash is compared, never stored.
+   * Committing a watched round (review B2): the hash of the log the viewer showed (RoundPlayback.log.hash). In every
+   * build, `advance` plays the round from prepareRound at 'full' and refuses with 'watch.mismatch' (no state)
+   * unless its log hash equals this; the hash is compared, never stored.
+   *
+   * Required exactly while liveMatch.watch.mode is 'watch' and watch.round is set. Who supplies it (05-technical-m2
+   * §A3): the viewer at the round's end and on "Skip to end of round" (the loaded log, also after a resume, which
+   * re-simulates and loads it first; skipping is disabled until it has loaded). Every other path has no shown log
+   * and is refused with 'watch.not-shown' (details: fixtureId, round), which the UI routes to #/arena: Continue
+   * from Home or any other screen, a test harness, a stale tab. "Simulate the rest" first sends
+   * `match.watch { mode: 'simulate' }`; from then on `watched` is not required and the current round is
+   * committed from prepareRound like a simulated one (its outcome was fixed at the lock).
    */
   watched?: { round: number; logHash: string };
 }
 
-/**
- * When a watched round's outcome becomes part of the state (owner question Q60; OPEN, working assumption
- * 'inputs'). 'inputs': its inputs are locked and autosaved before it is shown, and the round is committed when its
- * playback ends (calls stay possible). 'result': the round is simulated, committed and autosaved before playback
- * starts (the literal D-O); calls could not touch such rounds. WP-M2B keeps the difference inside one function
- * (the watch step of week processing) selected by this constant, so the owner's answer is a contained change.
+/*
+ * Commit point of a watched round (owner answer to Q60, 2026-10-27, option A): its lineups, presets and seed are
+ * locked and autosaved before it is shown, so its outcome is fixed and cannot be rerolled; the round is committed
+ * when its playback ends (advance with AdvanceOptions.watched), and nothing of its result is in GameState before.
  */
-export type WatchCommitPolicy = 'inputs' | 'result';
-export const WATCH_COMMIT_POLICY: WatchCommitPolicy = 'inputs';
 
 /**
  * `AdvanceOutcome.watch`: the player's next round waits to be watched (state.liveMatch in phase

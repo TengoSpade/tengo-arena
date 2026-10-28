@@ -162,9 +162,7 @@ export function levelUpView(state: GameState, fighterId: FighterId, content: Con
 
 // ---- M2 contract (docs/design/_drafts/05-technical-m2.md §A3; WP-M2B implements, stubs until then) ---------
 
-export type { AdvanceOptions, MatchPlayback, ReplayAvailability, ReplayUnavailableReason, RoundPlayback, WatchCommitPolicy, WatchPause } from './playback';
-/** Owner question Q60 (OPEN): 'inputs' (working assumption) or 'result'; one switch, read by the watch step (WP-M2B). */
-export { WATCH_COMMIT_POLICY } from './playback';
+export type { AdvanceOptions, MatchPlayback, ReplayAvailability, ReplayUnavailableReason, RoundPlayback, WatchPause } from './playback';
 
 /**
  * The round the player is watching, as a full-level log from the same sim call headless play uses (vis-009).

@@ -68,7 +68,7 @@ export interface RoundInput {
   calls?: RoundCalls;
 }
 
-// ---- M2: calls (P-01), RESERVED until the owner answers Q17 and sys-calls is specified --------------
+// ---- M2: calls (P-01), RESERVED: staged after M2 (owner answer to Q53); built once sys-calls is specified ----
 
 /**
  * One call (P-01, 03 §3.5 sys-calls): a committed input that takes effect at the START of `tick`, before that
@@ -173,7 +173,7 @@ export interface MatchResult {
   /**
    * M2 (additive, optional; written by WP-M2B from save v5): core/sim simContentHash of the content that played the
    * match, a hash of only what the sim reads. Replays and the report timeline need it (with engineVersion) to match
-   * this build, so an update that changes no sim value (names, economy, calendar) keeps them (owner answer to Q56:
+   * this build, so an update that changes nothing the fight reads (names, economy, calendar) keeps them (owner answer to Q56:
    * replays end at a balance-changing update). Absent on older results, which fall back to contentHash.
    */
   simHash?: string;

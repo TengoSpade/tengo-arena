@@ -1,7 +1,7 @@
 # Technical addendum: M2 "Arena viewer" contracts and work packages
 
 > Addendum to [05](../05-technical-design-principles-and-build-plan.md) (§3, §5, §6, §8, §9.2, §10) for M2. Architect, 2026-10-27. Branch `m2/contracts` from main @ 5eb87cd.
-> **Status: DRAFT, revision 2.** It incorporates the owner's answers of 2026-10-27, which approved **Q53–Q59 as recommended**, and an independent architecture review ("approve with changes"; tech-015 confirmed). The approved answers are the design here. The lead designer records them in 01 §8.5 and §8.1; this addendum does not edit 01–05, and its question numbers are proposals until then. One question is still open: **Q60** (what "committed before shown" means for a watched round; working assumption **OPEN**, option A). The document as a whole still binds no one until the owner approves it, and implementation waits for that. Owner requirements and O-decisions stay REQUIRED: T1, T4, R1, V1, G1, O1, O12, O20, O22, O24, O33, and D-J under O25's confirmation rules. Technical choices are `tech-015` to `tech-027` (§A12); the owner may override any of them.
+> **Status: DRAFT, revision 3** (revision 2 plus the reviewer's three minor fixes: the sim-hash scope, the Q60 alternative, the paths without a shown log; and the owner's answer to Q60). It incorporates the owner's answers of 2026-10-27, which approved **Q53–Q59 as recommended** and chose **option A for Q60**, and an independent architecture review ("approve with changes", then approved; tech-015 confirmed). The approved answers are the design here. The lead designer records them in 01 §8.5 and §8.1; this addendum does not edit 01–05, and its question numbers are proposals until then. The only open question it relies on is **Q35** (the reference machine, for the performance targets). The document as a whole still binds no one until the owner approves it, and implementation waits for that. Owner requirements and O-decisions stay REQUIRED: T1, T4, R1, V1, G1, O1, O12, O20, O22, O24, O33, and D-J under O25's confirmation rules. Technical choices are `tech-015` to `tech-027` (§A12); the owner may override any of them.
 > The contracts phase (this branch) adds typed stubs, one behaviour-preserving extraction (`prepareRound`) and the rules and tests that pin them. No game behaviour changed; `npm run check` is green and the soak is unaffected (§A1).
 
 ## A0. Summary
@@ -19,7 +19,7 @@ M2 lets the player **watch his own match live** and **replay any match whose rec
 | Event model | `FIGHT_LOG_FORMAT_VERSION` (1; format 2 planned: frames gain shield and focus); `FightHeader.logFormat?`; `FrameUnit` optional `shield` and `focus`; `RuleTraceEntry` gains the detail the sim already records at `full` (`reason`, `cond`, `observed`, `readyInTicks`); a reserved event type `call.issue` (never emitted) | `src/core/model/events.ts` |
 | Match model | Reserved call types (`FightCall`, `SideCallPlan`, `RoundCalls`); `RoundInput.calls?`; `RoundLineups.calls?`; `MatchViewMode`; `LiveWatch` (with `cursorTick` defined as the reveal frontier) and `MatchState.watch?`; `MatchResult.simHash?`; `RoundResult.eventHash` stays null for committed rounds | `src/core/model/match.ts` |
 | Commands | `match.watch` (the watch cursor, with optional `mode: 'simulate'`) and `match.call` (reserved); both refused with stable codes until their packages land | `src/core/model/commands.ts`, `src/core/game/commands.ts` |
-| core/game | **`prepareRound`** (implemented): the one builder of a round's input, extracted from `playRound` with no behaviour change; `LIVE_MATCH_ALLOWED` exported. Stubs: `AdvanceOptions` (`playerMatch`, `watched`; accepted and ignored for now), `AdvanceOutcome.watch?`, `WatchPause`, `WATCH_COMMIT_POLICY` (Q60), `liveRoundPlayback`, `roundPlayback`, `matchPlayback`, `replayAvailability`, `inspectPlayback` | `src/core/game/orchestrator.ts`, `playback.ts`, `live.ts`, `engine.ts`, `index.ts` |
+| core/game | **`prepareRound`** (implemented): the one builder of a round's input, extracted from `playRound` with no behaviour change; `LIVE_MATCH_ALLOWED` exported. Stubs: `AdvanceOptions` (`playerMatch`, `watched`; accepted and ignored for now), `AdvanceOutcome.watch?`, `WatchPause`, `liveRoundPlayback`, `roundPlayback`, `matchPlayback`, `replayAvailability`, `inspectPlayback` | `src/core/game/orchestrator.ts`, `playback.ts`, `live.ts`, `engine.ts`, `index.ts` |
 | core/sim | Stubs `inspectRoundAt(input, roundSeed, content, tick): RoundProbe` and `simContentHash(content)` | `src/core/sim/index.ts` |
 | src/render | **Pure half:** contract types; the render-state model (`indexFightLog(…, kind)`, `sampleAt`, `eventsBetween`, `decisionAt`, `autoPauseStops(…, untilTick)`, `keyMoments(…, untilTick)`, `samePrefix`, and the injectable `Timeline`); cues; colours; camera; `DEFAULT_AUTO_PAUSE`. **PixiJS half:** `createArenaViewer`, `ArenaViewer` (async `load`, live `endTick` null, `keyMoments()`, `decisionAt()`), `ArenaSkin` (`load`, `prepare(units)`, no rotation by the viewer), `placeholderSkin`. All bodies throw `NotImplementedError` | `src/render/**`, README |
 | src/ui | Routes `arena` (`#/arena`) and `replay` (`#/replay/:fixtureId`) with placeholder screens; nothing links to them and the report's Replay button stays disabled. `ArenaFacade` and `MATCH_WATCHING` (`store/arena.ts`); optional `GameEngine` members; `GameStore.advance(options?)` | `src/ui/app/routes.ts`, `src/ui/screens/arena/`, `src/ui/store/` |
@@ -67,7 +67,7 @@ GameState ── results[fixtureId] (stored inputs, round records)        liveMa
 
 The future-leak point is the only cost of playback, and it is contained in the types. It also matters less than it looks. **Without calls, a round's outcome is fixed by its inputs** whichever architecture shows it, so watching ahead and reloading changes nothing. With calls, a reload exploit (watch ahead, quit, reload, call earlier) would exist in both architectures. §A6's write-ahead reveal record closes it.
 
-**Commit point (owner question Q60; working assumption A, OPEN).** Under A, a watched round's inputs are locked and autosaved before it is shown, so its outcome is fixed and cannot be rerolled. The round itself is committed when its playback ends, or when the player skips to its end, by `advance` playing `prepareRound`'s input through the orchestrator exactly as today. §A3 says what option B would change.
+**Commit point (owner answer to Q60, option A).** The owner: "a watched round may play before its result is saved, as long as its lineups, presets and seed are locked and autosaved first, so the outcome is fixed and can't be rerolled." So a watched round's inputs are locked and autosaved before it is shown, and the round itself is committed when its playback ends, or when the player skips to its end, by `advance` playing `prepareRound`'s input through the orchestrator exactly as today. Nothing of its result is in GameState before then. §A3 records the rejected alternative.
 
 **Record level.** 03 sys-match-report says "M2 records at full level for the viewer". Read as: logs at `full` are produced on demand for viewing, and stored results keep their current shape. A `full` log is 255 KB of JSON at the median and 413 KB at the maximum, so storing them would break O33. `RoundResult.eventHash` stays null for every committed round, watched ones included. The watched log's hash is compared at commit and never stored, so a Watch season and a Simulate season end in identical states (§A3).
 
@@ -83,17 +83,20 @@ The future-leak point is the only cost of playback, and it is contained in the t
 - Simulate is the M1.1 flow, unchanged.
 - Without calls, Watch and Simulate give identical results (tested over a season); with calls, Simulate gives the player's side the AI call policy.
 
-**Live match states** (core/game, WP-M2B; under Q60 option A):
+**Live match states** (core/game, WP-M2B; Q60 option A):
 
 | Step | `liveMatch` | Screen | Autosave (`auto-round`) |
 | --- | --- | --- | --- |
 | Play match (Watch): lock, `startMatch`, no round played | phase `round_pending`, `watch { mode 'watch', round 1, cursorTick 0, calls [] }`; `AdvanceOutcome.watch` set | `#/arena` opens **only after this autosave has succeeded**; on failure the viewer stays closed with "Could not save: Retry" | **required** (review B3) |
 | Watching | unchanged; nothing is written while playback runs | viewer | — |
 | Playback stops: pause, auto-pause, window hidden | `match.watch { tick }` (the cursor = the shown tick) | viewer | yes, while stopped (no frame to hitch) |
-| Round end reached, or "Skip to end of round" | `advance({ watched: { round, logHash } })`: plays `prepareRound`'s input at `full`, refuses with `watch.mismatch` unless the hash equals the shown log's (every build), commits (P-05), runs the hooks; then the between-round step | the round-end overlay (non-blocking, §A7), then `#/between-rounds` per `pauseBetweenRounds` (unchanged), or straight to the next round | yes (as today) |
+| Round end reached, or "Skip to end of round" | `advance({ watched: { round, logHash } })` with the hash of the log the viewer loaded: plays `prepareRound`'s input at `full`, refuses with `watch.mismatch` unless the hashes match (every build), commits (P-05), runs the hooks; then the between-round step | the round-end overlay (non-blocking, §A7), then `#/between-rounds` per `pauseBetweenRounds` (unchanged), or straight to the next round | yes (as today) |
+| `advance` with no shown log while watching (Continue from Home or another screen, a stale tab, a harness) | refused with `watch.not-shown` (no state) | the UI routes it to `#/arena`; Home's Continue reads "Resume watching" and navigates there instead of advancing | — |
 | Between rounds → Continue | swaps applied; phase `round_pending`, `watch.round` n + 1, cursor 0 | `#/arena` (after the autosave, as above) | required |
-| "Simulate the rest" | `match.watch { mode: 'simulate' }`: the current round finishes with its calls, later rounds are simulated; Watch never comes back within the match | M1.1 flow | yes |
+| "Simulate the rest" | `match.watch { mode: 'simulate' }`, then `advance` with no `watched` hash (not required once the mode is 'simulate'): the current round is committed from `prepareRound` with its calls (its outcome was fixed at the lock), later rounds are simulated; Watch never comes back within the match | M1.1 flow | yes |
 | Deciding round committed | `liveMatch` null; the week finishes (AI matches are simulated now, after the player's match, as today) | report per pacing (D-L) | weekly rotation |
+
+**Who supplies `AdvanceOptions.watched`.** It is required exactly while `watch.mode` is 'watch' and `watch.round` is set. The viewer supplies the hash of the log it loaded (`RoundPlayback.log.hash`) at the round's end and on "Skip to end of round". After a resume, the viewer first re-simulates and loads the round, and skipping stays disabled until it has. Every other caller gets `watch.not-shown`, which routes to `#/arena`. "Simulate the rest" changes the mode first, so it needs no hash.
 
 **Only these commands are accepted during a live match** (`LIVE_MATCH_ALLOWED`: `match.swap`, which is refused while a round is pending; news; shortlist; level-up policy; auto-swap rules; pacing; and from WP-M2B `match.watch`). None of them changes the next round's input; a test pins that for every entry, so any later addition fails it.
 
@@ -112,12 +115,7 @@ The future-leak point is the only cost of playback, and it is contained in the t
 
 **Mid-fight resume (05 §5).** Loading a save whose `liveMatch.watch.round` is set opens `#/arena`. It re-simulates that round with its calls (`liveRoundPlayback`) and opens it paused at `cursorTick` with a "Resumed" toast. The outcome is the one the inputs give, so a reload cannot reroll it (P-05). A manual save while paused first persists the cursor.
 
-**What Q60 option B would change.** `WATCH_COMMIT_POLICY` becomes `'result'`, and the watch step of week processing changes in one place:
-- The step plays and commits round n (`prepareRound` → `playRound`, hooks, autosave) before returning the watch pause. `liveMatch` moves straight on to the between-round step or the next round.
-- `liveRoundPlayback` returns the just-committed round, still presented as live: no seeking past the head, no result to the UI.
-- The commit-time check becomes "the shown log reproduces the committed checksum", and the cursor only drives resume.
-- Calls could never apply to such rounds, so the calls package would need A for rounds where calls are possible.
-- Nothing in render or the UI changes. WP-M2B keeps the policy behind that constant and tests both settings.
+**Rejected alternative (Q60 option B), for the record.** B would simulate, commit and autosave the round before its playback starts, the literal D-O. In core that is one function. But the result would then sit in GameState while the round plays: the score, rounds and phase, the Freshness drain, round XP and injuries on the fighters, the save's "after round n" label, and the winner in `MatchPlayback`. Every screen reading those (HUD pips, fighter strip, Saves, resume routing, badges) would have needed read rules and a pre-round snapshot during playback, plus a leak test over state-derived data. Calls could never apply to such rounds. The owner chose A, so WP-M2B builds only A and keeps no switch.
 
 **Save schema (WP-M2B, tech-023).** State schema **v5** with an identity migration from v4:
 - New fields: `MatchState.watch` (`LiveWatch`, under 0.2 KB), `RoundLineups.calls` (absent until calls exist; under 0.5 KB a match with them) and `MatchResult.simHash` (about 40 bytes a match, about 15 KB a season over every stored result). All join the strict zod schema, with `SAVE_BOUNDS` for the call count.
@@ -132,7 +130,7 @@ The future-leak point is the only cost of playback, and it is contained in the t
 ## A4. Replay availability (owner answer to Q56, approved)
 
 A replay re-simulates stored inputs. It needs (1) the inputs and round records and (2) the same sim: the stored `engineVersion` equals `ENGINE_VERSION`, and **the stored `simHash` equals `simContentHash(content)`**.
-- `simContentHash` is a hash of only what the sim reads (tech-026; `HASH_EXCLUDED` is the precedent). That honours the owner's wording: replays end at a balance-changing update, not at a renamed club or a tuned wage.
+- `simContentHash` is a hash of exactly what the fight reads (tech-026; `HASH_EXCLUDED` is the precedent for leaving keys out): a canonical serialization of what `simTables` compiles plus every direct ContentDB read of core/sim and core/tactics. That includes reads outside `combat` such as `development.captaincy.grades`, `actingCaptainCqPenalty` and `levels.freshness.labels`; a read-set test guards it. That honours the owner's wording: replays end at a balance-changing update, not at a renamed club or a tuned wage.
 - Results written before M2 have no `simHash` and fall back to the content hash.
 - The career content hash (saves, `GameState.content`, the load warning) is unchanged.
 - One rule (`replayAvailability`) serves replays and the report timeline, so the report's per-round box-score lines also survive non-sim updates (WP-M2B switches `buildMatchReport` to it).
@@ -144,8 +142,8 @@ A replay re-simulates stored inputs. It needs (1) the inputs and round records a
 | The player's older matches | — | no | results older than last season are dropped (`compacted`: "not kept in full") |
 | Matches between other clubs, within 3 weeks of play | — | yes, while the sim is the same | — |
 | Matches between other clubs, compacted (3 weeks after play, or at season end) | — | no | `compacted` (O24 dropped their inputs and round records) |
-| Any match, after an update that changes `ENGINE_VERSION` or a sim value (combat, classes' combat fields, abilities, ranks, perks, presets, race combat mods, sim-applied trait effects) | — | no | `other-build` |
-| Any match after an update that changes no sim value (names, clubs, economy, calendar, development) | — | yes | — |
+| Any match, after an update that changes `ENGINE_VERSION` or anything the fight reads (combat, classes' combat fields, abilities, ranks, perks, presets and vocabulary, race combat mods, sim-applied trait effects, captaincy grades and the acting-captain penalty, Freshness labels) | — | no | `other-build` |
+| Any match after an update that changes nothing the fight reads (names, clubs, economy, calendar, development outside captaincy) | — | yes | — |
 | M1 results (engine 1) | — | no | `other-build` |
 
 **What O24 means for M2.** Matches between other clubs are replayable for 3 weeks (`leagues.json matchRecords.compactAiMatchesAfterWeeks`). That covers the useful case: the next opponent's last match is usually a week old (not in the first matchweek, when it belongs to last season). Reckoning matches between other clubs are compacted at the season end. The player's own matches are always replayable in their season and the next, while the sim stays the same.
@@ -378,10 +376,13 @@ Reference machine: 05 §8's working reference (a 2020+ mid-range 4-core, 8 GB la
 
 **Determinism (Node, Vitest; vis-009).**
 - *Watched = committed* (contracts phase, `m2-contracts.test.ts`). `prepareRound` is read-only; `playRound` plays exactly its input; the `full` log of that input has the committed checksum. No command in `LIVE_MATCH_ALLOWED` changes the next round's input, and `match.swap` is refused while a round is pending.
-- *Commit check* (WP-M2B). `advance` with a wrong `watched.logHash` returns `watch.mismatch` and no state; with the right one, it commits. This holds in every build.
+- *Commit check* (WP-M2B). `advance` with a wrong `watched.logHash` returns `watch.mismatch` and no state; with the right one, it commits; without one while watching it returns `watch.not-shown` and no state; after `match.watch { mode: 'simulate' }` it commits without one, with the same checksum as the watched path. This holds in every build. WP-M2E tests that `watch.not-shown` routes to `#/arena` and that Home's Continue reads "Resume watching" while a round is being watched.
 - *Replay = original* (WP-M2B). Every round of played matches with swaps, injuries and an emergency entrant re-simulates to its stored checksum, and the replay log hash equals the live log hash captured while watching.
 - *Format 2* (WP-M2A). As test-first item 4; full-level goldens are re-pinned once.
-- *Replay hash* (WP-M2A). Renaming a class or club, or changing a wage or calendar value, leaves `simContentHash` unchanged; changing an ability coefficient, a preset rule or a combat constant changes it.
+- *Replay hash* (WP-M2A). The hash covers what `simTables` compiles plus every direct read of the fight (tech-026), not a hand-kept key list.
+  - *Read-set guard:* a corpus of seeded rounds runs on a ContentDB that records every property path the fight touches; a touched path outside the hashed set fails the test.
+  - *Changes that must move the hash:* `development.captaincy.grades`, `actingCaptainCqPenalty`, `levels.freshness.labels`, an ability coefficient, a preset rule, a combat constant.
+  - *Changes that must not:* any excluded key (names, descriptions, icons, wages, calendar, development outside captaincy) leaves the hash and the corpus's round checksums unchanged.
 - *Resume* (WP-M2B). Save at a cursor, parse, `liveRoundPlayback`: identical log, start tick and committed result.
 - *Probe* (WP-M2A). `inspectRoundAt` never changes a later result; at a tick where a decision was traced, its evaluation matches the recorded trace.
 - *Cross-runtime.* The smoke computes a fixture round's `hashEventStream` in Chromium and compares it with Node's pinned golden (05 §10 "golden hash in Node and Chromium").
@@ -440,7 +441,7 @@ Only (3) is evidence for vis-003 (01 §6); (1) and (2) gate the merge.
 | tech-023 | State schema v5, identity migration, for `MatchState.watch`, `RoundLineups.calls` and `MatchResult.simHash` | Strict schema: an older build must refuse new saves cleanly | Optional fields without a version |
 | tech-024 | PixiJS init: WebGL preference, antialias, autoDensity, resolution min(DPR, 2), `preserveDrawingBuffer`, ticker dt clamped to 100 ms | Predictable in both wrappers; F8 screenshots; no jumps | WebGPU first |
 | tech-025 | Viewer chunks lazy, ≤ 250 KB gzip, prefetched at idle in a matchweek | Startup budget unchanged | PixiJS in the main bundle |
-| tech-026 | Replay availability compares `simContentHash` (only what the sim reads) and the engine version; the career content hash is unchanged | The owner's "replays end at a balance-changing update" (Q56) | The full content hash (any edit ends replays) |
+| tech-026 | Replay availability compares `simContentHash` (what `simTables` compiles plus the fight's direct content reads, guarded by a read-set test) and the engine version; the career content hash is unchanged | The owner's "replays end at a balance-changing update" (Q56) | The full content hash (any edit ends replays); a hand-kept key list (misses reads such as captaincy grades) |
 | tech-027 | A `smoke` build mode compiles in the test hook and the dev world's fixture round; production never does (bundle test) | The smoke must run on a built bundle, and the hook is dev-only today | Smoke against `npm run dev` only; shipping the hook |
 
 ## A13. Work packages
@@ -456,25 +457,24 @@ Only (3) is evidence for vis-003 (01 §6); (1) and (2) gate the merge.
 | Package | Owns | Implements | Depends on | Parallel with | Model |
 | --- | --- | --- | --- | --- | --- |
 | **WP-M2A** Sim: log format 2, probe, replay hash | `src/core/sim/**`, `src/core/tactics/**` | Frames with shield and focus, a closing frame, `header.logFormat`; `inspectRoundAt`; `simContentHash`; the sim refuses non-none call plans; goldens re-pinned (approved here); README | contracts only | all | Sonnet |
-| **WP-M2B** Game: watch flow, playback, replay, resume, save v5 (integrator) | `src/core/game/**`, `src/core/save/**`, `src/core/ai/**`, `src/core/harness/soak*.ts`, `scripts/soak.ts`, `scripts/replay.ts`, plus the two exceptions above | `AdvanceOptions` (`playerMatch`, `watched`), the watch step behind `WATCH_COMMIT_POLICY`, `watch.mismatch`, `match.watch` (with `mode`), the live playback functions on `prepareRound`, `replayAvailability` with `simHash` (and `buildMatchReport` on it), `inspectPlayback` (after WP-M2A), `roundInputOf` copying calls, schema v5 and migration, error codes, README | contracts; WP-M2A for `inspectPlayback` and `simContentHash` (stubs until then) | all | **Opus**: it moves the player's commit point and the week split, where a slip breaks P-05 or vis-009 silently; it also integrates the merges |
+| **WP-M2B** Game: watch flow, playback, replay, resume, save v5 (integrator) | `src/core/game/**`, `src/core/save/**`, `src/core/ai/**`, `src/core/harness/soak*.ts`, `scripts/soak.ts`, `scripts/replay.ts`, plus the two exceptions above | `AdvanceOptions` (`playerMatch`, `watched`), the watch step (inputs locked and autosaved first, Q60 option A), `watch.mismatch`, `watch.not-shown`, `match.watch` (with `mode`), the live playback functions on `prepareRound`, `replayAvailability` with `simHash` (and `buildMatchReport` on it), `inspectPlayback` (after WP-M2A), `roundInputOf` copying calls, schema v5 and migration, error codes, README | contracts; WP-M2A for `inspectPlayback` and `simContentHash` (stubs until then) | all | **Opus**: it moves the player's commit point and the week split, where a slip breaks P-05 or vis-009 silently; it also integrates the merges |
 | **WP-M2C** Render model | `src/render/timeline/**`, `src/render/cues/**`, `src/render/colors/**`, `src/render/camera/**` | The pure API of §A5 | contracts (format 1 logs suffice; format 2 fields light up when WP-M2A merges) | all | Sonnet |
 | **WP-M2D** Render viewer | `src/render/viewer/**` except `skin.ts`, `src/render/skins/**` | `createArenaViewer` (clock, scene, overlays, cues, input, resize, DPR, teardown, snapshot, stats), the placeholder skin | contracts; a fake `Timeline` until WP-M2C lands | all | Sonnet |
 | **WP-M2E** UI | `src/ui/**` except `src/ui/styles/**`; `src/platform/**` if the ticket metadata needs it | §A7: arena and replay screens, HUD, strip, feed, inspector, controls and keys, Watch/Simulate, routing (after a successful autosave) and resume, Replay entries, settings, store facade and autosave points, F8 metadata, the test hook in dev and smoke mode | contracts; WP-M2B views (stubs → `safeView` null; tests use fakes); WP-M2D (a fake viewer in tests) | all | Sonnet |
 | **WP-M2F** QA smoke and vis-003 protocol | `scripts/smoke/**` (new) | §A11 smoke driver and checks against the `smoke` build, the vis-003 observer kit and agent pre-check, the report format | WP-M2D and WP-M2E for the real run; the driver can start against the placeholder route | all (finishes last) | Sonnet |
-| **WP-M2G** Calls (gated on sys-calls being specified and approved; staging approved in Q53) | sim/tactics, game, UI and content changes, after M2 merges | §A6: call effects, the AI call policy, `match.call`, records, the reveal record, the call UI, `ENGINE_VERSION` 3, harness runs | the combat designer and the owner; all M2 packages merged; Q60 option A | none (sequential) | Sonnet |
+| **WP-M2G** Calls (gated on sys-calls being specified and approved; staging approved in Q53) | sim/tactics, game, UI and content changes, after M2 merges | §A6: call effects, the AI call policy, `match.call`, records, the reveal record, the call UI, `ENGINE_VERSION` 3, harness runs | the combat designer and the owner; all M2 packages merged | none (sequential) | Sonnet |
 
 **Acceptance per package** (beyond `npm run check` green after a rebase, README updated, no file outside ownership):
 - **WP-M2A:**
   - format 2 frames match the sim's state (shield after `shield.gain`/`break`, focus after `cast.release`);
   - test-first item 4;
-  - the replay-hash tests;
+  - the replay-hash tests (read-set guard, the keys that must move it, the excluded keys that must not move it or any round checksum);
   - `inspectRoundAt` consistent with recorded traces and side-effect-free;
   - full-level sim time reported.
 - **WP-M2B:**
   - test-first item 1;
   - the commit-check, replay and resume tests of §A11;
   - `replayAvailability` reasons for not-played, compacted (3 weeks), other-build (engine, `simHash`, and the `contentHash` fallback) and live;
-  - both values of `WATCH_COMMIT_POLICY` pass their tests;
   - `npm run soak -- --seasons 3 --seed soak-1` and the 10-season gate identical to main (AI matches never watch);
   - a v4 save loads as v5 and saves back identically.
 - **WP-M2C:**
@@ -502,7 +502,7 @@ Only (3) is evidence for vis-003 (01 §6); (1) and (2) gate the merge.
 **Design tasks (not coding packages):**
 - the UI designer mocks the arena screen (HUD, strip, inspector, round-end overlay) and adds tokens (`--c-arena-floor`, `--c-arena-wall`, `--c-fx-physical`, `--c-fx-arcane`, status pip glyphs) to `src/ui/styles`;
 - the combat designer writes sys-calls (staging approved, Q53);
-- the lead designer records the answers to Q53–Q59 and asks Q60.
+- the lead designer records the answers to Q53–Q60.
 
 **Highest-risk assumptions to prove early:**
 - the watched input equals the played one (pinned now by `prepareRound`; WP-M2B test-first item 1);
@@ -512,7 +512,7 @@ Only (3) is evidence for vis-003 (01 §6); (1) and (2) gate the merge.
 
 ## A14. Owner questions
 
-Q53–Q59 were answered by the owner on 2026-10-27: **"approved as recommended"**. Q60 is new and open.
+Q53–Q59 were answered by the owner on 2026-10-27: **"approved as recommended"**. Q60 was answered the same day: **option A**.
 
 **Q53 — Calls in watched fights: in M2, later, or never?**
 **Required before M2 starts · 01 §8.3 P-01; §8.5 Q17; 03 §3.5 sys-calls**
@@ -585,12 +585,12 @@ Each trigger is a switch in Settings › Match day. Proposed defaults:
 
 D-O says a result is committed and autosaved before it is shown, so reloading cannot reroll it. For a round you watch there are two readings.
 - **Option A:** the round's inputs (squads, rows, presets, the seed) are locked and autosaved before it is shown. Its outcome is then fixed and cannot be rerolled, and it is committed when playback ends. Calls (staged, Q53) stay possible, because a call is a new input at a tick.
-- **Option B:** the round is simulated and its result committed and autosaved before playback starts: the literal D-O. It is simpler in M2, but the rounds where calls are possible would later need A.
+- **Option B:** the round is simulated and its result committed and autosaved before playback starts: the literal D-O. It is simpler in the engine, but while you watch, the result already sits in the saved game. Every screen that could show it (the score, Freshness and injuries, the save list, where Continue takes you) must then be held back until the round has been shown, and the rounds where calls are possible would later need A anyway.
 
 **Recommendation:** A.
-**If deferred:** A. Switching to B is a contained change: one constant and one function in WP-M2B, nothing in render or the UI (§A3).
+**Answer (owner, 2026-10-27):** "Q60 option A: a watched round may play before its result is saved, as long as its lineups, presets and seed are locked and autosaved first, so the outcome is fixed and can't be rerolled."
 
-## A15. Approved design and remaining working assumptions
+## A15. Approved design and the remaining open item
 
 | Item | Design | Status |
 | --- | --- | --- |
@@ -601,14 +601,14 @@ D-O says a result is committed and autosaved before it is shown, so reloading ca
 | Retention | No change | Approved (Q57) |
 | Auto-pause | Own downs, own captain down, overtime on; others off | Approved (Q58) |
 | Art and audio | Placeholder shapes, role glyphs; no class icons, sprites or arena sound in M2 | Approved (Q59) |
-| Commit point of a watched round | Inputs locked and autosaved before it is shown; committed when playback ends | **OPEN** (Q60), working assumption A |
+| Commit point of a watched round | Lineups, presets and seed locked and autosaved before it is shown; committed when playback ends | Approved (Q60, option A) |
 | Performance | §A10 targets on 05 §8's working reference | **OPEN** (Q35) |
 | Speed | 1x at first, then the remembered speed per device | T1 fixes the speeds |
-| Inspector visibility | Both sides' rules and traces | open-026 working assumption (Q10) |
+| Inspector visibility | Both sides' rules and traces | as the package's M1–M3 visibility rule (open-026); fog arrives with M4 |
 
 ## A16. Top risks
 
-1. **The watched input drifts from the played input.** Mitigation: `prepareRound` is the one builder (in place, tested); the commit compares the shown log's hash in every build and refuses on a mismatch.
+1. **The watched input drifts from the played input.** Mitigation: `prepareRound` is the one builder (in place, tested); the commit compares the shown log's hash in every build and refuses on a mismatch; a commit with no shown log is refused (`watch.not-shown`) unless the player chose "Simulate the rest".
 2. **Format 2 accidentally changes an outcome** (a recorder that reads or mutates sim state). Mitigation: recording stays read-only; test-first item 4.
 3. **Frame rate on integrated graphics at 4x with many effects.** Mitigation: object reuse, effect caps and merging, the resolution cap at 2, the smoke's fps check early. Fallback: lower effect density at 4x.
 4. **Future-knowledge leaks through the UI.** Mitigation: bounded types (live `endTick` null, `untilTick` queries, the viewer as the only live source) and the truncated-log DOM equivalence test.
@@ -627,7 +627,7 @@ D-O says a result is committed and autosaved before it is shown, so reloading ca
 6. **M2 art scope is inconsistent.** 01 §5's M2 row says "placeholder shapes or sprites for all 42 classes"; 04 §10 schedules 42 class icons (asset-005) in M2; 04 §8 schedules arena sound in M2. Meanwhile open-032 is unresolved and O22 excludes the existing pipeline. → Q59 (answered: placeholders).
 7. **Zoom and follow** are "OPEN for M2" in 04 §4 and §11, with no owner question. → Q55 (answered).
 8. **Replays across builds.** 05 §6 promises determinism only within a build, and the content hash covers non-sim data too, so any content edit would end every earlier replay. 02 and 04 never say so to the player. → Q56 (answered) and tech-026.
-9. **The commit point of a watched round.** 02 §3's "Match result" row commits with the week at Play match (D-O); M1.1 commits per round; a watched round can be committed before or after it is shown. → Q60.
+9. **The commit point of a watched round.** 02 §3's "Match result" row commits with the week at Play match (D-O); M1.1 commits per round; a watched round can be committed before or after it is shown. → Q60 (answered: inputs locked and autosaved first, committed after it is shown); 02 should say so when M2 is approved.
 10. **No frame-rate, frame-time or viewer-memory target** exists in 05 §8 or 04 §7 (only UI responsiveness), and the reference machine is still open (Q35). Working targets in §A10.
 11. **Colour tokens for arena effects and the floor are missing.** 04 §3 forbids role hues for anything but roles, and 04 §5 asks for a mid-value floor, but tokens.css has no floor, wall or hit-tone tokens. → designer request (§A13).
 12. **The render README's planned API** (`load(log)`, `onTick`, "interpolating between frame events and drawing deaths") predates squads, the live/replay split, auto-pause and the inspector. Replaced by §A5 and the new README.

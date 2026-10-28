@@ -235,14 +235,23 @@ export function inspectRoundAt(input: RoundInput, roundSeed: Seed, content: Cont
 }
 
 /**
- * M2 (05-technical-m2 §A4; owner answer to Q56; WP-M2A implements): a hash of ONLY the content the sim reads,
- * so replay availability follows "replays end at a balance-changing update" rather than any content edit. Computed
- * from the parsed ContentDB (doc keys and formatting never matter), over an allow-list the sim owns: `combat`;
- * classes' combat fields (attributes, rating weights, roles, starting row, kit, presets; not names, descriptions,
- * icons); abilities and ability ranks (mechanics, not display text); perks (mechanics); tactics presets (rules and
- * stance; not names or summaries); races' combatMods; traits' sim-applied effects. Stored inputs already carry the
- * management-effective stats, so management content (economy, development, leagues, names) never enters it.
- * The career content hash (core/content hashContent, saves, GameState.content) is unchanged. Cached per ContentDB.
+ * M2 (05-technical-m2 §A4, tech-026; owner answer to Q56; WP-M2A implements): a hash of exactly the content the
+ * fight reads, so replay availability follows "replays end at a balance-changing update" rather than any edit.
+ *
+ * Not a hand-kept key list (review: a list misses reads such as development.captaincy.grades and
+ * actingCaptainCqPenalty, which change outcomes, or levels.freshness.labels). It is the hash of a canonical
+ * serialization (sorted keys and map entries) of (a) what simTables(content) compiles, ranked kits and compiled
+ * presets included, and (b) every value core/sim and core/tactics read from ContentDB outside simTables during a
+ * fight (preset rules and stance, vocabulary, tactics limits, perk rules, and any other direct read). WP-M2A first
+ * moves the direct reads into simTables where it can, so (a) covers nearly everything.
+ *
+ * Guards (WP-M2A tests): (1) a read-set test runs a corpus of seeded rounds on a ContentDB whose objects record
+ * every property path the fight touches, and fails if a touched path is outside the hashed set; (2) changing
+ * development.captaincy.grades, actingCaptainCqPenalty, levels.freshness.labels, an ability coefficient, a preset
+ * rule or a combat constant changes the hash; (3) changing any excluded key (names, descriptions, icons, economy,
+ * leagues, calendar, development outside captaincy, docs) leaves the hash AND the round checksums of the corpus
+ * unchanged. The career content hash (core/content hashContent, saves, GameState.content) is unchanged. Cached
+ * per ContentDB.
  */
 export function simContentHash(content: ContentDB): string {
   return notImplemented('sim.simContentHash', content);

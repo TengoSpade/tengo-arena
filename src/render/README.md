@@ -1,6 +1,6 @@
 # src/render — PixiJS arena viewer (M2)
 
-**Owner:** architect (contract files); WP-M2C (pure half: `timeline/`, `cues/`, `colors/`, `camera/`); WP-M2D (PixiJS half: `viewer/` except `skin.ts`, `skins/`). **Status:** contracts only (M2 contracts phase, branch `m2/contracts`): every function is a typed stub that throws `NotImplementedError`. Design: [`docs/design/_drafts/05-technical-m2.md`](../../docs/design/_drafts/05-technical-m2.md) (draft revision 2: the owner approved Q53–Q59 on 2026-10-27; Q60 is open). `pixi.js` v8 is a pinned dependency (8.22).
+**Owner:** architect (contract files); WP-M2C (pure half: `timeline/`, `cues/`, `colors/`, `camera/`); WP-M2D (PixiJS half: `viewer/` except `skin.ts`, `skins/`). **Status:** contracts only (M2 contracts phase, branch `m2/contracts`): every function is a typed stub that throws `NotImplementedError`. Design: [`docs/design/_drafts/05-technical-m2.md`](../../docs/design/_drafts/05-technical-m2.md) (draft revision 3: the owner approved Q53–Q60 on 2026-10-27). `pixi.js` v8 is a pinned dependency (8.22).
 
 ## Responsibility
 - Show one round of a fight from its full-level `FightLog` (`core/model` events): the live round the player is watching, or a replay. The log always comes from `core/game` (`liveRoundPlayback`, `roundPlayback`), which runs the same `simulateRound` call headless play uses, so what is shown is the headless result (vis-009, tech-015).
