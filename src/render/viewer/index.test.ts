@@ -4,18 +4,27 @@
  * (the skin's load, the cue table) leaves no canvas in the host, no live context and no skin behind.
  */
 import type * as Pixi from 'pixi.js';
+import type * as TextModule from './scene/text';
 import { describe, expect, it, vi } from 'vitest';
 import type { ContentDB } from '../../core/content';
 import { defaultArenaPalette } from '../colors';
 import type { ArenaSkin } from './index';
 import { createArenaViewer } from './index';
-import { createFakeTimeline, fakeContent, fakeCues, fakeViewTransform } from './testing/fake-timeline';
+import { createFakeTimeline, fakeContent, fakeContext, fakeCues, fakeLog, fakeViewTransform } from './testing/fake-timeline';
 
 const fake = vi.hoisted(() => ({
   initError: null as Error | null,
   /** PixiJS dereferences an undefined renderer when a failed init is destroyed: model it. */
   destroyThrows: false,
-  apps: [] as { destroy: ReturnType<typeof vi.fn>; loseContext: ReturnType<typeof vi.fn>; ticker: { stop: ReturnType<typeof vi.fn>; start: ReturnType<typeof vi.fn> }; canvas: HTMLCanvasElement }[],
+  apps: [] as {
+    destroy: ReturnType<typeof vi.fn>;
+    render: ReturnType<typeof vi.fn>;
+    loseContext: ReturnType<typeof vi.fn>;
+    ticker: { add: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; start: ReturnType<typeof vi.fn> };
+    canvas: HTMLCanvasElement;
+    /** How many children the stage still had when the app was destroyed (the scene must be detached first). */
+    stageChildrenAtDestroy: number;
+  }[],
 }));
 
 vi.mock('pixi.js', async (importOriginal) => {
@@ -27,7 +36,9 @@ vi.mock('pixi.js', async (importOriginal) => {
     renderer = { resize: vi.fn(), resolution: 1, name: 'webgl', gl: { getExtension: () => ({ loseContext: this.loseContext }) } };
     ticker = { started: false, deltaMS: 16, add: vi.fn(), remove: vi.fn(), start: vi.fn(() => (this.ticker.started = true)), stop: vi.fn(() => (this.ticker.started = false)) };
     render = vi.fn();
+    stageChildrenAtDestroy = -1;
     destroy = vi.fn(() => {
+      this.stageChildrenAtDestroy = this.stage.children.length;
       if (fake.destroyThrows) throw new TypeError("Cannot read properties of undefined (reading 'destroy')");
       this.canvas.remove();
     });
@@ -43,6 +54,11 @@ vi.mock('pixi.js', async (importOriginal) => {
     }
   }
   return { ...actual, Application: FakeApplication };
+});
+
+vi.mock('./scene/text', async (importOriginal) => {
+  const actual = await importOriginal<typeof TextModule>();
+  return { ...actual, createPixiTextFactory: () => actual.createStubTextFactory() };
 });
 
 function options(host: HTMLElement, over: Partial<Parameters<typeof createArenaViewer>[0]> = {}): Parameters<typeof createArenaViewer>[0] {
@@ -142,6 +158,71 @@ describe('createArenaViewer setup and undo', () => {
     expect(skin.destroyed).toBe(1);
     expect(host.querySelectorAll('canvas')).toHaveLength(0);
     await expect(viewer.snapshot()).rejects.toThrow('destroyed');
+  });
+
+  it('a viewer destroyed from inside its own tick (an onStop callback that leaves the arena) renders nothing more', async () => {
+    const { host } = setup();
+    const rendersAtStop: number[] = [];
+    let viewer: Awaited<ReturnType<typeof createArenaViewer>> | null = null;
+    viewer = await createArenaViewer(
+      options(host, {
+        onStop: () => {
+          rendersAtStop.push(app.render.mock.calls.length);
+          viewer!.destroy(); // the UI leaves the arena on a stop
+        },
+      }),
+    );
+    const app = fake.apps[0]!;
+    await viewer.load(fakeLog(), fakeContext({ kind: 'replay' }));
+    viewer.setSpeed(4);
+    viewer.play();
+    const tick = app.ticker.add.mock.calls[0]![0] as () => void;
+    for (let i = 0; i < 4000 && rendersAtStop.length === 0; i++) tick();
+    expect(rendersAtStop).toHaveLength(1); // a stop fired inside a tick
+    expect(app.render.mock.calls.length).toBe(rendersAtStop[0]); // and that tick drew nothing after the destroy
+    expect(app.destroy).toHaveBeenCalledTimes(1);
+    expect(app.stageChildrenAtDestroy).toBe(0); // the scene was detached before the renderer went
+    // a tick that was already queued does nothing either
+    expect(() => tick()).not.toThrow();
+    expect(app.render.mock.calls.length).toBe(rendersAtStop[0]);
+  });
+
+  it('destroys in a safe order: ticker off, scene detached and released, then the renderer', async () => {
+    const { host } = setup();
+    const order: string[] = [];
+    const skin = trackedSkin({ destroy: () => order.push('skin') as unknown as void });
+    const viewer = await createArenaViewer(options(host, { skin }));
+    const app = fake.apps[0]!;
+    app.ticker.stop.mockImplementation(() => order.push('ticker.stop'));
+    app.destroy.mockImplementation(() => {
+      order.push('app.destroy');
+      app.canvas.remove();
+    });
+    viewer.destroy();
+    expect(order.indexOf('ticker.stop')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('ticker.stop')).toBeLessThan(order.indexOf('skin'));
+    expect(order.indexOf('skin')).toBeLessThan(order.indexOf('app.destroy'));
+    expect(order.filter((o) => o === 'app.destroy')).toHaveLength(1);
+  });
+
+  it('a play followed by a skip and a destroy in the same task is silent (no warnings, no errors)', async () => {
+    const { host } = setup();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const viewer = await createArenaViewer(options(host));
+    const app = fake.apps[0]!;
+    await viewer.load(fakeLog(), fakeContext({ kind: 'replay' }));
+    viewer.setSpeed(4);
+    viewer.play();
+    const tick = app.ticker.add.mock.calls[0]![0] as () => void;
+    for (let i = 0; i < 5; i++) tick();
+    viewer.seek(1_000_000); // Simulate the rest: skip to the end
+    viewer.destroy();
+    expect(() => tick()).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    warn.mockRestore();
+    error.mockRestore();
   });
 
   it('tabStop: false leaves the canvas out of the tab order', async () => {

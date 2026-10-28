@@ -220,6 +220,8 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
       if (lastTickAt > 0 && t0 - lastTickAt < 250) intervals.push(t0 - lastTickAt);
       lastTickAt = t0;
       const keepRunning = core.frame(dt);
+      // A stop callback can destroy the viewer (leaving the arena): nothing renders, and the ticker is not touched again.
+      if (destroyed) return;
       cpu.push(performance.now() - t0);
       app.render();
       if (!keepRunning && !scene.animating) {
@@ -327,9 +329,13 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
         stopDprWatch();
         resizeObserver?.disconnect();
         detachInput();
+        // Nothing renders from here on: the ticker is off and a tick in progress (destroy from an onStop callback) ends
+        // without drawing. Then the stage lets go of the scene, so no frame can draw what is about to be destroyed, and
+        // the scene's textures (fonts) go before the renderer that drew them.
         app.ticker.remove(onTick);
         app.ticker.stop();
         core.destroy();
+        app.stage.removeChild(scene.root);
         scene.destroy();
         skin.destroy();
         // Gives the GPU context back now too (browsers cap live contexts).
