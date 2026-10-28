@@ -16,6 +16,9 @@ import type { ArenaFrameState, ArenaRoundContext, ArenaUnitInfo, AutoPauseRules,
 import { MAX_DT_MS, PlaybackClock } from './clock';
 import type { FrameInfo, KickoffInfo } from './scene/arena-scene';
 
+/** Tolerance for tick comparisons that accumulated floating-point error could miss. */
+const HAIR = 1e-6;
+
 /** The scene as the core sees it. `ArenaScene` implements it. */
 export interface ScenePort {
   setRound(ctx: ArenaRoundContext, arena: { width: number; height: number }, kickoff: KickoffInfo | null): void;
@@ -330,6 +333,13 @@ export class ViewerCore {
   /**
    * One display frame. Returns true while the ticker should keep running (playing); false lets it stop after the
    * render that follows. `dtMs` is the ticker's wall delta (clamped by the clock).
+   *
+   * A REPLAY draws the tick the clock reaches. A LIVE round draws one frame interval BEHIND the revealed head
+   * (`header.frameEvery`, 2 ticks): the head (the reveal frontier, the cursor, every bounded query) runs ahead of
+   * the drawn tick by at most that, so interpolating toward the next frame stays inside `knownUntilTick = head` and
+   * motion is as smooth as a replay's (without it, a live round steps at the frame rate, 10 Hz). Whatever the UI
+   * receives is still bounded by the head. At a stop (an auto-pause, the head, the end) the display catches up to the
+   * stop tick: it shows tick S, the head is S, `onFrame` gets the state at S and `onStop` carries S.
    */
   frame(dtMs: number): boolean {
     const clock = this.clock;
@@ -340,6 +350,7 @@ export class ViewerCore {
       if (this.needsDraw) this.redraw();
       return false;
     }
+    if (clock.kind === 'live') return this.frameLive(dtMs, index, ctx, clock);
 
     const now = this.o.now();
     const from = clock.tick;
@@ -351,18 +362,12 @@ export class ViewerCore {
       stop = { kind: 'end', tick: clock.tick };
       target = clock.tick;
     } else {
-      // Auto-pause stops are only asked for up to the tick about to be shown (a live round never looks ahead).
-      // Stops sit on whole ticks, so the model is asked once per tick reached (not once per frame), never beyond the frame.
-      const until = clock.kind === 'replay' && clock.end !== null ? clock.end : Math.floor(target);
-      this.stops.ensure(until, (u) => this.o.timeline.autoPauseStops(index, this.autoPause, ctx, u));
+      // The stops of a replay are known up to its end: computed once.
+      this.stops.ensure(clock.end ?? target, (u) => this.o.timeline.autoPauseStops(index, this.autoPause, ctx, u));
       const hit = this.stops.firstIn(from, target);
       if (hit) {
         target = hit.tick;
         stop = { kind: 'auto', stop: hit };
-      } else if (clock.rewound && target >= clock.head) {
-        // Live, after a rewind: playback caught up with what was already shown.
-        target = clock.head;
-        stop = { kind: 'head', tick: target };
       }
     }
 
@@ -371,14 +376,72 @@ export class ViewerCore {
       clock.markEnd(state.endTick);
       if (state.endTick <= target) {
         target = state.endTick;
-        if (!stop || stop.kind === 'head') stop = { kind: 'end', tick: target };
+        if (!stop) stop = { kind: 'end', tick: target };
         if (target !== state.tick) state = this.sample(index, ctx, target);
       }
     }
     clock.commit(target);
     this.present(state, target, now, dtMs, true);
+    return this.afterFrame(stop);
+  }
 
-    if (stop) {
+  /** One playing frame of a live round: see `frame`. */
+  private frameLive(dtMs: number, index: PlaybackIndex, ctx: ArenaRoundContext, clock: PlaybackClock): boolean {
+    const now = this.o.now();
+    const lag = Math.max(1, index.header.frameEvery || 2);
+    const d0 = clock.tick;
+    const h0 = clock.head;
+    // The revealed position of the display: one frame ahead of it, never beyond the head (after a stop they meet).
+    const c0 = Math.min(h0, d0 + lag);
+    const dNext = clock.plan(dtMs);
+    const c1 = dNext + lag;
+
+    // The first of: an auto-pause stop, the end, the live head after a rewind, in the revealed range (c0, c1].
+    // At the same tick an auto-pause wins over the end, and the end over the head.
+    let stop: PlaybackStop | null = null;
+    let at = Number.POSITIVE_INFINITY;
+    let rank = 3;
+    const consider = (tick: number, rk: number, s: PlaybackStop): void => {
+      if (tick < at || (tick === at && rk < rank)) {
+        at = tick;
+        rank = rk;
+        stop = s;
+      }
+    };
+    if (clock.atEnd) {
+      consider(clock.tick, 1, { kind: 'end', tick: clock.tick });
+    } else {
+      // Asked up to the tick about to be revealed, once per whole tick (stops sit on whole ticks): never further.
+      this.stops.ensure(Math.floor(c1), (u) => this.o.timeline.autoPauseStops(index, this.autoPause, ctx, u));
+      const hit = this.stops.firstIn(c0, c1);
+      if (hit) consider(hit.tick, 0, { kind: 'auto', stop: hit });
+      // (a hair of tolerance: float noise must not let the frame that lands on the head slip past it)
+      if (c0 < h0 - HAIR && c1 >= h0 - HAIR) consider(h0, 2, { kind: 'head', tick: h0 });
+      const known = clock.end;
+      if (known !== null) {
+        if (c1 >= known - HAIR && known > c0) consider(known, 1, { kind: 'end', tick: known });
+      } else if (!stop && c1 > h0) {
+        // The end is learned only when the revealed range reaches it: a probe at the new frontier.
+        const probe = this.sample(index, ctx, c1, c1);
+        if (probe.ended && probe.endTick !== null && probe.endTick <= c1) consider(probe.endTick, 1, { kind: 'end', tick: probe.endTick });
+      }
+    }
+
+    const stopped = stop as PlaybackStop | null;
+    const displayTo = stopped ? at : dNext;
+    const headTo = stopped ? Math.max(h0, at) : Math.max(h0, c1);
+    if (stopped?.kind === 'end' && clock.end === null) clock.markEnd(at);
+    const state = this.sample(index, ctx, displayTo, headTo);
+    clock.commit(displayTo);
+    clock.reveal(headTo);
+    this.present(state, displayTo, now, dtMs, true);
+    return this.afterFrame(stopped);
+  }
+
+  /** After a frame: a stop pauses the clock and tells the UI (the HUD got the stop tick's state first). */
+  private afterFrame(stop: PlaybackStop | null): boolean {
+    const clock = this.clock;
+    if (stop && clock) {
       clock.pause();
       this.emitFrame(true);
       this.o.onStop?.(stop);
@@ -390,14 +453,14 @@ export class ViewerCore {
   }
 
   /**
-   * Sample the model. A LIVE round passes `knownUntilTick` = the head (the furthest tick shown, or the tick this very
-   * frame is about to show), so interpolated positions, effect anchors and projectile starts never use a frame past
-   * it (§A19). A replay passes none.
+   * Sample the model. A LIVE round passes \`knownUntilTick\` = the head (the furthest tick revealed, or the frontier
+   * this very frame reveals), so interpolated positions, effect anchors and projectile starts never use a frame past
+   * it (A19). A replay passes none.
    */
-  private sample(index: PlaybackIndex, ctx: ArenaRoundContext, tick: number): ArenaFrameState {
+  private sample(index: PlaybackIndex, ctx: ArenaRoundContext, tick: number, knownUntil?: number): ArenaFrameState {
     if (ctx.kind === 'live') {
-      const head = Math.max(this.clock?.head ?? 0, tick);
-      return this.o.timeline.sampleAt(index, tick, ctx, { reducedMotion: this.reducedMotion, knownUntilTick: head });
+      const known = knownUntil ?? Math.max(this.clock?.head ?? 0, tick);
+      return this.o.timeline.sampleAt(index, tick, ctx, { reducedMotion: this.reducedMotion, knownUntilTick: known });
     }
     return this.o.timeline.sampleAt(index, tick, ctx, { reducedMotion: this.reducedMotion });
   }

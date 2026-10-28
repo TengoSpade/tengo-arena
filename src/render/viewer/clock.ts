@@ -94,6 +94,11 @@ export class PlaybackClock {
     if (tick > this._head) this._head = tick;
   }
 
+  /** Live: the reveal frontier moves forward to `head` (it runs ahead of the drawn tick by up to a frame interval). */
+  reveal(head: number): void {
+    if (head > this._head) this._head = head;
+  }
+
   /** The round's end was reached (a live sample reported it). */
   markEnd(end: number): void {
     this._end = end;

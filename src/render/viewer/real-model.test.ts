@@ -54,17 +54,73 @@ describe('the viewer over the real model', () => {
     h.run(60);
     h.core.pause();
     const head = h.core.headTick;
+    const tick = h.core.tick;
     expect(head).toBeGreaterThan(130);
-    // The full log sampled at the head with the bound equals a log that stops at the head...
+    expect(head - tick).toBeLessThanOrEqual(2 + 1e-6); // the drawn tick is at most one frame interval behind the head
+    // The full log sampled at the drawn tick with the head as the bound equals a log that stops at the head...
     const full = indexFightLog(log, content, cues, 'live');
     const cut = indexFightLog(truncateLog(log, Math.floor(head)), content, cues, 'live');
-    const a = sampleAt(full, head, ctx, { knownUntilTick: head });
-    const b = sampleAt(cut, head, ctx, { knownUntilTick: head });
+    const a = sampleAt(full, tick, ctx, { knownUntilTick: head });
+    const b = sampleAt(cut, tick, ctx, { knownUntilTick: head });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-    // ...and that is what the viewer itself shows at its head.
+    // ...and that is what the viewer itself shows.
     expect(JSON.stringify(h.core.currentState)).toBe(JSON.stringify(a));
     expect(h.core.endTick).toBeNull();
     for (const m of h.core.keyMoments()) expect(m.tick).toBeLessThanOrEqual(head);
+  });
+
+  it('live motion is as smooth as a replay: as many distinct positions over the same frames, and no sample uses a frame past the head', async () => {
+    const { log } = loadFixture('a');
+    const content = defaultContent();
+    const cues = defaultCues();
+    type Call = { tick: number; known: number | undefined; result: string };
+    const calls: Call[] = [];
+    const spy: typeof timeline = {
+      ...timeline,
+      sampleAt: (index, tick, c, o) => {
+        const state = timeline.sampleAt(index, tick, c, o);
+        calls.push({ tick, known: o?.knownUntilTick, result: JSON.stringify(state) });
+        return state;
+      },
+    };
+    const FRAMES = 12;
+    const run = async (kind: 'live' | 'replay'): Promise<{ xs: number[][]; heads: number[]; h: Headless }> => {
+      const h = assemble({ timeline: spy, cues, content, viewTransform, autoPause: NO_PAUSE });
+      await h.core.load(log, { ...makeCtx(log, 0, kind), startTick: 200 });
+      h.core.play();
+      const xs: number[][] = [];
+      const heads: number[] = [];
+      for (let i = 0; i < FRAMES; i++) {
+        h.run(1);
+        xs.push(h.core.currentState!.units.map((u) => u.x));
+        heads.push(h.core.headTick);
+      }
+      return { xs, heads, h };
+    };
+    const replay = await run('replay');
+    calls.length = 0;
+    const live = await run('live');
+    const liveCalls = calls.slice();
+    const distinct = (xs: number[][], unit: number): number => new Set(xs.map((row) => row[unit])).size;
+    const best = [...Array(10).keys()].sort((p, q) => distinct(replay.xs, q) - distinct(replay.xs, p))[0]!;
+    expect(distinct(replay.xs, best)).toBe(FRAMES); // a moving unit takes a new position every frame in a replay
+    expect(distinct(live.xs, best)).toBe(distinct(replay.xs, best)); // and in a live round (it stepped every 2 ticks: 2 of 12)
+    // The head runs ahead of the drawn tick by at most one frame interval, and never goes back.
+    live.heads.forEach((head, i) => {
+      if (i > 0) expect(head).toBeGreaterThanOrEqual(live.heads[i - 1]!);
+    });
+    expect(live.h.core.headTick - live.h.core.tick).toBeLessThanOrEqual(2 + 1e-6);
+    // No sample used a frame past the head: each live sample passed its bound, and equals the sample of a log cut at it.
+    const real = liveCalls.filter((c) => c.tick > 0); // (the kickoff sample at 0 only reads the first frame)
+    expect(real.length).toBeGreaterThan(FRAMES);
+    const ctx = makeCtx(log, 0, 'live');
+    for (const c of real) {
+      expect(c.known, 'a live sample without knownUntilTick').toBeDefined();
+      expect(c.known!).toBeGreaterThanOrEqual(c.tick);
+      expect(c.known! - c.tick).toBeLessThanOrEqual(2 + 1e-6);
+      const cut = indexFightLog(truncateLog(log, Math.floor(c.known!)), content, cues, 'live');
+      expect(JSON.stringify(sampleAt(cut, c.tick, ctx, { reducedMotion: false, knownUntilTick: c.known! }))).toBe(c.result);
+    }
   });
 
   it('decisionsUpTo gives the real committed decisions: oldest first, one per change, none past the head', async () => {

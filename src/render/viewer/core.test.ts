@@ -486,3 +486,66 @@ describe('the real model contract (A19)', () => {
     expect(assemble().core.decisionsUpTo(1)).toEqual([]); // nothing loaded
   });
 });
+
+describe('a live round draws one frame interval behind the revealed head', () => {
+  it('while playing at the edge the head runs ahead of the drawn tick by one frame interval, and never goes back', async () => {
+    const h = await loaded('live', { startTick: 100, autoPause: NO_PAUSE });
+    expect(h.core.headTick).toBe(100);
+    h.core.setSpeed(2);
+    h.core.play();
+    let last = h.core.headTick;
+    for (let i = 0; i < 90; i++) {
+      h.run(1);
+      expect(h.core.headTick).toBeGreaterThanOrEqual(last);
+      last = h.core.headTick;
+      expect(h.core.headTick - h.core.tick).toBeLessThanOrEqual(2 + 1e-6);
+      expect(h.core.currentState!.tick).toBe(h.core.tick); // the HUD gets the state that is drawn
+    }
+    expect(h.core.headTick - h.core.tick).toBeCloseTo(2, 6); // the full interval at the edge
+    expect(h.core.tick).toBeGreaterThan(100);
+  });
+
+  it('every live sample is bounded by the head and at most one frame behind it', async () => {
+    const h = await loaded('live', { startTick: 100, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(100);
+    const { sampleAt, knownUntil } = h.timeline.calls;
+    sampleAt.forEach((tick, i) => {
+      if (tick === 0) return; // the kickoff sample
+      expect(knownUntil[i]!).toBeGreaterThanOrEqual(tick);
+      expect(knownUntil[i]! - tick).toBeLessThanOrEqual(2 + 1e-6);
+    });
+  });
+
+  it('at a stop the display catches up: it shows the stop tick, the head is the stop tick, the HUD got that state', async () => {
+    const h = await loaded('live', { startTick: 560, playerSide: 0 });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(2000);
+    expect(h.stops).toHaveLength(1);
+    expect(h.stops[0]).toMatchObject({ kind: 'auto', stop: { tick: 600 } });
+    expect(h.core.tick).toBe(600);
+    expect(h.core.headTick).toBe(600);
+    expect(h.core.currentState!.tick).toBe(600);
+    expect(h.frames.at(-1)!.tick).toBe(600);
+    // Resuming reveals ahead again and the display moves on from the stop tick.
+    h.core.play();
+    h.run(5);
+    expect(h.core.tick).toBeGreaterThan(600);
+    expect(h.core.headTick - h.core.tick).toBeLessThanOrEqual(2 + 1e-6);
+  });
+
+  it('a live end is learned when the revealed range reaches it, and the display catches up to it', async () => {
+    const h = await loaded('live', { startTick: 1150, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    expect(h.core.endTick).toBeNull();
+    h.core.play();
+    h.run(200);
+    expect(h.stops).toEqual([{ kind: 'end', tick: 1200 }]);
+    expect(h.core.tick).toBe(1200);
+    expect(h.core.headTick).toBe(1200);
+    expect(h.core.endTick).toBe(1200);
+    expect(h.core.currentState!.ended).toBe(true);
+  });
+});
