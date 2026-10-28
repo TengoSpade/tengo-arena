@@ -413,3 +413,66 @@ describe('M2: a watched round through a real save (the required autosave, a curs
     }
   });
 });
+
+describe('M2: a watched season through real saves at every stop (pacing "never")', () => {
+  it('equals the simulated season; each commit runs the between-round step and stops at the next round', { timeout: 600_000 }, () => {
+    const engine = createGameEngine(realGamePorts);
+    const save = (s: GameState): GameState => {
+      const env = createSave(s, saveMetaFor(s, { slotId: 'auto-round', kind: 'auto', label: 'x', savedAt: '2026-10-27T00:00:00Z', playtimeSec: 0, gameVersion: 't' }), { engineVersion: engine.ports.sim.engineVersion });
+      const parsed = parseSave(serializeSave(env), content);
+      if (!parsed.ok) throw new Error(`${parsed.error.code}: ${parsed.error.message}`);
+      expect(checksumState(parsed.value.envelope.state)).toBe(checksumState(s));
+      return parsed.value.envelope.state;
+    };
+    const must = <T>(r: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T => {
+      if (!r.ok) throw new Error(`${r.error.code}: ${r.error.message}`);
+      return r.value;
+    };
+    const w = must(engine.createWorld(content, { rootSeed: 'watch-never-save' }));
+    const club = Object.keys(w.clubs).sort()[3] as ClubId;
+    let start = must(engine.applyCommand(w, { type: 'club.choose', clubId: club }, content)).state;
+    start = must(engine.applyCommand(start, { type: 'pacing.set', clubId: club, levelUpPacing: 'fast', pauseBetweenRounds: 'never' }, content)).state;
+    for (let g = 0; g < 10 && start.calendar.weekId !== 'MW1'; g++) start = must(engine.advanceWeek(start, content)).state;
+    const unblock = (s: GameState): GameState => (engine.getBlockers(s, content).length === 0 ? s : must(engine.applyCommand(s, engine.suggestLineup(s, club, content), content)).state);
+    const season = (watch: boolean) => {
+      let s = start;
+      let watched = 0;
+      let stoppedAtNext = 0;
+      for (let g = 0; g < 40 && s.calendar.phase !== 'season-end'; g++) {
+        let r = must(engine.advance(unblock(s), content, watch ? { playerMatch: 'watch' } : {}));
+        for (let k = 0; r.week === null; k++) {
+          if (k > 30) throw new Error('the week never finished');
+          if (!r.watch) {
+            r = must(engine.advance(save(r.state), content));
+            continue;
+          }
+          // The required autosave, then a stop at a cursor and its autosave, then the commit from the loaded state.
+          const locked = save(r.state);
+          const live = engine.liveRoundPlayback(locked, content);
+          if (!live.ok) throw new Error(live.error.message);
+          const tick = Math.trunc(live.value.log.events[live.value.log.events.length - 1]!.tick / 2);
+          const stopped = save(must(engine.applyCommand(locked, { type: 'match.watch', clubId: club, fixtureId: r.watch.fixtureId, round: r.watch.round, tick }, content)).state);
+          const resumed = engine.liveRoundPlayback(stopped, content);
+          if (!resumed.ok) throw new Error(resumed.error.message);
+          expect(resumed.value.log.hash).toBe(live.value.log.hash);
+          expect(resumed.value.startTick).toBe(tick);
+          watched++;
+          const round = r.watch.round;
+          r = must(engine.advance(stopped, content, { watched: { round, logHash: resumed.value.log.hash } }));
+          if (r.watch) {
+            expect(r.watch.round).toBe(round + 1);
+            stoppedAtNext++;
+          }
+        }
+        s = r.state;
+      }
+      return { s, watched, stoppedAtNext };
+    };
+    const simulated = season(false);
+    const watched = season(true);
+    expect(watched.s.calendar.phase).toBe('season-end');
+    expect(watched.watched).toBeGreaterThan(20);
+    expect(watched.stoppedAtNext).toBeGreaterThan(0);
+    expect(checksumState(watched.s)).toBe(checksumState(simulated.s));
+  });
+});

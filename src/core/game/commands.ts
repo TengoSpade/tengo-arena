@@ -199,9 +199,9 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
         return ok(null);
       }
       if (w.round === null) return fail('match.not-watching', 'No round is being watched: the match waits between rounds', { fixtureId: cmd.fixtureId });
-      // The reveal frontier only moves forward (LiveWatch.cursorTick); a lower tick is a stale stop.
-      if (cmd.tick < w.cursorTick) return fail('watch.tick', `The cursor only moves forward (at ${w.cursorTick}, got ${cmd.tick})`, { tick: cmd.tick, cursorTick: w.cursorTick });
-      ms.watch = { ...w, cursorTick: cmd.tick };
+      // The cursor is the reveal frontier (LiveWatch.cursorTick): it never moves back. A stop after a rewind within the
+      // round (05-technical-m2 §A3, live seeking) sends a lower tick; it is accepted and the frontier stays where it was.
+      ms.watch = { ...w, cursorTick: Math.max(w.cursorTick, cmd.tick) };
       return ok(null);
     }
     case 'match.call':

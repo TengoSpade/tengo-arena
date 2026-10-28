@@ -11,7 +11,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { asId, type ClubId, type FixtureId, type GameState, type MatchResult, type MatchState, type RoundInput, type SwapDecision } from '../model';
 import { fixtureContent } from '../testkit';
 import { NotImplementedError, cloneJson, hashString, stableStringify } from '../util';
-import { createGameEngine, prepareRound, realGamePorts, roundInputOf as roundInputOfResult, type BetweenRoundView, type GameEngine, type GamePorts } from './index';
+import { createGameEngine, createStandInPorts, prepareRound, realGamePorts, roundInputOf as roundInputOfResult, type BetweenRoundView, type GameEngine, type GamePorts } from './index';
 
 const content = fixtureContent();
 
@@ -365,13 +365,16 @@ describe('the watch cursor (match.watch) and the resume', () => {
   const watch = (state: GameState, extra: Partial<{ clubId: ClubId; fixtureId: FixtureId; round: number; tick: number; mode: 'watch' | 'simulate' }>) =>
     engine.applyCommand(state, { type: 'match.watch', clubId: state.playerClubId!, fixtureId, round: 1, tick: 0, ...extra }, content);
 
-  it('moves the reveal frontier forward only, within the round time cap; it changes nothing else', () => {
+  it('moves the reveal frontier forward only (a stop after a rewind keeps it), within the round time cap; it changes nothing else', () => {
     const a = must(watch(s, { tick: 300 })).state;
     expect(a.liveMatch!.watch).toEqual({ mode: 'watch', round: 1, cursorTick: 300, calls: [] });
     expect({ ...a.liveMatch!, watch: undefined }).toEqual({ ...s.liveMatch!, watch: undefined });
     expect(must(watch(a, { tick: 300 })).state.liveMatch!.watch!.cursorTick).toBe(300);
-    const back = watch(a, { tick: 299 });
-    expect(back.ok ? null : back.error.code).toBe('watch.tick');
+    // The player rewound within the live round (§A3) and paused at 120: the stop is accepted, the frontier stays at 300.
+    const rewound = must(watch(a, { tick: 120 })).state;
+    expect(rewound.liveMatch!.watch).toEqual({ mode: 'watch', round: 1, cursorTick: 300, calls: [] });
+    expect(must(engine.liveRoundPlayback(rewound, content)).startTick).toBe(300);
+    expect(must(watch(rewound, { tick: 450 })).state.liveMatch!.watch!.cursorTick).toBe(450);
     const cap = Math.round(content.combat.overtime.hardCapS * content.combat.tick.ticksPerSecond);
     expect(watch(a, { tick: cap }).ok).toBe(true);
     for (const tick of [cap + 1, -1, 1.5]) {
@@ -579,14 +582,9 @@ describe('inspectPlayback (the pause inspector probe; core/sim inspectRoundAt fr
     const engine = createGameEngine(realGamePorts);
     const mw1 = careerAtMw1(engine, 'inspect-1');
     const r = must(engine.advance(unblock(engine, mw1), content, { playerMatch: 'watch' }));
-    let thrown: unknown = null;
-    try {
-      engine.inspectPlayback(r.state, r.watch!.fixtureId, 1, 0, content);
-    } catch (e) {
-      thrown = e;
-    }
-    // Until WP-M2A merges core/sim's inspectRoundAt throws NotImplementedError; afterwards this returns a probe.
-    if (thrown !== null) expect(thrown).toBeInstanceOf(NotImplementedError);
+    // Until WP-M2A merges core/sim's inspectRoundAt throws NotImplementedError. Integrating WP-M2A replaces this test
+    // with the real probe (it must then fail here, so the integration cannot forget it).
+    expect(() => engine.inspectPlayback(r.state, r.watch!.fixtureId, 1, 0, content)).toThrow(NotImplementedError);
   });
 });
 
@@ -599,5 +597,66 @@ describe('AI matches never watch', () => {
     expect(a.watch).toBeNull();
     expect(a.week).not.toBeNull();
     expect(checksumState(a.state)).toBe(checksumState(must(engine.advanceWeek(w, content)).state));
+  });
+});
+
+describe('pacing "never" with Watch: the round end runs the between-round step and stops at the next round', () => {
+  it('one advance commits the round, applies the auto step and returns the next round to watch; the week equals advanceWeek', () => {
+    const engine = createGameEngine(realGamePorts);
+    let mw1 = careerAtMw1(engine, 'watch-never-1');
+    mw1 = must(engine.applyCommand(mw1, { type: 'pacing.set', clubId: mw1.playerClubId!, levelUpPacing: 'fast', pauseBetweenRounds: 'never' }, content)).state;
+    mw1 = unblock(engine, mw1);
+    let r = must(engine.advance(mw1, content, { playerMatch: 'watch' }));
+    let stoppedAtNext = 0;
+    for (let i = 0; i < 8 && r.week === null; i++) {
+      expect(r.pause).toBeNull();
+      const w = r.watch!;
+      const live = must(engine.liveRoundPlayback(r.state, content));
+      r = must(engine.advance(r.state, content, { watched: { round: w.round, logHash: live.log.hash } }));
+      if (r.watch) {
+        // Round w committed, its between-round step applied, round w + 1 waiting: all in this one advance.
+        expect(r.watch.round).toBe(w.round + 1);
+        expect(r.state.liveMatch!.rounds).toHaveLength(w.round);
+        expect(r.state.liveMatch!.betweenRounds).toHaveLength(w.round);
+        stoppedAtNext++;
+      }
+    }
+    expect(r.week).not.toBeNull();
+    expect(stoppedAtNext).toBeGreaterThan(0);
+    expect(checksumState(r.state)).toBe(checksumState(must(engine.advanceWeek(mw1, content)).state));
+  });
+});
+
+describe('call plans never carry into a later round (RESERVED for the calls package)', () => {
+  it('after "Simulate the rest" the pending round keeps its calls and the next rounds have none', () => {
+    // Stand-in sim: it ignores call plans, so this pins core/game's bookkeeping whatever core/sim does with them.
+    const engine = createGameEngine(createStandInPorts());
+    let mw1 = careerAtMw1(engine, 'calls-carry-1');
+    mw1 = must(engine.applyCommand(mw1, { type: 'pacing.set', clubId: mw1.playerClubId!, levelUpPacing: 'fast', pauseBetweenRounds: 'never' }, content)).state;
+    const r = must(engine.advance(unblock(engine, mw1), content, { playerMatch: 'watch' }));
+    const { fixtureId } = r.watch!;
+    const withCall = cloneJson(r.state);
+    const call = { tick: 41, kind: 'focus', target: 1 };
+    withCall.liveMatch!.watch!.calls = [call]; // what 'match.call' will write; refused in M2
+    const switched = must(engine.applyCommand(withCall, { type: 'match.watch', clubId: withCall.playerClubId!, fixtureId, round: 1, tick: 60, mode: 'simulate' }, content)).state;
+    expect(switched.liveMatch!.watch!.calls).toEqual([call]);
+    const side = switched.liveMatch!.home.clubId === switched.playerClubId ? 'home' : 'away';
+    expect(prepareRound(engine.ports, switched, switched.liveMatch!, content).input.calls![side]).toEqual({ mode: 'explicit', calls: [call] });
+    const done = must(engine.advance(switched, content));
+    const lineups = done.state.results[fixtureId]?.roundLineups ?? done.state.liveMatch!.roundLineups;
+    expect(lineups.length).toBeGreaterThan(1);
+    expect(lineups[0]!.calls![side]).toEqual({ mode: 'explicit', calls: [call] });
+    for (const l of lineups.slice(1)) expect(l.calls).toBeUndefined();
+    if (done.state.liveMatch) expect(done.state.liveMatch.watch!.calls).toEqual([]);
+    // Watching, the same: the committed round's calls are cleared with it.
+    const watched = cloneJson(r.state);
+    watched.liveMatch!.watch!.calls = [call];
+    const live = must(engine.liveRoundPlayback(watched, content));
+    const next = must(engine.advance(watched, content, { watched: { round: 1, logHash: live.log.hash } }));
+    if (next.state.liveMatch) {
+      expect(next.state.liveMatch.roundLineups[0]!.calls![side]).toEqual({ mode: 'explicit', calls: [call] });
+      expect(next.state.liveMatch.watch!.calls).toEqual([]);
+      expect(prepareRound(engine.ports, next.state, next.state.liveMatch, content).input.calls).toBeUndefined();
+    }
   });
 });

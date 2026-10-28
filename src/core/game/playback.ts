@@ -54,7 +54,9 @@ export interface AdvanceOptions {
 
 /**
  * `AdvanceOutcome.watch`: the player's next round waits to be watched (state.liveMatch in phase
- * 'round_pending' with watch.round set). The UI opens the arena viewer on `liveRoundPlayback`.
+ * 'round_pending' with watch.round set). The UI opens the arena viewer on `liveRoundPlayback`. Before any playback
+ * the UI must autosave this state (the `auto-round` slot), which holds the locked round: the viewer opens only after
+ * that write succeeded (owner answer to Q60, option A; review B3).
  */
 export interface WatchPause {
   fixtureId: FixtureId;

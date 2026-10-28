@@ -307,10 +307,10 @@ export class WatchMismatchError extends Error {
   constructor(
     readonly fixtureId: Fixture['id'],
     readonly round: number,
-    readonly expected: string,
     readonly shown: string,
   ) {
-    super(`The log shown for round ${round} of ${fixtureId} is not that round's log (shown ${shown}, round ${expected})`);
+    // The round's own log hash is never part of the refusal: a caller cannot commit a round without loading its log.
+    super(`The log shown for round ${round} of ${fixtureId} (${shown}) is not that round's log`);
   }
 }
 
@@ -333,12 +333,15 @@ export function playRound(ports: GamePorts, draft: GameState, ms: MatchState, co
   const out = ports.sim.simulateRound(input, seed, content, { record: shown === undefined ? 'none' : 'full' });
   if (shown !== undefined) {
     const hash = out.log?.hash ?? '';
-    if (hash !== shown) throw new WatchMismatchError(ms.fixtureId, n, hash, shown);
+    if (hash !== shown) throw new WatchMismatchError(ms.fixtureId, n, shown);
   }
   // The outcome is identical at every record level (T4); only the 'full' level's own field differs, and committed rounds never store it.
   const result: RoundResult = { round: n, seed, ...out.result, eventHash: null };
   ms.rounds.push(result);
   ms.roundLineups.push(lineups);
+  // The call plans belonged to this round (RESERVED; recorded in its lineups): none carries into the next round, in
+  // either mode ("Simulate the rest" keeps the pending round's calls for that round only).
+  if (ms.watch && ms.watch.calls.length > 0) ms.watch = { ...ms.watch, calls: [] };
   ms.score[result.winner]++;
   for (const id of [...ms.home.active, ...ms.away.active]) {
     const add = out.fighterStats[id];
