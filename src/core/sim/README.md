@@ -68,5 +68,6 @@ Depends on: `util`, `rng`, `model`, `content`, `tactics`.
 
 ## M2 contract (stubs; docs/design/_drafts/05-technical-m2.md §A2, §A5, WP-M2A)
 - `inspectRoundAt(input, roundSeed, content, tick): RoundProbe` (stub): the pause inspector's view at a tick, read-only.
+- `simContentHash(content)` (stub): a hash of only the content the sim reads, for replay availability (owner answer to Q56: replays end at a balance-changing update); the career content hash is unchanged.
 - Log format 2 (planned): frames gain `shield` and `focus` and a closing frame at the end tick; `FightHeader.logFormat` names the format (`FIGHT_LOG_FORMAT_VERSION` in core/model). No outcome or round checksum may change; full-level goldens are re-pinned with the format bump and `ENGINE_VERSION` stays 2 (tech-016).
 - `RoundInput.calls` is reserved for the calls package: until then WP-M2A makes the sim refuse any plan other than absent or none for both sides (today it ignores the field).

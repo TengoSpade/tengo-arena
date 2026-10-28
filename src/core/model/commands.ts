@@ -56,8 +56,8 @@ export type Command =
   // ---- M2 (docs/design/_drafts/05-technical-m2.md; implemented by WP-M2B) --------------------------------
   /**
    * The player has watched his live round up to `tick` (monotonic: a lower tick is refused). Moves
-   * liveMatch.watch.cursorTick so a reload resumes there; changes no result. Sent at pauses, auto-pauses and
-   * periodically while playing (tech-019). `mode: 'simulate'` switches the rest of the match to Simulate (the
+   * liveMatch.watch.cursorTick so a reload resumes there; changes no result. Sent only when playback stops (pause,
+   * auto-pause, round end, window hidden; tech-019), never while it runs. `mode: 'simulate'` switches the rest of the match to Simulate (the
    * current round still finishes with its calls); 'watch' never comes back mid-match. Refused with
    * 'match.watch-unavailable' until WP-M2B lands.
    */

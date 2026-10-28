@@ -95,7 +95,7 @@ export interface RoundCalls {
   away: SideCallPlan;
 }
 
-/** M2: how the player's match is played, fixed at Play match with the squad lock (open-020, Q54 working assumption). */
+/** M2: how the player's match is played, fixed at Play match with the squad lock (open-020; owner answer to Q54, 2026-10-27: both offered, Watch primary). */
 export type MatchViewMode = 'watch' | 'simulate';
 
 /**
@@ -106,7 +106,13 @@ export interface LiveWatch {
   mode: MatchViewMode;
   /** The round waiting to be watched or being watched (rounds played + 1), or null between rounds. */
   round: number | null;
-  /** The furthest tick the player has watched in that round (0 before kickoff); a reload resumes there, paused. Monotonic. */
+  /**
+   * The reveal frontier of that round: an integer fight tick (0 before kickoff, at most the time cap) at or beyond
+   * every tick the player may have been shown before this state was saved. A reload resumes there, paused, and
+   * (calls package) a call is accepted only at a tick after it. Monotonic. M2 writes it only when playback stops
+   * (pause, auto-pause, round end, window hidden), where it equals the shown tick exactly; the calls package adds a
+   * write-ahead reveal record in fight ticks, merged on load as max(cursorTick, revealed) (05-technical-m2 §A6).
+   */
   cursorTick: number;
   /** The player's calls in that round so far (RESERVED: always empty before the calls package). */
   calls: FightCall[];
@@ -164,6 +170,13 @@ export interface MatchResult {
   mvpFighterId: FighterId | null;
   /** Hired blades used by either side (open-006). */
   hiredBladeIds: FighterId[];
+  /**
+   * M2 (additive, optional; written by WP-M2B from save v5): core/sim simContentHash of the content that played the
+   * match, a hash of only what the sim reads. Replays and the report timeline need it (with engineVersion) to match
+   * this build, so an update that changes no sim value (names, economy, calendar) keeps them (owner answer to Q56:
+   * replays end at a balance-changing update). Absent on older results, which fall back to contentHash.
+   */
+  simHash?: string;
   // ---- M1.1 round-by-round records (absent on results written before state v3: whole-match M1 sims) ----
   /** The squads fixed at the lineup lock. */
   squads?: { home: MatchSquad; away: MatchSquad };
@@ -349,9 +362,9 @@ export interface RoundResult {
   /** Hash of the final fight state; identical at every RecordLevel. */
   checksum: string;
   /**
-   * hashEventStream of the full log when recorded at 'full', else null. M2: a round the player watched is
-   * committed at 'full' and keeps the hash of the log he saw (diagnostics and determinism tests; replays are
-   * verified by `checksum`, because the hash also depends on FIGHT_LOG_FORMAT_VERSION).
+   * hashEventStream of the full log when recorded at 'full', else null. M2 keeps it null for committed rounds,
+   * watched ones included: the watched log's hash is compared at commit (AdvanceOptions.watched; refusal
+   * 'watch.mismatch') and never stored, so a Watch season and a Simulate season end in identical states.
    */
   eventHash: string | null;
 }

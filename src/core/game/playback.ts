@@ -20,7 +20,23 @@ export interface AdvanceOptions {
    * liveMatch.watch.mode). Default 'simulate': the M1.1 flow. Ignored when no player match starts.
    */
   playerMatch?: MatchViewMode;
+  /**
+   * Committing a watched round (review B2): the hash of the log the viewer showed. In every build (not only dev),
+   * `advance` plays the round from prepareRound at 'full' and refuses with 'watch.mismatch' (no state) unless its
+   * log hash equals this. Required when liveMatch.watch.round is set; the hash is compared, never stored.
+   */
+  watched?: { round: number; logHash: string };
 }
+
+/**
+ * When a watched round's outcome becomes part of the state (owner question Q60; OPEN, working assumption
+ * 'inputs'). 'inputs': its inputs are locked and autosaved before it is shown, and the round is committed when its
+ * playback ends (calls stay possible). 'result': the round is simulated, committed and autosaved before playback
+ * starts (the literal D-O); calls could not touch such rounds. WP-M2B keeps the difference inside one function
+ * (the watch step of week processing) selected by this constant, so the owner's answer is a contained change.
+ */
+export type WatchCommitPolicy = 'inputs' | 'result';
+export const WATCH_COMMIT_POLICY: WatchCommitPolicy = 'inputs';
 
 /**
  * `AdvanceOutcome.watch`: the player's next round waits to be watched (state.liveMatch in phase
@@ -36,8 +52,9 @@ export interface WatchPause {
 /**
  * Why a match cannot be played back (05-technical-m2 §A4): no result yet; the result was compacted (a match
  * between other clubs older than `leagues.json matchRecords.compactAiMatchesAfterWeeks`, O24) or dropped with
- * its season; another build played it (engine version or content hash differ); it is the player's match in
- * progress (watch it live instead).
+ * its season; another build played it (engine version differs, or the sim content: MatchResult.simHash against
+ * core/sim simContentHash, falling back to contentHash for results without it; owner answer to Q56); it is the
+ * player's match in progress (watch it live instead).
  */
 export type ReplayUnavailableReason = 'not-played' | 'compacted' | 'other-build' | 'live';
 
@@ -82,8 +99,8 @@ export interface MatchPlayback {
 }
 
 /**
- * The round the player is watching, re-simulated at 'full' from liveMatch (lock-time inputs, the round's
- * lineup and liveMatch.watch.calls). Errors: 'match.not-live' (no live match), 'match.not-watching' (the
+ * The round the player is watching: orchestrator prepareRound (the one builder playRound also uses) plus
+ * liveMatch.watch.calls, simulated at 'full'. Errors: 'match.not-live' (no live match), 'match.not-watching' (the
  * match is simulated, or it waits between rounds).
  */
 export function liveRoundPlaybackWith(ports: GamePorts, state: GameState, content: ContentDB): Result<RoundPlayback, EngineError> {
@@ -105,7 +122,10 @@ export function matchPlaybackWith(ports: GamePorts, state: GameState, fixtureId:
   return notImplemented('game.matchPlayback', ports, state, fixtureId, content);
 }
 
-/** Cheap check for the Replay buttons (no simulation): the same test buildMatchReport uses for its timeline. */
+/**
+ * Cheap check for the Replay buttons (no simulation). One rule for replays and the report timeline: WP-M2B makes
+ * buildMatchReport use it too (engine version, then simHash or, for older results, contentHash; not compacted).
+ */
 export function replayAvailabilityWith(ports: GamePorts, state: GameState, fixtureId: FixtureId, content: ContentDB): ReplayAvailability {
   return notImplemented('game.replayAvailability', ports, state, fixtureId, content);
 }
@@ -113,7 +133,8 @@ export function replayAvailabilityWith(ports: GamePorts, state: GameState, fixtu
 /**
  * The pause inspector's "now" view (P-22, tech-022): the round's input (live or replay, with its calls) handed
  * to sim inspectRoundAt at `tick`. Same errors as the playback functions; 'inspect.tick' when the tick is past
- * the round's end or, live, past the watch cursor (no peeking ahead).
+ * the round's end or, live, past liveMatch.watch.cursorTick (the inspector opens while paused, and the pause has
+ * persisted the cursor first; no peeking ahead).
  */
 export function inspectPlaybackWith(ports: GamePorts, state: GameState, fixtureId: FixtureId, round: number, tick: number, content: ContentDB): Result<RoundProbe, EngineError> {
   return notImplemented('game.inspectPlayback', ports, state, fixtureId, round, tick, content);

@@ -16,7 +16,8 @@
 import type { ContentDB } from '../../core/content';
 import type { FightLog, UnitIndex } from '../../core/model';
 import { notImplemented } from '../../core/util';
-import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, AutoPauseRules, CameraConfig, PlaybackStop, Speed, ViewerStats } from '../types';
+import type { Timeline } from '../timeline';
+import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, AutoPauseRules, CameraConfig, DecisionSnapshot, KeyMoment, PlaybackStop, Speed, ViewerStats } from '../types';
 import type { ArenaSkin } from './skin';
 
 export type { ArenaSkin, BodyFrame, BodyVisual, SkinContext } from './skin';
@@ -41,11 +42,18 @@ export interface ArenaViewerOptions {
   onStop?: (stop: PlaybackStop) => void;
   /** A token was clicked or keyboard-selected (inspector). */
   onSelect?: (unit: UnitIndex | null) => void;
+  /** The render-state model (default: the real src/render timeline); tests inject a fake (review B8). */
+  timeline?: Timeline;
 }
 
+/**
+ * For a live round the viewer is the UI's ONLY source of round data (review B1): onFrame samples, keyMoments() and
+ * decisionAt(), all bounded by headTick, and endTick stays null until the end is reached. The UI never indexes a
+ * live log itself; the fake-viewer leak test (05-technical-m2 §A11) holds it to that.
+ */
 export interface ArenaViewer {
-  /** Load a round (paused at ctx.startTick). Replaces any previous round; frees its visuals. */
-  load(log: FightLog, ctx: ArenaRoundContext): void;
+  /** Load a round (paused at ctx.startTick) after the skin has prepared its units. Replaces any previous round; frees its visuals. */
+  load(log: FightLog, ctx: ArenaRoundContext): Promise<void>;
   /**
    * Calls package: swap in the round re-simulated with a new call, at the current tick. Refused (returns false)
    * unless every event up to `atTick` is identical (render/timeline samePrefix).
@@ -60,9 +68,14 @@ export interface ArenaViewer {
   seek(tick: number): void;
   /** The current (fractional) tick. */
   readonly tick: number;
-  /** Live: the furthest tick shown so far (the watch cursor). Replay: endTick. */
+  /** Live: the furthest tick shown so far. Replay: the round's last tick. */
   readonly headTick: number;
-  readonly endTick: number;
+  /** Replay: the round's last tick. Live: null until playback has reached the end (no scrubber may announce it). */
+  readonly endTick: number | null;
+  /** Key moments up to headTick (the feed, scrubber marks). */
+  keyMoments(): readonly KeyMoment[];
+  /** The selected or given unit's committed decision at the current tick (inspector "why this"). */
+  decisionAt(unit: UnitIndex): DecisionSnapshot | null;
   setAutoPause(rules: AutoPauseRules): void;
   setCamera(camera: Partial<CameraConfig>): void;
   setPalette(palette: ArenaPalette): void;

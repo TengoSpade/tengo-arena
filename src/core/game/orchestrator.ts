@@ -58,7 +58,7 @@ import {
   type SwapRecord,
   type SwapRejection,
 } from '../model';
-import { deriveSeed } from '../rng';
+import { deriveSeed, type Seed } from '../rng';
 import { mergeStats, mvpScore } from '../sim';
 import { InvariantError } from '../util';
 import { buildMatchInput, fightInputOf, matchTypeOf } from './match';
@@ -250,18 +250,36 @@ function lineupOf(ports: GamePorts, state: GameState, ms: MatchState, side: Matc
   };
 }
 
-/** Play the next round: build its RoundInput, simulateRound(deriveSeed(seed, 'round', n)), the lifecycle hooks, the score; phase moves on. */
-export function playRound(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB): RoundOutcome {
-  if (ms.phase !== 'round_pending') throw new InvariantError(`playRound: ${ms.fixtureId} is ${ms.phase}`);
+/** The next round of a match as the sim will play it: its number, exact RoundInput, lineup record and round seed. */
+export interface PreparedRound {
+  round: number;
+  input: RoundInput;
+  lineups: RoundLineups;
+  seed: Seed;
+}
+
+/**
+ * The next round's input, lineup record and seed, read-only (state and match are not touched). The ONE builder
+ * of a round's input: playRound plays exactly this, and the M2 watch path (05-technical-m2 §A3, liveRoundPlayback)
+ * shows exactly this, so the round the player watches cannot differ from the round that is committed.
+ */
+export function prepareRound(ports: GamePorts, state: GameState, ms: MatchState, content: ContentDB): PreparedRound {
+  if (ms.phase !== 'round_pending') throw new InvariantError(`prepareRound: ${ms.fixtureId} is ${ms.phase}`);
   const n = ms.rounds.length + 1;
-  const lineups: RoundLineups = { round: n, home: lineupOf(ports, draft, ms, 'home', content), away: lineupOf(ports, draft, ms, 'away', content) };
+  const lineups: RoundLineups = { round: n, home: lineupOf(ports, state, ms, 'home', content), away: lineupOf(ports, state, ms, 'away', content) };
   const pool = (id: FighterId) => ms.inputsById[id];
   const input: RoundInput = {
     round: n,
     home: sideFrom(ms.input.home, pool, lineups.home, `playRound ${ms.fixtureId}`),
     away: sideFrom(ms.input.away, pool, lineups.away, `playRound ${ms.fixtureId}`),
   };
-  const seed = deriveSeed(ms.seed, 'round', n);
+  return { round: n, input, lineups, seed: deriveSeed(ms.seed, 'round', n) };
+}
+
+/** Play the next round: prepareRound, simulateRound(deriveSeed(seed, 'round', n)), the lifecycle hooks, the score; phase moves on. */
+export function playRound(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB): RoundOutcome {
+  if (ms.phase !== 'round_pending') throw new InvariantError(`playRound: ${ms.fixtureId} is ${ms.phase}`);
+  const { round: n, input, lineups, seed } = prepareRound(ports, draft, ms, content);
   const out = ports.sim.simulateRound(input, seed, content, { record: 'none' });
   const result: RoundResult = { round: n, seed, ...out.result };
   ms.rounds.push(result);

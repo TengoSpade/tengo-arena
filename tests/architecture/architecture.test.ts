@@ -105,6 +105,8 @@ describe('architecture: the checker catches violations (guards against a vacuous
     expect(rulesOf('src/render/timeline/sample.ts', `const t = performance.now();`)).toEqual(['render-pure']);
     expect(rulesOf('src/render/cues/a.ts', `const w = window.innerWidth;`)).toEqual(['render-pure']);
     expect(rulesOf('src/render/cues/a.ts', `const r = Math.random();`)).toEqual(['render-pure']);
+    expect(rulesOf('src/render/camera/a.ts', `const d = devicePixelRatio; const m = matchMedia('(x)');`)).toEqual(['render-pure', 'render-pure']);
+    expect(rulesOf('src/render/colors/a.ts', `const c = getComputedStyle(x); const o = new ResizeObserver(f);`)).toEqual(['render-pure', 'render-pure']);
     expect(rulesOf('src/render/cues/a.ts', `const o = { document: 1 }; const v = o.document + Math.floor(1.5);`)).toEqual([]);
     expect(rulesOf('src/render/timeline/sample.ts', `import { x } from '../../core/model';`)).toEqual([]);
     expect(rulesOf('src/render/timeline/sample.test.ts', `const t = performance.now();`)).toEqual([]);
@@ -125,5 +127,13 @@ describe('architecture: the checker catches violations (guards against a vacuous
     expect(rulesOf(ui, `const m = await import('../../../render/skins/placeholder');`)).toEqual(['render-deep-import']);
     expect(rulesOf('src/platform/save-store.ts', `import type { Speed } from '../render';`)).toEqual(['platform-imports-render']);
     expect(rulesOf('src/render/viewer/scene.ts', `import { x } from '../../platform/browser';`)).toEqual(['render-imports-platform']);
+  });
+
+  it('M2: src/render reads core/sim as types only (tech-009: the viewer never simulates)', () => {
+    expect(rulesOf('src/render/timeline/a.ts', `import type { RoundProbe } from '../../core/sim';`)).toEqual([]);
+    expect(rulesOf('src/render/viewer/a.ts', `import { type RoundProbe } from '../../core/sim';`)).toEqual([]);
+    expect(rulesOf('src/render/viewer/a.ts', `import { simulateRound } from '../../core/sim';`)).toEqual(['render-sim-value']);
+    expect(rulesOf('src/render/timeline/a.ts', `const m = await import('../../core/sim');`)).toEqual(['render-sim-value']);
+    expect(rulesOf('src/render/timeline/a.ts', `import { notImplemented } from '../../core/util';`)).toEqual([]);
   });
 });

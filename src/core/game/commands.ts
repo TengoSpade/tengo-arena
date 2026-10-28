@@ -33,7 +33,7 @@ const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set([
  * itself, settings and news. Everything that could change a squad, a roster or money waits until
  * the match (and so the week) is over; level-up picks too (levelup.choose, 05 M1.1 addendum).
  */
-const LIVE_MATCH_ALLOWED: ReadonlySet<Command['type']> = new Set(['match.swap', 'news.markRead', 'news.setRead', 'shortlist.toggle', 'levelup.policy', 'autoswap.set', 'pacing.set']);
+export const LIVE_MATCH_ALLOWED: ReadonlySet<Command['type']> = new Set(['match.swap', 'news.markRead', 'news.setRead', 'shortlist.toggle', 'levelup.policy', 'autoswap.set', 'pacing.set']);
 
 function clubCheck(state: GameState, clubId: ClubId): EngineError | null {
   return getOwn(state.clubs, clubId) ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };

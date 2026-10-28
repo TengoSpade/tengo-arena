@@ -233,3 +233,17 @@ export interface RoundProbe {
 export function inspectRoundAt(input: RoundInput, roundSeed: Seed, content: ContentDB, tick: number): RoundProbe {
   return notImplemented('sim.inspectRoundAt', input, roundSeed, content, tick);
 }
+
+/**
+ * M2 (05-technical-m2 §A4; owner answer to Q56; WP-M2A implements): a hash of ONLY the content the sim reads,
+ * so replay availability follows "replays end at a balance-changing update" rather than any content edit. Computed
+ * from the parsed ContentDB (doc keys and formatting never matter), over an allow-list the sim owns: `combat`;
+ * classes' combat fields (attributes, rating weights, roles, starting row, kit, presets; not names, descriptions,
+ * icons); abilities and ability ranks (mechanics, not display text); perks (mechanics); tactics presets (rules and
+ * stance; not names or summaries); races' combatMods; traits' sim-applied effects. Stored inputs already carry the
+ * management-effective stats, so management content (economy, development, leagues, names) never enters it.
+ * The career content hash (core/content hashContent, saves, GameState.content) is unchanged. Cached per ContentDB.
+ */
+export function simContentHash(content: ContentDB): string {
+  return notImplemented('sim.simContentHash', content);
+}

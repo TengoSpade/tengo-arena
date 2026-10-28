@@ -6,7 +6,11 @@
  * Units: positions in centimetres (as in the fight log), time in ticks (50 ms; a tick may be fractional while
  * playing), angles in radians (0 = east, +y = south, as the arena's axes), colours as 0xRRGGBB numbers.
  */
+import type { Effect } from '../core/content';
 import type { AbilityId, ClassId, ClubId, FighterId, RuleTraceEntry, Side, UnitIndex } from '../core/model';
+
+/** The closed effect vocabulary of abilities.json (17 types); cue derivation switches over it exhaustively. */
+export type AbilityEffectType = Effect['type'];
 
 /** Playback speeds (T1). */
 export type Speed = 1 | 2 | 4;
@@ -203,6 +207,14 @@ export type EffectKind =
   | 'status-resist'
   | 'interrupt'
   | 'dash-trail'
+  | 'displace'
+  | 'cleanse'
+  | 'dispel'
+  | 'guard-link'
+  | 'chain-arc'
+  | 'splash'
+  | 'cooldown-reset'
+  | 'focus-gain'
   | 'zone-trigger'
   | 'down'
   | 'deathward'
@@ -218,6 +230,8 @@ export interface ArenaFrameState {
   overtime: boolean;
   /** The round has ended at or before this tick. */
   ended: boolean;
+  /** The round's last tick once `ended` (null before: a live sample never tells when the round will end). */
+  endTick: number | null;
   units: readonly UnitRenderState[];
   projectiles: readonly ProjectileRenderState[];
   zones: readonly ZoneRenderState[];
@@ -229,7 +243,7 @@ export interface ArenaFrameState {
 
 // ---- Playback control -------------------------------------------------------------------------------
 
-/** Auto-pause triggers (P-01 "auto-pause on configurable events"; defaults are owner question Q58). */
+/** Auto-pause triggers (P-01 "auto-pause on configurable events"; defaults approved by the owner, Q58, 2026-10-27). */
 export interface AutoPauseRules {
   ownDowned: boolean;
   enemyDowned: boolean;
@@ -241,7 +255,7 @@ export interface AutoPauseRules {
 
 export type AutoPauseReason = keyof AutoPauseRules;
 
-/** A tick where playback must stop (the viewer stops after drawing that tick). */
+/** A tick where playback must stop (the viewer stops after drawing that tick). Never handed to the UI before it is reached. */
 export interface AutoPauseStop {
   tick: number;
   reason: AutoPauseReason;
@@ -287,11 +301,11 @@ export interface DecisionSnapshot {
 export type Projection = { kind: 'top-down' } | { kind: 'oblique'; tiltDeg: number };
 
 export interface CameraConfig {
-  /** M2 working assumption: top-down orthographic (04 §4, P-03). Oblique = a 3/4 view (art §12 Q4), y squashed by cos(tilt). */
+  /** M2: top-down orthographic (04 §4, P-03; owner answer to Q55). Oblique = a 3/4 view (art §12 Q4), y squashed by cos(tilt). */
   projection: Projection;
-  /** 1 = the whole arena fits (default; 04 §4: never scrolls at default zoom). 1.5 and 2 are OPEN (04 §4, Q55). */
+  /** 1 = the whole arena fits (04 §4: never scrolls at default zoom). M2 ships 1 (owner answer to Q55); 1.5 and 2 come with the sprite decision. */
   zoom: 1 | 1.5 | 2;
-  /** Follow a unit when zoomed (OPEN, Q55); null = centred. */
+  /** Follow a unit when zoomed (with the sprite decision, Q55); null = centred, the M2 setting. */
   follow: UnitIndex | null;
   /** Margin around the arena, CSS px (the HUD strips are DOM over the canvas, 04 §4: 56 px top, 72 px bottom). */
   padding: { top: number; right: number; bottom: number; left: number };
@@ -345,8 +359,13 @@ export interface AbilityCue {
   ability: AbilityId;
   /** Shown during the windup/cast when it lasts ≥ 0.3 s (04 §7), or for every area ability. */
   telegraph: { shape: 'circle' | 'cone' | 'line' | 'single'; sizeCm: number; spread: number; minTicks: number } | null;
-  /** What the release draws. */
+  /** What the release draws. Never 'none' for an active ability (84 in content/default, tested); 'none' only for passives. */
   release: 'swing' | 'beam' | 'projectile' | 'dash-trail' | 'area-flash' | 'self-pulse' | 'none';
+  /**
+   * One cue per effect of the ability, nested effects included (chain, splash, zone, onKill), from an exhaustive
+   * switch over AbilityEffectType: a new effect type fails to compile until it has a cue.
+   */
+  effects: readonly { type: AbilityEffectType; cue: EffectKind }[];
   /** Projectile glyph (readable minimum size, research A4.2: no tiny projectiles). */
   projectile: { sizePx: number } | null;
   /** Dominant tone of its hits. */

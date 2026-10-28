@@ -1,12 +1,13 @@
 /**
  * Camera and projection (05-technical-m2 §A5; WP-M2C implements). PURE, so the scene, pointer hit-testing
- * and tests share one transform. The projection is configuration, not code paths: the owner has not chosen
- * the camera (art §12 Q4; owner question Q55), and the sim and the render-state model are unaffected by it.
+ * and tests share one transform. The projection is configuration, not code paths: M2 is top-down with fixed
+ * framing (owner answer to Q55), and a 3/4 view, zoom and follow come with the sprite decision (art §12 Q4)
+ * without touching the sim or the render-state model.
  */
 import { notImplemented } from '../../core/util';
 import type { CameraConfig, ViewTransform } from '../types';
 
-/** M2 working assumption, OPEN (Q55): top-down orthographic, whole arena, no follow (04 §4). */
+/** M2 (approved, Q55): top-down orthographic, whole arena, no zoom or follow (04 §4). */
 export const DEFAULT_CAMERA: CameraConfig = {
   projection: { kind: 'top-down' },
   zoom: 1,

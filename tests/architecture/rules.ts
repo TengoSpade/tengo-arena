@@ -13,7 +13,8 @@
  *   src/render only through src/render/index.ts (pure) and
  *   src/render/viewer/index.ts (PixiJS; dynamic import() or import type only);
  *   the pure half of src/render (all but viewer/ and skins/) imports no pixi.js
- *   and touches no DOM, clock, timer or randomness global.
+ *   and touches no DOM, clock, timer or randomness global; src/render imports
+ *   core/sim as types only.
  *
  * ESLint mirrors some of these rules for editor feedback; this file decides.
  * Changing the tables below is an architect-owned change (docs/design 05 §11).
@@ -56,6 +57,8 @@ export const CORE_ALLOWED_PACKAGES: readonly string[] = ['zod'];
 export const CORE_TEST_ALLOWED_PACKAGES: readonly string[] = ['vitest'];
 /** Core modules src/render may import (read-only consumer of the event stream). */
 export const RENDER_ALLOWED_CORE: readonly string[] = ['util', 'rng', 'model', 'content', 'sim'];
+/** M2 (tech-009): of those, core modules src/render may import as TYPES only (it must never run the sim). */
+export const RENDER_TYPE_ONLY_CORE: readonly string[] = ['sim'];
 
 /**
  * M2 (docs/design/_drafts/05-technical-m2.md §A8): src/render has a PixiJS half (these folders) and a pure half
@@ -88,6 +91,10 @@ export const RENDER_PURE_BANNED_GLOBALS: ReadonlySet<string> = new Set([
   'crypto',
   'globalThis',
   'self',
+  'matchMedia',
+  'getComputedStyle',
+  'devicePixelRatio',
+  'ResizeObserver',
 ]);
 
 /** Identifiers that must not be referenced in core (platform globals, clocks, entropy, output). */
@@ -379,6 +386,8 @@ export function checkSource(relPath: string, text: string): Violation[] {
         if (!target.isIndex) add(node, 'deep-import', `import core/${target.coreModule} through its index.ts, not "${spec}"`);
         if (area.kind === 'render' && !RENDER_ALLOWED_CORE.includes(target.coreModule)) {
           add(node, 'render-dependency', `src/render may only read core/{${RENDER_ALLOWED_CORE.join(',')}}, not core/${target.coreModule}`);
+        } else if (area.kind === 'render' && RENDER_TYPE_ONLY_CORE.includes(target.coreModule) && importKind(node) !== 'type') {
+          add(node, 'render-sim-value', `src/render may import core/${target.coreModule} as types only: the viewer never simulates (tech-009)`);
         }
       } else if ((area.kind === 'render' || area.kind === 'platform') && target.rel.startsWith('src/ui/')) {
         add(node, `${area.kind}-imports-ui`, `src/${area.kind} must not import src/ui ("${spec}")`);
