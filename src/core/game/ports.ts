@@ -11,10 +11,23 @@ import * as fighters from '../fighters';
 import * as league from '../league';
 import * as sim from '../sim';
 import * as tactics from '../tactics';
+import type { ContentDB } from '../content';
+import { NotImplementedError } from '../util';
 
 export interface GamePorts {
   /** M1.1: simulateRound (WP-A) is what the orchestrator calls; simulateMatch stays for the M1 whole-match path and tests. */
-  sim: Pick<typeof sim, 'simulateMatch' | 'simulateRound'> & { engineVersion: number };
+  sim: Pick<typeof sim, 'simulateMatch' | 'simulateRound'> & {
+    engineVersion: number;
+    /**
+     * M2 (05-technical-m2 §A4, tech-026): core/sim simContentHash, a hash of only what the fight reads; written on every
+     * result (`MatchResult.simHash`) and compared by replayAvailability. Null when this sim cannot name it (core/sim's
+     * function is still a stub until WP-M2A merges, a stand-in sim): results then carry no simHash and replays fall
+     * back to the career content hash. Optional so older port bundles (tests, tools) keep compiling.
+     */
+    simContentHash?: (content: ContentDB) => string | null;
+    /** M2 pause inspector probe (tech-022; WP-M2A). Absent: inspectPlayback is not available (NotImplementedError). */
+    inspectRoundAt?: typeof sim.inspectRoundAt;
+  };
   tactics: Pick<typeof tactics, 'resolveTactics'>;
   fighters: Pick<
     typeof fighters,
@@ -113,8 +126,33 @@ export interface GamePorts {
   ai: AiApi;
 }
 
+/**
+ * core/sim simContentHash, or null while it is a stub (it throws NotImplementedError until WP-M2A merges). Cached per
+ * ContentDB: every result of a week asks for it.
+ */
+const simHashes = new WeakMap<ContentDB, string | null>();
+function realSimContentHash(content: ContentDB): string | null {
+  const known = simHashes.get(content);
+  if (known !== undefined) return known;
+  let h: string | null;
+  try {
+    h = sim.simContentHash(content);
+  } catch (e) {
+    if (!(e instanceof NotImplementedError)) throw e;
+    h = null;
+  }
+  simHashes.set(content, h);
+  return h;
+}
+
 export const realGamePorts: GamePorts = {
-  sim: { simulateMatch: sim.simulateMatch, simulateRound: sim.simulateRound, engineVersion: sim.ENGINE_VERSION },
+  sim: {
+    simulateMatch: sim.simulateMatch,
+    simulateRound: sim.simulateRound,
+    engineVersion: sim.ENGINE_VERSION,
+    simContentHash: realSimContentHash,
+    inspectRoundAt: sim.inspectRoundAt,
+  },
   tactics: { resolveTactics: tactics.resolveTactics },
   fighters: {
     createFighter: fighters.createFighter,

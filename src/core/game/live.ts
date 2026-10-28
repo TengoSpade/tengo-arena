@@ -31,12 +31,14 @@ export interface AdvanceOutcome {
 }
 
 /**
- * Continue. M2 contract: `options.playerMatch` ('watch' | 'simulate', default 'simulate') is accepted now and
- * ignored until WP-M2B implements the watch flow (05-technical-m2 §A3), so every caller keeps the M1.1 flow.
+ * Continue / Play match (M2: 05-technical-m2 §A3). `options.playerMatch` 'watch' starts the player's match in the
+ * viewer: the lock stops before round 1 (`watch` set). `options.watched` commits the round the viewer showed (its log
+ * hash is compared in every build: 'watch.mismatch'); while a round waits to be watched, an advance without it is
+ * refused with 'watch.not-shown'. Without options, and for a simulated match, the M1.1 flow is unchanged.
  */
-export function advanceWith(ports: GamePorts, state: GameState, content: ContentDB, _options?: AdvanceOptions): Result<AdvanceOutcome, EngineError> {
-  const r = advanceLoggedWith(ports, state, content);
-  return r.ok ? ok({ state: r.value.state, week: r.value.report, pause: r.value.pause }) : r;
+export function advanceWith(ports: GamePorts, state: GameState, content: ContentDB, options?: AdvanceOptions): Result<AdvanceOutcome, EngineError> {
+  const r = processWeekLive(ports, state, content, true, options ?? {});
+  return r.ok ? ok({ state: r.value.state, week: r.value.report, pause: r.value.pause, watch: r.value.watch ?? null }) : r;
 }
 
 export function advanceLoggedWith(ports: GamePorts, state: GameState, content: ContentDB): Result<LiveWeekOutcome, EngineError> {

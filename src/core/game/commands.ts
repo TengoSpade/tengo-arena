@@ -29,11 +29,26 @@ const SEASON_END_ALLOWED: ReadonlySet<Command['type']> = new Set([
 ]);
 
 /**
- * Commands allowed while the player's match waits between rounds (GameState.liveMatch): the swap
- * itself, settings and news. Everything that could change a squad, a roster or money waits until
- * the match (and so the week) is over; level-up picks too (levelup.choose, 05 M1.1 addendum).
+ * Commands allowed while the player's match is live (GameState.liveMatch: waiting between rounds, or M2 a round
+ * waiting to be watched): the swap itself, the watch cursor (M2), settings and news. Everything that could change a
+ * squad, a roster or money waits until the match (and so the week) is over; level-up picks too (levelup.choose, 05
+ * M1.1 addendum). None of them changes the next round's input (m2-contracts.test.ts pins that for every entry).
  */
-export const LIVE_MATCH_ALLOWED: ReadonlySet<Command['type']> = new Set(['match.swap', 'news.markRead', 'news.setRead', 'shortlist.toggle', 'levelup.policy', 'autoswap.set', 'pacing.set']);
+export const LIVE_MATCH_ALLOWED: ReadonlySet<Command['type']> = new Set([
+  'match.swap',
+  'match.watch',
+  'news.markRead',
+  'news.setRead',
+  'shortlist.toggle',
+  'levelup.policy',
+  'autoswap.set',
+  'pacing.set',
+]);
+
+/** The round time cap in fight ticks (combat.json overtime.hardCapS): no cursor lies beyond it. */
+function timeCapTicks(content: ContentDB): number {
+  return Math.round(content.combat.overtime.hardCapS * content.combat.tick.ticksPerSecond);
+}
 
 function clubCheck(state: GameState, clubId: ClubId): EngineError | null {
   return getOwn(state.clubs, clubId) ? null : { code: 'club.unknown', message: `Unknown club "${clubId}"`, details: { clubId } };
@@ -161,10 +176,34 @@ export function applyToDraft(ports: GamePorts, draft: GameState, cmd: Command, c
       return ok(null);
     }
 
-    // M2 contracts (docs/design/_drafts/05-technical-m2.md): WP-M2B implements the watch cursor (add 'match.watch'
-    // to LIVE_MATCH_ALLOWED); calls stay refused until the calls package (P-01; staged after M2, Q53).
-    case 'match.watch':
-      return fail('match.watch-unavailable', 'Watching a match arrives with the M2 arena viewer', { fixtureId: cmd.fixtureId });
+    // M2 (docs/design/_drafts/05-technical-m2.md §A3, tech-019): the watch cursor and "Simulate the rest". Calls stay
+    // refused until the calls package (P-01; staged after M2, Q53).
+    case 'match.watch': {
+      if (draft.playerClubId === null || cmd.clubId !== draft.playerClubId) {
+        return fail('match.not-player-club', `"${cmd.clubId}" is not the player's club: only the player watches his match`, { clubId: cmd.clubId });
+      }
+      const ms = draft.liveMatch;
+      if (ms === null || ms.fixtureId !== cmd.fixtureId) return fail('match.not-live', 'That match is not in progress', { fixtureId: cmd.fixtureId });
+      const w = ms.watch;
+      if (!w || w.mode !== 'watch') return fail('match.not-watching', 'That match is simulated, not watched', { fixtureId: cmd.fixtureId });
+      if (cmd.mode !== undefined && cmd.mode !== 'watch' && cmd.mode !== 'simulate') return fail('watch.mode', `Unknown mode "${String(cmd.mode)}"`);
+      const cap = timeCapTicks(content);
+      if (!Number.isSafeInteger(cmd.tick) || cmd.tick < 0 || cmd.tick > cap) return fail('watch.tick', `The cursor must be a fight tick from 0 to ${cap} (got ${String(cmd.tick)})`, { tick: cmd.tick, cap });
+      // The round on screen: the watched round, or between rounds the round about to start (only "Simulate the rest" applies there).
+      const round = w.round ?? ms.rounds.length + 1;
+      if (cmd.round !== round) return fail('watch.round', `Round ${round} is the round in progress, not round ${cmd.round}`, { round, requested: cmd.round });
+      if (cmd.mode === 'simulate') {
+        // "Simulate the rest": the pending round is committed from its locked inputs (with its calls) by the next advance,
+        // the later rounds are simulated; Watch never comes back within the match. The cursor is moot from here.
+        ms.watch = { mode: 'simulate', round: null, cursorTick: Math.max(w.cursorTick, cmd.tick), calls: w.calls };
+        return ok(null);
+      }
+      if (w.round === null) return fail('match.not-watching', 'No round is being watched: the match waits between rounds', { fixtureId: cmd.fixtureId });
+      // The reveal frontier only moves forward (LiveWatch.cursorTick); a lower tick is a stale stop.
+      if (cmd.tick < w.cursorTick) return fail('watch.tick', `The cursor only moves forward (at ${w.cursorTick}, got ${cmd.tick})`, { tick: cmd.tick, cursorTick: w.cursorTick });
+      ms.watch = { ...w, cursorTick: cmd.tick };
+      return ok(null);
+    }
     case 'match.call':
       return fail('match.calls-unavailable', 'Calls are not part of this build (P-01; staged after M2, owner answer to Q53)', { fixtureId: cmd.fixtureId });
 

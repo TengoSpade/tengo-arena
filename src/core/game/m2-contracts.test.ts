@@ -15,11 +15,12 @@ import { createGameEngine, playRound, prepareRound, realGamePorts } from './inde
 const content = fixtureContent();
 const engine = createGameEngine(realGamePorts);
 
-/** A world whose player club has a live match waiting for round 1 (phase round_pending), as a watched match will. */
+/** A world whose player club has a live match waiting for round 1 to be watched (phase round_pending, watch.round 1). */
 function liveWorld(): { s: GameState; c: ClubId } {
   const s = buildFixtureWorld({ clubLimit: 4, fightersPerClub: 8, squadReserves: 2 });
   const c = s.playerClubId!;
   s.liveMatch = fixtureMatchState(s, c, Object.keys(s.clubs).find((x) => x !== c) as ClubId, content);
+  s.liveMatch.watch = { mode: 'watch', round: 1, cursorTick: 0, calls: [] };
   return { s, c };
 }
 
@@ -61,6 +62,7 @@ describe('commands allowed during a live match never touch the next round input'
     const other = Object.values(s.fighters).find((f) => f.clubId !== c)!.id as FighterId;
     const commands: Record<string, Command> = {
       'match.swap': { type: 'match.swap', clubId: c, fixtureId: s.liveMatch!.fixtureId, afterRound: 0, swaps: [] },
+      'match.watch': { type: 'match.watch', clubId: c, fixtureId: s.liveMatch!.fixtureId, round: 1, tick: 240 },
       'news.markRead': { type: 'news.markRead', newsIds: [] },
       'news.setRead': { type: 'news.setRead', newsIds: [], read: false },
       'shortlist.toggle': { type: 'shortlist.toggle', clubId: c, fighterId: other },
@@ -80,6 +82,10 @@ describe('commands allowed during a live match never touch the next round input'
       expect(r.ok, `${type}: ${r.ok ? '' : r.error.code}`).toBe(true);
       if (r.ok) expect(inputKey(r.value.state), type).toBe(before);
     }
+    // "Simulate the rest" (match.watch with mode 'simulate') changes how the round is committed, never its input.
+    const rest = engine.applyCommand(s, { type: 'match.watch', clubId: c, fixtureId: s.liveMatch!.fixtureId, round: 1, tick: 240, mode: 'simulate' }, content);
+    expect(rest.ok).toBe(true);
+    if (rest.ok) expect(inputKey(rest.value.state)).toBe(before);
     // Everything else waits until the match is over (a squad change, for one).
     const ids = Object.values(s.fighters).filter((f) => f.clubId === c).map((f) => asId<FighterId>(f.id));
     const squad = engine.applyCommand(s, { type: 'squad.set', clubId: c, fighters: ids.slice(0, 5).map((fighterId) => ({ fighterId, row: 'front' })), reserves: [], matchCaptainId: null }, content);
