@@ -52,6 +52,11 @@ export function App({ store }: AppProps) {
   }, [debug, debugAllowed, DebugOverlay]);
 
   useEffect(() => applySettingsToDocument(), []);
+  // The arena test hook (window.__arena.viewer): dev and `smoke` builds only. The condition is a build-time constant,
+  // so a production build drops the import and the hook module with it (tech-027).
+  useEffect(() => {
+    if (import.meta.env.DEV || import.meta.env.MODE === 'smoke') void import('../screens/arena/test-hook').then((m) => m.installArenaTestHook(store));
+  }, [store]);
   // F8 files a playtest ticket from any screen (the tool itself is a lazy chunk).
   useEffect(() => installTicketKey(store), [store]);
   useEffect(

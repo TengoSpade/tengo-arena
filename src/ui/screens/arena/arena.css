@@ -1,0 +1,472 @@
+/* ==========================================================================
+   Arena screens (M2, WP-M2E): layout glue only. Colours, type, spacing and motion come from tokens.css; the arena
+   tokens the UI designer adds (--c-arena-floor, --c-arena-wall, --c-fx-physical, --c-fx-arcane) are read by the
+   viewer through the palette object, not here. The canvas fills the stage; the HUD (top) and the fighter strip
+   (bottom) are DOM over it (05-technical-m2 §A7: 56 px and 72 px at the reference size).
+   ========================================================================== */
+
+.arena {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  background: var(--c-surface-0);
+  isolation: isolate;
+}
+
+.arena__stage {
+  position: absolute;
+  inset: 0;
+}
+
+.arena__host {
+  position: absolute;
+  inset: 0;
+  outline: none;
+}
+.arena__host:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--c-focus);
+}
+.arena__host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.arena__loading,
+.arena__failed {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--c-text-muted);
+  pointer-events: none;
+}
+.arena__failed {
+  pointer-events: auto;
+  background: var(--c-overlay);
+}
+
+/* ---- Top strip --------------------------------------------------------- */
+.arena__top {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: var(--z-raised);
+  pointer-events: none;
+}
+.arena__top > * {
+  pointer-events: auto;
+}
+
+.arena-hud {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 3.5rem;
+  padding: var(--sp-2) var(--sp-4);
+  background: color-mix(in srgb, var(--c-surface-1) 88%, transparent);
+  border-bottom: 1px solid var(--c-border);
+}
+.arena-hud__side {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.arena-hud__side--away {
+  justify-content: flex-end;
+}
+.arena-hud__name {
+  font-family: var(--font-display);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arena-hud__center {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.arena-hud__score {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+}
+.arena-hud__pips {
+  display: flex;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arena-pip {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px solid var(--c-border-strong);
+  border-radius: var(--r-pill);
+}
+.arena-pip[data-state="home"],
+.arena-pip[data-state="away"] {
+  background: var(--c-text);
+  border-color: var(--c-text);
+}
+.arena-pip[data-state="away"] {
+  border-style: double;
+  background: var(--c-text-muted);
+}
+.arena-pip[data-state="current"] {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+.arena-hud__clock {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  min-width: 3.2rem;
+  text-align: center;
+}
+.arena-hud__clock.is-overtime {
+  color: var(--c-warn);
+}
+.arena-hud__ot {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.arena-hud__standing {
+  color: var(--c-text-muted);
+}
+.arena-hud__transport {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* ---- Side panels: feed and inspector ----------------------------------- */
+.arena__side {
+  position: absolute;
+  top: 4.5rem;
+  right: var(--sp-3);
+  bottom: 12rem;
+  z-index: var(--z-raised);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: min(22rem, 30%);
+  min-width: 15rem;
+  pointer-events: none;
+}
+.arena__side > * {
+  pointer-events: auto;
+}
+.arena-feed,
+.arena-inspector {
+  background: color-mix(in srgb, var(--c-surface-1) 92%, transparent);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  overflow: auto;
+  box-shadow: var(--shadow-1);
+}
+.arena-feed {
+  flex: 1 1 8rem;
+  min-height: 0;
+}
+.arena-inspector {
+  flex: 2 1 12rem;
+  min-height: 0;
+}
+.arena-inspector__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.arena-panel__title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+  margin: 0 0 var(--sp-2);
+}
+.arena-feed__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arena-feed__jump {
+  display: grid;
+  grid-template-columns: 2.6rem 1rem 1fr;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-1) 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.arena-feed__jump:hover {
+  background: var(--c-surface-3);
+}
+.arena-feed__item[data-ours="true"] .arena-feed__mark {
+  color: var(--c-side-us);
+}
+.arena-feed__item[data-ours="false"] .arena-feed__mark {
+  color: var(--c-side-them);
+}
+.arena-feed__time {
+  color: var(--c-text-muted);
+}
+.arena-inspector__who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.arena-inspector__rule {
+  margin: var(--sp-1) 0;
+}
+.arena-inspector__facts dt {
+  color: var(--c-text-muted);
+  margin-top: var(--sp-2);
+}
+.arena-inspector__fact {
+  display: inline-block;
+  margin-right: var(--sp-3);
+}
+.arena-trace {
+  margin: var(--sp-1) 0;
+  padding: 0;
+  list-style: none;
+}
+.arena-trace__line {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: var(--sp-1) var(--sp-2);
+  padding: var(--sp-1) 0;
+  border-top: 1px solid var(--c-divider);
+}
+.arena-trace__why {
+  grid-column: 2;
+}
+.arena-trace__label {
+  font-weight: var(--fw-bold);
+  color: var(--c-accent-text);
+}
+
+/* ---- Bottom stack: round tabs, transport, fighter strip ------------------ */
+.arena__bottom {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: var(--z-raised);
+  background: color-mix(in srgb, var(--c-surface-1) 90%, transparent);
+  border-top: 1px solid var(--c-border);
+}
+.arena__keys {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-4);
+}
+.arena-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4);
+}
+.arena-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+}
+.arena-scrub {
+  position: relative;
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+.arena-scrub__input {
+  width: 100%;
+}
+.arena-scrub__marks {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 0.5rem;
+  pointer-events: none;
+}
+.arena-scrub__mark {
+  position: absolute;
+  bottom: 0;
+  width: 2px;
+  height: 0.5rem;
+  background: var(--c-text-muted);
+}
+.arena-scrub__mark--down,
+.arena-scrub__mark--captain-down {
+  background: var(--c-text);
+  height: 0.65rem;
+}
+.arena-scrub__mark--overtime {
+  background: var(--c-warn);
+}
+
+.arena-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  min-height: 4.5rem;
+}
+.arena-strip__side {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arena-fighter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "face text"
+    "hp hp"
+    "badges badges";
+  gap: 2px var(--sp-1);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--c-surface-2);
+  border: 2px solid var(--side-c, var(--c-border));
+  border-radius: var(--r-sm);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The colour-free side cue (04 §9): the player's side solid, the other double. */
+.arena-fighter[data-ring="double"] {
+  border-style: double;
+  border-width: 4px;
+}
+.arena-fighter > .portrait {
+  grid-area: face;
+}
+.arena-fighter__text {
+  grid-area: text;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.arena-fighter__name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arena-fighter__roles {
+  display: flex;
+  gap: 2px;
+}
+.arena-fighter__hp {
+  grid-area: hp;
+  position: relative;
+  display: block;
+  height: 0.45rem;
+  background: var(--c-surface-0);
+  border-radius: var(--r-xs);
+  overflow: hidden;
+}
+.arena-fighter__hp-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--hp, 1) * 100%);
+  background: var(--c-text);
+}
+.arena-fighter__hp-shield {
+  position: absolute;
+  inset: 0 auto 0 calc(var(--hp, 1) * 100%);
+  width: calc(var(--shield, 0) * 100%);
+  background: var(--c-info);
+}
+.arena-fighter__badges {
+  grid-area: badges;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 1.1rem;
+  font-size: var(--fs-xs);
+}
+.arena-fighter__rule {
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-xs);
+  font-weight: var(--fw-bold);
+}
+.arena-fighter.is-selected {
+  box-shadow: var(--shadow-focus);
+}
+.arena-fighter.is-down {
+  opacity: 0.55;
+}
+.arena-fighter__down {
+  margin-left: auto;
+}
+
+/* ---- Round-end overlay and replay end: non-blocking --------------------- */
+.arena-end {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.arena-end__card {
+  min-width: 18rem;
+  padding: var(--sp-5) var(--sp-8);
+  text-align: center;
+  background: color-mix(in srgb, var(--c-surface-1) 94%, transparent);
+  border: 1px solid var(--c-accent-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  pointer-events: auto;
+}
+.arena-end__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  margin: 0 0 var(--sp-2);
+}
+.arena-end__winner {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+}
+.arena-end__winner.is-ours {
+  color: var(--c-accent-text);
+}
+.arena-replay-end {
+  position: absolute;
+  left: 50%;
+  top: 4.5rem;
+  z-index: var(--z-overlay);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  transform: translateX(-50%);
+  background: var(--c-surface-1);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+}
+
+@media (max-width: 1500px) {
+  .arena-hud__round,
+  .arena-hud__standing {
+    display: none;
+  }
+}

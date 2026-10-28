@@ -9,6 +9,7 @@ import type { ScreenProps } from '../../app/routes';
 import { Kbd, PageHeader, Panel, showToast } from '../../components';
 import { AUTOSAVE_SLOTS, DEFAULT_SETTINGS, pacingStops, settings, updateSettings, type PacingPreset, type PacingStops, type UiSettings } from '../../store';
 import { Segmented } from '../league/lib/ui';
+import { ArenaPanel } from './ArenaPanel';
 import { MatchDayPanel, applyPresetToClub, useOptionalMatchDay } from './MatchDayPanel';
 import { TicketsPanel } from './TicketsPanel';
 import { t } from './text';
@@ -285,6 +286,7 @@ export default function SettingsScreen(_props: ScreenProps) {
         </Panel>
 
         <MatchDayPanel />
+        <ArenaPanel />
         <TicketsPanel />
       </div>
     </section>

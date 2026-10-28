@@ -10,6 +10,8 @@ import { weekLong } from '../league/lib/calendar';
 import { clubShort } from '../league/lib/club';
 import { fmtInt, fmtMoney, fmtTicks } from '../league/lib/format';
 import { href } from '../league/lib/store';
+import { REPLAY_LEAD_TICKS, ReplayButton, useReplayState } from '../arena/ReplayLink';
+
 import { Callout, Delta } from '../league/lib/ui';
 import { benchXpOf, downSummaries, name, type FighterInfo, type Moment, type Perspective } from './analysis';
 import { SubMark } from './BoxScore';
@@ -36,6 +38,8 @@ export function Moments({
   onFocus: (id: FighterId | null) => void;
 }) {
   const tickMs = content.combat.tick.tickMs;
+  // M2: each moment jumps the replay to 2 s before it, when the match can be replayed (04 ui-report, 05-technical-m2 §A7).
+  const replay = useReplayState(report.fixtureId);
   const rounds = report.rounds.filter((r) => round === null || r.round === round);
   const count = rounds.reduce((n, r) => n + (all.get(r.round)?.filter((m) => !m.key.endsWith('-end')).length ?? 0), 0);
   return (
@@ -79,6 +83,11 @@ export function Moments({
                   <div>
                     <div class="timeline__title">{m.title}</div>
                     {m.text && <div class="timeline__text">{m.text}</div>}
+                    {replay.available === true && (
+                      <span class="timeline__replay" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                        <ReplayButton fixtureId={report.fixtureId} round={m.round} tick={Math.max(0, m.tick - REPLAY_LEAD_TICKS)} label={t('moments.replayFrom', { time: fmtTicks(m.tick, tickMs) })} testId="moment-replay" />
+                      </span>
+                    )}
                   </div>
                 </li>
               )),

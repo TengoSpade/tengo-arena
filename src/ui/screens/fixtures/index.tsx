@@ -11,6 +11,7 @@ import { useShortcuts } from '../../app/shortcuts';
 import type { ContentDB } from '../../../core/content';
 import type { ClubId, Fixture, GameState, TierId } from '../../../core/model';
 import { DataTable, Icon, PageHeader, Panel, TabPanel, type Column } from '../../components';
+import { ReplayButton } from '../arena/ReplayLink';
 import { weekDefAt, weekLong, weekShort, weekTitle } from '../league/lib/calendar';
 import { TRIALS } from '../league/lib/trials';
 import { ClubEntity, clubName, clubShort, clubVenue } from '../league/lib/club';
@@ -193,10 +194,13 @@ function OurSeason({ game, content, clubId, fixtures, next }: { game: GameState;
       class: 'cell-tight',
       cell: (f) =>
         game.results[f.id] ? (
-          <a class="btn btn--sm btn--ghost" href={href(`match/${encodeURIComponent(f.id)}`)} aria-label={t('reportAria', { match: `${weekShort(content, f.weekIndex)} ${clubShort(game, opponentOf(f, clubId))}` })}>
+          <span class="l-cluster l-cluster--xs">
+            <a class="btn btn--sm btn--ghost" href={href(`match/${encodeURIComponent(f.id)}`)} aria-label={t('reportAria', { match: `${weekShort(content, f.weekIndex)} ${clubShort(game, opponentOf(f, clubId))}` })}>
             <Icon name="scroll" />
             {t('report')}
-          </a>
+            </a>
+            <ReplayButton fixtureId={f.id} icon label={t('replay')} testId="fixture-replay" />
+          </span>
         ) : null,
     },
   ];
@@ -290,10 +294,13 @@ function ByWeek({ game, content, clubId }: { game: GameState; content: ContentDB
       class: 'cell-tight',
       cell: (f) =>
         game.results[f.id] ? (
-          <a class="btn btn--sm btn--ghost" href={href(`match/${encodeURIComponent(f.id)}`)} aria-label={t('reportAria', { match: `${clubShort(game, f.homeClubId)} v ${clubShort(game, f.awayClubId)}` })}>
+          <span class="l-cluster l-cluster--xs">
+            <a class="btn btn--sm btn--ghost" href={href(`match/${encodeURIComponent(f.id)}`)} aria-label={t('reportAria', { match: `${clubShort(game, f.homeClubId)} v ${clubShort(game, f.awayClubId)}` })}>
             <Icon name="scroll" />
             {t('report')}
-          </a>
+            </a>
+            <ReplayButton fixtureId={f.id} icon label={t('replay')} testId="fixture-replay" />
+          </span>
         ) : null,
     },
   ];

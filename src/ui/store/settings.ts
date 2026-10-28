@@ -9,6 +9,8 @@
 import { effect, signal } from '@preact/signals';
 import { readSettingsRecord, writeSettingsRecord } from '../../platform/settings-storage';
 import { tooltipDelayMs } from '../components/Tooltip';
+import type { ArenaSettings } from './arena';
+import { cloneArenaSettings, DEFAULT_ARENA_SETTINGS, mergeArenaSettings } from './arena-settings';
 
 export type ThemeSetting = 'dark' | 'light' | 'system';
 export type PacingPreset = 'thorough' | 'balanced' | 'streamlined' | 'custom';
@@ -39,6 +41,8 @@ export interface UiSettings {
   autosave: boolean;
   /** Playtest ticket tool (F8, top-bar button) in non-dev builds; dev builds always have it. */
   playtestTools: boolean;
+  /** M2: the arena viewer's per-device settings (Settings › Match day; stored here, never in a save). */
+  arena: ArenaSettings;
 }
 
 export const DEFAULT_SETTINGS: Readonly<UiSettings> = {
@@ -53,10 +57,11 @@ export const DEFAULT_SETTINGS: Readonly<UiSettings> = {
   navCollapsed: false,
   autosave: true,
   playtestTools: true,
+  arena: DEFAULT_ARENA_SETTINGS,
 };
 
 function merge(record: Record<string, unknown> | null): UiSettings {
-  const s: UiSettings = { ...DEFAULT_SETTINGS, pacingCustom: { ...DEFAULT_SETTINGS.pacingCustom } };
+  const s: UiSettings = { ...DEFAULT_SETTINGS, pacingCustom: { ...DEFAULT_SETTINGS.pacingCustom }, arena: cloneArenaSettings() };
   if (!record) return s;
   const pick = <K extends keyof UiSettings>(key: K, ok: (v: unknown) => boolean) => {
     if (ok(record[key])) (s as unknown as Record<string, unknown>)[key] = record[key];
@@ -71,6 +76,7 @@ function merge(record: Record<string, unknown> | null): UiSettings {
   pick('navCollapsed', (v) => typeof v === 'boolean');
   pick('autosave', (v) => typeof v === 'boolean');
   pick('playtestTools', (v) => typeof v === 'boolean');
+  s.arena = mergeArenaSettings(record['arena']);
   const pc = record['pacingCustom'];
   if (pc && typeof pc === 'object') {
     for (const k of Object.keys(s.pacingCustom) as (keyof PacingStops)[]) {
@@ -141,4 +147,10 @@ export function reducedMotion(s: UiSettings = settings.value): boolean {
   } catch {
     return false;
   }
+}
+
+/** Change the arena viewer's per-device settings (a partial patch; the auto-pause rules merge one level deep). */
+export function updateArenaSettings(patch: Partial<Omit<ArenaSettings, 'autoPause'>> & { autoPause?: Partial<ArenaSettings['autoPause']> }): void {
+  const cur = settings.value.arena;
+  updateSettings({ arena: { ...cur, ...patch, autoPause: { ...cur.autoPause, ...patch.autoPause } } });
 }

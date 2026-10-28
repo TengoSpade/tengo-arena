@@ -37,6 +37,7 @@ export const FIXTURES_TEXT = {
   'next': 'Next',
   'thisWeek': 'This week',
   'report': 'Report',
+  'replay': 'Replay',
   'reportAria': 'Open the report: {match}',
   'cross': 'Cross-wing',
   'week.title': 'By matchweek',

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/pr
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetToasts } from '../components';
 import { createTestStore } from '../debug/test-store';
-import { DEFAULT_SETTINGS, updateSettings } from '../store/settings';
+import { DEFAULT_SETTINGS, updateArenaSettings, updateSettings } from '../store/settings';
 import { App } from './App';
 import { navigate } from './router';
 
@@ -57,6 +57,7 @@ describe('App', () => {
   it('commits and autosaves the result before the match report opens (no reroll by reloading)', async () => {
     const { store, saves } = createTestStore({ world: 'dev', weekIndex: 11 });
     updateSettings({ pacing: 'thorough' }); // open every report
+    updateArenaSettings({ watchPreference: 'simulate' }); // this is the Simulate flow's ordering rule (M2: Watch has its own, arena tests)
     const week = store.game.value!.calendar.weekIndex;
     // Hold the autosave write until the test releases it.
     let release!: () => void;
@@ -80,6 +81,7 @@ describe('App', () => {
     const autos = (await saves.list()).filter((m) => m.kind === 'auto');
     expect(autos.some((m) => m.weekIndex === week + 1)).toBe(true);
     updateSettings({ pacing: DEFAULT_SETTINGS.pacing });
+    updateArenaSettings({ watchPreference: DEFAULT_SETTINGS.arena.watchPreference });
   }, 20_000);
 
   it("M1.1: the player's match pauses between rounds; Continue on that screen plays on to the report", async () => {

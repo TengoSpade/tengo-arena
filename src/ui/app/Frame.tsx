@@ -14,13 +14,14 @@ import { ToastRegion, clearUndos, showToast, undoLast } from '../components/Toas
 import { TooltipLayer, tipAttrs, type Tip } from '../components/Tooltip';
 import { formatInt, formatMoney, ordinal } from '../format';
 import { phaseName, weekLabel } from '../format/calendar';
-import { MATCH_PAUSED, isTicketSlot, useStore, type AppStore } from '../store';
+import type { MatchViewMode } from '../../core/model';
+import { MATCH_PAUSED, MATCH_WATCHING, SAVE_ROUND_FAILED, WATCH_NOT_SHOWN, isTicketSlot, useStore, type AppStore } from '../store';
 import { digestNews, needsActionNow, newsNeedsAction } from '../store/digest-flags';
 import { useEngine } from '../store/engine';
 import { effectiveTheme, pacingStops, reducedMotion, settings, updateSettings } from '../store/settings';
 import { usePlayerClub, type ClubContext } from '../store/views';
 import { t } from '../text';
-import { continueModel, type ContinueModel } from './continue';
+import { continueModel, playModeFor, type ContinueModel } from './continue';
 import { NAV_FOOTER, NAV_ITEMS, navOwner } from './nav';
 import type * as ContinueDialogs from './continue-dialogs';
 import type { ConfirmVariant } from './continue-dialogs';
@@ -105,6 +106,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
+  const play = playModeFor(s.pacing, s.arena.watchPreference);
   const model = continueModel({
     state: store.game.value,
     content: store.content.value,
@@ -113,48 +115,67 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
     routeId,
     busy: store.busy.value || simulating !== null,
     stops: pacingStops(s),
+    play,
   });
 
   const needsAction = ctx ? needsActionNow(ctx.state, ctx.club.id, store.blockers.value) : 0;
 
-  const advance = async (playsMatch: boolean) => {
-    const delay = playsMatch && !reducedMotion(settings.value) ? SIMULATING_MS : 0;
-    if (playsMatch) setSimulating(ctx?.fixture?.bestOf ?? 3);
-    const [res] = await Promise.all([store.advance(), new Promise((r) => setTimeout(r, delay))]);
+  /** A step that did not finish the week: where the player goes (or what he is told) instead. */
+  const stopped = (code: string): boolean => {
+    if (code === MATCH_PAUSED) navigate('#/between-rounds'); // the player's match waits between rounds (M1.1)
+    else if (code === MATCH_WATCHING || code === WATCH_NOT_SHOWN) navigate('#/arena'); // a round waits to be watched (M2)
+    else if (code === SAVE_ROUND_FAILED) {
+      // The lock could not be saved, so nothing started and nothing opened (the viewer needs the write). Play match again retries.
+      showToast({
+        kind: 'bad',
+        title: t('continue.saveFailedTitle'),
+        sub: t('continue.saveFailedSub'),
+        durationMs: 15000,
+        action: { label: t('continue.retry'), onClick: () => void advanceRef.current(true, 'watch') },
+      });
+    } else return false;
+    return true;
+  };
+
+  const advance = async (playsMatch: boolean, mode: MatchViewMode = play.mode) => {
+    // The Simulating panel is the simulated match's; a watched match opens the arena straight away.
+    const simulates = playsMatch && mode === 'simulate';
+    const delay = simulates && !reducedMotion(settings.value) ? SIMULATING_MS : 0;
+    if (simulates) setSimulating(ctx?.fixture?.bestOf ?? 3);
+    const [res] = await Promise.all([store.advance(playsMatch ? { playerMatch: mode } : undefined), new Promise((r) => setTimeout(r, delay))]);
     setSimulating(null);
     if (!res.ok) {
-      // The player's match waits between rounds (M1.1): its screen takes over.
-      if (res.error.code === MATCH_PAUSED) navigate('#/between-rounds');
+      stopped(res.error.code);
       return;
     }
     if (res.value.playerFixtureId) afterMatch(store.game.value, res.value);
     else if (routeId !== 'home') navigate('#/home');
   };
+  const advanceRef = useLatest(advance);
 
   const advanceToSeasonEnd = async () => {
     for (let i = 0; i < 6; i++) {
       const g = store.game.value;
       if (!g || g.calendar.phase === 'season-end') break;
-      const res = await store.advance();
+      const res = await store.advance({ playerMatch: play.mode });
       if (!res.ok) {
-        if (res.error.code === MATCH_PAUSED) {
-          navigate('#/between-rounds');
-          return;
-        }
+        if (stopped(res.error.code)) return;
         break;
       }
     }
     navigate('#/home');
   };
 
-  const runContinue = async (m: ContinueModel = model) => {
+  /** `other`: the offered alternative (Shift Space, the second button): Simulate when Watch is the default, and the reverse. */
+  const runContinue = async (m: ContinueModel = model, other = false) => {
     const a = m.action;
     switch (a.kind) {
       case 'navigate':
         navigate(a.to);
         return;
       case 'advance':
-        await advance(a.playsMatch);
+        if (a.playsMatch) await advance(true, other && a.offer ? (a.mode === 'watch' ? 'simulate' : 'watch') : a.mode);
+        else await advance(false);
         return;
       case 'confirm-advance':
         setConfirm(a.variant);
@@ -212,8 +233,8 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
   // Global shortcuts (04 §6.4). Screens add their own layers with useShortcuts().
   useEffect(() => {
     const global = (): ShortcutMap => {
-      const map: Record<string, () => boolean | void> = {
-        Space: () => void runContinueRef.current(),
+      const map: Record<string, (e: KeyboardEvent) => boolean | void> = {
+        Space: (e) => void runContinueRef.current(undefined, e.shiftKey),
         'ctrl+s': () => void quickSaveRef.current(),
         'ctrl+k': () => setSearch(true),
         'ctrl+z': () => {
@@ -237,7 +258,7 @@ export function Frame({ children, onToggleDebug }: FrameProps) {
 
   return (
     <div class="app" data-nav={collapsed ? 'collapsed' : undefined}>
-      <Topbar ctx={ctx} model={model} needsAction={needsAction} onContinue={() => void runContinue()} onSearch={() => setSearch(true)} onSheet={() => setSheet(true)} />
+      <Topbar ctx={ctx} model={model} needsAction={needsAction} onContinue={() => void runContinue()} onOther={() => void runContinue(undefined, true)} onSearch={() => setSearch(true)} onSheet={() => setSheet(true)} />
       <nav class="sidenav" aria-label={t('nav.main')}>
         {NAV_ITEMS.map((n) => (
           <a key={n.id} class="sidenav__item" href={n.href} aria-current={owner === n.id ? 'page' : undefined} {...tipAttrs(collapsed ? t(n.label) : null)}>
@@ -327,6 +348,7 @@ function Topbar({
   model,
   needsAction,
   onContinue,
+  onOther,
   onSearch,
   onSheet,
 }: {
@@ -334,6 +356,8 @@ function Topbar({
   model: ContinueModel;
   needsAction: number;
   onContinue: () => void;
+  /** Play match: the other way to play it (Simulate beside a primary Watch, and the reverse). */
+  onOther: () => void;
   onSearch: () => void;
   onSheet: () => void;
 }) {
@@ -399,6 +423,19 @@ function Topbar({
             data-testid="ticket-button"
           >
             <Icon name="bug" />
+          </button>
+        )}
+        {model.action.kind === 'advance' && model.action.playsMatch && model.action.offer && (
+          <button
+            class="btn"
+            type="button"
+            onClick={onOther}
+            data-testid="continue-other"
+            aria-disabled={model.state === 'busy' ? 'true' : undefined}
+            {...tipAttrs(t(model.action.mode === 'watch' ? 'continue.simulateTip' : 'continue.tipWatch'))}
+          >
+            {t(model.action.mode === 'watch' ? 'continue.simulateButton' : 'continue.watchButton')}
+            <kbd>Shift Space</kbd>
           </button>
         )}
         <button
