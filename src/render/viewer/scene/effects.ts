@@ -450,7 +450,8 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
   const downed = e.kind === 'captain-down';
   const victim = e.unit !== null ? env.infoOf(e.unit) : undefined;
   const killer = e.target !== null ? env.infoOf(e.target) : undefined;
-  const ability = e.ability !== null ? (env.content.abilities.get(e.ability)?.name ?? null) : null;
+  // The cause is always named: the ability's name, or its id when the content does not know it.
+  const ability = e.ability !== null ? (env.content.abilities.get(e.ability)?.name ?? String(e.ability)) : null;
   const who = victim?.className ?? 'Fighter';
   // One line per fallen fighter: a captain's down line carries the captain, a captain-down alone says so.
   let text = downed ? `Captain down: ${who}` : `${v.captain ? 'Captain ' : ''}${who} downed`;
