@@ -5,10 +5,12 @@ import { REPO_ROOT } from '../../lib/node-content';
 import type { GpuMode } from './browser';
 
 /**
- * The career seed of a default run: its first match has rounds that pass 0:45 (round 1 is 54.6 s, round 2 56.8 s), so the career
- * shows overtime on a real round. Found with scripts/smoke/tools/overtime-seed.ts; 'arena-smoke-1' (a 42 s first round) has none.
+ * The career seed of a default run, found with scripts/smoke/tools/overtime-seed.ts: its first two matches give six rounds with
+ * no decision needed in between (no unfit starter), and its first match has rounds of 54.8 s and 48.0 s (past 0:45), so the career
+ * shows overtime on a real round and vis-003 gets five fights with overtime among them. 'arena-smoke-4' has overtime too, but
+ * its second match starts with an unfit starter.
  */
-export const DEFAULT_SEED = 'arena-smoke-4';
+export const DEFAULT_SEED = 'arena-smoke-10';
 
 export const JOURNEYS = ['cross', 'fixture', 'career', 'vis003'] as const;
 export type JourneyName = (typeof JOURNEYS)[number];
@@ -53,7 +55,7 @@ const HELP = `usage: npx tsx scripts/smoke/run.ts [options]   (the package scrip
   --no-build            reuse the build in reports/smoke/build
   --url <http://...>    test an already served build (no build, no preview)
   --self-test           run against the built-in mock arena: tests the driver, not the game
-  --seed <text>         seed typed on the new-career screen (default arena-smoke-4: its first rounds reach overtime)
+  --seed <text>         seed typed on the new-career screen (default arena-smoke-10: five fights, no decisions, overtime in its first match)
   --seconds <n>         wall seconds of playback measured at 1x and at 4x (default 10)
   --heap-loads <n>      consecutive round loads for the heap check (default 20)
   --gpu auto|hardware|software   WebGL source (default auto: the GPU if the browser finds one)
