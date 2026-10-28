@@ -16,7 +16,7 @@ import type { ContentDB } from '../../../core/content';
 import type { UnitIndex } from '../../../core/model';
 import { TELEGRAPH_MIN_TICKS } from '../../cues';
 import type { viewTransform as viewTransformFn } from '../../camera';
-import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, CameraConfig, CueTable, StatusCue, UnitRenderState } from '../../types';
+import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, ArenaUnitInfo, CameraConfig, CueTable, StatusCue, UnitRenderState } from '../../types';
 import { DESTROY_ALL } from '../destroy';
 import { FlashLimiter } from '../flash-limiter';
 import type { ArenaSkin, BodyFrame } from '../skin';
@@ -100,6 +100,10 @@ export class ArenaScene {
   private floorArena = '';
   private kickoff: KickoffInfo | null = null;
   private readonly markerXs: { x: number; side: 0 | 1; row: 'front' | 'back' }[] = [];
+  private readonly dashXs: number[] = [];
+  private dashY0 = Number.NaN;
+  private dashY1 = Number.NaN;
+  private dashColor = -1;
 
   private viewport = { width: 1280, height: 720 };
   private target: AffineMap = { ox: 0, oy: 0, ax: 1, ay: 0, bx: 0, by: 1 };
@@ -112,6 +116,7 @@ export class ArenaScene {
 
   private readonly limiter: FlashLimiter;
   private readonly byUnit: (UnitRenderState | undefined)[] = new Array<UnitRenderState | undefined>(MAX_UNITS).fill(undefined);
+  private readonly infoByUnit: (ArenaUnitInfo | undefined)[] = new Array<ArenaUnitInfo | undefined>(MAX_UNITS).fill(undefined);
   private readonly pipBuf: StatusCue[] = [];
   private lastState: ArenaFrameState | null = null;
   private readonly bodyFrame: BodyFrame = { tick: 0, dtMs: 0, speed: 1, reducedMotion: false, pxPerMetre: BASE_PX_PER_METRE };
@@ -162,7 +167,8 @@ export class ArenaScene {
       cues: opts.cues,
       content: opts.content,
       text: opts.text,
-      units: [],
+      byUnit: this.byUnit,
+      infoOf: (unit) => this.infoByUnit[unit],
       zones: [],
       tick: 0,
       reducedMotion: this.reducedMotion,
@@ -171,8 +177,6 @@ export class ArenaScene {
       sideColor: (side) => this.ringOf(side),
       ringStyle: (side) => this.ctx?.sides[side].colors.ringStyle ?? (side === 0 ? 'solid' : 'double'),
       limiter: this.limiter,
-      byUnit: this.byUnit,
-      info: [],
       viewport: this.viewport,
     };
   }
@@ -248,7 +252,8 @@ export class ArenaScene {
     this.arena = arena;
     this.kickoff = kickoff;
     this.ringRemap = false;
-    this.env.info = ctx.units;
+    this.infoByUnit.fill(undefined);
+    for (const info of ctx.units) if (info.unit >= 0 && info.unit < MAX_UNITS) this.infoByUnit[info.unit] = info;
     for (const info of ctx.units) {
       if (info.unit < 0 || info.unit >= MAX_UNITS) continue;
       const colors = ctx.sides[info.side].colors;
@@ -282,6 +287,7 @@ export class ArenaScene {
       this.floor = null;
     }
     this.markerG.clear();
+    this.dashXs.length = 0;
     for (const chip of this.markerChips) chip.view.visible = false;
     this.markerXs.length = 0;
     this.ctx = null;
@@ -305,7 +311,6 @@ export class ArenaScene {
     const ppm = pxPerMetreOf(map);
     env.ppm = ppm;
     env.squash = Math.abs(map.ax) > 1e-9 ? Math.abs(map.by / map.ax) : 1;
-    env.units = state.units;
     env.zones = state.zones;
     env.tick = frame.tick;
     env.playing = frame.playing;
@@ -457,15 +462,25 @@ export class ArenaScene {
     if (n === 0) return;
     const p = this.palette;
     const g = this.markerG;
-    g.clear();
     const y0 = sy(map, 0, 0);
     const y1 = sy(map, 0, this.arena.height);
-    const dash = 6;
-    for (const m of this.markerXs) {
-      const x = sx(map, m.x, 0);
-      for (let y = y0; y < y1; y += dash * 2) g.moveTo(x, y).lineTo(x, Math.min(y + dash, y1));
+    // The ~280 dash segments are rebuilt only when the lines moved (zoom, resize, a new round) or the colour changed.
+    let moved = this.dashY0 !== y0 || this.dashY1 !== y1 || this.dashColor !== p.line || this.dashXs.length !== n;
+    for (let i = 0; i < n && !moved; i++) if (this.dashXs[i] !== sx(map, this.markerXs[i]!.x, 0)) moved = true;
+    if (moved) {
+      this.dashY0 = y0;
+      this.dashY1 = y1;
+      this.dashColor = p.line;
+      this.dashXs.length = 0;
+      g.clear();
+      const dash = 6;
+      for (const m of this.markerXs) {
+        const x = sx(map, m.x, 0);
+        this.dashXs.push(x);
+        for (let y = y0; y < y1; y += dash * 2) g.moveTo(x, y).lineTo(x, Math.min(y + dash, y1));
+      }
+      g.stroke({ width: 1, color: p.line });
     }
-    g.stroke({ width: 1, color: p.line });
     const labelAlpha = tick <= KICKOFF_TICKS ? 1 : Math.max(0, 1 - (tick - KICKOFF_TICKS) / KICKOFF_FADE_TICKS);
     const rem = p.metrics.pipSizePx;
     while (this.markerChips.length < n) {
@@ -478,7 +493,7 @@ export class ArenaScene {
       chip.view.visible = labelAlpha > 0;
       if (labelAlpha <= 0) return;
       const h = p.metrics.labelSizePx * 1.35;
-      const w = chip.set(m.row === 'front' ? 'Front row' : 'Back row', this.env, { minW: 0, padX: rem * 0.4, h });
+      const w = chip.set(m.row === 'front' ? 'Front row' : 'Back row', this.env, 0, rem * 0.4, h);
       chip.view.position.set(sx(map, m.x, 0) - w / 2, y0 + rem * 0.4);
       chip.view.alpha = labelAlpha * 0.85;
     });

@@ -99,6 +99,16 @@ export class PlaybackClock {
     this._end = end;
   }
 
+  /**
+   * A live round after a log swap at `atTick` (calls): only the ticks up to it were shown, so the head and the tick move
+   * back to it, and an end that was not reached (it lies beyond) is unknown again.
+   */
+  rebase(atTick: number): void {
+    this._head = Math.min(this._head, Math.max(0, atTick));
+    this._tick = Math.min(this._tick, this._head);
+    if (this._end !== null && this._end > this._head) this._end = null;
+  }
+
   /** Replace the end and head bounds after a log swap (calls). The tick is kept. */
   reset(end: number | null): void {
     this._end = end;

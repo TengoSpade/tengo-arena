@@ -137,7 +137,8 @@ export class ViewerCore {
 
     this.ctx = ctx;
     this.index = index;
-    const clock = new PlaybackClock(ctx.kind, ctx.startTick, index.endTick);
+    // A live round has no end until playback reaches it, whatever the index says (no future leak).
+    const clock = new PlaybackClock(ctx.kind, ctx.startTick, ctx.kind === 'live' ? null : index.endTick);
     clock.setSpeed(this.speedSetting);
     this.clock = clock;
     this.stops.reset();
@@ -175,7 +176,9 @@ export class ViewerCore {
 
   /**
    * Calls: swap in the round re-simulated with a new call, at the current tick. Refused (false) unless every event
-   * up to `atTick` is identical, and never for a tick beyond the head.
+   * up to `atTick` is identical, and never for a tick beyond the head. A live round then counts only the ticks up to
+   * `atTick` as shown (its head, and the tick, move back to it): the new log's later ticks were never shown, so they
+   * cannot be sought, and a known end is forgotten unless it was reached.
    */
   replaceLog(log: FightLog, atTick: number): boolean {
     const { ctx, index, clock } = this;
@@ -191,7 +194,8 @@ export class ViewerCore {
     this.index = next;
     this.stops.reset();
     this.moments = null;
-    clock.reset(ctx.kind === 'replay' ? next.endTick : null);
+    if (ctx.kind === 'replay') clock.reset(next.endTick);
+    else clock.rebase(atTick);
     this.redraw();
     this.emitFrame(true);
     return true;
@@ -328,7 +332,8 @@ export class ViewerCore {
       target = clock.tick;
     } else {
       // Auto-pause stops are only asked for up to the tick about to be shown (a live round never looks ahead).
-      const until = clock.kind === 'replay' && clock.end !== null ? clock.end : target;
+      // Stops sit on whole ticks, so the model is asked once per tick reached (not once per frame), never beyond the frame.
+      const until = clock.kind === 'replay' && clock.end !== null ? clock.end : Math.floor(target);
       this.stops.ensure(until, (u) => this.o.timeline.autoPauseStops(index, this.autoPause, ctx, u));
       const hit = this.stops.firstIn(from, target);
       if (hit) {
@@ -357,7 +362,8 @@ export class ViewerCore {
       clock.pause();
       this.emitFrame(true);
       this.o.onStop?.(stop);
-      return false;
+      // The callback may have called play() (or destroy()): the ticker follows the clock, not the stop.
+      return !this.destroyed && (this.clock?.playing ?? false);
     }
     this.emitFrame(false);
     return true;
@@ -391,6 +397,11 @@ export class ViewerCore {
     if (!force && now - this.lastHudMs < interval) return;
     this.lastHudMs = now;
     this.o.onFrame(state);
+  }
+
+  /** Draw the current tick now, synchronously (a resize just cleared the canvas). */
+  refresh(): void {
+    this.redraw();
   }
 
   invalidate(): void {

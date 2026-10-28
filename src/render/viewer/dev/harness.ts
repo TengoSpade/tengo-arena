@@ -4,7 +4,9 @@
  * starting point for the smoke (WP-M2F). Not bundled into the app.
  */
 import { DEFAULT_CAMERA } from '../../camera';
-import { createArenaViewer, defaultArenaPalette, type ArenaViewer } from '../index';
+import { createArenaViewer, defaultArenaPalette, type ArenaSkin, type ArenaViewer } from '../index';
+import type { PlaybackStop } from '../../types';
+import { placeholderSkin } from '../../skins/placeholder';
 import { createFakeTimeline, fakeContent, fakeContext, fakeCues, fakeLog, fakeViewTransform } from '../testing/fake-timeline';
 
 const q = new URLSearchParams(location.search);
@@ -17,6 +19,8 @@ document.body.style.color = theme === 'light' ? '#1d1c19' : '#ebe6da';
 
 const timeline = createFakeTimeline();
 const frames: number[] = [];
+/** A test can set this to act inside onStop (call play(), as a UI might). */
+let stopHook: ((stop: PlaybackStop) => void) | null = null;
 
 export interface HarnessMeasure {
   n: number;
@@ -44,6 +48,7 @@ async function main(): Promise<void> {
     },
     onStop: (stop) => {
       hud.textContent += `  [stop: ${stop.kind}]`;
+      stopHook?.(stop);
     },
   });
   const log = fakeLog();
@@ -74,6 +79,9 @@ async function main(): Promise<void> {
 
   const api = {
     viewer,
+    setStopHook(fn: ((stop: PlaybackStop) => void) | null): void {
+      stopHook = fn;
+    },
     timeline,
     log,
     ctx,
@@ -152,6 +160,61 @@ async function main(): Promise<void> {
       const left = scratch.querySelectorAll('canvas').length;
       scratch.remove();
       return { canvasesLeft: left };
+    },
+    /** Failed creations leave nothing behind: a skin that fails to load, a cue table that cannot be built, no WebGL. */
+    async failures(): Promise<{ skin: string; cues: string; webgl: string; canvasesLeft: number }> {
+      const scratch = document.createElement('div');
+      scratch.style.cssText = 'position:absolute;left:0;top:0;width:640px;height:360px;visibility:hidden';
+      document.body.appendChild(scratch);
+      const base = { host: scratch, content: fakeContent(), palette: defaultArenaPalette(theme), reducedMotion: false, timeline: createFakeTimeline(), cues: fakeCues(), viewTransform: fakeViewTransform };
+      const message = (e: unknown): string => (e instanceof Error ? `${e.constructor.name}: ${e.message}` : String(e));
+      const inner = placeholderSkin();
+      const bad: ArenaSkin = { id: 'bad', load: () => Promise.reject(new Error('skin boom')), prepare: (u) => inner.prepare(u), createBody: (i, c) => inner.createBody(i, c), createFloor: (a, p) => inner.createFloor(a, p), setPalette: (p) => inner.setPalette(p), destroy: () => inner.destroy() };
+      let skin = 'resolved';
+      let cues = 'resolved';
+      let webgl = 'resolved';
+      try {
+        await createArenaViewer({ ...base, skin: bad });
+      } catch (e) {
+        skin = message(e);
+      }
+      try {
+        const { cues: _omit, ...noCues } = base;
+        void _omit;
+        await createArenaViewer(noCues);
+      } catch (e) {
+        cues = message(e);
+      }
+      const getContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = (() => null) as typeof getContext;
+      try {
+        await createArenaViewer(base);
+      } catch (e) {
+        webgl = message(e);
+      } finally {
+        HTMLCanvasElement.prototype.getContext = getContext;
+      }
+      const left = scratch.querySelectorAll('canvas').length;
+      scratch.remove();
+      return { skin, cues, webgl, canvasesLeft: left };
+    },
+    /** How many times aria-label of the canvas is rewritten during `ms` of playback, and during a pause that follows. */
+    async ariaWrites(ms: number): Promise<{ whilePlaying: number; afterPause: number }> {
+      const canvas = host.querySelector('canvas') as HTMLCanvasElement;
+      const mo = new MutationObserver(() => undefined);
+      mo.observe(canvas, { attributes: true, attributeFilter: ['aria-label'] });
+      viewer.pause();
+      viewer.seek(0);
+      viewer.setAutoPause({ ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null });
+      await new Promise((r) => setTimeout(r, 50));
+      mo.takeRecords();
+      viewer.play();
+      await new Promise((r) => setTimeout(r, ms));
+      const whilePlaying = mo.takeRecords().length;
+      viewer.pause();
+      const afterPause = mo.takeRecords().length;
+      mo.disconnect();
+      return { whilePlaying, afterPause };
     },
     /** Load the round `n` times back to back, playing a little each time (the teardown check). */
     async rounds(n: number, playMs: number): Promise<void> {

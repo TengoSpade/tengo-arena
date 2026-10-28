@@ -154,6 +154,42 @@ describe('the playback clock', () => {
 });
 
 describe('stops', () => {
+  it('keeps the ticker alive when the UI calls play() inside onStop (frame() follows the clock, not the stop)', async () => {
+    let resumed = 0;
+    const h = assemble({
+      onStop: (stop, hh) => {
+        if (stop.kind === 'auto' && resumed++ === 0) hh.core.play();
+      },
+    });
+    await h.core.load(fakeLog(), fakeContext({ kind: 'replay', playerSide: 0 }));
+    h.core.setSpeed(4);
+    h.core.play();
+    // The frame that fires the stop is the one that must tell the ticker to go on.
+    let kept = false;
+    for (let i = 0; i < 4000 && h.stops.length < 1; i++) {
+      h.skipTime(16.7);
+      kept = h.core.frame(16.7);
+    }
+    expect(h.stops[0]).toMatchObject({ kind: 'auto', stop: { tick: 600 } });
+    expect(h.core.playing).toBe(true); // resumed inside the callback
+    expect(kept).toBe(true);
+    // frame() reports it: the ticker must keep running or the tick stays stuck at 600
+    const before = h.core.tick;
+    expect(h.core.frame(16.7)).toBe(true);
+    expect(h.core.tick).toBeGreaterThan(before);
+    h.run(300);
+    expect(h.core.tick).toBeGreaterThan(600);
+    expect(h.stops.at(-1)).toMatchObject({ kind: 'auto', stop: { tick: 700 } });
+  });
+
+  it('a live round asks the model for stops once per tick reached, not once per frame', async () => {
+    const h = await loaded('live', { startTick: 0, playerSide: 0 });
+    h.core.play();
+    h.run(300); // 300 frames at 1x is 100 ticks
+    expect(h.timeline.calls.autoPauseStops.length).toBeLessThanOrEqual(104);
+    expect(h.timeline.calls.autoPauseStops.length).toBeGreaterThan(90);
+  });
+
   it('stops exactly on an auto-pause tick, once, and resumes past it', async () => {
     const h = await loaded('replay', { playerSide: 0 });
     h.core.setSpeed(4);
@@ -292,7 +328,7 @@ describe('replaceLog (calls)', () => {
     h.core.play();
     h.run(40);
     h.core.pause();
-    const t = Math.floor(h.core.tick);
+    const t = h.core.tick;
     const next = fakeLog({ endTick: 1000, divergeAfter: { tick: t, tag: 'call-1' } });
     const before = h.core.tick;
     expect(h.core.replaceLog(next, t)).toBe(true);
@@ -311,9 +347,44 @@ describe('replaceLog (calls)', () => {
     expect(h.core.tick).toBe(0);
   });
 
+  it('a swap in the middle of what was shown rolls the head back: later ticks of the new log were never shown', async () => {
+    const h = await loaded('live', { startTick: 500, autoPause: NO_PAUSE });
+    h.core.seek(300);
+    const next = fakeLog({ endTick: 1100, divergeAfter: { tick: 450, tag: 'call-1' } });
+    expect(h.core.replaceLog(next, 450)).toBe(true);
+    expect(h.core.headTick).toBe(450);
+    expect(h.core.tick).toBe(300);
+    h.core.seek(1000);
+    expect(h.core.tick).toBe(450); // no seeking into ticks of the new log that were not shown
+    expect(h.core.endTick).toBeNull();
+  });
+
+  it('forgets an end that lies beyond the swap tick, and keeps none it did not announce', async () => {
+    const h = await loaded('live', { startTick: 0, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    playOut(h);
+    expect(h.core.endTick).toBe(1200);
+    const next = fakeLog({ endTick: 1000, divergeAfter: { tick: 800, tag: 'call-2' } });
+    expect(h.core.replaceLog(next, 800)).toBe(true);
+    expect(h.core.endTick).toBeNull();
+    expect(h.core.headTick).toBe(800);
+  });
+
   it('refuses when nothing is loaded', () => {
     const h = assemble();
     expect(h.core.replaceLog(fakeLog(), 0)).toBe(false);
+  });
+});
+
+describe('a live clock has no end until it is reached', () => {
+  it('ignores an end the model volunteers for a live index', async () => {
+    const h = assemble({ autoPause: NO_PAUSE });
+    const real = h.timeline.indexFightLog.bind(h.timeline);
+    h.timeline.indexFightLog = (log, content, cues, kind) => ({ ...real(log, content, cues, kind), endTick: 1200 });
+    await h.core.load(fakeLog(), fakeContext({ kind: 'live', startTick: 100 }));
+    expect(h.core.endTick).toBeNull();
+    h.core.seek(900);
+    expect(h.core.tick).toBe(100);
   });
 });
 

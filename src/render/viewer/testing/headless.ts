@@ -92,6 +92,8 @@ export interface HeadlessOptions {
   palette?: ArenaPalette;
   camera?: Partial<CameraConfig>;
   content?: ContentDB;
+  /** Called after a stop is recorded (a test can call play() inside it, as a UI might). */
+  onStop?: (stop: PlaybackStop, h: Headless) => void;
 }
 
 export function assemble(options: HeadlessOptions = {}): Headless {
@@ -155,7 +157,10 @@ export function assemble(options: HeadlessOptions = {}): Headless {
     autoPause: options.autoPause ?? DEFAULT_AUTO_PAUSE,
     onFrame: (s) => h.frames.push(s),
     hudHz: options.hudHz ?? 10,
-    onStop: (s) => h.stops.push(s),
+    onStop: (s) => {
+      h.stops.push(s);
+      options.onStop?.(s, h);
+    },
     onSelect: (u) => h.selections.push(u),
   });
   return h;

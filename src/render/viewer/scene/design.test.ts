@@ -162,6 +162,10 @@ describe('the overtime edge (A18 decision 6)', () => {
   });
 });
 
+const NAMED = 'white|black|red|green|blue|yellow|orange|purple|violet|pink|brown|gray|grey|cyan|magenta|silver|gold|teal|navy|maroon|olive|lime|aqua|fuchsia|transparent|currentcolor';
+/** 0xRRGGBB numbers, # hex in 3, 4, 6 or 8 digits, colour functions, and named colours as whole string literals. */
+const COLOUR_LITERAL = new RegExp(`0x[0-9a-fA-F]{6}\\b|#[0-9a-fA-F]{8}\\b|#[0-9a-fA-F]{6}\\b|#[0-9a-fA-F]{3,4}\\b|\\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\\(|(?<![\\w-])['"](?:${NAMED})['"]`, 'gi');
+
 describe('colours come from the palette (no literals)', () => {
   const ROOT = join(process.cwd(), 'src', 'render');
   const walk = (dir: string, out: string[] = []): string[] => {
@@ -173,6 +177,13 @@ describe('colours come from the palette (no literals)', () => {
     return out;
   };
 
+  it('the scan itself catches every spelling it claims to', () => {
+    for (const bad of ['0xff00aa', '#abc', '#abcd', '#aabbcc', '#aabbccdd', 'rgb(1,2,3)', 'rgba(1,2,3,.5)', "'red'", '"white"', 'hsl(10, 5%, 5%)']) {
+      expect(bad.match(COLOUR_LITERAL), bad).not.toBeNull();
+    }
+    for (const fine of ['const width = 0x10;', 'colors.white2', 'x.red', '#/arena', 'redraw', "'whitespace'"]) expect(fine.match(COLOUR_LITERAL), fine).toBeNull();
+  });
+
   it('has no colour literal in the viewer or the placeholder skin but the white of tinted masks, and the default palette', () => {
     const files = [...walk(join(ROOT, 'viewer')), ...walk(join(ROOT, 'skins'))].filter((f) => {
       const rel = relative(ROOT, f).replaceAll('\\', '/');
@@ -182,9 +193,12 @@ describe('colours come from the palette (no literals)', () => {
     const found: string[] = [];
     for (const file of files) {
       const text = readFileSync(file, 'utf8');
-      for (const m of text.matchAll(/0x[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{6}\b|rgba?\(/g)) {
+      const rel = relative(ROOT, file).replaceAll('\\', '/');
+      for (const m of text.matchAll(COLOUR_LITERAL)) {
         if (m[0].toLowerCase() === '0xffffff') continue; // a white mask: a tint decides the colour
-        found.push(`${relative(ROOT, file)}: ${m[0]}`);
+        if (rel === 'viewer/scene/glyphs.ts' && m[0] === "'white'") continue; // the same mask, as SVG markup
+        if (rel === 'viewer/scene/arena-scene.ts' && m[0] === "'grey'") continue; // StatusCue.ring's state name, not a colour
+        found.push(`${rel}: ${m[0]}`);
       }
     }
     expect(found).toEqual([]);

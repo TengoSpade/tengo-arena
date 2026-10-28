@@ -23,8 +23,6 @@ const BODY_RADIUS_M = 0.5;
 const DOWNED_FLATTEN = 0.6;
 /** The body rim (secondary colour) is this fraction of the disc diameter wide (components.css: inset m * 0.07). */
 const RIM_OF_DIAMETER = 0.07;
-/** How long the flatten takes at 1x while playing; paused or seeking snaps. */
-const FLATTEN_MS = 160;
 /** The wall band outside the field, metres (components.css .arena-wall: 0.35 m). */
 const WALL_THICKNESS_M = 0.35;
 /** Used before any palette arrives. */
@@ -50,13 +48,8 @@ class DiscBody implements BodyVisual {
     if (this.destroyed) return;
     const radius = BODY_RADIUS_M * frame.pxPerMetre;
     if (radius !== this.drawnRadius) this.draw(radius, frame.pxPerMetre);
-    const target = state.standing ? 0 : 1;
-    if (frame.reducedMotion || frame.dtMs <= 0) {
-      this.flat = target;
-    } else {
-      const step = frame.dtMs / FLATTEN_MS;
-      this.flat = target > this.flat ? Math.min(target, this.flat + step) : Math.max(target, this.flat - step);
-    }
+    // Downed bodies flatten at once (components.css .is-down has no transition), so a seek and playing agree.
+    this.flat = state.standing ? 0 : 1;
     const downOpacity = this.metrics()?.downOpacity ?? FALLBACK_DOWN_OPACITY;
     this.disc.scale.y = 1 - (1 - DOWNED_FLATTEN) * this.flat;
     this.view.alpha = 1 - (1 - downOpacity) * this.flat;

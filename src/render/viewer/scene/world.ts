@@ -11,7 +11,7 @@
  */
 import { Container, Graphics } from 'pixi.js';
 import type { ContentDB } from '../../../core/content';
-import type { ArenaPalette, CueTable, ProjectileRenderState, TelegraphRenderState, UnitRenderState, ZoneRenderState } from '../../types';
+import type { ArenaPalette, ArenaUnitInfo, CueTable, ProjectileRenderState, TelegraphRenderState, UnitRenderState, ZoneRenderState } from '../../types';
 import { DESTROY_ALL } from '../destroy';
 import { KeyedPool } from '../pool';
 import { toneColor } from '../palette';
@@ -32,7 +32,10 @@ export interface WorldEnv {
   cues: CueTable;
   content: ContentDB;
   text: TextFactory;
-  units: readonly UnitRenderState[];
+  /** The unit states by unit index (never by array position). */
+  byUnit: readonly (UnitRenderState | undefined)[];
+  /** Who a unit is (the round context), by unit index. */
+  infoOf(unit: number): ArenaUnitInfo | undefined;
   /** The zones in play (a zone-trigger pulse reaches to its zone's edge). */
   zones: readonly ZoneRenderState[];
   tick: number;
@@ -193,7 +196,7 @@ export class TelegraphLayer {
     pool.begin();
     for (const t of list) {
       const m = pool.get(t.caster);
-      const side = env.units[t.caster]?.side ?? 0;
+      const side = env.byUnit[t.caster]?.side ?? 0;
       const color = env.sideColor(side);
       const double = env.ringStyle(side) === 'double';
       const size = t.shape === 'single' ? Math.max(cm(env, t.size), env.ppm * 0.7) : cm(env, t.size);
@@ -220,7 +223,7 @@ export class TelegraphLayer {
       m.name.view.visible = name !== '';
       if (name !== '') {
         const h = p.metrics.labelSizePx * 1.35;
-        const w = m.name.set(name, env, { minW: 0, padX: rem * 0.4, h });
+        const w = m.name.set(name, env, 0, rem * 0.4, h);
         const below = t.shape === 'circle' ? size * env.squash : env.ppm * 0.7;
         m.name.view.position.set(-w / 2, below + rem * 0.5);
       }
@@ -355,8 +358,8 @@ export class ProjectileLayer {
       m.root.position.set(x, y);
       if (Number.isNaN(m.lastX)) {
         // Before it has moved: point from the launcher at the target.
-        const from = env.units[proj.source];
-        const to = proj.target !== null ? env.units[proj.target] : undefined;
+        const from = env.byUnit[proj.source];
+        const to = proj.target !== null ? env.byUnit[proj.target] : undefined;
         if (from && to) m.heading = Math.atan2(sy(env.map, to.x, to.y) - sy(env.map, from.x, from.y), sx(env.map, to.x, to.y) - sx(env.map, from.x, from.y));
       } else if (Math.abs(x - m.lastX) > 0.5 || Math.abs(y - m.lastY) > 0.5) {
         m.heading = Math.atan2(y - m.lastY, x - m.lastX);

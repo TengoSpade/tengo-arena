@@ -16,7 +16,7 @@
  *   motion-only kinds from the sample; the drawers draw nothing for them either.)
  */
 import { Container, Graphics } from 'pixi.js';
-import type { ArenaUnitInfo, EffectKind, EffectRenderState, UnitRenderState } from '../../types';
+import type { EffectKind, EffectRenderState } from '../../types';
 import { DESTROY_ALL } from '../destroy';
 import type { FlashLimiter } from '../flash-limiter';
 import { KeyedPool } from '../pool';
@@ -28,9 +28,6 @@ import type { WorldEnv } from './world';
 
 export interface FxEnv extends WorldEnv {
   limiter: FlashLimiter;
-  /** Units by index (UnitRenderState.unit); undefined for an index the state lacks. */
-  byUnit: readonly (UnitRenderState | undefined)[];
-  info: readonly ArenaUnitInfo[];
   viewport: { width: number; height: number };
 }
 
@@ -70,7 +67,6 @@ export const LAYER_OF: Record<EffectKind, Layer> = {
 const FLASH_KINDS: ReadonlySet<EffectKind> = new Set<EffectKind>(['impact', 'heal-pulse', 'splash', 'zone-trigger', 'cooldown-reset', 'deathward', 'rally', 'shield-break']);
 /** Pulses, glints and streaks the model drops under reduced motion (MOTION_ONLY_EFFECTS): never drawn then. */
 const MOTION_ONLY: ReadonlySet<EffectKind> = new Set<EffectKind>(['dash-trail', 'displace', 'heal-pulse', 'cooldown-reset', 'focus-gain']);
-const REFUSED_ALPHA = 0.3;
 
 class EffectView {
   readonly root = new Container();
@@ -202,7 +198,15 @@ export class EffectLayer {
         v.bornMs = env.nowMs;
         // Flash cues are limited while playing; a paused or sought frame is static, so it is never refused.
         v.admitted = !FLASH_KINDS.has(e.kind) || !env.playing || env.reducedMotion || env.limiter.admit(e.target ?? e.unit ?? 1000, env.nowMs);
-        if (e.kind === 'number') this.mergeNumber(v, e, env);
+        if (e.kind === 'number') {
+          // Merging is for continuous playback (wall time); a paused or sought frame shows every hit's own number.
+          if (env.playing) this.mergeNumber(v, e, env);
+          else {
+            v.total = e.amount ?? 0;
+            v.crit = e.crit;
+            v.suppressed = false;
+          }
+        }
       }
     }
     // Pass 2: draw (numbers now hold their merged totals).
@@ -212,7 +216,8 @@ export class EffectLayer {
       const v = views[i]!;
       v.root.visible = true;
       if (e.kind === 'down' || e.kind === 'captain-down') slot++;
-      DRAWERS[e.kind](v, e, env, v.admitted ? 1 : REFUSED_ALPHA, slot - 1);
+      // A burst the limiter refused is a ghost of itself (the zone alpha), never dropped: the cue still reads.
+      DRAWERS[e.kind](v, e, env, v.admitted ? 1 : env.palette.metrics.zoneAlpha, slot - 1);
     }
     this.pools.low.end();
     this.pools.high.end();
@@ -259,14 +264,31 @@ export class EffectLayer {
 
 const TAU = Math.PI * 2;
 
-function unitXY(env: FxEnv, unit: number | null): { x: number; y: number } | null {
+interface Pt {
+  x: number;
+  y: number;
+}
+/**
+ * Points are written into a ring of scratch objects, so a frame's lookups allocate nothing. A point stays valid for the
+ * next 7 lookups (a drawer holds at most three).
+ */
+const SCRATCH: Pt[] = Array.from({ length: 8 }, () => ({ x: 0, y: 0 }));
+let scratchAt = 0;
+function take(x: number, y: number): Pt {
+  const p = SCRATCH[scratchAt++ & 7]!;
+  p.x = x;
+  p.y = y;
+  return p;
+}
+
+function unitXY(env: FxEnv, unit: number | null): Pt | null {
   if (unit === null) return null;
   const u = env.byUnit[unit];
-  return u ? { x: sx(env.map, u.x, u.y), y: sy(env.map, u.x, u.y) } : null;
+  return u ? take(sx(env.map, u.x, u.y), sy(env.map, u.x, u.y)) : null;
 }
 
 /** The effect's own point, in screen px. */
-const here = (env: FxEnv, e: EffectRenderState): { x: number; y: number } => ({ x: sx(env.map, e.x, e.y), y: sy(env.map, e.x, e.y) });
+const here = (env: FxEnv, e: EffectRenderState): Pt => take(sx(env.map, e.x, e.y), sy(env.map, e.x, e.y));
 
 /** A ring with a plate halo (every mark keeps contrast on any floor). */
 function ring(g: Graphics, x: number, y: number, r: number, color: number, alpha: number, width: number, env: FxEnv): void {
@@ -333,15 +355,15 @@ function wordChip(v: EffectView, text: string, x: number, y: number, env: FxEnv,
   const rem = env.palette.metrics.pipSizePx;
   const chip = v.textChip();
   const h = env.palette.metrics.labelSizePx * 1.35;
-  const w = chip.set(text, env, { minW: 0, padX: rem * 0.4, h, edge });
+  const w = chip.set(text, env, 0, rem * 0.4, h, -1, edge);
   chip.view.position.set(x - w / 2, y - h / 2);
   chip.view.alpha = alpha;
 }
 
 function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number, slot: number): void {
   const downed = e.kind === 'captain-down';
-  const victim = e.unit !== null ? env.info[e.unit] : undefined;
-  const killer = e.target !== null ? env.info[e.target] : undefined;
+  const victim = e.unit !== null ? env.infoOf(e.unit) : undefined;
+  const killer = e.target !== null ? env.infoOf(e.target) : undefined;
   const ability = e.ability !== null ? (env.content.abilities.get(e.ability)?.name ?? null) : null;
   const who = victim?.className ?? 'Fighter';
   let text = downed ? `Captain down: ${who}` : `${who} downed`;
@@ -352,7 +374,7 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
   const h = env.palette.metrics.labelSizePx * 1.45;
   const chip = v.textChip();
   // The diamond (the ring colour) sits in the left padding of the chip.
-  const w = chip.set(text, env, { minW: 0, padX: rem * 0.75, h, edge: env.palette.edge });
+  const w = chip.set(text, env, 0, rem * 0.75, h);
   const anchor = unitXY(env, e.unit) ?? here(env, e);
   // Under the downed fighter, kept inside the canvas, simultaneous callouts stacked downwards.
   const x = Math.max(w / 2 + 4, Math.min(env.viewport.width - w / 2 - 4, anchor.x));

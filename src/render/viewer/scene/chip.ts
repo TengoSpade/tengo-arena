@@ -23,7 +23,11 @@ export class Chip {
   w = 0;
   private text = '';
   private textW = 0;
-  private drawn = '';
+  private dw = -1;
+  private dh = -1;
+  private dpx = -2;
+  private dedge = -1;
+  private dversion = -1;
 
   constructor(text: TextFactory, kind: LabelKind) {
     this.view.eventMode = 'none';
@@ -37,10 +41,11 @@ export class Chip {
   }
 
   /**
-   * Lay out `text` in a chip of height `h`; returns its width. `progress` (0..1) adds the cast bar's fill; `keyline`
-   * is a colour for a thin outline in place of the edge hairline (the callout's side colour).
+   * Lay out `text` in a chip `h` high, at least `minW` wide with `padX` either side; returns its width. `progress`
+   * (0..1, or -1 for none) adds the cast bar's fill; `edge` (a colour, or -1) replaces the hairline colour (the
+   * callout's side colour). Numeric arguments and fields only: a frame that changes nothing allocates nothing.
    */
-  set(text: string, env: ChipEnv, o: { minW: number; padX: number; h: number; progress?: number; edge?: number }): number {
+  set(text: string, env: ChipEnv, minW: number, padX: number, h: number, progress = -1, edge = -1): number {
     const p = env.palette;
     if (this.text !== text) {
       this.text = text;
@@ -48,17 +53,20 @@ export class Chip {
       this.textW = this.label.width;
     }
     this.label.setColor(p.ink);
-    const w = Math.max(o.minW, this.textW + o.padX * 2);
-    const px = o.progress === undefined ? -1 : Math.round(Math.max(0, Math.min(1, o.progress)) * w);
-    const edge = o.edge ?? p.edge;
-    const key = `${w.toFixed(1)}|${o.h}|${px}|${edge}|${env.version}`;
-    if (key !== this.drawn) {
-      this.drawn = key;
-      this.bg.clear().roundRect(0, 0, w, o.h, 3).fill({ color: p.plate }).roundRect(0.5, 0.5, w - 1, o.h - 1, 3).stroke({ width: 1, color: edge });
+    const w = Math.max(minW, this.textW + padX * 2);
+    const px = progress < 0 ? -1 : Math.round(Math.min(1, progress) * w);
+    const edgeColor = edge >= 0 ? edge : p.edge;
+    if (w !== this.dw || h !== this.dh || px !== this.dpx || edgeColor !== this.dedge || env.version !== this.dversion) {
+      this.dw = w;
+      this.dh = h;
+      this.dpx = px;
+      this.dedge = edgeColor;
+      this.dversion = env.version;
+      this.bg.clear().roundRect(0, 0, w, h, 3).fill({ color: p.plate }).roundRect(0.5, 0.5, w - 1, h - 1, 3).stroke({ width: 1, color: edgeColor });
       this.fill.clear();
-      if (px > 0) this.fill.rect(1, 1, Math.max(0, Math.min(px, w) - 2), o.h - 2).fill({ color: p.telegraph, alpha: 0.28 });
+      if (px > 0) this.fill.rect(1, 1, Math.max(0, Math.min(px, w) - 2), h - 2).fill({ color: p.telegraph, alpha: p.metrics.telegraphProgressAlpha });
     }
-    this.label.view.position.set(w / 2, o.h / 2);
+    this.label.view.position.set(w / 2, h / 2);
     this.w = w;
     return w;
   }

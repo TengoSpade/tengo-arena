@@ -359,6 +359,51 @@ describe('cues', () => {
   });
 });
 
+describe('review fixes', () => {
+  it('shows every hit\'s own number when paused or seeking (merging is for continuous playback)', async () => {
+    const h = await shown();
+    const base = blankState(h.core.currentState!);
+    const numbers = [1, 2, 3].map((id, i) => effect({ id, kind: 'number', unit: 2, target: 7, amount: (i + 1) * 10, tone: 'physical', age: 0.1 }));
+    h.scene.draw({ ...base, effects: numbers }, { tick: 50, dtMs: 0, speed: 1, playing: false, nowMs: 1000 });
+    const signed = /^[\u2212+]\d+$/;
+    expect(visibleLabels(h).filter((t) => signed.test(t)).sort()).toEqual(['\u221210', '\u221220', '\u221230']);
+  });
+
+  it('finds units by their index, not their position in the state or the context', async () => {
+    const h = assemble();
+    const ctx = fakeContext({ kind: 'replay' });
+    const shuffled = { ...ctx, units: [...ctx.units].reverse() };
+    await h.core.load(fakeLog(), shuffled);
+    const base = blankState(h.core.currentState!);
+    const reversed = { ...base, units: [...base.units].reverse() };
+    h.scene.draw(
+      { ...reversed, effects: [effect({ id: 9, kind: 'down', unit: 6, target: 1, ability: 'a.shadowstep' as never })], telegraphs: [{ caster: 8, ability: 'a.fireball' as never, shape: 'circle', x: 2000, y: 900, size: 260, spread: 0, direction: 0, progress: 0.5 }] },
+      { tick: 305, dtMs: 0, speed: 1, playing: false, nowMs: 1000 },
+    );
+    expect(visibleLabels(h)).toContain('Duelist downed by Duelist \u00b7 Shadowstep'); // unit 6 and unit 1, by index
+    for (let u = 0; u < 10; u++) expect(h.scene.tokenOf(u)!.info.unit).toBe(u);
+    expect(h.scene.tokenOf(8)!.info.side).toBe(1);
+  });
+
+  it('rebuilds the row dashes only when the lines move, not every frame', async () => {
+    const h = await shown();
+    const markerG = (h.scene as unknown as { markerG: { clear: () => unknown } }).markerG;
+    let clears = 0;
+    const clear = markerG.clear.bind(markerG);
+    markerG.clear = () => {
+      clears++;
+      return clear();
+    };
+    for (let tick = 10; tick < 60; tick += 2) h.core.seek(tick);
+    expect(clears).toBe(0);
+    h.scene.setViewport(1000, 600);
+    h.core.seek(60);
+    expect(clears).toBe(1);
+    h.core.seek(62);
+    expect(clears).toBe(1);
+  });
+});
+
 describe('flashes (04 §9: at most 3 a second; reduced motion removes them)', () => {
   function hitState(base: UnitRenderState, hit: number | null): UnitRenderState {
     return { ...base, lastHitTick: hit };

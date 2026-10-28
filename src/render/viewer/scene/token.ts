@@ -149,6 +149,9 @@ export class Token {
   private badgeText = '';
   private tagText = '';
   private nameText = '';
+  /** The Freshness tag and the (truncated) name never change within a round: built once. */
+  private readonly tagLabel: string;
+  private readonly nameLabel: string;
   private destroyed = false;
   /** The last hit already considered for a flash, and the flash in progress (wall ms). */
   private lastHitSeen: number | null = null;
@@ -162,6 +165,8 @@ export class Token {
   ) {
     this.env = env;
     this.colors = colors;
+    this.tagLabel = info.fatigueTag !== null && info.freshness !== null ? `${info.fatigueTag === 'spent' ? 'Spent' : 'Tired'} (${Math.round(info.freshness)})` : '';
+    this.nameLabel = info.name.length > NAME_MAX_CHARS ? `${info.name.slice(0, NAME_MAX_CHARS - 1)}…` : info.name;
     this.root.eventMode = 'none';
     this.overlay.eventMode = 'none';
     for (const c of [this.ringGroup, this.plateGroup, this.stack, this.bars, this.row, this.crown]) c.eventMode = 'none';
@@ -402,7 +407,7 @@ export class Token {
     this.badge.view.visible = rule !== null;
     if (rule) {
       this.badgeText = rule.label;
-      badgeW = this.badge.set(rule.label, this.env, { minW: rem * 1.45, padX: rem * 0.28, h: rem });
+      badgeW = this.badge.set(rule.label, this.env, rem * 1.45, rem * 0.28, rem);
       x = badgeW;
     }
     let shownPips = 0;
@@ -422,7 +427,7 @@ export class Token {
     this.more.view.visible = f.pipMore > 0;
     if (f.pipMore > 0) {
       x += x > 0 ? (shownPips === 0 ? ROW_GAP : STACK_GAP) : 0;
-      const w = this.more.set(`+${f.pipMore}`, this.env, { minW: 0, padX: rem * 0.25, h: rem });
+      const w = this.more.set(`+${f.pipMore}`, this.env, 0, rem * 0.25, rem);
       this.more.view.position.set(x, 0);
       x += w;
     }
@@ -440,17 +445,17 @@ export class Token {
     const casting = f.cast >= 0;
     this.cast.view.visible = casting;
     if (casting) {
-      const w = this.cast.set(f.castName, this.env, { minW: this.barW, padX: rem * 0.35, h: lineH, progress: f.cast });
+      const w = this.cast.set(f.castName, this.env, this.barW, rem * 0.35, lineH, f.cast);
       this.cast.view.position.set(-w / 2, y - lineH);
       y -= lineH + STACK_GAP;
     }
 
     // Freshness tag (first 3 s), then the name.
-    const tagText = f.tick < TAG_TICKS && this.info.fatigueTag !== null && this.info.freshness !== null ? `${this.info.fatigueTag === 'spent' ? 'Spent' : 'Tired'} (${Math.round(this.info.freshness)})` : '';
+    const tagText = f.tick < TAG_TICKS ? this.tagLabel : '';
     this.tag.view.visible = tagText !== '';
     this.tagText = tagText;
     if (tagText !== '') {
-      const w = this.tag.set(tagText, this.env, { minW: 0, padX: rem * 0.35, h: lineH });
+      const w = this.tag.set(tagText, this.env, 0, rem * 0.35, lineH);
       this.tag.view.position.set(-w / 2, y - lineH);
       y -= lineH + STACK_GAP;
     }
@@ -458,10 +463,10 @@ export class Token {
     this.name.view.visible = showName;
     this.nameText = '';
     if (showName) {
-      const text = this.info.name.length > NAME_MAX_CHARS ? `${this.info.name.slice(0, NAME_MAX_CHARS - 1)}…` : this.info.name;
+      const text = this.nameLabel;
       this.nameText = text;
       const nh = m.labelSizePx * 1.35;
-      const w = this.name.set(text, this.env, { minW: 0, padX: rem * 0.4, h: nh });
+      const w = this.name.set(text, this.env, 0, rem * 0.4, nh);
       this.name.view.position.set(-w / 2, y - nh);
     }
   }
