@@ -7,13 +7,16 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GameState } from '../../../src/core/model';
 import { checkCanvas, checkHashEqual, checkSaveTrace, checkTokens, canvasNotBlank, tokenCensus } from '../lib/checks';
+import { pressPlayIfPaused } from '../lib/arena-ui';
 import { headlessRoundHash } from '../lib/headless';
 import { readGameState } from '../lib/saves';
 import { decodePng } from '../lib/png';
 import { SmokeFailure, sleep, type PageDriver } from '../lib/page';
 import { ROUTE, SEL } from '../lib/selectors';
 import { analyzeSaveTrace } from '../lib/stats';
-import { canvasInfo, frame, frameOrNull, logHash, pause, play, projectUnits, requireHook, setSpeed, sideColors, stats, traceCursorSave, type CanvasInfo, type HookInfo } from '../lib/viewer';
+import { arenaCmOf } from '../lib/arena-ui';
+import { checkOvertime, readOvertimeUi } from '../lib/overtime';
+import { canvasInfo, frame, frameOrNull, logHash, pause, projectUnits, requireHook, setSpeed, sideColors, stats, traceCursorSave, type CanvasInfo, type HookInfo } from '../lib/viewer';
 import type { JourneyEnv } from './env';
 
 export interface WatchedOptions {
@@ -64,8 +67,8 @@ export async function watchedRoundSteps(page: PageDriver, env: JourneyEnv, opts:
     const img = decodePng(shot);
     rec.check(checkCanvas(canvasNotBlank(img, canvas.rect), `${opts.path}, tick ${Math.round(f.tick)}`));
     const sc = await sideColors(page, env.opts.ringColors);
-    const proj = await projectUnits(page, f, canvas);
-    rec.check(checkTokens(tokenCensus(img, proj.probes, sc.colors, proj.radiusPx), `${opts.path}; colours ${sc.names.join(', ')}; projection ${proj.method}`));
+    const proj = await projectUnits(page, f, canvas, { img, arenaCm: arenaCmOf(env) });
+    rec.check(checkTokens(tokenCensus(img, proj.probes, sc.colors, proj.band), `${opts.path}; colours ${sc.names.join(', ')}; projection ${proj.method}`));
   });
 
   await rec.step('arena.hash', 'The viewed round hashes like the headless round (vis-009)', async () => {
@@ -133,6 +136,38 @@ export async function watchedRoundSteps(page: PageDriver, env: JourneyEnv, opts:
   }
 }
 
+interface OvertimeProgress {
+  /** The overtime state has been checked and photographed. */
+  shown: boolean;
+  /** A second picture, later in overtime, has been taken. */
+  later: boolean;
+}
+
+/**
+ * While the match plays: the first time a round is in overtime, read the HUD (amber clock, tag, scrubber mark, feed) and
+ * photograph it; later in the same overtime photograph it again. The viewer stops by itself when overtime starts (an auto-pause,
+ * on by default), so the first picture is the overtime edge.
+ */
+async function watchOvertime(page: PageDriver, env: JourneyEnv, progress: OvertimeProgress): Promise<void> {
+  const f = await frameOrNull(page);
+  if (!f?.overtime) return;
+  const { rec } = env;
+  if (!progress.shown) {
+    progress.shown = true;
+    await sleep(150);
+    const ui = await readOvertimeUi(page);
+    const colors = await page.probe<Record<string, string>>('palette', ['--c-warn', '--c-text']);
+    rec.check(checkOvertime(ui, { warn: colors['--c-warn'] ?? '', text: colors['--c-text'] ?? '' }, `round at ${f.fightSeconds.toFixed(1)} s`));
+    rec.measurements['arena.overtime'] = { ui, fightSeconds: f.fightSeconds, tick: f.tick };
+    await page.screenshot(join(env.outDir, 'shots', 'career-overtime-edge.png'));
+    rec.screenshots.push({ file: 'shots/career-overtime-edge.png', label: 'Overtime, first seen', width: page.viewport.width, height: page.viewport.height, tags: { path: 'career', fightSeconds: Math.round(f.fightSeconds * 10) / 10 } });
+  } else if (!progress.later && f.fightSeconds >= 50) {
+    progress.later = true;
+    await page.screenshot(join(env.outDir, 'shots', 'career-overtime-later.png'));
+    rec.screenshots.push({ file: 'shots/career-overtime-later.png', label: 'Overtime, later', width: page.viewport.width, height: page.viewport.height, tags: { path: 'career', fightSeconds: Math.round(f.fightSeconds * 10) / 10 } });
+  }
+}
+
 /** After the last round pacing may take the player Home with a result toast instead of the report; the toast appears a moment after the route changes. */
 const TOAST_GRACE_MS = 6_000;
 
@@ -146,6 +181,7 @@ export async function finishMatch(page: PageDriver, env: JourneyEnv, graceMs = T
   let rounds = 1;
   let lastHash = '';
   let homeSince = 0;
+  const overtime = { shown: false, later: false };
   while (Date.now() < deadline) {
     const hash = await page.eval<string>('location.hash');
     if (ROUTE.report.test(hash)) break;
@@ -167,12 +203,11 @@ export async function finishMatch(page: PageDriver, env: JourneyEnv, graceMs = T
         await sleep(500);
       } else if (ROUTE.arena.test(hash)) {
         if (hash !== lastHash) rec.say(`  arena, round ${rounds}`);
-        // Keep it playing: an auto-pause stop waits for the player.
-        const f = await frameOrNull(page).catch(() => null);
-        if (f && !f.ended) {
-          await setSpeed(page, 4).catch(() => undefined);
-          await play(page).catch(() => undefined);
-        }
+        // Keep it playing, as a player does: every auto-pause stop waits for a press of Play. At the deciding down the stop
+        // wins over the round's end, so the press is also what lets the end through (lib/arena-ui.ts).
+        await setSpeed(page, 4).catch(() => undefined);
+        await pressPlayIfPaused(page).catch(() => undefined);
+        await watchOvertime(page, env, overtime).catch(() => undefined);
       }
     }
     lastHash = hash;
@@ -190,6 +225,9 @@ export async function finishMatch(page: PageDriver, env: JourneyEnv, graceMs = T
         ? `The match ended at Home with neither the report nor the result toast that opens it (${rounds} round(s) seen).`
         : `The match did not reach its report within 6 minutes (the page is at ${end}, ${rounds} round(s) seen).`,
     );
+  }
+  if (!overtime.shown) {
+    rec.skipCheck('arena.overtime', 'Overtime shows: amber clock, the Overtime tag, a scrubber mark', 'No watched round passed 0:45, so overtime was not on screen. The default seed has one in its first round; see scripts/smoke/tools/overtime-seed.ts.', 'arena-notes §1, 04 §7');
   }
   rec.check({
     id: 'career.watch-flow',

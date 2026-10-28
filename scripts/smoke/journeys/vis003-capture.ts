@@ -12,6 +12,7 @@ import type { FightLog, GameState } from '../../../src/core/model';
 import { NotImplementedError } from '../../../src/core/util';
 import { PageDriver, SmokeFailure, sleep } from '../lib/page';
 import { MATCHDAY_MAIN, ROUTE, SEL } from '../lib/selectors';
+import { pressPlayIfPaused } from '../lib/arena-ui';
 import { canvasInfo, frame, logHash, pause, play, requireHook, setSpeed } from '../lib/viewer';
 import { buildFightKey } from '../vis003/key';
 import { writeVis003Files, frameFile, packetDir, type PacketFight } from '../vis003/packet';
@@ -148,6 +149,8 @@ async function nextRoundOpen(page: PageDriver, env: JourneyEnv): Promise<void> {
     } else if (ROUTE.arena.test(hash)) {
       const f = await frame(page).catch(() => null);
       if (f && !f.ended && f.tick < 100) return;
+      // The last round stopped by an auto-pause at its end tick: one more press of Play lets the round end (lib/arena-ui.ts).
+      if (f?.ended) await pressPlayIfPaused(page).catch(() => undefined);
     }
     await sleep(300);
   }

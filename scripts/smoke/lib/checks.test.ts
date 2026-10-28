@@ -15,6 +15,7 @@ import {
   colorDistance,
   letterboxProject,
   parseCssColor,
+  ringBand,
   splitConsole,
   tokenCensus,
   type TokenProbe,
@@ -176,6 +177,8 @@ describe('pixel checks', () => {
     expect(checkCanvas(canvasNotBlank(flat, { x: 0, y: 0, width: 200, height: 120 }), 't').status).toBe('fail');
   });
 
+  // The ring is painted from radius 15 to 20 and the body inside 14; the band is the ring's, so the body's trim is not in it.
+  const BAND = { innerPx: 15, outerPx: 25 };
   const brass: [number, number, number] = [201, 162, 74];
   const steel: [number, number, number] = [74, 120, 168];
 
@@ -198,7 +201,7 @@ describe('pixel checks', () => {
   it('finds all ten ringed tokens, with a projection a few pixels off', () => {
     const { img, probes } = arena();
     const off = probes.map((p) => ({ ...p, x: p.x + 4, y: p.y - 3 }));
-    const c = tokenCensus(img, off, [brass, steel], 28);
+    const c = tokenCensus(img, off, [brass, steel], BAND);
     expect(c.found).toBe(10);
     expect(c.sidesConsistent).toBe(true);
     expect(checkTokens(c, 'test').status).toBe('pass');
@@ -206,7 +209,7 @@ describe('pixel checks', () => {
 
   it('misses a token that is not drawn', () => {
     const { img, probes } = arena({ drop: 7 });
-    const c = tokenCensus(img, probes, [brass, steel], 28);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
     expect(c.found).toBe(9);
     expect(c.missing).toEqual([7]);
     expect(checkTokens(c, 'test').status).toBe('fail');
@@ -214,7 +217,7 @@ describe('pixel checks', () => {
 
   it('flags a ring in the wrong side colour: that token shows none of its own side\'s', () => {
     const { img, probes } = arena({ swapOne: true });
-    const c = tokenCensus(img, probes, [brass, steel], 28);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
     expect(c.assignment).toEqual([0, 1]);
     expect(c.found).toBe(9);
     expect(c.missing).toEqual([2]);
@@ -226,24 +229,35 @@ describe('pixel checks', () => {
     const { img, probes } = arena();
     // The opponent's tokens carry a thick brass trim inside their steel ring: more brass pixels than steel ones.
     for (const p of probes.filter((q) => q.side === 1)) paintRing(img, p.x, p.y, 14, 9, brass);
-    const c = tokenCensus(img, probes, [brass, steel], 28);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
     expect(c.assignment).toEqual([0, 1]);
     expect(c.found).toBe(10);
     expect(c.sidesConsistent).toBe(true);
     expect(checkTokens(c, 'test').status).toBe('pass');
   });
 
+  it('a brass trim inside the ring does not stand in for a missing ring (the band is the ring\'s, not the body\'s)', () => {
+    const { img, probes } = arena({ drop: 7 });
+    // Unit 7 has no ring, but a brass trim in the body (radius 9 to 14): the old disc window counted it as brass.
+    const p7 = probes.find((q) => q.unit === 7)!;
+    paintRing(img, p7.x, p7.y, 14, 9, brass);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
+    expect(c.missing).toEqual([7]);
+    expect(c.found).toBe(9);
+    expect(checkTokens(c, 'test').status).toBe('fail');
+  });
+
   it('works whichever candidate belongs to which side, and with extra candidates', () => {
     const { img, probes } = arena();
     const other: [number, number, number] = [10, 200, 10];
-    const c = tokenCensus(img, probes, [other, steel, brass], 28);
+    const c = tokenCensus(img, probes, [other, steel, brass], BAND);
     expect(c.assignment).toEqual([2, 1]);
     expect(c.found).toBe(10);
   });
 
   it('nothing matching is no assignment and no token found', () => {
     const { img, probes } = arena();
-    const c = tokenCensus(img, probes, [[255, 0, 255], [0, 255, 255]], 28);
+    const c = tokenCensus(img, probes, [[255, 0, 255], [0, 255, 255]], BAND);
     expect(c.assignment).toBeNull();
     expect(c.found).toBe(0);
     expect(c.sidesConsistent).toBe(false);
@@ -252,7 +266,7 @@ describe('pixel checks', () => {
   it('does not require downed tokens', () => {
     const { img, probes } = arena({ drop: 3 });
     probes[3] = { ...probes[3]!, standing: false };
-    const c = tokenCensus(img, probes, [brass, steel], 28);
+    const c = tokenCensus(img, probes, [brass, steel], BAND);
     expect(c.expected).toBe(9);
     expect(c.found).toBe(9);
     // Nine tokens are not the ten the check wants.
@@ -320,5 +334,15 @@ describe('what bounds a slow frame rate', () => {
     expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(600)), gpu, quiet).detail).toBeUndefined();
     expect(checkFrameRate('perf.fps-1x', '1x', slow, gpu, null).detail).toBeUndefined();
     expect(loadNote(null)).toBeNull();
+  });
+});
+
+describe('the ring band', () => {
+  it('starts at the disc edge (0.5 m) and runs a few pixels past it, in any zoom', () => {
+    const at48 = ringBand(0.478);
+    expect(at48.innerPx).toBeCloseTo(22.9, 1);
+    expect(at48.outerPx).toBeCloseTo(33.9, 1);
+    expect(ringBand(0.27).innerPx).toBeCloseTo(12.5, 1);
+    expect(ringBand(0.001).innerPx).toBeGreaterThanOrEqual(4);
   });
 });

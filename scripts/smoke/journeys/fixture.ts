@@ -4,6 +4,7 @@
  * fps and our frame time at 1x and 4x; the heap over consecutive round loads; the hash of the loaded log.
  */
 import { join } from 'node:path';
+import { arenaCmOf } from '../lib/arena-ui';
 import { decodePng } from '../lib/png';
 import { checkCanvas, checkCpuFrame, checkFirstOpen, checkFrameRate, checkHashEqual, checkHeap, checkTokens, canvasNotBlank, tokenCensus } from '../lib/checks';
 import { PageDriver, SmokeFailure, type VisionDeficiency } from '../lib/page';
@@ -94,8 +95,8 @@ export async function runFixtureJourney(env: JourneyEnv): Promise<void> {
         const img = decodePng(shot);
         rec.check(checkCanvas(canvasNotBlank(img, canvas.rect), `fixture, tick ${Math.round(f.tick)}`));
         const sc = await sideColors(page, opts.ringColors);
-        const proj = await projectUnits(page, f, canvas);
-        rec.check(checkTokens(tokenCensus(img, proj.probes, sc.colors, proj.radiusPx), `fixture, tick ${Math.round(f.tick)}; colours ${sc.names.join(', ')}; projection ${proj.method}`));
+        const proj = await projectUnits(page, f, canvas, { img, arenaCm: arenaCmOf(env) });
+        rec.check(checkTokens(tokenCensus(img, proj.probes, sc.colors, proj.band), `fixture, tick ${Math.round(f.tick)}; colours ${sc.names.join(', ')}; projection ${proj.method}`));
       });
 
       if (!opts.noShots) {

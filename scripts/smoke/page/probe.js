@@ -227,6 +227,22 @@
     };
   };
 
+  /** The HUD's overtime marks (arena screen): the amber clock, the Overtime tag, the scrubber mark, the feed line. */
+  S.overtimeUi = () => {
+    const clock = document.querySelector('[data-testid="arena-clock"]');
+    const tag = document.querySelector('[data-testid="arena-overtime"]');
+    const center = document.querySelector('.ahud__center');
+    return {
+      overtimeAttr: center ? center.getAttribute('data-overtime') : null,
+      clockText: clock ? textOf(clock) : null,
+      clockColor: clock ? getComputedStyle(clock).color : null,
+      tagText: tag ? textOf(tag) : null,
+      tagVisible: !!tag && visible(tag),
+      marks: document.querySelectorAll('[data-testid="arena-marks"] [data-kind="overtime"]').length,
+      feedSaysSo: /overtime begins/i.test(document.body ? document.body.innerText : ''),
+    };
+  };
+
   /**
    * The game's own saves, as the page's IndexedDB holds them (src/platform/save-store.idb.ts: database arena-league,
    * store saves, records { slotId, meta, json }): the slot asked for and only that one (null when it is not there: a

@@ -112,9 +112,10 @@ The proxy reads the DOM (text, live regions, `[data-role]` elements and the text
 
 ```
 run.ts                    the driver (npx tsx scripts/smoke/run.ts; package script smoke:arena to be added)
-lib/                      cdp (WebSocket client), browser (find, launch, clean up, the process-safety guard), page (a driven page), serve (build, preview,
+lib/                      field (the field found in a screenshot), overtime (the HUD in overtime), arena-ui (the arena's own Play button), cdp (WebSocket client), browser (find, launch, clean up, the process-safety guard), page (a driven page), serve (build, preview,
                           static), viewer (the hook), saves (the page's IndexedDB saves), checks and stats (pure check logic), report (types, verdict,
                           markdown), png, options, selectors, headless
+tools/overtime-seed.ts    finds career seeds whose first match reaches overtime (headless, core/game)
 journeys/                 cross-hash, fixture, career, arena-steps (shared), vis003-capture, mock (self-test)
 cross/                    the cross-runtime cases and the browser entry
 page/probe.js             injected into every page: the rAF recorder, finders, evidence, the save reader (plain JavaScript on purpose)

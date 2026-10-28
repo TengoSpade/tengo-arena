@@ -285,23 +285,42 @@ export interface TokenCensus {
   missing: number[];
 }
 
+/** The ring's place in a token, in pixels from its centre. */
+export interface RingBand {
+  innerPx: number;
+  outerPx: number;
+}
+
 /**
- * For each standing unit, count the pixels within `radiusPx` of its projected centre that are near each candidate ring colour.
+ * Where a token's side ring is, from the drawing order of 04/arena-notes §1: bottom to top the ring, a keyline, the body
+ * (club primary with a secondary rim), the glyph plate. The disc is the fighter's 0.5 m radius; the ring (3.5 px solid, or two 2 px
+ * lines) sits just outside it, in CSS pixels at any zoom. So the band starts at the disc's edge and runs a few pixels past it:
+ * the body's trim, whose colour is a club colour that can be brass-like, lies inside it and is not looked at.
+ */
+export function ringBand(pxPerCm: number): RingBand {
+  const disc = 50 * pxPerCm;
+  return { innerPx: Math.max(4, disc - 1), outerPx: disc + 10 };
+}
+
+/**
+ * For each standing unit, count the pixels in the ring band around its projected centre (a ring-shaped window, not a disc)
+ * that are near each candidate ring colour.
  * The picture decides which candidate belongs to which side: the pair (home colour, away colour), the two different, that
  * lets the most standing units show enough of their own side's colour. A unit is drawn when at least `minPixels` of its
- * side's colour are near it. Other colours near a token (the body, its trim, a zone disc, the other side's ring) do not count
- * for or against it, so two clubs whose trims share a hue cannot swap the sides. A downed token is flattened and faded
- * (asset-006), so only standing units are required. Tolerant by design: the projection the driver uses may be a few pixels
- * off the viewer's.
+ * side's colour are in its band (a real ring has hundreds). Other colours near a token (the body, its trim, a zone disc, the
+ * other side's ring) do not count for or against it, so two clubs whose trims share a hue cannot swap the sides. A downed
+ * token is flattened and faded (asset-006), so only standing units are required. Tolerant by design: the projection the driver
+ * uses may be a few pixels off the viewer's.
  */
-export function tokenCensus(img: Rgba, probes: readonly TokenProbe[], candidates: readonly Rgb[], radiusPx: number, tolerance = 42, minPixels = 4): TokenCensus {
+export function tokenCensus(img: Rgba, probes: readonly TokenProbe[], candidates: readonly Rgb[], band: RingBand, tolerance = 42, minPixels = 30): TokenCensus {
   const standing = probes.filter((p) => p.standing);
   const hits = standing.map((p) => {
     const h = new Array<number>(candidates.length).fill(0);
-    const r = Math.ceil(radiusPx);
+    const r = Math.ceil(band.outerPx);
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
-        if (dx * dx + dy * dy > radiusPx * radiusPx) continue;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > band.outerPx * band.outerPx || d2 < band.innerPx * band.innerPx) continue;
         const x = Math.round(p.x) + dx;
         const y = Math.round(p.y) + dy;
         if (x < 0 || y < 0 || x >= img.width || y >= img.height) continue;
@@ -354,7 +373,7 @@ export function checkTokens(c: TokenCensus, label: string): CheckResult {
     ref: 'A11 checks',
     expected: '10 standing tokens, each with enough pixels of its own side\'s ring colour near it (the two sides\' colours differ)',
     actual: `${c.found} of ${c.expected} found${c.missing.length ? `, missing units ${c.missing.join(', ')}` : ''}${c.assignment ? `, ring colours: home candidate ${c.assignment[0]}, away candidate ${c.assignment[1]}` : ', no ring colour matched any token'}`,
-    ...(!ok ? { detail: 'The ring colours are looked up in a small window around each unit\'s projected position (the viewer\'s own projection when the hook has one, else a letterbox of the canvas with the default camera padding).' } : {}),
+    ...(!ok ? { detail: 'The ring colours are counted in the ring band around each unit\'s projected position (the viewer\'s own projection when the hook has one, else the field found in the screenshot, else a letterbox of the canvas with the default camera padding).' } : {}),
   };
 }
 
