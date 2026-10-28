@@ -70,7 +70,7 @@ The future-leak point is the only cost of playback, and it is contained in the t
 
 **Commit point (owner answer to Q60, option A).** The owner: "a watched round may play before its result is saved, as long as its lineups, presets and seed are locked and autosaved first, so the outcome is fixed and can't be rerolled." So a watched round's inputs are locked and autosaved before it is shown, and the round itself is committed when its playback ends, or when the player skips to its end, by `advance` playing `prepareRound`'s input through the orchestrator exactly as today. Nothing of its result is in GameState before then. §A3 records the rejected alternative.
 
-**Record level.** 03 sys-match-report says "M2 records at full level for the viewer". Read as: logs at `full` are produced on demand for viewing, and stored results keep their current shape. A `full` log is 255 KB of JSON at the median and 413 KB at the maximum, so storing them would break O33. `RoundResult.eventHash` stays null for every committed round, watched ones included. The watched log's hash is compared at commit and never stored, so a Watch season and a Simulate season end in identical states (§A3).
+**Record level.** 03 sys-match-report says "M2 records at full level for the viewer". Read as: logs at `full` are produced on demand for viewing, and stored results keep their current shape. A `full` log in format 2 is about 271 KB of JSON at the median and 468 KB at the maximum (WP-M2A review; format 1 was 255 and 413 KB), so storing them would break O33. `RoundResult.eventHash` stays null for every committed round, watched ones included. The watched log's hash is compared at commit and never stored, so a Watch season and a Simulate season end in identical states (§A3).
 
 **Log format version (tech-016).** The viewer needs each fighter's shield and focus every frame (04 §4: "HP bar with shield segment, focus bar"); frames carry neither today. Log format 2 appends both to `FrameUnit`, emits a closing frame at the end tick and names its format in the header. That changes full-level event hashes, but no outcome and no round checksum. Replays and the report timeline are verified by round checksums. So tech-016 versions the recorded shape separately (`FIGHT_LOG_FORMAT_VERSION`) instead of bumping `ENGINE_VERSION`, which would make every stored match of every career unreplayable for a change that alters no result.
 - The goldens are re-pinned with the format bump, approved by this addendum. The golden test's rule becomes "an `ENGINE_VERSION` or `FIGHT_LOG_FORMAT_VERSION` bump".
@@ -362,7 +362,7 @@ Reference machine: 05 §8's working reference (a 2020+ mid-range 4-core, 8 GB la
 | HUD updates | ≤ 10 Hz, ≤ 2 ms each |
 | Startup JS | unchanged, ≤ 250 KB gzip (about 219 KB now) |
 | Viewer chunks | ≤ 250 KB gzip |
-| Memory: logs | one round's log is 255 KB JSON at the median, 413 KB at the maximum; the viewer keeps the current round's log and index and the previous round's |
+| Memory: logs | one round's log is about 271 KB JSON at the median, 468 KB at the maximum (format 2, WP-M2A review); the viewer keeps the current round's log and index and the previous round's |
 | Memory: heap and textures | JS heap growth ≤ 50 MB while viewing; GPU textures ≤ 32 MB (placeholder and per-match sprite atlases); no growth over 20 consecutive rounds; the app within 05 §8's 400 MB |
 | Save | < 1 KB per watched match, plus `simHash` on every result (about 15 KB a season) |
 
@@ -624,7 +624,7 @@ D-O says a result is committed and autosaved before it is shown, so reloading ca
 2. **The decision trace in the event model is narrower than the spec and the sim.** 03 sys-tactics says the trace records the condition and the observed value. The sim records them (`reason`, `cond`, `observed`, `readyInTicks`), but `core/model` typed only rule, fired and skip. Fixed in the contract (types only, no hash change). Separately, decisions are traced only when they change, so "why was this rule skipped right now" needs the probe (tech-022).
 3. **04 §4 requires shield segments and focus bars, but frames carry neither.** → log format 2 (tech-016).
 4. **"The viewer never re-simulates" versus "calls are timed inputs to the deterministic sim".** The render README and tech-009 say the first; 03 §3.5 says the second, and a call needs a re-simulation somewhere. Resolved by tech-015: core re-simulates; the viewer only swaps logs.
-5. **"M2 records at full level for the viewer" (03 sys-match-report)** could be read as storing full logs; at 255–413 KB per round that breaks O33. Read here as producing full logs on demand.
+5. **"M2 records at full level for the viewer" (03 sys-match-report)** could be read as storing full logs; at about 271–468 KB per round (format 2) that breaks O33. Read here as producing full logs on demand.
 6. **M2 art scope is inconsistent.** 01 §5's M2 row says "placeholder shapes or sprites for all 42 classes"; 04 §10 schedules 42 class icons (asset-005) in M2; 04 §8 schedules arena sound in M2. Meanwhile open-032 is unresolved and O22 excludes the existing pipeline. → Q59 (answered: placeholders).
 7. **Zoom and follow** are "OPEN for M2" in 04 §4 and §11, with no owner question. → Q55 (answered).
 8. **Replays across builds.** 05 §6 promises determinism only within a build, and the content hash covers non-sim data too, so any content edit would end every earlier replay. 02 and 04 never say so to the player. → Q56 (answered) and tech-026.
@@ -679,3 +679,26 @@ Also added: `StatusCue.pip: PipKind | null`. The existing `fxPhysical` and `fxAr
   - the keyboard of decision 3 (a key scope that suspends the shell shortcuts on the arena routes, Shift Space, End, Tab through the strip);
   - the round-end flow of decision 1, the fixed scrubber, the four icons;
   - the inspector wording of notes §6.
+
+## A19. Contract amendment for integration (2026-10-28)
+
+Additive only, in `src/render/types.ts`. It records what the packages built beyond the contract, so src/ui needs no casts.
+
+- **`ArenaViewerOptionExtras`**, three options WP-M2D implemented; every default is the real module:
+  - `cues?: CueTable`;
+  - `viewTransform?: ViewTransformFn` (the signature of `camera/viewTransform`, now named in `types.ts`);
+  - `tabStop?: boolean` (default true; keyboard selection stays with the fighter strip, §A18).
+
+  At integration, `src/render/viewer`'s `ArenaViewerOptions` extends it.
+- **`ArenaViewerDecisionHistory`**: `decisionsUpTo?(unit: UnitIndex, tick?: number): readonly DecisionSnapshot[]`.
+  - It returns the unit's committed decisions from round start, oldest first, up to the given or current tick and never past `headTick`.
+  - Each entry has the shape `decisionAt` returns; WP-M2E counts them by rule for "Rules fired so far".
+  - WP-M2D implements it, for example from `timeline.eventsBetween` filtered to the unit's `unit.decide` events. `ArenaViewer` extends the interface, and the UI uses the method when present.
+- **`KeyMoment` unit convention**, as WP-M2C built it and as the report's key events: `unit` is the acting fighter and `target` the one it happened to.
+  - For a **down**, `unit` is the credited fighter (null for damage over time without a source) and `target` is the fallen. The down belongs to the fallen's side.
+  - For captain events, `unit` is the captain concerned.
+  - **WP-M2E must match it.** Its down cause looks up the moment whose `target` is the fallen and names `unit`, and its scrubber and feed sides for downs use `target`'s side.
+  - Effect markers keep their own convention: `unit` is the unit drawn on.
+- **`sampleAt`'s `knownUntilTick`** (WP-M2C's additive option): a live caller **must** pass the live head. Without it, interpolated positions, effect anchors and projectile starts may use the frame after the head, and the no-look-ahead guarantee is gone. A replay passes none. The rule is documented on `ArenaFrameState` and in the render README; WP-M2D's viewer passes `headTick` for live rounds.
+- **Effect `age` under reduced motion:** `age` 1 means "drawn static at its end state", not "faded out". A viewer must not fade non-number effects by 1 − age in that mode; numbers fade in place.
+- **Log sizes (§A10):** format 2 logs are about 271 KB of JSON at the median and 468 KB at the maximum (WP-M2A review).

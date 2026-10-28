@@ -26,6 +26,8 @@ export const SAVE_BOUNDS = {
   levelUpOptions: 3,
   /** Perks a fighter holds, at most (perks.json rules.perkCap). */
   perksPerFighter: 4,
+  /** M2 (save v5, RESERVED for the calls package): calls a side makes in one round, at most (P-01: up to two per round; the calls package adds the content value and its validator check). */
+  callsPerRound: 2,
 } as const;
 
 export type SaveBounds = typeof SAVE_BOUNDS;

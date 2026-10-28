@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAVE_BOUNDS } from '../content';
-import { STATE_SCHEMA_VERSION, asId, type ClassId, type ClubId, type FighterId, type GameState, type SaveEnvelope } from '../model';
+import { STATE_SCHEMA_VERSION, asId, type ClassId, type ClubId, type CompetitionId, type FighterId, type GameState, type SaveEnvelope } from '../model';
 import { buildFixtureWorld, fixtureContent, fixtureMatchState, fixturePendingLevelUp } from '../testkit';
 import { cloneJson, deepFreeze } from '../util';
 import {
@@ -170,32 +170,143 @@ describe('migrations', () => {
       [1, 2],
       [2, 3],
       [3, 4],
+      [4, 5],
     ]);
-    expect(STATE_SCHEMA_VERSION).toBe(4);
+    expect(STATE_SCHEMA_VERSION).toBe(5);
   });
 
-  it('v3 -> v4 (KI-2) is the identity on the data: a v3 save loads, reports migratedFrom 3 and keeps every field; a v4 save is refused by a v3 build as too new', () => {
+  /** A world whose player club has a live match (round 1 pending), with the competition and fixture it belongs to. */
+  function liveWorld(): GameState {
     const state = world();
+    const c = state.playerClubId!;
+    const ms = fixtureMatchState(state, c, Object.keys(state.clubs).find((x) => x !== c) as ClubId, content);
+    const tierId = state.clubs[c]!.tierId;
+    const competitionId = asId<CompetitionId>('lg:1:test');
+    state.competitions[competitionId] = { id: competitionId, kind: 'league', season: 1, tierId, clubIds: [ms.home.clubId, ms.away.clubId], wings: [], seedOrder: [], fixtureIds: [ms.fixtureId], bracket: null, status: 'in-progress' };
+    state.fixtures[ms.fixtureId] = {
+      id: ms.fixtureId,
+      competitionId,
+      season: 1,
+      tierId,
+      weekIndex: state.calendar.weekIndex,
+      weekId: state.calendar.weekId!,
+      stage: 'league',
+      matchweek: 1,
+      wing: null,
+      homeClubId: ms.home.clubId,
+      awayClubId: ms.away.clubId,
+      bestOf: ms.bestOf,
+      venueId: null,
+      status: 'scheduled',
+    };
+    state.liveMatch = ms;
+    return state;
+  }
+
+  /** The state as an older build wrote it: the same data under an older schema version. */
+  function savedAs(state: GameState, version: number): string {
     const s = cloneJson(state) as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-    s.schemaVersion = 3;
-    const v3 = JSON.stringify({ ...envelopeOf(state), schemaVersion: 3, checksum: checksumState(s as unknown as GameState), state: s });
-    const r = parseSave(v3, content);
+    s.schemaVersion = version;
+    return JSON.stringify({ ...envelopeOf(state), schemaVersion: version, checksum: checksumState(s as unknown as GameState), state: s });
+  }
+
+  it('v3 -> v4 (KI-2) is the identity on the data: a v3 save loads (through v4 and v5), reports migratedFrom 3 and keeps every field; a v4 save is refused by a v3 build as too new', () => {
+    const state = world();
+    const r = parseSave(savedAs(state, 3), content);
     expect(r.ok ? null : r.error).toBeNull();
     if (!r.ok) return;
     expect(r.value.migratedFrom).toBe(3);
-    expect(r.value.envelope.schemaVersion).toBe(4);
-    expect(r.value.envelope.state.schemaVersion).toBe(4);
+    expect(r.value.envelope.schemaVersion).toBe(STATE_SCHEMA_VERSION);
+    expect(r.value.envelope.state.schemaVersion).toBe(STATE_SCHEMA_VERSION);
     expect(r.value.envelope.state).toEqual(state);
     expect(r.value.envelope.checksum).toBe(checksumState(state));
     expect(validateState(r.value.envelope.state, content)).toEqual([]);
-    // Saved again it is a v4 save, which loads without a migration.
+    // Saved again it is a current save, which loads without a migration.
     const again = parseSave(serializeSave(r.value.envelope), content);
     expect(again.ok && again.value.migratedFrom).toBeNull();
     // A build that knows only v3 reports a newer version, not a damaged save.
-    const old = parseSaveWith(serializeSave(r.value.envelope), content, { migrations: MIGRATIONS.filter((m) => m.to <= 3), currentVersion: 3 });
-    expect(old.ok).toBe(false);
-    if (!old.ok) expect(old.error).toMatchObject({ code: 'save.too-new', details: { saveVersion: 4, buildVersion: 3 } });
+    const v4 = parseSaveWith(savedAs(state, 4), content, { migrations: MIGRATIONS.filter((m) => m.to <= 3), currentVersion: 3 });
+    expect(v4.ok).toBe(false);
+    if (!v4.ok) expect(v4.error).toMatchObject({ code: 'save.too-new', details: { saveVersion: 4, buildVersion: 3 } });
   });
+
+  it('v4 -> v5 (M2) is the identity on the data: a v4 save, a live match between rounds included, loads as v5 and saves back identically; a v5 save is refused by a v4 build as too new', () => {
+    // A v4 live match: never watched (v4 builds have no watch flow).
+    const state = liveWorld();
+    const json = savedAs(state, 4);
+    const r = parseSave(json, content);
+    expect(r.ok ? null : r.error).toBeNull();
+    if (!r.ok) return;
+    expect(r.value.migratedFrom).toBe(4);
+    const loaded = r.value.envelope.state;
+    expect(loaded.schemaVersion).toBe(5);
+    expect(r.value.envelope.schemaVersion).toBe(5);
+    // Nothing but the version is stamped: no watch on the live match (it is a simulated match), no simHash, no calls.
+    const original = JSON.parse(json) as { state: Record<string, unknown> };
+    expect({ ...loaded, schemaVersion: 4 }).toEqual(original.state);
+    expect(loaded.liveMatch!.watch).toBeUndefined();
+    expect(r.value.envelope.checksum).toBe(checksumState(loaded));
+    expect(validateState(loaded, content)).toEqual([]);
+    // Saved back: a v5 save that loads without a migration, byte for byte the same state again.
+    const resaved = serializeSave(createSave(loaded, r.value.envelope.meta, { engineVersion: r.value.envelope.engineVersion }));
+    const again = parseSave(resaved, content);
+    expect(again.ok ? null : again.error).toBeNull();
+    if (!again.ok) return;
+    expect(again.value.migratedFrom).toBeNull();
+    expect(serializeSave(again.value.envelope)).toBe(resaved);
+    expect(checksumState(again.value.envelope.state)).toBe(checksumState(loaded));
+    // A build that knows only v4 reports a newer version (save.too-new), not a damaged save.
+    const old = parseSaveWith(resaved, content, { migrations: MIGRATIONS.filter((m) => m.to <= 4), currentVersion: 4 });
+    expect(old.ok).toBe(false);
+    if (!old.ok) expect(old.error).toMatchObject({ code: 'save.too-new', details: { saveVersion: 5, buildVersion: 4 } });
+  });
+
+  it('v5 fields (MatchState.watch, RoundLineups.calls, MatchResult.simHash) pass the strict schema; malformed ones do not', () => {
+    const state = liveWorld();
+    state.liveMatch!.watch = { mode: 'watch', round: 1, cursorTick: 340, calls: [] };
+    const issues = (s: GameState): string[] => validateState(s, content).map((i) => `${i.path}: ${i.message}`);
+    expect(issues(state)).toEqual([]);
+    const reparsed = parseSave(serializeSave(envelopeOf(state)), content);
+    expect(reparsed.ok ? reparsed.value.envelope.state.liveMatch!.watch : reparsed.error).toEqual({ mode: 'watch', round: 1, cursorTick: 340, calls: [] });
+    // Reserved call records (the calls package): the structure is bounded by SAVE_BOUNDS.callsPerRound, and until the
+    // calls package a live match holding calls is refused (core/sim refuses every plan but none: it could not play on).
+    const call = { tick: 41, kind: 'focus', target: 7 };
+    const withCalls = cloneJson(state);
+    const structure = (x: GameState): string[] => {
+      const r = GameStateSchema.safeParse(x);
+      return r.success ? [] : r.error.issues.map((i) => i.path.join('.'));
+    };
+    withCalls.liveMatch!.watch!.calls = Array.from({ length: SAVE_BOUNDS.callsPerRound }, () => ({ ...call }));
+    expect(structure(withCalls)).toEqual([]);
+    expect(issues(withCalls)).toEqual(['liveMatch.watch.calls: calls are not part of this build']);
+    withCalls.liveMatch!.watch!.calls.push({ ...call });
+    expect(structure(withCalls).some((p) => p.includes('watch.calls'))).toBe(true);
+    const rl = cloneJson(state);
+    rl.liveMatch!.roundLineups = [{ round: 1, home: lineup(), away: lineup(), calls: { home: { mode: 'explicit', calls: [call] }, away: { mode: 'policy' } } }];
+    rl.liveMatch!.rounds = [];
+    expect(issues(rl).filter((p) => p.includes('roundLineups'))).toEqual([]);
+    rl.liveMatch!.roundLineups[0]!.calls = { home: { mode: 'sometimes' }, away: { mode: 'none' } } as never;
+    expect(issues(rl).some((p) => p.includes('roundLineups'))).toBe(true);
+    // The watched round must be the pending round, in mode 'watch'; the cursor a tick within the time cap.
+    const bad = (edit: (s: GameState) => void): string[] => {
+      const x = cloneJson(state);
+      edit(x);
+      return issues(x);
+    };
+    expect(bad((x) => (x.liveMatch!.watch!.round = 2)).some((p) => p.startsWith('liveMatch.watch.round'))).toBe(true);
+    expect(bad((x) => (x.liveMatch!.watch!.mode = 'simulate')).some((p) => p.startsWith('liveMatch.watch.round'))).toBe(true);
+    expect(bad((x) => (x.liveMatch!.watch!.round = null)).some((p) => p.startsWith('liveMatch.watch.round'))).toBe(true);
+    expect(bad((x) => (x.liveMatch!.watch!.cursorTick = 99_999)).some((p) => p.startsWith('liveMatch.watch.cursorTick'))).toBe(true);
+    expect(bad((x) => (x.liveMatch!.watch!.cursorTick = -1)).length).toBeGreaterThan(0);
+    expect(bad((x) => ((x.liveMatch!.watch as unknown as Record<string, unknown>)['extra'] = 1)).length).toBeGreaterThan(0);
+    // Between rounds a watched match has no round on screen; a simulated one never has.
+    expect(bad((x) => { x.liveMatch!.phase = 'between_rounds'; x.liveMatch!.watch!.round = null; })).toEqual([]);
+    expect(bad((x) => { x.liveMatch!.watch = { mode: 'simulate', round: null, cursorTick: 12, calls: [] }; })).toEqual([]);
+  });
+
+  function lineup() {
+    return { fighterIds: ['a', 'b', 'c', 'd', 'e'], rows: ['front', 'front', 'front', 'back', 'back'], captainIndex: 0, viceCaptainIndex: 1, captainQuality: 50, freshness: [90, 90, 90, 90, 90], entered: [false, false, false, false, false] } as never;
+  }
 
   it('a compacted result with its kept five (MatchResult.fielded) passes the strict schema; a malformed five does not', () => {
     const state = world();
@@ -215,6 +326,9 @@ describe('migrations', () => {
     expect(issuesAt({ ...compacted, fielded: undefined })).toEqual([]); // saves without it (every older save) stay valid
     expect(issuesAt({ ...compacted, fielded: { home: [['f-1', 2, 55]], away: [] } }).some((p) => p.includes('fielded'))).toBe(true);
     expect(issuesAt({ ...compacted, fielded: { home: [], away: [], extra: [] } }).some((p) => p.includes('fielded'))).toBe(true);
+    // M2 (v5): the sim content hash a result was played with is an optional string.
+    expect(issuesAt({ ...compacted, simHash: 'a1b2c3' })).toEqual([]);
+    expect(issuesAt({ ...compacted, simHash: 7 }).some((p) => p.includes('simHash'))).toBe(true);
   });
 
   /** A v3 state as a v2 save wrote it: the M1.1 fields removed (in place on a clone). */
@@ -316,10 +430,10 @@ describe('migrations', () => {
 
   // The runner itself, one version past the current one.
   const state = world();
-  const v4 = serializeSave(envelopeOf(state));
+  const current = serializeSave(envelopeOf(state));
   const renameClub: Migration = {
-    from: 4,
-    to: 5,
+    from: STATE_SCHEMA_VERSION,
+    to: STATE_SCHEMA_VERSION + 1,
     migrate(s) {
       const st = s as GameState;
       for (const c of Object.values(st.clubs)) c.shortName = `${c.shortName}*`;
@@ -328,22 +442,22 @@ describe('migrations', () => {
   };
 
   it('runs each step in order and reports migratedFrom', () => {
-    const r = parseSaveWith(v4, content, { migrations: [renameClub], currentVersion: 5 });
+    const r = parseSaveWith(current, content, { migrations: [renameClub], currentVersion: STATE_SCHEMA_VERSION + 1 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.migratedFrom).toBe(4);
-    expect(r.value.envelope.schemaVersion).toBe(5);
-    expect(r.value.envelope.state.schemaVersion).toBe(5);
+    expect(r.value.migratedFrom).toBe(STATE_SCHEMA_VERSION);
+    expect(r.value.envelope.schemaVersion).toBe(STATE_SCHEMA_VERSION + 1);
+    expect(r.value.envelope.state.schemaVersion).toBe(STATE_SCHEMA_VERSION + 1);
     expect(Object.values(r.value.envelope.state.clubs).every((c) => c.shortName.endsWith('*'))).toBe(true);
     expect(r.value.envelope.checksum).toBe(checksumState(r.value.envelope.state));
   });
 
   it('save.migration when a step is missing or throws', () => {
-    const missing = parseSaveWith(v4, content, { migrations: [], currentVersion: 5 });
+    const missing = parseSaveWith(current, content, { migrations: [], currentVersion: STATE_SCHEMA_VERSION + 1 });
     expect(missing.ok ? null : missing.error.code).toBe('save.migration');
-    const throwing = parseSaveWith(v4, content, {
-      migrations: [{ from: 4, to: 5, migrate: () => { throw new Error('boom'); } }],
-      currentVersion: 5,
+    const throwing = parseSaveWith(current, content, {
+      migrations: [{ from: STATE_SCHEMA_VERSION, to: STATE_SCHEMA_VERSION + 1, migrate: () => { throw new Error('boom'); } }],
+      currentVersion: STATE_SCHEMA_VERSION + 1,
     });
     expect(throwing.ok ? null : throwing.error.code).toBe('save.migration');
   });
@@ -529,7 +643,7 @@ describe('structure bounds come from SAVE_BOUNDS (the same constants the content
   });
 
   it('the bounds are the documented values (changing one is a save-format change)', () => {
-    expect(SAVE_BOUNDS).toEqual({ squadStarters: 5, squadReserves: 2, swapsPerMatch: 2, pendingLevelUps: 3, levelUpOptions: 3, perksPerFighter: 4 });
+    expect(SAVE_BOUNDS).toEqual({ squadStarters: 5, squadReserves: 2, swapsPerMatch: 2, pendingLevelUps: 3, levelUpOptions: 3, perksPerFighter: 4, callsPerRound: 2 });
   });
 });
 

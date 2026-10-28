@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Arena mock (smoke self-test)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --c-side-us: #c9a24a; --c-side-them: #4a78a8; --body-us: #5a4a1e; --body-them: #1e3550; --floor: #6b6256; --page: #1c1a17; --text: #eee; }
+  :root[data-theme="light"] { --floor: #c8bfae; --page: #efe9dc; --text: #222; }
+  html, body { margin: 0; height: 100%; background: var(--page); color: var(--text); font: 14px system-ui, sans-serif; }
+  #app { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #top { position: absolute; left: 0; right: 0; top: 0; height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; }
+  #strip { position: absolute; left: 0; right: 0; bottom: 0; height: 72px; display: flex; gap: 6px; padding: 8px 16px; box-sizing: border-box; }
+  #stripList { display: contents; margin: 0; padding: 0; }
+  #strip li { list-style: none; flex: 1; border: 1px solid #8884; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+  #strip li[data-side="0"] { border-color: var(--c-side-us); }
+  #strip li[data-side="1"] { border-color: var(--c-side-them); }
+  #strip li[data-down="1"] { opacity: .45; }
+  .glyph { display: inline-block; width: 10px; height: 10px; margin-right: 4px; background: currentColor; }
+  #feed { position: absolute; right: 16px; top: 64px; width: 260px; margin: 0; padding: 0; font-size: 12px; }
+  #feed li { list-style: none; margin-bottom: 4px; }
+  #callout { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv" role="img" aria-label="Arena"></canvas>
+  <div id="top"><span id="round">Round 1</span><span id="clock">0.0 s</span><span id="mode"></span></div>
+  <div id="callout" aria-live="polite"></div>
+  <ul id="feed" aria-live="polite"></ul>
+  <div id="strip"><ul id="stripList"></ul></div>
+</div>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const live = params.has('live');
+  const theme = params.get('theme');
+  if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+  const canvas = document.getElementById('cv');
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const rgb = (hex) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex); const v = parseInt(m ? m[1] : '808080', 16); return [(v >> 16) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255]; };
+  let gl = null;
+  let log = null; let meta = null;
+  let frames = []; let downs = []; let endTick = 0;
+  let tick = 0; let head = 0; let playing = false; let speed = 1;
+  let ended = false; let lastTs = 0; let ready = false;
+  // Like the game's hook: frame() is the HUD's latest frame (at most 10 Hz, and at every stop, seek and load), and there is no tick getter.
+  let hudFrame = null; let hudAt = 0;
+  const workMs = []; let frameCount = 0; let fpsT0 = 0; let fps = 0;
+  const state = { liveMatch: { phase: 'round_pending', watch: { mode: 'watch', round: 1, cursorTick: 0, calls: [] } } };
+  const feedSeen = new Set();
+  let callout = { text: '', until: 0 };
+
+  function layout() {
+    const w = Math.max(1, canvas.clientWidth); const h = Math.max(1, canvas.clientHeight);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    const pad = { top: 56, right: 16, bottom: 72, left: 16 };
+    const aw = w - pad.left - pad.right; const ah = h - pad.top - pad.bottom;
+    const arena = log ? log.header.arena : { width: 3200, height: 1800 };
+    const k = Math.min(aw / arena.width, ah / arena.height);
+    return { w, h, k, ox: pad.left + (aw - arena.width * k) / 2, oy: pad.top + (ah - arena.height * k) / 2 };
+  }
+
+  function frameAt(t) {
+    let lo = 0; let hi = frames.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (frames[mid].tick <= t) lo = mid; else hi = mid - 1; }
+    return frames[lo];
+  }
+
+  function unitStates(t) {
+    const f = frameAt(t);
+    return f.u.map((u, i) => ({ unit: i, side: log.header.units[i].side, x: u[0], y: u[1], hp: u[2], maxHp: 1000, standing: (u[3] & 16) === 0, shield: null, focus: null }));
+  }
+
+  function rect(x, y, w, h, c) {
+    gl.scissor(Math.round(x), Math.round(canvas.height - y - h), Math.max(0, Math.round(w)), Math.max(0, Math.round(h)));
+    gl.clearColor(c[0], c[1], c[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
+  function draw() {
+    if (!gl || !log) return;
+    const L = layout();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.enable(gl.SCISSOR_TEST);
+    rect(0, 0, L.w, L.h, rgb(css('--page')));
+    rect(L.ox, L.oy, log.header.arena.width * L.k, log.header.arena.height * L.k, rgb(css('--floor')));
+    const us = rgb(css('--c-side-us')); const them = rgb(css('--c-side-them'));
+    const bodyUs = rgb(css('--body-us')); const bodyThem = rgb(css('--body-them'));
+    const r = 50 * L.k;
+    for (const u of unitStates(tick)) {
+      if (!u.standing) continue;
+      const cx = L.ox + u.x * L.k; const cy = L.oy + u.y * L.k;
+      const ring = u.side === 0 ? us : them;
+      rect(cx - r, cy - r, 2 * r, 2 * r, ring);
+      rect(cx - r + 6, cy - r + 6, 2 * r - 12, 2 * r - 12, u.side === 0 ? bodyUs : bodyThem);
+      if (u.side === 1) { rect(cx - r + 10, cy - r + 10, 2 * r - 20, 2 * r - 20, ring); rect(cx - r + 14, cy - r + 14, 2 * r - 28, 2 * r - 28, bodyThem); }
+    }
+  }
+
+  function noteDowns(now) {
+    for (const d of downs) {
+      if (d.tick > tick || feedSeen.has(d.seq)) continue;
+      feedSeen.add(d.seq);
+      const text = meta.names[d.unit] + ' downed by ' + (d.by === null ? 'status damage' : meta.names[d.by]) + (d.ability ? ' · ' + (meta.abilityNames[d.ability] || d.ability) : '');
+      const li = document.createElement('li'); li.textContent = text; document.getElementById('feed').appendChild(li);
+      callout = { text, until: now + 2000 };
+      const row = document.querySelector('#stripList li[data-unit="' + d.unit + '"]'); if (row) row.setAttribute('data-down', '1');
+    }
+    document.getElementById('callout').textContent = now < callout.until ? callout.text : '';
+  }
+
+  // The cost of the cursor save at a stop (match.watch + autosave): a main-thread hitch of about this long.
+  function persistCursor() {
+    const t0 = performance.now(); while (performance.now() - t0 < 12) { /* serialise */ }
+    state.liveMatch.watch.cursorTick = Math.floor(tick);
+  }
+
+  function stop() {
+    if (!playing) return;
+    playing = false;
+    if (live) persistCursor();
+    publish();
+  }
+
+  function makeFrame() {
+    return { tick, fightSeconds: tick * 0.05, overtime: false, ended, endTick: ended || !live ? endTick : null, units: unitStates(tick), projectiles: [], zones: [], telegraphs: [], effects: downs.filter((d) => d.tick <= tick && tick - d.tick < 40).map((d) => ({ id: d.seq, kind: 'down', unit: d.unit, target: d.by, ability: d.ability, x: 0, y: 0, amount: null, crit: false, tone: 'neutral', age: (tick - d.tick) / 40 })), standing: { home: 5, away: 5 }, captains: { home: 0, away: 5 } };
+  }
+
+  function publish() { hudFrame = log ? makeFrame() : null; hudAt = performance.now(); }
+
+  function step(ts) {
+    requestAnimationFrame(step);
+    if (!log) { lastTs = ts; return; }
+    const t0 = performance.now();
+    const dt = Math.min(100, ts - (lastTs || ts)); lastTs = ts;
+    if (playing) {
+      const next = tick + (dt * speed) / 50;
+      // Auto-pause: stop after drawing the frame of one of our fighters going down.
+      const hit = downs.find((d) => log.header.units[d.unit].side === 0 && d.tick > tick && d.tick <= next && !d.paused);
+      if (hit) { hit.paused = true; tick = hit.tick; head = Math.max(head, tick); draw(); noteDowns(ts); stop(); }
+      else { tick = Math.min(endTick, next); head = Math.max(head, tick); if (tick >= endTick) { ended = true; playing = false; } }
+    }
+    draw(); noteDowns(ts);
+    if (ts - hudAt >= 100) publish();
+    document.getElementById('clock').textContent = (tick / 20).toFixed(1) + ' s';
+    workMs.push(performance.now() - t0); if (workMs.length > 300) workMs.shift();
+    frameCount++; if (!fpsT0) fpsT0 = ts; if (ts - fpsT0 >= 1000) { fps = (frameCount * 1000) / (ts - fpsT0); frameCount = 0; fpsT0 = ts; }
+  }
+
+  async function loadRound() {
+    const res = await fetch('/round.json'); const data = await res.json();
+    log = data.log; meta = data.meta;
+    frames = log.events.filter((e) => e.type === 'frame').map((e) => ({ tick: e.tick, u: e.data.u }));
+    downs = log.events.filter((e) => e.type === 'unit.down').map((e) => ({ seq: e.seq, tick: e.tick, unit: e.unit, by: e.data.by, ability: e.data.ability }));
+    endTick = log.events[log.events.length - 1].tick;
+    tick = 0; head = 0; playing = false; ended = false; speed = 1; feedSeen.clear();
+    hudFrame = null;
+    document.getElementById('feed').replaceChildren();
+    document.getElementById('mode').textContent = live ? 'live' : 'replay';
+    const list = document.getElementById('stripList'); list.replaceChildren();
+    log.header.units.forEach((u, i) => {
+      const li = document.createElement('li'); li.setAttribute('data-unit', String(i)); li.setAttribute('data-side', String(u.side));
+      for (const role of meta.roles[i]) { const g = document.createElement('span'); g.className = 'glyph'; g.setAttribute('data-role', role); g.setAttribute('aria-label', role); li.appendChild(g); }
+      li.appendChild(document.createTextNode(meta.names[i])); list.appendChild(li);
+    });
+    if (!gl) gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false });
+    draw();
+    publish();
+    ready = true;
+  }
+
+  const viewer = {
+    // Like the game's hook: returns at once; the viewer mounts a moment later.
+    loadFixtureRound: async () => { ready = false; hudFrame = null; setTimeout(() => { loadRound(); }, 120); return 'mock-fixture'; },
+    frame: () => (ready ? hudFrame : null),
+    ready: () => ready,
+    seek: (t) => { tick = Math.max(0, Math.min(live ? head : endTick, t)); ended = tick >= endTick; draw(); noteDowns(performance.now()); publish(); },
+    play: () => { if (!ended) playing = true; },
+    pause: () => { stop(); },
+    setSpeed: (s) => { speed = s; },
+    stats: () => { if (!ready) return null; const s = workMs.slice().sort((a, b) => a - b); return { fps, frameMsP50: s[Math.floor(s.length * 0.5)] || 0, frameMsP95: s[Math.floor(s.length * 0.95)] || 0, drawCalls: 14, renderer: gl ? 'webgl' : 'none', resolution: 1 }; },
+    logHash: () => (log ? log.hash : null),
+  };
+  window.__arena = { viewer, state: () => JSON.parse(JSON.stringify(state)) };
+  requestAnimationFrame(step);
+  if (live) loadRound();
+})();
+</script>
+</body>
+</html>

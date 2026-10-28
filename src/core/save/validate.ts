@@ -274,6 +274,20 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
       const s = live[side];
       for (const fid of [...s.active, ...s.squad.reserves, ...s.withdrawn, ...s.emergencyEntrants]) if (!fighters[fid]) add(`liveMatch.${side}`, `unknown fighter "${fid}"`);
     }
+    // M2 (v5): a round is watched only in mode 'watch', while it is the pending round; the cursor is a fight tick.
+    const w = live.watch;
+    if (w) {
+      if (w.round !== null && w.mode !== 'watch') add('liveMatch.watch.round', `a round is watched only in mode "watch" (mode "${w.mode}")`);
+      if (w.round !== null && (live.phase !== 'round_pending' || w.round !== live.rounds.length + 1)) {
+        add('liveMatch.watch.round', `round ${w.round} is not the pending round (phase ${live.phase}, ${live.rounds.length} played)`);
+      }
+      if (w.mode === 'watch' && w.round === null && live.phase === 'round_pending') add('liveMatch.watch.round', 'a watched match waits for its pending round to be watched');
+      const cap = Math.round(content.combat.overtime.hardCapS * content.combat.tick.ticksPerSecond);
+      if (w.cursorTick > cap) add('liveMatch.watch.cursorTick', `${w.cursorTick} is past the time cap (${cap} ticks)`);
+      // Calls are RESERVED until the calls package (P-01): core/sim refuses any plan but none, so a live match holding
+      // one could never play its round. Refused at load instead (the calls package lifts this check).
+      if (w.calls.length > 0) add('liveMatch.watch.calls', 'calls are not part of this build');
+    }
   }
 
   // market

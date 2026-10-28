@@ -73,7 +73,10 @@ function eventJson(ev: FightEvent): string {
       let d = '{"u":[';
       for (let i = 0; i < u.length; i++) {
         const f = u[i]!;
-        d += (i > 0 ? ',[' : '[') + f[0] + ',' + f[1] + ',' + f[2] + ',' + f[3] + ']';
+        // Format 2 frames carry six numbers (x, y, hp, stateBits, shield, focus); format 1 four.
+        d += (i > 0 ? ',[' : '[') + f[0] + ',' + f[1] + ',' + f[2] + ',' + f[3];
+        for (let k = 4; k < f.length; k++) d += ',' + f[k];
+        d += ']';
       }
       return env(ev, d + ']}');
     }
