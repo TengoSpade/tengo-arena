@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ContentDB } from '../../../core/content';
 import type { FixtureId } from '../../../core/model';
 import { fixtureContent } from '../../../core/testkit';
+import type { LogSpec } from './testing/fixture-log';
 import { App } from '../../app/App';
 import { navigate } from '../../app/router';
 import { resetToasts, toasts } from '../../components';
@@ -55,7 +56,7 @@ interface Mounted {
   t: ReturnType<typeof createTestStore>;
 }
 
-function mountApp(opts: { winners?: ('home' | 'away')[]; state?: 'prelock' | 'round-waiting'; hash?: string; injured?: boolean } = {}): Mounted {
+function mountApp(opts: { winners?: ('home' | 'away')[]; state?: 'prelock' | 'round-waiting'; hash?: string; injured?: boolean; log?: Partial<LogSpec> } = {}): Mounted {
   const w = watchWorld(content);
   if (opts.injured) {
     // A reserve of the player's club hurt this week (the scripted core's reports are of season 1, week 11): the injury stop.
@@ -63,7 +64,7 @@ function mountApp(opts: { winners?: ('home' | 'away')[]; state?: 'prelock' | 'ro
     if (!reserve) throw new Error('the fixture club has no reserve to injure');
     reserve.injury = { severity: 'minor', weeksOut: 1, fixtureId: w.fixtureId as FixtureId, round: 1, causeFighterId: null, damageBp: 4000, since: { season: 1, weekIndex: 11 } };
   }
-  const core = createScriptedCore(w, { winners: opts.winners });
+  const core = createScriptedCore(w, { winners: opts.winners, log: opts.log });
   const t = createTestStore({ world: 'none', engine: core.engine });
   t.store.replaceWorld(opts.state === 'round-waiting' ? liveWatchState(w) : w.state, content);
   const harness = createFakeViewerHarness(fakeTimeline, content);
@@ -712,6 +713,41 @@ describe('keyboard only (04 §9, A9)', () => {
     // The keys are listed on screen.
     expect(root.textContent).toContain('Space plays or pauses');
   });
+});
+
+describe('a deciding down on the end tick (WP-M2D: the end stop carries no cause)', () => {
+  it('is the round end only (no separate pause), and the card and the status name the down read from the moments', async () => {
+    // The fixture round's down (unit 3, ours, by unit 7) now lands on the end tick, and the player stops on own downs.
+    updateSettings({ ...DEFAULT_SETTINGS, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: { ownDowned: true, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null } } });
+    const m = mountApp({ state: 'round-waiting', hash: '#/arena', log: { endTick: 600, downTick: 600 } });
+    await arenaReady(m, 1);
+    await settle();
+    const ctxName = (u: number) => m.w.state.fighters[m.w.prepared[u < 5 ? 'home' : 'away'].active[u % 5]!]!.name.full;
+    await act(async () => {
+      m.harness.current().advanceTo(1000);
+    });
+    // One stop, the end: the card is up with no key pressed, and it names the deciding down.
+    await waitFor(() => expect(screen.getByTestId('round-end-down')).toBeTruthy(), { timeout: 4000 });
+    // The sentence the feed uses for that down (the fallen, the one who downed him, the ability).
+    const sentence = screen.getByTestId('round-end-down').textContent!;
+    expect(sentence.startsWith(`The last to fall: ${ctxName(3)} downed by ${ctxName(7)}`)).toBe(true);
+    expect(sentence.endsWith('.')).toBe(true);
+    expect(m.harness.current().calls.filter((c) => c === 'play')).toHaveLength(1);
+    expect(screen.getByTestId('status-note').textContent).toBe(`${ctxName(3)} was downed`);
+    expect(screen.queryByText('Paused automatically')).toBeNull();
+  }, 20_000);
+
+  it('a round that ends with no down on its end tick (the time cap) names no down', async () => {
+    const m = mountApp({ state: 'round-waiting', hash: '#/arena' }); // the fixture's down is at 400, the end at 1,000
+    await arenaReady(m, 1);
+    await settle();
+    await act(async () => {
+      m.harness.current().advanceTo(1000);
+    });
+    await waitFor(() => expect(screen.getByTestId('round-end-winner')).toBeTruthy(), { timeout: 4000 });
+    expect(screen.queryByTestId('round-end-down')).toBeNull();
+    expect(screen.queryByTestId('status-note')).toBeNull();
+  }, 20_000);
 });
 
 describe('a step that outlives its screen does not act afterwards (Back while a round commits)', () => {

@@ -85,10 +85,13 @@ export function ArenaControls({
               {statusNote && <span data-testid="status-note">{statusNote}</span>}
             </>
           ) : stop?.kind === 'end' ? (
-            <span class="tag">
-              <Icon name="check" size="sm" />
-              {t('statusOver')}
-            </span>
+            <>
+              <span class="tag">
+                <Icon name="check" size="sm" />
+                {t('statusOver')}
+              </span>
+              {statusNote && <span data-testid="status-note">{statusNote}</span>}
+            </>
           ) : sn.playing ? (
             <span class="tag tag--good" data-testid="status-live">
               <Icon name="eye" size="sm" />

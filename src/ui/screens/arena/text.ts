@@ -280,6 +280,7 @@ const T = {
   endScoreLabel: 'Match score {a} to {b}',
   endSubElim: 'Won by elimination: {n} of {who} standing.',
   endSubCap: 'Won at the time cap: {n} of {who} standing.',
+  endDecidingDown: 'The last to fall: {down}.',
   endNextRound: 'The match goes to round {n}.',
   endDecided: 'The match is decided.',
   endFootAny: 'Any key skips this card',

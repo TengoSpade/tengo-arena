@@ -28,6 +28,8 @@ export interface RoundEndResult {
   /** 'elimination' | 'time-limit' and how many of the winner's side stood. */
   reason: 'elimination' | 'time-limit';
   standing: number;
+  /** The down that ended an elimination round ("Kael downed by Cato"), read from the viewer's moments at the end tick; else null. */
+  decidingDown: string | null;
   /** "ours" or "theirs" (or the club's short name in a match between other clubs). */
   who: string;
   /** The deciding round: the match is over. */
@@ -127,6 +129,11 @@ export function RoundEndOverlay() {
               <span class="u-faint">–</span>
               <span class={r.winnerFirst ? undefined : 'is-win'}>{r.score[1]}</span>
             </span>
+            {r.decidingDown && (
+              <span class="around__sub" data-testid="round-end-down">
+                {t('endDecidingDown', { down: r.decidingDown })}
+              </span>
+            )}
             <span class="around__sub">
               {t(r.reason === 'elimination' ? 'endSubElim' : 'endSubCap', { n: r.standing, who: r.who })} {r.matchOver ? t('endDecided') : t('endNextRound', { n: r.nextRound })}
             </span>

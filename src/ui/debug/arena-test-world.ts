@@ -87,18 +87,18 @@ export function lineupsOf(ms: MatchState, round: number): RoundLineups {
   return { round, home: side('home'), away: side('away') };
 }
 
-export function logSpecOf(state: GameState, ms: MatchState, content: ContentDB, round: number): LogSpec {
+export function logSpecOf(state: GameState, ms: MatchState, content: ContentDB, round: number, over: Partial<LogSpec> = {}): LogSpec {
   const unit = (side: 'home' | 'away', i: number): LogUnit => {
     const id = ms[side].active[i]!;
     return { fighterId: id, classId: state.fighters[id]!.classId, clubId: ms[side].clubId, slot: i, row: ms[side].rows[i]!, isCaptain: i === 0 };
   };
   const a1 = content.classAbility(state.fighters[ms.home.active[0]!]!.classId, 'a1').id;
-  return { home: [0, 1, 2, 3, 4].map((i) => unit('home', i)), away: [0, 1, 2, 3, 4].map((i) => unit('away', i)), abilityId: a1, round };
+  return { home: [0, 1, 2, 3, 4].map((i) => unit('home', i)), away: [0, 1, 2, 3, 4].map((i) => unit('away', i)), abilityId: a1, round, ...over };
 }
 
-export function roundPlaybackOf(state: GameState, content: ContentDB, kind: 'live' | 'replay', round: number): RoundPlayback {
+export function roundPlaybackOf(state: GameState, content: ContentDB, kind: 'live' | 'replay', round: number, over: Partial<LogSpec> = {}): RoundPlayback {
   const ms = state.liveMatch!;
-  const log = buildFightLog(logSpecOf(state, ms, content, round));
+  const log = buildFightLog(logSpecOf(state, ms, content, round, over));
   const done = ms.rounds[round - 1];
   return {
     fixtureId: ms.fixtureId,
@@ -158,7 +158,7 @@ const REPORT = (playerFixtureId: string | null): WeekReport => ({ season: 1, wee
  *  - advance() between rounds in a watched match: the next round locked and waiting.
  *  - advance() with a round waiting and no `watched`: refused with watch.not-shown.
  */
-export function createScriptedCore(w: WatchWorld, opts: { winners?: ('home' | 'away')[]; base?: GameEngine } = {}): ScriptedCore {
+export function createScriptedCore(w: WatchWorld, opts: { winners?: ('home' | 'away')[]; base?: GameEngine; /** Override the fixture round's log (a down on the end tick). */ log?: Partial<LogSpec> } = {}): ScriptedCore {
   const base = opts.base ?? createDevEngine();
   const winners = opts.winners ?? ['home', 'home'];
   const advances: ScriptedCore['advances'] = [];
@@ -171,7 +171,7 @@ export function createScriptedCore(w: WatchWorld, opts: { winners?: ('home' | 'a
     watchCommands,
     availability: { available: true, rounds: 2 },
     failNext: null,
-    hashOf: (state, round) => buildFightLog(logSpecOf(state, state.liveMatch!, w.content, round)).hash,
+    hashOf: (state, round) => buildFightLog(logSpecOf(state, state.liveMatch!, w.content, round, opts.log)).hash,
   };
   const commit = (state: GameState, round: number): Result<{ state: GameState; week: WeekReport | null; pause: null; watch?: { fixtureId: string; round: number; cursorTick: number } | null }, EngineError> => {
     const next = structuredClone(state);
@@ -251,12 +251,12 @@ export function createScriptedCore(w: WatchWorld, opts: { winners?: ('home' | 'a
       const watch = state.liveMatch?.watch;
       if (!state.liveMatch) return err(engineError('match.not-live', 'No live match'));
       if (!watch || watch.mode !== 'watch' || watch.round === null) return err(engineError('match.not-watching', 'No round is being watched'));
-      return ok(roundPlaybackOf(state, content, 'live', watch.round));
+      return ok(roundPlaybackOf(state, content, 'live', watch.round, opts.log));
     }) as GameEngine['liveRoundPlayback'],
     roundPlayback: ((state: GameState, _fixtureId: string, round: number, content: ContentDB) => {
       const ms = state.liveMatch;
       if (!ms || !ms.rounds[round - 1]) return err(engineError('replay.no-round', 'No such round'));
-      return ok(roundPlaybackOf(state, content, 'replay', round));
+      return ok(roundPlaybackOf(state, content, 'replay', round, opts.log));
     }) as GameEngine['roundPlayback'],
     matchPlayback: ((state: GameState, fixtureId: string): Result<MatchPlayback, EngineError> => {
       const ms = state.liveMatch;

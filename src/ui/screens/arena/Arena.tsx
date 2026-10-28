@@ -25,7 +25,7 @@ import { Empty } from '../../components';
 import { settings, updateArenaSettings } from '../../store/settings';
 import './arena.css';
 import { ArenaControls } from './Controls';
-import { feedItems, nameOfUnit, stopCause, stopText } from './feed';
+import { decidingDown, feedItems, nameOfUnit, stopCause, stopText } from './feed';
 import { ArenaHud, type HudInfo } from './Hud';
 import { inspectorModel } from './inspect';
 import { ArenaFeed, ArenaInspector, type ProbeState } from './Panels';
@@ -215,7 +215,9 @@ export function ArenaLayout(p: ArenaLayoutProps) {
   })();
 
   const screenState = p.kind === 'replay' ? 'replay' : p.roundOver ? 'round-end' : paused ? 'paused' : 'live';
-  const statusNote = stop && stop.kind === 'auto' ? stopCause(stop, ctx) : null;
+  // An auto-pause names its cause; the round's end (which also covers a deciding down on its tick) names the deciding down.
+  const endDown = stop && stop.kind === 'end' ? decidingDown(session.moments.value, stop.tick) : null;
+  const statusNote = stop && stop.kind === 'auto' ? stopCause(stop, ctx) : endDown ? t('statusDown', { name: nameOfUnit(ctx, endDown.target) }) : null;
   return (
     <section class="arena-screen" data-state={screenState} data-testid={p.kind === 'live' ? 'screen-arena' : 'screen-replay'} data-kind={p.kind} data-status={status}>
       <h1 class="u-sr-only">{`${t('title')} · ${t('hudRound', { n: p.hud.round, max: p.hud.bestOf })}`}</h1>

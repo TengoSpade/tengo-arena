@@ -27,6 +27,7 @@ import { t as uiT } from '../../text';
 import { registerArenaTicketInfo } from '../../tickets/arena-info';
 import { ArenaLayout } from './Arena';
 import { buildHud, buildRoundContext, fightInputOf } from './context';
+import { decidingDown, momentText } from './feed';
 import { readArenaPalette } from './palette';
 import { ROUND_END_MS, RoundEndOverlay, resetRoundEnd, roundEnd, type RoundEndResult } from './RoundEnd';
 import { recallStop, rememberStop, type StopAt } from './resume-cause';
@@ -39,7 +40,7 @@ const TICK_S = 0.05;
 export const watchingOf = watchingMatch;
 
 /** The finished round for the card: winner, match score (the player's side first), time and what opens next, from committed state only. */
-function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId, round: number, report: WeekReport | null): RoundEndResult | null {
+function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId, round: number, report: WeekReport | null, decidingDown: string | null = null): RoundEndResult | null {
   const ms = state.liveMatch && state.liveMatch.fixtureId === fixtureId ? state.liveMatch : null;
   const result = state.results[fixtureId];
   const rounds = ms ? ms.rounds : (result?.rounds ?? []);
@@ -66,6 +67,7 @@ function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId
     overtime: seconds >= content.combat.overtime.startS,
     reason: r.endReason,
     standing: r.survivors[r.winner],
+    decidingDown: r.endReason === 'elimination' ? decidingDown : null,
     who: involved ? (ours ? uiText('whoOurs') : uiText('whoTheirs')) : ((winnerId ? state.clubs[winnerId]?.shortName : undefined) ?? winnerName),
     matchOver,
     next: matchOver ? (report && opensReport(state, report) ? 'report' : 'home') : ms.watch?.round != null ? 'kickoff' : 'between',
@@ -261,7 +263,10 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
 
   /** Show the committed round for 1.5 s, then open what comes next. */
   const showResult = (after: GameState, next: () => void, report: WeekReport | null = null): void => {
-    const result = roundOutcome(after, content, fixtureId, round, report);
+    // The end stop carries no cause (WP-M2D): the card names the deciding down from the moments the viewer has shown, at the end tick.
+    const v = session.viewer();
+    const down = v ? decidingDown(v.keyMoments(), v.endTick) : null;
+    const result = roundOutcome(after, content, fixtureId, round, report, down ? momentText(down, ctx, content) : null);
     roundEnd.value = { phase: 'result', round, bestOf: ctx.bestOf, result, next, retry: null };
   };
 
