@@ -15,7 +15,7 @@ import type { NewsItem } from './news';
  * Version of the GameState shape. Any change to a persisted type in
  * core/model bumps this and adds a migration in core/save (architect-owned).
  */
-export const STATE_SCHEMA_VERSION = 3;
+export const STATE_SCHEMA_VERSION = 4;
 
 /**
  * The complete, authoritative, JSON-safe state of one career. Everything

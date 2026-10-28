@@ -142,3 +142,49 @@ describe.each(['r001-t004', 'r001-t004-s2w3-v2'] as const)("the owner's R001 car
     expect(hash(again.value.envelope.state)).toBe(hash(s));
   }, 120_000);
 });
+
+describe('a real v3 save written by main (d440107: state v3, no in-season compaction), season 2 week 7', () => {
+  const json = gunzipSync(readFileSync(join(REPO_ROOT, 'tests', 'fixtures', 'saves', 'ki2-v3-main-s2w7.json.gz'))).toString('utf8');
+  const parsed = parseSave(json, content);
+  if (!parsed.ok) throw new Error(`${parsed.error.code}: ${parsed.error.message}`);
+  const start = parsed.value.envelope.state;
+
+  it('loads through the v3 -> v4 step: migratedFrom 3, schema 4, valid, nothing but the version stamped; older results keep their shape', () => {
+    expect((JSON.parse(json) as { schemaVersion: number }).schemaVersion).toBe(3);
+    expect(parsed.value.migratedFrom).toBe(3);
+    expect(parsed.value.envelope.schemaVersion).toBe(4);
+    expect(start.schemaVersion).toBe(4);
+    expect(parsed.value.warnings.every((w) => w.includes('different content'))).toBe(true);
+    expect(validateState(start, content)).toEqual([]);
+    const original = (JSON.parse(json) as { state: GameState }).state;
+    expect(hash({ ...start, schemaVersion: 3 })).toBe(hash(original));
+    // Season 1 was compacted by main's season-end rule (no `fielded`); season 2 so far is in full.
+    const results = Object.values(start.results);
+    expect(results.filter((r) => r.season === 1 && !involvesPlayer(start, r)).every((r) => isCompactedResult(r) && r.fielded === undefined)).toBe(true);
+    expect(results.filter((r) => r.season === 2).every((r) => !isCompactedResult(r))).toBe(true);
+  });
+
+  it('plays on: from its next week the rule compacts season 2 matches between other clubs, and the game is the same as with the rule off', () => {
+    let on = start;
+    let off = start;
+    for (let i = 0; i < 3; i++) {
+      on = week(content, on);
+      off = week(never, off);
+      expect(hash(withoutDetail(on))).toBe(hash(withoutDetail(off)));
+      expect(hash(tables(on, content))).toBe(hash(tables(off, never)));
+    }
+    const current = Object.values(on.results).filter((r) => r.season === 2);
+    const aged = current.filter((r) => r.weekIndex <= 6 && !involvesPlayer(on, r));
+    expect(aged.length).toBeGreaterThan(20);
+    expect(aged.every((r) => isCompactedResult(r) && fieldedFive(r, 'home').length === 5 && fieldedFive(r, 'away').length === 5)).toBe(true);
+    expect(current.filter((r) => involvesPlayer(on, r)).every((r) => !isCompactedResult(r))).toBe(true);
+    expect(current.filter((r) => r.weekIndex >= 7).every((r) => !isCompactedResult(r))).toBe(true);
+    // Last season's results are as main left them.
+    expect(Object.values(on.results).filter((r) => r.season === 1).every((r) => r.fielded === undefined)).toBe(true);
+    // Saved again it is a v4 save that loads without a migration.
+    const again = parseSave(serializeSave(createSave(on, saveMeta(on), { engineVersion: realGamePorts.sim.engineVersion })), content);
+    if (!again.ok) throw new Error(`${again.error.code}: ${again.error.message}`);
+    expect(again.value.migratedFrom).toBeNull();
+    expect(hash(again.value.envelope.state)).toBe(hash(on));
+  }, 120_000);
+});

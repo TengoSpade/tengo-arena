@@ -74,10 +74,17 @@ describe('loadContent: fixture content', () => {
     expect(errorsOf(with_({ compactAiMatchesAfterWeeks: 3 }))).toEqual([]);
     for (const bad of [0, -1, 2.5, 100, '3']) expect(errorsOf(with_({ compactAiMatchesAfterWeeks: bad })).length).toBeGreaterThan(0);
     expect(errorsOf(with_({}))).not.toEqual([]);
-    const long = loadContent('t', with_({ compactAiMatchesAfterWeeks: 99 }) as RawContentFiles, { profile: 'fixture' });
-    expect(long.ok && long.value.warnings.some((w) => w.path === 'matchRecords.compactAiMatchesAfterWeeks')).toBe(true);
-    const short = loadContent('t', with_({ compactAiMatchesAfterWeeks: 3 }) as RawContentFiles, { profile: 'fixture' });
-    expect(short.ok && short.value.warnings.some((w) => w.path === 'matchRecords.compactAiMatchesAfterWeeks')).toBe(false);
+    const warns = (n: number): boolean => {
+      const r = loadContent('t', with_({ compactAiMatchesAfterWeeks: n }) as RawContentFiles, { profile: 'fixture' });
+      return r.ok && r.value.warnings.some((w) => w.path === 'matchRecords.compactAiMatchesAfterWeeks');
+    };
+    // Matches run from week 5 (MW1) to week 23 (the final): a match of week w compacts at processing week w + N, so N = 18 still
+    // compacts the first matchweek (processed in week 23) and N = 19 compacts nothing.
+    const weeks = (base['leagues']!['calendar'] as { weeks: { index: number; phase: string }[] }).weeks;
+    const matchWeeks = weeks.filter((w) => w.phase !== 'preseason').map((w) => w.index);
+    expect([Math.min(...matchWeeks), Math.max(...matchWeeks)]).toEqual([5, 23]);
+    expect([1, 3, 18].map(warns)).toEqual([false, false, false]);
+    expect([19, 23, 99].map(warns)).toEqual([true, true, true]);
   });
 });
 

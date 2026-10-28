@@ -530,9 +530,20 @@ export function validateContentFiles(f: ContentFiles, profile: ValidationProfile
   if (phaseOrder.lastIndexOf('preseason') > firstRegular || phaseOrder.lastIndexOf('regular') > firstTournament) {
     c.error(LF, 'calendar.weeks', 'phases must run preseason, then regular, then tournament');
   }
+  // A match played in week w is compacted by the processing of week w + N, and processing stops at the last match week:
+  // N beyond (last match week - first match week) compacts nothing in season.
   const compactAfter = leagues.matchRecords?.compactAiMatchesAfterWeeks;
-  if (compactAfter !== undefined && compactAfter >= weeks.length) {
-    c.warn(LF, 'matchRecords.compactAiMatchesAfterWeeks', `${compactAfter} is at least the season's ${weeks.length} weeks, so no match is compacted in season and a save peaks at its full size (about 12 MB) until the season end`);
+  const matchWeeks = weeks.filter((w) => w.phase === 'regular' || w.phase === 'tournament').map((w) => w.index);
+  if (compactAfter !== undefined && matchWeeks.length > 0) {
+    const first = Math.min(...matchWeeks);
+    const last = Math.max(...matchWeeks);
+    if (compactAfter > last - first) {
+      c.warn(
+        LF,
+        'matchRecords.compactAiMatchesAfterWeeks',
+        `${compactAfter} is more than the ${last - first} weeks from the first match week (${first}) to the last (${last}): a match of week w is compacted by the processing of week w + ${compactAfter}, which never comes, so no match is compacted in season and a save peaks at its full size (about 12 MB) until the season end`,
+      );
+    }
   }
   const weekById = new Map(weeks.map((w) => [w.id, w]));
   const venueIds = checkUnique(c, LF, 'venues', leagues.venues, 'venue id');

@@ -28,6 +28,7 @@ import {
   standings,
   type TierMove,
 } from './index';
+import { compactAgedResultsImpl } from './season-end';
 import { byStrength, playSeason, playWeek, type Decide } from './test-support';
 
 const content = fixtureContent();
@@ -356,6 +357,21 @@ describe('in-season compaction (leagues.json matchRecords.compactAiMatchesAfterW
     expect(state).toEqual(before);
     compactAgedResults(state, 2, 20, content); // a season with no results
     expect(state).toEqual(before);
+  });
+
+  it('the upper bound: matches run from week 5 to 23, so N = 18 still compacts the first matchweek at the last processing and N = 19 compacts nothing', () => {
+    const state = playedThrough(23); // the whole season: the last processing is week 23
+    const full = (n: number) => {
+      const copy = cloneJson(state);
+      copy.playerClubId = null;
+      compactAgedResultsImpl(copy, 1, 23, n);
+      return results(copy).filter(isCompactedResult);
+    };
+    const eighteen = full(18);
+    expect(eighteen.length).toBeGreaterThan(0);
+    expect(eighteen.every((r) => r.weekIndex === 5)).toBe(true);
+    expect(full(19)).toHaveLength(0);
+    expect(full(99)).toHaveLength(0);
   });
 
   it('with no player club every match is eligible, and a state that skipped the rule is caught up in one call', () => {

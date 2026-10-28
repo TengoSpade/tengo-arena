@@ -152,7 +152,7 @@ export const LeaguesFileSchema = z.object({
    */
   matchRecords: z.object({
     _doc: z.string().optional(),
-    /** Weeks after which a match between two other clubs is compacted (1-99; 23 or more: never in season). */
+    /** Weeks after which a match between two other clubs is compacted (1-99; above last match week - first match week nothing is compacted in season: the validator warns). */
     compactAiMatchesAfterWeeks: int().min(1).max(99),
   }).strict().optional(),
 }).strict();

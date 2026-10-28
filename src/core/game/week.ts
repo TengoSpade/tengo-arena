@@ -7,6 +7,7 @@
  *  4 income                              9 AI action phase (tier, then club id order)
  *  5 costs                              10 pool floor top-up
  *  6 financial status                   11 advance the calendar (+ seed the Reckoning), digest
+ *                                       12 compact aged matches between other clubs (matchRecords)
  * The UI store autosaves after success. The input state is never mutated.
  */
 import type { ContentDB } from '../content';
