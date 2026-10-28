@@ -10,6 +10,7 @@ import {
   checkHeap,
   checkRoundLoad,
   checkSaveTrace,
+  loadNote,
   checkTokens,
   colorDistance,
   letterboxProject,
@@ -211,12 +212,41 @@ describe('pixel checks', () => {
     expect(checkTokens(c, 'test').status).toBe('fail');
   });
 
-  it('flags a ring in the wrong side colour', () => {
+  it('flags a ring in the wrong side colour: that token shows none of its own side\'s', () => {
     const { img, probes } = arena({ swapOne: true });
     const c = tokenCensus(img, probes, [brass, steel], 28);
-    expect(c.found).toBe(10);
+    expect(c.assignment).toEqual([0, 1]);
+    expect(c.found).toBe(9);
+    expect(c.missing).toEqual([2]);
     expect(c.sidesConsistent).toBe(false);
     expect(checkTokens(c, 'test').status).toBe('fail');
+  });
+
+  it('two clubs whose trims share the ring hue do not swap the sides (the opponent\'s trim is brass-coloured)', () => {
+    const { img, probes } = arena();
+    // The opponent's tokens carry a thick brass trim inside their steel ring: more brass pixels than steel ones.
+    for (const p of probes.filter((q) => q.side === 1)) paintRing(img, p.x, p.y, 14, 9, brass);
+    const c = tokenCensus(img, probes, [brass, steel], 28);
+    expect(c.assignment).toEqual([0, 1]);
+    expect(c.found).toBe(10);
+    expect(c.sidesConsistent).toBe(true);
+    expect(checkTokens(c, 'test').status).toBe('pass');
+  });
+
+  it('works whichever candidate belongs to which side, and with extra candidates', () => {
+    const { img, probes } = arena();
+    const other: [number, number, number] = [10, 200, 10];
+    const c = tokenCensus(img, probes, [other, steel, brass], 28);
+    expect(c.assignment).toEqual([2, 1]);
+    expect(c.found).toBe(10);
+  });
+
+  it('nothing matching is no assignment and no token found', () => {
+    const { img, probes } = arena();
+    const c = tokenCensus(img, probes, [[255, 0, 255], [0, 255, 255]], 28);
+    expect(c.assignment).toBeNull();
+    expect(c.found).toBe(0);
+    expect(c.sidesConsistent).toBe(false);
   });
 
   it('does not require downed tokens', () => {
@@ -267,5 +297,28 @@ describe('round load (A10: the sim at full plus indexFightLog, median 15 ms, p99
     expect(c.pending).toBeUndefined();
     expect(c.detail).toMatch(/lower bound/);
     expect(c.detail).toMatch(/render.indexFightLog/);
+  });
+});
+
+describe('what bounds a slow frame rate', () => {
+  const slow = summarizeIntervals(steady(600, 17.6));
+  const quiet = { wallS: 10, task: 0.3, script: 0.15, layout: 0.01, style: 0.02 };
+  const busy = { wallS: 10, task: 0.9, script: 0.6, layout: 0.1, style: 0.1 };
+
+  it('a miss with a quiet main thread says the time goes to the GPU or the compositor', () => {
+    const c = checkFrameRate('perf.fps-1x', '1x', slow, gpu, quiet);
+    expect(c.status).toBe('fail');
+    expect(c.detail).toMatch(/Main thread busy 30%/);
+    expect(c.detail).toMatch(/GPU or the compositor/);
+  });
+
+  it('a miss with a busy main thread points at script, layout and style', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', slow, gpu, busy).detail).toMatch(/look at script, layout and style/);
+  });
+
+  it('a pass carries no note, and no load measured gives no note', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(600)), gpu, quiet).detail).toBeUndefined();
+    expect(checkFrameRate('perf.fps-1x', '1x', slow, gpu, null).detail).toBeUndefined();
+    expect(loadNote(null)).toBeNull();
   });
 });

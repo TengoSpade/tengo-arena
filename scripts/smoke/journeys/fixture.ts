@@ -148,8 +148,8 @@ export async function runFixtureJourney(env: JourneyEnv): Promise<void> {
           const intervals = playingIntervals(run.series, 5);
           const summary = summarizeIntervals(intervals);
           const st = await stats(page);
-          rec.measurements[`perf.fps-${speed}x`] = { ...summary, restarts: run.restarts, resumes: run.resumes, viewerStats: st };
-          rec.check(checkFrameRate(`perf.fps-${speed}x` as 'perf.fps-1x' | 'perf.fps-4x', `${speed}x`, summary, env.perf));
+          rec.measurements[`perf.fps-${speed}x`] = { ...summary, restarts: run.restarts, resumes: run.resumes, viewerStats: st, mainThread: run.load };
+          rec.check(checkFrameRate(`perf.fps-${speed}x` as 'perf.fps-1x' | 'perf.fps-4x', `${speed}x`, summary, env.perf, run.load));
           if (Number.isFinite(st.frameMsP95)) cpu.push(st.frameMsP95);
         }
         rec.check(checkCpuFrame(cpu.length ? Math.max(...cpu) : null, env.perf));

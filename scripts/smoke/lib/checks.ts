@@ -4,7 +4,7 @@
  */
 import type { Rgba } from './png';
 import type { CheckResult, CheckStatus } from './report';
-import { TARGETS, median, percentile, type HeapAnalysis, type IntervalSummary, type TraceAnalysis } from './stats';
+import { TARGETS, median, percentile, type HeapAnalysis, type IntervalSummary, type MainThreadLoad, type TraceAnalysis } from './stats';
 
 const ms = (v: number): string => (Number.isFinite(v) ? `${v.toFixed(1)} ms` : 'n/a');
 const fps = (v: number): string => (Number.isFinite(v) ? `${v.toFixed(1)} fps` : 'n/a');
@@ -27,7 +27,15 @@ const SOFTWARE_NOTE = 'Software WebGL: the targets apply to the reference machin
 
 // ---- Frame rate (A10: 60 fps target, p95 interval <= 20 ms, never below 30 fps) ----------------------------
 
-export function checkFrameRate(id: 'perf.fps-1x' | 'perf.fps-4x', speedLabel: string, s: IntervalSummary, ctx: PerfContext): CheckResult {
+/** One line on what bounds the frame rate: the main thread's share, and so where to look. */
+export function loadNote(load: MainThreadLoad | null): string | null {
+  if (!load) return null;
+  const pct = (v: number): string => `${(v * 100).toFixed(0)}%`;
+  const where = load.task < 0.6 ? 'the main thread has room, so the frame time is spent on the GPU or the compositor (draw cost, presenting the canvas), not in script, layout or style' : 'the main thread is busy: look at script, layout and style';
+  return `Main thread busy ${pct(load.task)} of ${load.wallS.toFixed(1)} s (script ${pct(load.script)}, layout ${pct(load.layout)}, style ${pct(load.style)}): ${where}.`;
+}
+
+export function checkFrameRate(id: 'perf.fps-1x' | 'perf.fps-4x', speedLabel: string, s: IntervalSummary, ctx: PerfContext, load: MainThreadLoad | null = null): CheckResult {
   const enough = s.frames >= 60;
   const ok = enough && s.medianFps >= TARGETS.fpsMedianMin && s.p95Ms <= TARGETS.p95IntervalMsMax && s.over33 === 0;
   const status: CheckStatus = !enough ? 'fail' : perfStatus(ok, ctx);
@@ -38,7 +46,13 @@ export function checkFrameRate(id: 'perf.fps-1x' | 'perf.fps-4x', speedLabel: st
     ref: 'A10',
     expected: `median >= ${TARGETS.fpsMedianMin} fps, p95 interval <= ${TARGETS.p95IntervalMsMax} ms, none over ${TARGETS.maxIntervalMs} ms`,
     actual: `${s.frames} frames: median ${fps(s.medianFps)}, p95 ${ms(s.p95Ms)}, max ${ms(s.maxMs)}, ${s.over33} over ${TARGETS.maxIntervalMs} ms`,
-    ...(!enough ? { detail: `Only ${s.frames} playing frames were recorded (at least 60 needed): the fight clock did not advance long enough.` } : status === 'warn' ? { detail: SOFTWARE_NOTE } : {}),
+    ...(!enough
+      ? { detail: `Only ${s.frames} playing frames were recorded (at least 60 needed): the fight clock did not advance long enough.` }
+      : status === 'warn'
+        ? { detail: [SOFTWARE_NOTE, loadNote(load)].filter(Boolean).join(' ') }
+        : status === 'fail' && loadNote(load)
+          ? { detail: loadNote(load)! }
+          : {}),
   };
 }
 
@@ -262,24 +276,28 @@ export interface TokenProbe {
 export interface TokenCensus {
   expected: number;
   found: number;
-  /** Per unit: the candidate colour index that matched, or null. */
+  /** Per standing unit: the ring colour (candidate index) of its side when enough of it was found near the unit, else null; pixels = how many. */
   matches: { unit: number; side: 0 | 1; color: number | null; pixels: number }[];
-  /** Both sides each matched a single colour of their own. */
+  /** The candidate each side was assigned (home, away), or null when no assignment explained any token. The two always differ. */
+  assignment: [number, number] | null;
+  /** Both sides have an assigned ring colour of their own and every standing unit shows its side's. */
   sidesConsistent: boolean;
   missing: number[];
 }
 
 /**
- * For each standing unit, look within `radiusPx` of its projected centre for pixels near one of the candidate ring
- * colours (the side colours); a unit is drawn when at least `minPixels` match. A downed token is flattened and faded
- * (asset-006), so only standing units are required. Tolerant by design: the projection the driver uses may be a few
- * pixels off the viewer's.
+ * For each standing unit, count the pixels within `radiusPx` of its projected centre that are near each candidate ring colour.
+ * The picture decides which candidate belongs to which side: the pair (home colour, away colour), the two different, that
+ * lets the most standing units show enough of their own side's colour. A unit is drawn when at least `minPixels` of its
+ * side's colour are near it. Other colours near a token (the body, its trim, a zone disc, the other side's ring) do not count
+ * for or against it, so two clubs whose trims share a hue cannot swap the sides. A downed token is flattened and faded
+ * (asset-006), so only standing units are required. Tolerant by design: the projection the driver uses may be a few pixels
+ * off the viewer's.
  */
 export function tokenCensus(img: Rgba, probes: readonly TokenProbe[], candidates: readonly Rgb[], radiusPx: number, tolerance = 42, minPixels = 4): TokenCensus {
-  const matches: TokenCensus['matches'] = [];
-  for (const p of probes) {
-    if (!p.standing) continue;
-    const hits = new Array<number>(candidates.length).fill(0);
+  const standing = probes.filter((p) => p.standing);
+  const hits = standing.map((p) => {
+    const h = new Array<number>(candidates.length).fill(0);
     const r = Math.ceil(radiusPx);
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -290,26 +308,41 @@ export function tokenCensus(img: Rgba, probes: readonly TokenProbe[], candidates
         const o = (y * img.width + x) * 4;
         const px: Rgb = [img.data[o]!, img.data[o + 1]!, img.data[o + 2]!];
         candidates.forEach((c, i) => {
-          if (colorDistance(px, c) <= tolerance) hits[i]!++;
+          if (colorDistance(px, c) <= tolerance) h[i]!++;
         });
       }
     }
-    let best = -1;
-    let bestHits = 0;
-    hits.forEach((h, i) => {
-      if (h > bestHits) {
-        bestHits = h;
-        best = i;
-      }
-    });
-    matches.push({ unit: p.unit, side: p.side, color: bestHits >= minPixels ? best : null, pixels: bestHits });
+    return h;
+  });
+  // The assignment that lets the most units show their side's colour (ties: the most ring pixels in all).
+  let best: { pair: [number, number]; shown: number; pixels: number } | null = null;
+  for (let home = 0; home < candidates.length; home++) {
+    for (let away = 0; away < candidates.length; away++) {
+      if (home === away) continue;
+      let shown = 0;
+      let pixels = 0;
+      standing.forEach((p, i) => {
+        const n = hits[i]![p.side === 0 ? home : away]!;
+        pixels += n;
+        if (n >= minPixels) shown++;
+      });
+      if (shown > 0 && (!best || shown > best.shown || (shown === best.shown && pixels > best.pixels))) best = { pair: [home, away], shown, pixels };
+    }
   }
+  const matches: TokenCensus['matches'] = standing.map((p, i) => {
+    const color = best ? best.pair[p.side] : null;
+    const n = color === null ? 0 : hits[i]![color]!;
+    return { unit: p.unit, side: p.side, color: color !== null && n >= minPixels ? color : null, pixels: n };
+  });
   const found = matches.filter((m) => m.color !== null).length;
-  const colorsOf = (side: 0 | 1): Set<number> => new Set(matches.filter((m) => m.side === side && m.color !== null).map((m) => m.color!));
-  const home = colorsOf(0);
-  const away = colorsOf(1);
-  const sidesConsistent = home.size === 1 && away.size === 1 && [...home][0] !== [...away][0];
-  return { expected: matches.length, found, matches, sidesConsistent, missing: matches.filter((m) => m.color === null).map((m) => m.unit) };
+  return {
+    expected: matches.length,
+    found,
+    matches,
+    assignment: best ? best.pair : null,
+    sidesConsistent: best !== null && found === matches.length && matches.some((m) => m.side === 0) && matches.some((m) => m.side === 1),
+    missing: matches.filter((m) => m.color === null).map((m) => m.unit),
+  };
 }
 
 export function checkTokens(c: TokenCensus, label: string): CheckResult {
@@ -319,8 +352,8 @@ export function checkTokens(c: TokenCensus, label: string): CheckResult {
     title: `Ten tokens drawn with their side ring colours (${label})`,
     status: ok ? 'pass' : 'fail',
     ref: 'A11 checks',
-    expected: '10 standing tokens, each with a ring in its side colour (one colour a side, two sides differ)',
-    actual: `${c.found} of ${c.expected} found${c.missing.length ? `, missing units ${c.missing.join(', ')}` : ''}, sides ${c.sidesConsistent ? 'consistent' : 'not consistent'}`,
+    expected: '10 standing tokens, each with enough pixels of its own side\'s ring colour near it (the two sides\' colours differ)',
+    actual: `${c.found} of ${c.expected} found${c.missing.length ? `, missing units ${c.missing.join(', ')}` : ''}${c.assignment ? `, ring colours: home candidate ${c.assignment[0]}, away candidate ${c.assignment[1]}` : ', no ring colour matched any token'}`,
     ...(!ok ? { detail: 'The ring colours are looked up in a small window around each unit\'s projected position (the viewer\'s own projection when the hook has one, else a letterbox of the canvas with the default camera padding).' } : {}),
   };
 }

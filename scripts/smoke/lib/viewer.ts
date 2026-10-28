@@ -7,7 +7,7 @@
 import type { ArenaFrameState, ViewerStats } from '../../../src/render';
 import { letterboxProject, parseCssColor, type Rect, type Rgb, type TokenProbe } from './checks';
 import { SmokeFailure, sleep, type PageDriver } from './page';
-import { playingIntervals, stoppedAtEnd, type FrameSeries } from './stats';
+import { mainThreadLoad, playingIntervals, stoppedAtEnd, type FrameSeries, type MainThreadLoad } from './stats';
 
 export const REQUIRED_METHODS = ['frame', 'seek', 'play', 'pause', 'setSpeed', 'stats', 'logHash'] as const;
 
@@ -184,6 +184,8 @@ export interface PlayRunResult {
   restarts: number;
   resumes: number;
   playingFrames: number;
+  /** The page's main-thread load over the run, when the browser reported it. */
+  load: MainThreadLoad | null;
 }
 
 /**
@@ -193,6 +195,7 @@ export interface PlayRunResult {
  */
 export async function playFor(page: PageDriver, opts: { speed: 1 | 2 | 4; seconds: number; reload: () => Promise<unknown> }): Promise<PlayRunResult> {
   await setSpeed(page, opts.speed);
+  const m0 = await page.perfMetrics().catch(() => null);
   await page.probe('rafStart');
   await page.probe('rafMark', `play@${opts.speed}x`);
   await play(page);
@@ -222,10 +225,11 @@ export async function playFor(page: PageDriver, opts: { speed: 1 | 2 | 4; second
       still = 0;
     }
   }
+  const m1 = await page.perfMetrics().catch(() => null);
   const raw = await page.probe<{ t: number[]; tick: (number | null)[]; marks: { name: string; t: number }[] }>('rafStop');
   const series: FrameSeries = { t: raw.t, tick: raw.tick.map((k) => k ?? NaN) };
   await pause(page);
-  return { series, marks: raw.marks, restarts, resumes, playingFrames: playingIntervals(series, 5).length };
+  return { series, marks: raw.marks, restarts, resumes, playingFrames: playingIntervals(series, 5).length, load: m0 && m1 ? mainThreadLoad(m0, m1) : null };
 }
 
 // ---- The cursor-save trace -----------------------------------------------------------------------------------------
