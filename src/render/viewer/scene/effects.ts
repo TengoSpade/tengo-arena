@@ -450,6 +450,8 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
   const downed = e.kind === 'captain-down';
   const victim = e.unit !== null ? env.infoOf(e.unit) : undefined;
   const killer = e.target !== null ? env.infoOf(e.target) : undefined;
+  // The ability by name. An ability the content does not know is left out ("downed by X"): player text never shows an
+  // internal id (04).
   const ability = e.ability !== null ? (env.content.abilities.get(e.ability)?.name ?? null) : null;
   const who = victim?.className ?? 'Fighter';
   // One line per fallen fighter: a captain's down line carries the captain, a captain-down alone says so.
