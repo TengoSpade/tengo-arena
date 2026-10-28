@@ -101,6 +101,13 @@ export interface Chrome {
   track: number;
   /** Ring colour of a hard-controlled fighter. */
   grey: number;
+  /** A dark plate under canvas text: labels are always light-on-dark (the bitmap fonts carry a black outline). */
+  textPlate: number;
+  /**
+   * Canvas text colour for a palette colour: unchanged on the dark theme, lightened on the light theme (a dark fill
+   * would vanish into the fonts' black outline).
+   */
+  lift(color: number): number;
 }
 
 export function chromeFor(palette: ArenaPalette): Chrome {
@@ -110,5 +117,7 @@ export function chromeFor(palette: ArenaPalette): Chrome {
     outline: mixColor(palette.floor, dark ? 0x000000 : 0xffffff, 0.92),
     track: mixColor(palette.floor, dark ? 0x000000 : 0xffffff, 0.7),
     grey: mixColor(palette.textMuted, palette.floor, 0.45),
+    textPlate: mixColor(palette.floor, 0x000000, 0.8),
+    lift: dark ? (color) => color : (color) => mixColor(color, 0xffffff, 0.55),
   };
 }

@@ -16,7 +16,8 @@ import type { ContentDB } from '../../../core/content';
 import type { UnitIndex } from '../../../core/model';
 import { TELEGRAPH_MIN_TICKS } from '../../cues';
 import type { viewTransform as viewTransformFn } from '../../camera';
-import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, ArenaUnitInfo, CameraConfig, CueTable, StatusCue, TeamColors, UnitRenderState } from '../../types';
+import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, CameraConfig, CueTable, StatusCue, UnitRenderState } from '../../types';
+import { DESTROY_ALL } from '../destroy';
 import { FlashLimiter } from '../flash-limiter';
 import { chromeFor, type Chrome } from '../palette';
 import type { ArenaSkin, BodyFrame } from '../skin';
@@ -133,6 +134,7 @@ export class ArenaScene {
       chrome: this.chrome,
       cues: opts.cues,
       units: [],
+      zones: [],
       tick: 0,
       reducedMotion: this.reducedMotion,
       playing: false,
@@ -254,7 +256,7 @@ export class ArenaScene {
     this.fx.clear();
     this.limiter.reset();
     if (this.floor) {
-      this.floor.destroy({ children: true });
+      this.floor.destroy(DESTROY_ALL);
       this.floor = null;
     }
     this.markerG.clear();
@@ -283,6 +285,7 @@ export class ArenaScene {
     env.ppm = ppm;
     env.squash = squash;
     env.units = state.units;
+    env.zones = state.zones;
     env.tick = frame.tick;
     env.playing = frame.playing;
     env.nowMs = frame.nowMs;
@@ -411,7 +414,7 @@ export class ArenaScene {
     const settled = !this.easing;
     const changed = this.floor === null || this.floorArena !== arenaKey || (settled && Math.abs(ppm - this.floorPpm) > 0.01);
     if (!changed) return;
-    this.floor?.destroy({ children: true });
+    this.floor?.destroy(DESTROY_ALL);
     this.floor = this.opts.skin.createFloor(this.arena, ppm);
     this.floorPpm = ppm;
     this.floorArena = arenaKey;
@@ -470,7 +473,7 @@ export class ArenaScene {
       g.moveTo(x, y0).lineTo(x, y1).stroke({ width: 1.5, color: this.palette.text, alpha: 0.16 * alpha });
       const l = this.markerLabels[i]!;
       l.setText(m.row === 'front' ? 'Front row' : 'Back row');
-      l.setTint(this.palette.textMuted);
+      l.setTint(this.chrome.lift(this.palette.textMuted));
       l.view.position.set(x, y0 + 6);
       l.view.alpha = alpha * 0.9;
       l.view.visible = true;
@@ -566,15 +569,6 @@ export class ArenaScene {
     return this.tokens[unit];
   }
 
-  /** The unit info the scene was built for. */
-  unitInfo(unit: UnitIndex): ArenaUnitInfo | undefined {
-    return this.ctx?.units.find((u) => u.unit === unit);
-  }
-
-  sideColors(side: 0 | 1): TeamColors | null {
-    return this.ctx ? this.ctx.sides[side].colors : null;
-  }
-
   /** Release everything. */
   destroy(): void {
     if (this.destroyed) return;
@@ -586,7 +580,7 @@ export class ArenaScene {
     this.fx.destroy();
     for (const l of this.markerLabels) l.view.destroy();
     this.markerLabels.length = 0;
-    this.root.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
     this.opts.text.destroy();
   }
 

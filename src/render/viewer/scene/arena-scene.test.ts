@@ -3,7 +3,7 @@
  * order and bodies depth-sorted, visuals are reused by id, flashes and numbers are rate-limited, every effect kind
  * draws, and teardown leaves nothing behind. Text is a stub (no canvas 2D in happy-dom).
  */
-import { type Container } from 'pixi.js';
+import { Container, Graphics, type GraphicsContext } from 'pixi.js';
 import { describe, expect, it } from 'vitest';
 import type { ArenaFrameState, EffectKind, EffectRenderState, UnitRenderState } from '../../types';
 import { DEFAULT_CAMERA } from '../../camera';
@@ -276,6 +276,60 @@ describe('cues', () => {
     expect(h.scene.poolStats().effects).toBe(kinds.length);
   });
 
+  describe("who an effect is about (the render model unit and target convention)", () => {
+    const centre = (layer: number): { x: number; y: number; width: number } | null => {
+      const parent = (shownScene.scene.root.children[layer] as Container).children.find((c) => c.visible && c.children.length > 0);
+      if (!parent) return null;
+      const b = parent.getBounds();
+      return b.width > 0 ? { x: b.x + b.width / 2, y: b.y + b.height / 2, width: b.width } : null;
+    };
+    let shownScene: Headless;
+    const draw = async (effects: EffectRenderState[], reduced = false): Promise<void> => {
+      shownScene = await shown();
+      shownScene.core.seek(250);
+      if (reduced) shownScene.scene.setReducedMotion(true);
+      const state = { ...blankState(shownScene.core.currentState!), effects };
+      shownScene.scene.draw(state, { tick: 250, dtMs: 16, speed: 1, playing: true, nowMs: 50_000 });
+    };
+    const pos = (u: number) => shownScene.scene.tokenPosition(u)!;
+    const world = (u: number) => shownScene.core.currentState!.units[u]!;
+
+    it('draws a swing at the actor, toward the target (x,y is where it lands)', async () => {
+      await draw([effect({ id: 1, kind: 'swing', unit: 1, target: 7, x: 0, y: 0, age: 0.1 })]);
+      // x,y here is nonsense on purpose: the swing follows the actor and the target, not the event point.
+      const c = centre(7)!;
+      expect(Math.hypot(c.x - pos(1).x, c.y - pos(1).y)).toBeLessThan(Math.hypot(c.x - pos(7).x, c.y - pos(7).y));
+    });
+
+    it("draws a splash from the area of the ability: a circle of its size, a cone or line aimed at the target", async () => {
+      const w = world(1);
+      await draw([effect({ id: 2, kind: 'splash', unit: 1, target: 7, ability: 'a.fireball' as never, x: w.x, y: w.y, age: 0.1 })]);
+      const circle = centre(4)!;
+      const ppm = (Math.hypot(pos(1).x - pos(7).x, pos(1).y - pos(7).y) / Math.hypot(w.x - world(7).x, w.y - world(7).y)) * 100; // px per metre
+      expect(circle.width).toBeGreaterThan(2 * 2.6 * ppm * 0.9); // 260 cm radius
+      await draw([effect({ id: 3, kind: 'splash', unit: 1, target: 7, ability: 'a.cleave' as never, x: w.x, y: w.y, age: 0.1 })]);
+      const cone = centre(4)!;
+      const toward = { x: pos(7).x - pos(1).x, y: pos(7).y - pos(1).y };
+      expect((cone.x - pos(1).x) * toward.x + (cone.y - pos(1).y) * toward.y).toBeGreaterThan(0); // its mass lies toward the target
+    });
+
+    it('draws a deathward on the unit that was saved, and a displace from where it began to where the mover is now', async () => {
+      await draw([effect({ id: 4, kind: 'deathward', unit: 4, target: 9, age: 0.1 })]);
+      const ring = centre(4)!;
+      expect(Math.hypot(ring.x - pos(4).x, ring.y - pos(4).y)).toBeLessThan(Math.hypot(ring.x - pos(9).x, ring.y - pos(9).y));
+      const w = world(7);
+      await draw([effect({ id: 5, kind: 'displace', unit: 7, target: 1, x: w.x - 150, y: w.y, age: 0.1 })]);
+      const streak = centre(4)!;
+      expect(streak.x).toBeLessThan(pos(7).x); // the streak trails behind the mover
+    });
+
+    it('draws nothing for the motion-only cues under reduced motion (the model drops them too)', async () => {
+      const w = world(7);
+      await draw([effect({ id: 6, kind: 'displace', unit: 7, target: 1, x: w.x - 150, y: w.y }), effect({ id: 7, kind: 'heal-pulse', unit: 4, target: 3, tone: 'heal' })], true);
+      expect(centre(4)).toBeNull();
+    });
+  });
+
   it('names who went down, by whom and with what (vis-003)', async () => {
     const h = await shown();
     h.core.seek(305); // unit 6 (Duelist, away) downed by unit 1 (Duelist) with Shadowstep
@@ -459,6 +513,32 @@ describe('teardown (no growth over 20 rounds)', () => {
     expect(first.root.destroyed).toBe(true);
     expect(first.overlay.destroyed).toBe(true);
     expect(h.scene.poolStats()).toMatchObject({ zones: 0, telegraphs: 0, projectiles: 0, effects: 0 });
+  });
+
+  it('destroys the GPU-side context of every Graphics it frees (PixiJS only does with context: true; this leaked 0.65 MB a round)', async () => {
+    const h = await shown();
+    h.core.seek(320); // zones, telegraphs and cues in play
+    const owned = (root: Container): GraphicsContext[] => {
+      const out: GraphicsContext[] = [];
+      const walk = (c: Container): void => {
+        if (c instanceof Graphics) out.push(c.context);
+        for (const child of c.children) if (child instanceof Container) walk(child);
+      };
+      walk(root);
+      return out;
+    };
+    const tokenContexts = [0, 3, 6].flatMap((u) => [...owned(h.scene.tokenOf(u)!.root), ...owned(h.scene.tokenOf(u)!.overlay)]);
+    const bodyContexts = owned(h.scene.tokenOf(0)!.body.view);
+    expect(tokenContexts.length).toBeGreaterThan(30);
+    expect(bodyContexts.length).toBeGreaterThan(0);
+    await h.core.load(fakeLog(), fakeContext({ kind: 'replay' }));
+    expect(tokenContexts.every((c) => c.destroyed)).toBe(true);
+    expect(bodyContexts.every((c) => c.destroyed)).toBe(true);
+    const all = owned(h.scene.root);
+    expect(all.length).toBeGreaterThan(30);
+    h.core.destroy();
+    h.scene.destroy();
+    expect(all.every((c) => c.destroyed)).toBe(true);
   });
 
   it('tears the scene down once: destroy leaves no tokens, and drawing afterwards does nothing', async () => {

@@ -15,6 +15,7 @@
 import { Container, Graphics } from 'pixi.js';
 import type { ArenaPalette, ArenaUnitInfo, RoleId, StatusCue, TeamColors, UnitRenderState } from '../../types';
 import type { BodyFrame, BodyVisual } from '../skin';
+import { DESTROY_ALL } from '../destroy';
 import type { FlashLimiter } from '../flash-limiter';
 import { mixColor, type Chrome } from '../palette';
 import type { TextFactory, TextLabel } from './text';
@@ -180,7 +181,7 @@ export class Token {
     // Hit flash: a bright disc over the body (alpha animated).
     this.flashDisc.clear().circle(0, 0, r).fill({ color: 0xffffff });
     // Facing wedge: a small triangle just outside the ring, pointing east, rotated by the viewer's own mark.
-    const w = Math.max(5, r * 0.3);
+    const w = Math.max(6, r * 0.4);
     this.wedge.clear();
     this.wedge.poly([r + 3, 0, r - 1 - w * 0.2, -w * 0.62, r - 1 - w * 0.2, w * 0.62]).fill({ color: 0xffffff }).stroke({ width: 1.5, color: chrome.outline, join: 'round' });
     // Selection: a bright ring with a dark outline, clear of the side ring.
@@ -201,17 +202,17 @@ export class Token {
     this.castTrack.clear().rect(-BAR_W / 2 - 1, CAST_TOP - 1, BAR_W + 2, CAST_H + 2).fill({ color: chrome.outline, alpha: 0.85 });
     this.cast.clear().rect(0, 0, 1, CAST_H).fill({ color: 0xffffff });
     this.cast.tint = palette.warn;
-    this.badgePlate.clear().roundRect(-BADGE_W / 2, -BADGE_H / 2, BADGE_W, BADGE_H, 4).fill({ color: chrome.plate, alpha: 0.9 }).stroke({ width: 1, color: palette.text, alpha: 0.8 });
+    this.badgePlate.clear().roundRect(-BADGE_W / 2, -BADGE_H / 2, BADGE_W, BADGE_H, 4).fill({ color: chrome.textPlate, alpha: 0.92 }).stroke({ width: 1, color: chrome.lift(palette.text), alpha: 0.8 });
     this.badgePlate.position.set(-(BAR_W / 2 + 4 + BADGE_W / 2), ROW_CY);
     this.badge.view.position.copyFrom(this.badgePlate.position);
-    this.badge.setTint(palette.text);
+    this.badge.setTint(chrome.lift(palette.text));
     this.crown.clear().poly([-6, 4, -7, -5, -3, -1, 0, -7, 3, -1, 7, -5, 6, 4]).fill({ color: 0xffffff }).stroke({ width: 1.5, color: chrome.outline, join: 'round' });
     this.crown.tint = palette.text;
     this.crown.position.set(BAR_W / 2 + 4 + 7, ROW_CY);
     this.name.view.position.set(0, NAME_BOTTOM);
-    this.name.setTint(palette.text);
+    this.name.setTint(chrome.lift(palette.text));
     this.tag.view.position.set(0, TAG_BOTTOM);
-    this.tag.setTint(palette.warn);
+    this.tag.setTint(chrome.lift(palette.warn));
     for (const pip of this.pipSlots) pip.position.y = PIPS_CY;
     for (let i = 0; i < this.pipKeys.length; i++) this.pipKeys[i] = '';
 
@@ -226,11 +227,12 @@ export class Token {
     }
     this.glyphs = [];
     const roles = this.info.roles.slice(0, 2);
-    const size = roles.length > 1 ? r * 0.8 : r * 1.0;
+    // The plate stays well inside the disc so the side's body colour still shows around it.
+    const size = roles.length > 1 ? r * 0.5 : r * 0.72;
     const gap = size * 0.12;
     const total = roles.length * size + (roles.length - 1) * gap;
-    const plateW = total + size * 0.36;
-    const plateH = size + size * 0.36;
+    const plateW = total + size * 0.34;
+    const plateH = size + size * 0.34;
     this.plate.clear();
     if (roles.length > 0) {
       this.plate.roundRect(-plateW / 2, -plateH / 2, plateW, plateH, Math.min(plateH / 2, size * 0.34)).fill({ color: chrome.plate, alpha: 0.88 });
@@ -427,8 +429,8 @@ export class Token {
     if (this.destroyed) return;
     this.destroyed = true;
     this.body.destroy();
-    this.root.destroy({ children: true });
-    this.overlay.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
+    this.overlay.destroy(DESTROY_ALL);
   }
 }
 

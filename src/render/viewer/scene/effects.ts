@@ -14,6 +14,7 @@
 import { Container, Graphics } from 'pixi.js';
 import type { ContentDB } from '../../../core/content';
 import type { ArenaUnitInfo, EffectKind, EffectRenderState, UnitRenderState } from '../../types';
+import { DESTROY_ALL } from '../destroy';
 import type { FlashLimiter } from '../flash-limiter';
 import { KeyedPool } from '../pool';
 import { toneColor } from '../palette';
@@ -112,7 +113,7 @@ class EffectView {
   }
 
   destroy(): void {
-    this.root.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
   }
 }
 
@@ -224,8 +225,8 @@ export class EffectLayer {
     this.pools.low.clear();
     this.pools.high.clear();
     this.hosts.clear();
-    this.low.destroy({ children: true });
-    this.high.destroy({ children: true });
+    this.low.destroy(DESTROY_ALL);
+    this.high.destroy(DESTROY_ALL);
   }
 }
 
@@ -268,7 +269,7 @@ function floating(v: EffectView, e: EffectRenderState, env: FxEnv, text: string,
   v.g.clear();
   const l = v.label(size);
   l.setText(text);
-  l.setTint(color);
+  l.setTint(env.chrome.lift(color));
   const x = sx(env.map, e.x, e.y);
   const y = sy(env.map, e.x, e.y) - env.ppm * 0.9 - settle(env, rise * e.age, 0);
   l.view.position.set(x, y);
@@ -287,7 +288,7 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
   const side = victim ? env.sideColor(victim.side) : env.palette.text;
   const l = v.label('normal');
   l.setText(text);
-  l.setTint(env.palette.text);
+  l.setTint(env.chrome.lift(env.palette.text));
   const w = l.width + 16;
   const h = 20;
   const anchor = unitXY(env, e.unit) ?? { x: sx(env.map, e.x, e.y), y: sy(env.map, e.x, e.y) };
@@ -297,7 +298,7 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
   const y = Math.max(h / 2 + 4, anchor.y - above) + slot * (h + 4);
   const a = alpha * fade(e.age, 0.7);
   v.g.clear();
-  v.g.roundRect(x - w / 2, y - h / 2, w, h, 5).fill({ color: env.chrome.plate, alpha: 0.9 * a });
+  v.g.roundRect(x - w / 2, y - h / 2, w, h, 5).fill({ color: env.chrome.textPlate, alpha: 0.92 * a });
   v.g.roundRect(x - w / 2, y - h / 2, w, h, 5).stroke({ width: 2, color: side, alpha: a });
   l.view.position.set(x, y);
   l.view.alpha = a;
@@ -309,10 +310,12 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
 const DRAWERS: Record<EffectKind, Drawer> = {
   swing(v, e, env, alpha) {
     v.hideLabels();
-    const x = sx(env.map, e.x, e.y);
-    const y = sy(env.map, e.x, e.y);
-    const to = unitXY(env, e.target);
-    const aim = to ? Math.atan2(to.y - y, to.x - x) : 0;
+    // The event's x,y is where it lands (the target); the arc is drawn at the actor, toward it.
+    const from = unitXY(env, e.unit) ?? { x: sx(env.map, e.x, e.y), y: sy(env.map, e.x, e.y) };
+    const x = from.x;
+    const y = from.y;
+    const to = unitXY(env, e.target) ?? { x: sx(env.map, e.x, e.y), y: sy(env.map, e.x, e.y) };
+    const aim = Math.atan2(to.y - y, to.x - x);
     const sweep = 2.1;
     const color = toneColor(e.tone, env.palette);
     const r = env.ppm * 0.95;
@@ -354,6 +357,10 @@ const DRAWERS: Record<EffectKind, Drawer> = {
   },
   'heal-pulse'(v, e, env, alpha) {
     v.hideLabels();
+    if (env.reducedMotion) {
+      v.g.clear();
+      return;
+    }
     const p = unitXY(env, e.target ?? e.unit) ?? { x: sx(env.map, e.x, e.y), y: sy(env.map, e.x, e.y) };
     v.g.clear();
     ring(v.g, p.x, p.y, env.ppm * settle(env, 0.5 + 0.6 * e.age, 0.9), env.palette.good, alpha * fade(e.age), 3, env);
@@ -409,9 +416,10 @@ const DRAWERS: Record<EffectKind, Drawer> = {
   },
   displace(v, e, env, alpha) {
     v.hideLabels();
-    const p = unitXY(env, e.target ?? e.unit);
+    // x,y is where it began; unit is the one that moves (draw to where it is now).
+    const p = unitXY(env, e.unit ?? e.target);
     v.g.clear();
-    if (!p) return;
+    if (!p || env.reducedMotion) return;
     const x = sx(env.map, e.x, e.y);
     const y = sy(env.map, e.x, e.y);
     const a = alpha * 0.7 * fade(e.age);
@@ -482,12 +490,41 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     const x = sx(env.map, e.x, e.y);
     const y = sy(env.map, e.x, e.y);
     const color = toneColor(e.tone, env.palette);
+    const a = alpha * fade(e.age);
+    // The area is the ability's own: its cue's telegraph (circle, cone or line); a plain 0.9 m burst when it has none.
+    const tg = e.ability !== null ? env.cues.ability(e.ability).telegraph : null;
     v.g.clear();
-    v.g.circle(x, y, env.ppm * 0.9).fill({ color, alpha: alpha * 0.25 * fade(e.age) });
-    ring(v.g, x, y, env.ppm * 0.9, color, alpha * 0.8 * fade(e.age), 2, env);
+    if (tg && (tg.shape === 'cone' || tg.shape === 'line')) {
+      const to = unitXY(env, e.target);
+      const aim = to && (Math.abs(to.x - x) > 1 || Math.abs(to.y - y) > 1) ? Math.atan2(to.y - y, to.x - x) : 0;
+      const len = (tg.sizeCm / 100) * env.ppm;
+      if (tg.shape === 'cone') {
+        const half = tg.spread / 2;
+        v.g.moveTo(x, y).arc(x, y, len, aim - half, aim + half).closePath().fill({ color, alpha: a * 0.25 });
+        v.g.moveTo(x, y).arc(x, y, len, aim - half, aim + half).closePath().stroke({ width: 5, color: env.chrome.outline, alpha: a * 0.4 });
+        v.g.moveTo(x, y).arc(x, y, len, aim - half, aim + half).closePath().stroke({ width: 2, color, alpha: a * 0.9 });
+      } else {
+        const w = Math.max(4, ((tg.spread / 100) * env.ppm) / 2);
+        const px = -Math.sin(aim) * w;
+        const py = Math.cos(aim) * w;
+        const ex = x + Math.cos(aim) * len;
+        const ey = y + Math.sin(aim) * len;
+        const quad = [x + px, y + py, ex + px, ey + py, ex - px, ey - py, x - px, y - py];
+        v.g.poly(quad).fill({ color, alpha: a * 0.25 });
+        v.g.poly(quad).stroke({ width: 2, color, alpha: a * 0.9 });
+      }
+      return;
+    }
+    const r = tg && tg.shape === 'circle' ? (tg.sizeCm / 100) * env.ppm : env.ppm * 0.9;
+    v.g.circle(x, y, r).fill({ color, alpha: a * 0.25 });
+    ring(v.g, x, y, r, color, a * 0.8, 2, env);
   },
   'cooldown-reset'(v, e, env, alpha) {
     v.hideLabels();
+    if (env.reducedMotion) {
+      v.g.clear();
+      return;
+    }
     const p = unitXY(env, e.unit) ?? { x: sx(env.map, e.x, e.y), y: sy(env.map, e.x, e.y) };
     const s = 9 * settle(env, 1 - e.age * 0.5, 1);
     const y = p.y - env.ppm * 0.9;
@@ -496,6 +533,10 @@ const DRAWERS: Record<EffectKind, Drawer> = {
   },
   'focus-gain'(v, e, env, alpha) {
     v.hideLabels();
+    if (env.reducedMotion) {
+      v.g.clear();
+      return;
+    }
     const p = unitXY(env, e.unit ?? e.target);
     v.g.clear();
     if (!p) return;
@@ -507,19 +548,29 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     v.hideLabels();
     const x = sx(env.map, e.x, e.y);
     const y = sy(env.map, e.x, e.y);
+    // A pulse out to the edge of the zone it fired in (x,y is the zone's centre).
+    let radius = env.ppm * 0.8;
+    let best = Number.POSITIVE_INFINITY;
+    for (const z of env.zones) {
+      const d = Math.hypot(z.x - e.x, z.y - e.y);
+      if (d < best && d < 30) {
+        best = d;
+        radius = (z.radius / 100) * env.ppm;
+      }
+    }
     v.g.clear();
-    ring(v.g, x, y, env.ppm * settle(env, 0.4 + 0.7 * e.age, 0.8), toneColor(e.tone, env.palette), alpha * fade(e.age), 2.5, env);
+    ring(v.g, x, y, radius * settle(env, 0.5 + 0.5 * e.age, 1), toneColor(e.tone, env.palette), alpha * fade(e.age), 2.5, env);
   },
   down(v, e, env, alpha, slot) {
     callout(v, e, env, alpha, slot);
   },
   deathward(v, e, env, alpha) {
-    const p = unitXY(env, e.target ?? e.unit) ?? { x: sx(env.map, e.x, e.y), y: sy(env.map, e.x, e.y) };
+    const p = unitXY(env, e.unit ?? e.target) ?? { x: sx(env.map, e.x, e.y), y: sy(env.map, e.x, e.y) };
     v.g.clear();
     ring(v.g, p.x, p.y, env.ppm * settle(env, 0.5 + 0.9 * e.age, 1), env.palette.warn, alpha * fade(e.age), 3.5, env);
     const l = v.label('small');
     l.setText('Deathward');
-    l.setTint(env.palette.warn);
+    l.setTint(env.chrome.lift(env.palette.warn));
     l.view.position.set(p.x, p.y - env.ppm * 1.1);
     l.view.alpha = alpha * fade(e.age, 0.5);
   },
@@ -529,7 +580,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     ring(v.g, p.x, p.y, env.ppm * settle(env, 0.5 + 1.3 * e.age, 1.4), env.palette.text, alpha * fade(e.age), 3, env);
     const l = v.label('small');
     l.setText('Rally');
-    l.setTint(env.palette.text);
+    l.setTint(env.chrome.lift(env.palette.text));
     l.view.position.set(p.x, p.y - env.ppm * 1.1);
     l.view.alpha = alpha * fade(e.age, 0.5);
   },
@@ -541,8 +592,8 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     v.g.clear();
     ring(v.g, p.x, p.y, env.ppm * 0.8, env.palette.text, alpha * fade(e.age), 2.5, env);
     const l = v.label('small');
+    l.setTint(env.chrome.lift(env.palette.text));
     l.setText('Call');
-    l.setTint(env.palette.text);
     l.view.position.set(p.x, p.y - env.ppm * 1.1);
     l.view.alpha = alpha * fade(e.age, 0.5);
   },

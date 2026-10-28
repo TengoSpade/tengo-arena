@@ -9,8 +9,9 @@
  */
 import { Container, Graphics } from 'pixi.js';
 import type { AbilityCue, ArenaPalette, CueTable, ProjectileRenderState, TelegraphRenderState, UnitRenderState, ZoneRenderState } from '../../types';
+import { DESTROY_ALL } from '../destroy';
 import { KeyedPool } from '../pool';
-import { mixColor, toneColor, type Chrome } from '../palette';
+import { toneColor, type Chrome } from '../palette';
 import { sx, sy, type AffineMap } from './affine';
 
 /** What every world layer needs for a frame. Filled in by the scene; never allocated per frame. */
@@ -24,6 +25,8 @@ export interface WorldEnv {
   chrome: Chrome;
   cues: CueTable;
   units: readonly UnitRenderState[];
+  /** The zones in play (a zone-trigger pulse reaches to its zone's edge). */
+  zones: readonly ZoneRenderState[];
   tick: number;
   reducedMotion: boolean;
   playing: boolean;
@@ -47,7 +50,7 @@ class GroundMark {
     this.root.visible = false;
   }
   destroy(): void {
-    this.root.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
   }
 }
 
@@ -114,7 +117,7 @@ export class ZoneLayer {
   }
   destroy(): void {
     this.pool.clear();
-    this.root.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
   }
 }
 
@@ -131,7 +134,7 @@ class TelegraphMark {
     this.root.visible = false;
   }
   destroy(): void {
-    this.root.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
   }
 }
 
@@ -193,7 +196,7 @@ export class TelegraphLayer {
   }
   destroy(): void {
     this.pool.clear();
-    this.root.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
   }
 }
 
@@ -255,7 +258,7 @@ class ProjectileMark {
     this.root.visible = false;
   }
   destroy(): void {
-    this.root.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
   }
 }
 
@@ -318,11 +321,6 @@ export class ProjectileLayer {
   }
   destroy(): void {
     this.pool.clear();
-    this.root.destroy({ children: true });
+    this.root.destroy(DESTROY_ALL);
   }
-}
-
-/** A faded version of a colour for outlines on both themes (shared by the cue drawers). */
-export function dim(color: number, floor: number, t: number): number {
-  return mixColor(color, floor, t);
 }

@@ -152,7 +152,7 @@ export function createFakeTimeline(): FakeTimeline {
     keyMoments(index, _ctx, untilTick): readonly KeyMoment[] {
       calls.keyMoments.push(untilTick);
       const s = scriptOf(index);
-      const out: KeyMoment[] = s.downs.filter((d) => d.tick <= untilTick).map((d) => ({ tick: d.tick, seq: d.seq, kind: 'down' as const, unit: d.unit, target: d.by, ability: d.ability as never }));
+      const out: KeyMoment[] = s.downs.filter((d) => d.tick <= untilTick).map((d) => ({ tick: d.tick, seq: d.seq, kind: 'down' as const, unit: d.by, target: d.unit, ability: d.ability as never }));
       if (s.overtime !== null && s.overtime <= untilTick) out.push({ tick: s.overtime, seq: 9000, kind: 'overtime', unit: null, target: null, ability: null });
       if (s.end <= untilTick) out.push({ tick: s.end, seq: 9001, kind: 'end', unit: null, target: null, ability: null });
       return out.sort((a, b) => a.tick - b.tick);
@@ -263,7 +263,8 @@ function sample(s: Script, tickIn: number, reducedMotion: boolean): ArenaFrameSt
     const attacker = units[k % 10]!;
     const victim = units[(k * 3 + 5) % 10]!;
     const common = { unit: attacker.unit, target: victim.unit, x: victim.x, y: victim.y, tone: (k % 3 === 0 ? 'arcane' : 'physical') as EffectRenderState['tone'] };
-    add(1000 + k * 10, 'swing', start, 6, { ...common, x: attacker.x, y: attacker.y });
+    // As the real model: x,y is where it lands (the target); the viewer draws a swing at the actor.
+    add(1000 + k * 10, 'swing', start, 6, common);
     add(1001 + k * 10, 'impact', start + 2, 6, { ...common, crit: k % 7 === 0 });
     add(1002 + k * 10, 'number', start + 2, 14, { ...common, amount: 40 + (k % 5) * 11, crit: k % 7 === 0 });
     if (k % 4 === 1) add(1003 + k * 10, 'beam', start, 5, common);
@@ -272,7 +273,18 @@ function sample(s: Script, tickIn: number, reducedMotion: boolean): ArenaFrameSt
     if (k % 6 === 3) add(1006 + k * 10, 'evade', start + 2, 10, common);
     if (k % 8 === 4) add(1007 + k * 10, 'status-apply', start, 8, common);
     if (k % 9 === 5) add(1008 + k * 10, 'chain-arc', start, 8, common);
+    if (k % 6 === 0) add(1009 + k * 10, 'splash', start, 6, { ...common, ability: 'a.fireball' as never });
+    if (k % 7 === 3) add(1010 + k * 10, 'splash', start, 6, { ...common, ability: 'a.cleave' as never, x: attacker.x, y: attacker.y });
+    if (k % 11 === 4) add(1011 + k * 10, 'displace', start, 8, { ...common, unit: victim.unit, target: attacker.unit, x: victim.x - 120, y: victim.y });
   }
+  add(7000, 'zone-trigger', 200, 8, { unit: 4, ability: 'a.zone' as never, x: 1700, y: 900, tone: 'heal' });
+  add(7001, 'guard-link', 100, 80, { unit: 0, target: 1 });
+  add(7002, 'shield-gain', 195, 8, { unit: 4, target: 2, tone: 'shield' });
+  add(7003, 'cleanse', 350, 10, { unit: 4, target: 3, tone: 'heal' });
+  add(7004, 'dispel', 420, 10, { unit: 2, target: 7 });
+  add(7005, 'deathward', 450, 20, { unit: 4, target: 9, x: units[4]!.x, y: units[4]!.y });
+  add(7006, 'rally', 460, 16, { unit: 0, x: units[0]!.x, y: units[0]!.y });
+  add(7007, 'interrupt', 330, 8, { unit: 5, target: 3, x: units[3]!.x, y: units[3]!.y });
   for (const d of s.downs) add(5000 + d.seq, 'down', d.tick, 40, { unit: d.unit, target: d.by, ability: d.ability as never, x: units[d.unit]!.x, y: units[d.unit]!.y });
   const ended = tick >= s.end;
   return {
@@ -299,11 +311,19 @@ export function fakeContent(): ContentDB {
 }
 const ABILITY_NAMES: Record<string, string> = { 'a.shadowstep': 'Shadowstep', 'a.fireball': 'Fireball', 'a.cleave': 'Cleave' };
 
+const TELEGRAPHS: Record<string, AbilityCue['telegraph']> = {
+  'a.fireball': { shape: 'circle', sizeCm: 260, spread: 0, minTicks: 6 },
+  'a.cleave': { shape: 'cone', sizeCm: 320, spread: 1.2, minTicks: 6 },
+  'a.beam': { shape: 'line', sizeCm: 700, spread: 120, minTicks: 6 },
+};
+
+const STATUS_CATEGORY: Record<string, string> = { 's.stun': 'cc_hard', 's.slow': 'cc_soft', 's.haste': 'buff', 's.weak': 'debuff', 's.burn': 'dot', 's.regen': 'hot', 's.mark': 'special', 's.ward': 'shield' };
+
 /** A cue table with fixed answers (a real one comes from buildCueTable). */
 export function fakeCues(): CueTable {
   const ability = (id: string): AbilityCue => ({
     ability: id as never,
-    telegraph: null,
+    telegraph: TELEGRAPHS[id] ?? null,
     release: 'swing',
     effects: [],
     projectile: id === 'a.arrow' ? { sizePx: 12 } : null,
@@ -311,8 +331,9 @@ export function fakeCues(): CueTable {
     control: false,
   });
   const status = (id: string): StatusCue => {
-    const hard = id === 's.stun';
-    return { status: id, category: hard ? 'cc_hard' : 'buff', icon: hard ? 'stun' : 'buff', ring: hard ? 'grey' : 'none', priority: hard ? 10 : id === 's.mark' ? 2 : 5 };
+    const category = STATUS_CATEGORY[id] ?? 'buff';
+    const hard = category === 'cc_hard';
+    return { status: id, category, icon: category, ring: hard ? 'grey' : 'none', priority: hard ? 10 : id === 's.mark' ? 2 : id === 's.ward' ? 1 : 5 };
   };
   return { ability, status };
 }

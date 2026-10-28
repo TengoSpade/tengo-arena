@@ -12,6 +12,7 @@
  */
 import { Container, Graphics } from 'pixi.js';
 import type { ArenaPalette, ArenaUnitInfo, TeamColors, UnitRenderState } from '../../types';
+import { DESTROY_ALL } from '../../viewer/destroy';
 import { mixColor } from '../../viewer/palette';
 import type { ArenaSkin, BodyFrame, BodyVisual, SkinContext } from '../../viewer/skin';
 
@@ -63,7 +64,7 @@ class DiscBody implements BodyVisual {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    this.view.destroy({ children: true });
+    this.view.destroy(DESTROY_ALL);
   }
 }
 
@@ -117,7 +118,7 @@ class PlaceholderSkin implements ArenaSkin {
   }
 
   destroy(): void {
-    for (const floor of this.floors) if (!floor.destroyed) floor.destroy({ children: true });
+    for (const floor of this.floors) if (!floor.destroyed) floor.destroy(DESTROY_ALL);
     this.floors.clear();
     this.palette = null;
   }

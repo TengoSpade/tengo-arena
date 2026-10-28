@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arena viewer harness</title>
+    <!--
+      Dev harness for the PixiJS arena viewer (WP-M2D). Not part of the production build: nothing links here and the
+      root index.html does not import it. Serve with `npx vite --port 5299 --strictPort` and open
+      /src/render/viewer/dev/harness.html. Query: theme=dark|light, reduced=1, speed=1|2|4, play=1, tick=N,
+      labels=all, select=N. It drives the real viewer with the scripted fake Timeline (src/render/viewer/testing)
+      and exposes window.__harness for CDP drivers (canvas capture, fps, heap over 20 rounds).
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0e1013;
+        color: #ebe6da;
+        font: 13px/1.4 system-ui, sans-serif;
+      }
+      #host {
+        position: absolute;
+        inset: 0;
+      }
+      #bar {
+        position: absolute;
+        left: 8px;
+        top: 8px;
+        display: flex;
+        gap: 6px;
+        z-index: 2;
+      }
+      #bar button {
+        font: inherit;
+        padding: 2px 8px;
+      }
+      #hud {
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        z-index: 2;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="host"></div>
+    <div id="bar">
+      <button data-act="play">Play</button>
+      <button data-act="pause">Pause</button>
+      <button data-act="1">1x</button>
+      <button data-act="2">2x</button>
+      <button data-act="4">4x</button>
+      <button data-act="seek">Seek 320</button>
+    </div>
+    <div id="hud"></div>
+    <script type="module" src="./harness.ts"></script>
+  </body>
+</html>
