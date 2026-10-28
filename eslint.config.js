@@ -26,7 +26,9 @@ const LOCALE_METHODS = [
 
 export default defineConfig(
   {
-    ignores: ['dist/', 'coverage/', 'reports/', 'node_modules/', 'content/', 'docs/', 'src/ui/styles/'],
+    // `.claude/` holds agent worktrees (full sibling checkouts with their own eslint.config.js); linting into them
+    // fails with "multiple candidate TSConfigRootDirs" parse errors.
+    ignores: ['dist/', 'coverage/', 'reports/', 'node_modules/', 'content/', 'docs/', 'src/ui/styles/', '.claude/**'],
   },
   js.configs.recommended,
   tseslint.configs.recommended,
