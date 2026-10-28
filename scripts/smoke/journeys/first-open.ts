@@ -36,10 +36,19 @@ export interface PrefetchSeen {
 /** Wait (at most 10 s) for the viewer chunks to appear in the resource timing, then a second for an idle callback to finish. */
 export const WAIT_FOR_PREFETCH = `(async () => {
   const names = ${JSON.stringify(VIEWER_CHUNKS)};
-  const find = (n) => performance.getEntriesByType('resource').find((e) => { const p = e.name.split('?')[0]; return p.includes('/assets/' + n + '-') && p.endsWith('.js'); });
+  // The family's biggest file: PixiJS emits a 60-byte re-export beside WebGLRenderer, and viewer-factory also starts with "viewer-".
+  const find = (n) => {
+    let best = null;
+    for (const e of performance.getEntriesByType('resource')) {
+      const p = e.name.split('?')[0];
+      if (!p.includes('/assets/' + n + '-') || !p.endsWith('.js') || p.includes('/assets/viewer-factory-')) continue;
+      if (!best || e.decodedBodySize > best.decodedBodySize) best = e;
+    }
+    return best && best.decodedBodySize >= 10240 && best.responseEnd > 0 ? best : null;
+  };
   const t0 = performance.now();
   while (performance.now() - t0 < 10000) {
-    if (names.every((n) => { const e = find(n); return !!e && e.responseEnd > 0; })) break;
+    if (names.every((n) => find(n) !== null)) break;
     await new Promise((r) => setTimeout(r, 100));
   }
   await new Promise((r) => setTimeout(r, 1000));
@@ -47,7 +56,7 @@ export const WAIT_FOR_PREFETCH = `(async () => {
   const chunks = {};
   for (const n of names) {
     const e = find(n);
-    chunks[n] = e ? { startedAgoMs: Math.round(now - e.startTime), endedAgoMs: Math.round(now - e.responseEnd), kB: Math.round((e.encodedBodySize || 0) / 1024) } : null;
+    chunks[n] = e ? { startedAgoMs: Math.round(now - e.startTime), endedAgoMs: Math.round(now - e.responseEnd), kB: Math.round(e.decodedBodySize / 1024) } : null;
   }
   return { chunks, waitedMs: Math.round(now - t0) };
 })()`;
