@@ -11,6 +11,10 @@
  * match being shown (prepare), within the texture budget (05-technical-m2 §A10: 32 MB, prepare ≤ 300 ms from the
  * local bundle), so 42 classes × 3 layers are never resident at once.
  *
+ * The role glyph sits on the viewer's glyph plate (ArenaPalette.plate; about a third of the disc, 05-technical-m2
+ * §A18), drawn above the body, so a club colour that equals a role hue never hides the glyph: the plate is the
+ * viewer's mark, not the skin's, and stays over sprites too.
+ *
  * The viewer positions bodies and never rotates or mirrors them: a body chooses its own direction or frame from
  * UnitRenderState.facing (fixed-direction sprites in a 3/4 view must not be rotated; a placeholder disc may rotate
  * its own wedge-free shape or not at all).

@@ -11,6 +11,11 @@
              OS prefers-reduced-motion setting applies automatically)
 
    Spec: docs/design/_drafts/04-presentation.md section 3 and Notes for implementers.
+   Arena (M2): the --c-arena-*, --c-fx-*, --c-pip-*, --glyph-pip-* and
+   --arena-* groups are consumed by the DOM HUD and by the PixiJS viewer. The
+   canvas never parses this file: the host reads the computed values once per
+   theme or motion change and passes a palette object. Guide and the token
+   table: docs/design/mockups/arena-notes.md; mock: mockups/arena.html.
    ========================================================================== */
 
 :root {
@@ -121,6 +126,44 @@
   --bust-elf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 10.5c6.3 0 11.3 5 11.3 11.3l7.7-6.8-6.2 11.6C43.4 32.4 38.4 36 32 36s-11.4-3.6-12.8-9.4L13 15l7.7 6.8c0-6.3 5-11.3 11.3-11.3z'/%3E%3Cpath d='M12 64c0-13 9-21.5 20-21.5S52 51 52 64z'/%3E%3C/svg%3E");
   --bust-dwarf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='24' r='11'/%3E%3Cpath d='M20.5 26h23c0 10-5 18.5-11.5 18.5S20.5 36 20.5 26z'/%3E%3Cpath d='M3 64c0-12 12.5-19.5 29-19.5S61 52 61 64z'/%3E%3C/svg%3E");
   --bust-orc: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M19 21c0-7.5 5.8-12.5 13-12.5S45 13.5 45 21v7c0 6.5-5.8 11-13 11s-13-4.5-13-11z'/%3E%3Cpath d='M5 64c0-14.5 12-23.5 27-23.5S59 49.5 59 64z'/%3E%3C/svg%3E");
+
+  /* ---- Arena (M2): status pip glyphs and motion/geometry, same in both themes
+     Filled 24 px silhouettes like the role glyphs, drawn on a small chip, so a
+     pip is told from a role glyph by chip, silhouette and place. Control is an
+     octagon (hard = filled with a bar, soft = ring), buff and debuff are
+     opposed double chevrons, damage-over-time a drop, heal-over-time a heart,
+     special a spark. The data-pip mapping is at the end of this file. */
+  --glyph-pip-buff: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 10.2 12 1.6l9 8.6-2.6 2.6L12 6.8l-6.4 6zM3 19.2l9-8.6 9 8.6-2.6 2.6-6.4-6-6.4 6z'/%3E%3C/svg%3E");
+  --glyph-pip-debuff: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 13.8l9 8.6 9-8.6-2.6-2.6-6.4 6-6.4-6zM3 4.8l9 8.6 9-8.6-2.6-2.6-6.4 6-6.4-6z'/%3E%3C/svg%3E");
+  --glyph-pip-control-hard: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M8.2 2h7.6L22 8.2v7.6L15.8 22H8.2L2 15.8V8.2zM6.5 10.2v3.6h11v-3.6z'/%3E%3C/svg%3E");
+  --glyph-pip-control-soft: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M8.2 2h7.6L22 8.2v7.6L15.8 22H8.2L2 15.8V8.2zM9 5.6 5.6 9v6L9 18.4h6l3.4-3.4V9L15 5.6z'/%3E%3C/svg%3E");
+  --glyph-pip-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.8c3.9 4.9 6.6 8.3 6.6 11.9a6.6 6.6 0 0 1-13.2 0c0-3.6 2.7-7 6.6-11.9z'/%3E%3C/svg%3E");
+  --glyph-pip-hot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21.5C5.2 15.8 2.5 12.4 2.5 8.7A5.1 5.1 0 0 1 12 6.3a5.1 5.1 0 0 1 9.5 2.4c0 3.7-2.7 7.1-9.5 12.8z'/%3E%3C/svg%3E");
+  --glyph-pip-special: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5l2.5 8 8 2.5-8 2.5-2.5 8-2.5-8-8-2.5 8-2.5z'/%3E%3C/svg%3E");
+
+  /* Arena geometry, effects and motion. The canvas converts: px and ms are read
+     as numbers, rem sizes are measured once by the host (a probe element) so
+     --ui-scale reaches the canvas labels, bars and pips (04 section 9). */
+  --arena-ring-w: 3.5px;          /* the player's side ring (solid), in CSS px at any zoom, so it stays legible at 35 px/m */
+  --arena-ring-line: 2px;         /* each line of the opponent's double ring (the gap between them is --arena-ring-gap) */
+  --arena-ring-gap: 1.5px;        /* plate-coloured keyline between ring and body and outside the ring */
+  --arena-down-opacity: 0.4;      /* downed body (asset-006) */
+  --arena-zone-alpha: 0.22;       /* zone floor disc in the owner's ring colour */
+  --arena-telegraph-fill: 0.16;   /* telegraph area, alpha of the caster's ring colour */
+  --arena-telegraph-edge: 0.9;    /* telegraph outline alpha */
+  --arena-telegraph-progress: 0.3;/* growing inner fill; stays under reduced motion, it is information */
+  --arena-hit-flash-alpha: 0.7;
+  --arena-hit-flash-ms: 90ms;
+  --arena-flash-limit: 3;         /* flashes per second per fighter, always (04 section 9; no full-screen flashes) */
+  --arena-fx-fade-ms: 400ms;      /* an effect is gone within this at 1x (05-technical-m2 A5; the UI designer owns it) */
+  --arena-number-merge-ms: 100ms; /* at most one floating number per fighter per window; hits inside it merge */
+  --arena-number-rise: 0.9rem;    /* floating number drift; 0 under reduced motion (numbers fade in place) */
+  --arena-pulse-ms: 220ms;        /* rule badge pulse on a new decision (04 section 7) */
+  --arena-ease-ms: 220ms;         /* camera zoom ease (04 section 4) */
+  --arena-motion: 1;              /* 1 = animate, 0 = reduced motion (set below) */
+  --arena-label-size: var(--fs-xs);
+  --arena-pip-size: 1rem;         /* pip chip, square; 4 at most above the HP bar */
+  --arena-bar-h: 0.4rem;          /* HP bar height; shield rides on it, the focus bar is 60% of it */
 }
 
 /* ==========================================================================
@@ -212,6 +255,31 @@
   --c-side-us: #e6b866;
   --c-side-them: #a7b4c6;
 
+  /* Arena (M2). Canvas overlays sit on a near-black plate with parchment ink in
+     this theme, so every mark has a known background whatever the floor and
+     the club colours do. Pairs checked in mockups/arena-notes.md. */
+  --c-arena-floor: #3e3a32;      /* warm stone, flat; every ring and body colour reaches 3:1 on it */
+  --c-arena-wall: #716857;       /* boundary band; 3.3:1 against the page background */
+  --c-arena-line: #5a5448;       /* centre line, row markers; faint on purpose (1.5:1) */
+  --c-arena-plate: #14161a;      /* glyph plate, bar track, pip chip, label chip, keyline */
+  --c-arena-ink: #ebe6da;        /* text and HP fill on the plate */
+  --c-arena-edge: #8d897f;       /* hairline around bar tracks; 3:1 on the floor */
+  --c-arena-hp: #ebe6da;         /* neutral parchment, no red or green meaning */
+  --c-arena-track: var(--c-arena-plate);
+  --c-arena-shield: #8fd6ee;     /* drawn hatched, beyond the HP fill */
+  --c-arena-focus: #b8a8f7;      /* the thin bar under the HP bar */
+  --c-arena-select: var(--c-focus);
+  --c-arena-telegraph: #fff0cf;  /* progress fill and cast bar; the area itself takes the caster's ring colour */
+  --c-arena-hit-flash: #ffffff;
+  --c-fx-physical: #f2e6c8;      /* hit tone: swing, spark, number */
+  --c-fx-arcane: #a98bff;
+  --c-fx-true: #ffffff;
+  --c-fx-heal: var(--c-good);
+  --c-fx-shield: var(--c-arena-shield);
+  --c-pip-buff: #96eddc;
+  --c-pip-debuff: #b6c24a;
+  --c-pip-control: #c58ef7;
+
   /* Shadows */
   --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.42), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
@@ -298,6 +366,29 @@
   --c-side-us: #8a5a12;
   --c-side-them: #4a5a70;
 
+  /* Arena (M2), light theme: a vellum floor, cream plates and dark ink. */
+  --c-arena-floor: #eee7d6;
+  --c-arena-wall: #857a64;
+  --c-arena-line: #cfc4a8;
+  --c-arena-plate: #fbf8ee;
+  --c-arena-ink: #1d1c19;
+  --c-arena-edge: #5b5445;
+  --c-arena-hp: #1d1c19;
+  --c-arena-track: var(--c-arena-plate);
+  --c-arena-shield: #0f6b86;
+  --c-arena-focus: #5b3fc4;
+  --c-arena-select: var(--c-focus);
+  --c-arena-telegraph: #2b2418;
+  --c-arena-hit-flash: #ffffff;
+  --c-fx-physical: #4a3b22;
+  --c-fx-arcane: #5a2fd0;
+  --c-fx-true: #15130f;
+  --c-fx-heal: var(--c-good);
+  --c-fx-shield: var(--c-arena-shield);
+  --c-pip-buff: #087a6b;
+  --c-pip-debuff: #76680a;
+  --c-pip-control: #7437d0;
+
   --shadow-1: 0 1px 2px rgba(60, 48, 30, 0.08);
   --shadow-2: 0 6px 18px rgba(60, 48, 30, 0.14);
   --shadow-3: 0 24px 60px rgba(40, 30, 15, 0.25), 0 0 0 1px rgba(40, 30, 15, 0.06);
@@ -319,6 +410,25 @@
 [data-role="controller"] { --role-c: var(--c-role-controller); --role-glyph: var(--glyph-controller); }
 [data-role="healer"]  { --role-c: var(--c-role-healer);  --role-glyph: var(--glyph-healer); }
 
+/* Arena status pip: data-pip on a .apip chip. Category -> pip (all 34 statuses):
+   cc_hard control-hard, cc_soft control-soft, buff buff, debuff debuff, dot dot,
+   hot hot, special special. The shield category has no pip (the bar segment). */
+[data-pip="buff"]         { --pip-c: var(--c-pip-buff);    --pip-glyph: var(--glyph-pip-buff); }
+[data-pip="debuff"]       { --pip-c: var(--c-pip-debuff);  --pip-glyph: var(--glyph-pip-debuff); }
+[data-pip="control-hard"] { --pip-c: var(--c-pip-control); --pip-glyph: var(--glyph-pip-control-hard); }
+[data-pip="control-soft"] { --pip-c: var(--c-pip-control); --pip-glyph: var(--glyph-pip-control-soft); }
+[data-pip="dot"]          { --pip-c: var(--c-pip-debuff);  --pip-glyph: var(--glyph-pip-dot); }
+[data-pip="hot"]          { --pip-c: var(--c-pip-buff);    --pip-glyph: var(--glyph-pip-hot); }
+[data-pip="special"]      { --pip-c: var(--c-arena-ink);   --pip-glyph: var(--glyph-pip-special); }
+
+/* Arena damage tone: data-tone on a number or impact. Shape also differs
+   (physical = angular spark, arcane = round burst, true = diamond). */
+[data-tone="physical"] { --tone-c: var(--c-fx-physical); }
+[data-tone="arcane"]   { --tone-c: var(--c-fx-arcane); }
+[data-tone="true"]     { --tone-c: var(--c-fx-true); }
+[data-tone="heal"]     { --tone-c: var(--c-fx-heal); }
+[data-tone="shield"]   { --tone-c: var(--c-fx-shield); }
+
 /* Rating band: data-band="1..4" (computed in code from the TUNABLE thresholds) */
 [data-band="1"] { --band: var(--c-band-1); --band-bg: var(--c-band-1-bg); --band-on: var(--c-text); }
 [data-band="2"] { --band: var(--c-band-2); --band-bg: var(--c-band-2-bg); --band-on: var(--c-text); }
@@ -333,6 +443,11 @@
     --dur-fast: 0ms;
     --dur-base: 0ms;
     --dur-slow: 0ms;
+    --arena-hit-flash-ms: 0ms;
+    --arena-pulse-ms: 0ms;
+    --arena-ease-ms: 0ms;
+    --arena-number-rise: 0px;
+    --arena-motion: 0;
   }
 }
 :root[data-motion="reduced"] {
@@ -340,7 +455,19 @@
   --dur-fast: 0ms;
   --dur-base: 0ms;
   --dur-slow: 0ms;
+  --arena-hit-flash-ms: 0ms;
+  --arena-pulse-ms: 0ms;
+  --arena-ease-ms: 0ms;
+  --arena-number-rise: 0px;
+  --arena-motion: 0;
 }
+/* Arena under reduced motion (04 section 9, 05-technical-m2 A9): no pulses, no
+   trails, no hit flashes, no floating numbers (a number appears and fades in
+   place over --arena-fx-fade-ms), no camera ease, effects at their end state.
+   Telegraph progress stays, it is information. Flashing never exceeds
+   --arena-flash-limit a second and nothing shakes. The viewer receives
+   reducedMotion as a boolean (OS setting OR the in-game setting); these tokens
+   mirror it for the DOM parts and for hosts that read them. */
 
 /* Density: data-density="compact" on <html> or any container */
 [data-density="compact"] {

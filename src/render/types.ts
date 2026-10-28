@@ -344,6 +344,87 @@ export interface ArenaPalette {
   /** Hit tones (designer token request: physical, arcane). */
   fxPhysical: number;
   fxArcane: number;
+  // ---- Added by the M2 design review (05-technical-m2 §A18; tokens.css arena group, mockups/arena-notes.md §2, §3).
+  // The UI host reads them from computed style once per theme, motion or interface-scale change. ----
+  /** --c-arena-plate: the role-glyph plate, bar tracks, pip chips, label chips and keylines (every overlay sits on it). */
+  plate: number;
+  /** --c-arena-ink: text on the plate (labels, numbers' fill on the plate stroke). */
+  ink: number;
+  /** --c-arena-edge: hairline around bar tracks (the track alone is under 3:1 on the floor). */
+  edge: number;
+  /** --c-arena-line: centre line and row markers (faint on purpose). */
+  line: number;
+  /** --c-arena-hp: the HP fill, neutral (no red or green meaning). */
+  hp: number;
+  /** --c-arena-track: the bar track. */
+  track: number;
+  /** --c-arena-shield: the shield segment (drawn hatched, after the HP fill). */
+  shield: number;
+  /** --c-arena-focus: the thin focus bar. */
+  focus: number;
+  /** --c-arena-select: the selection corner brackets (= --c-focus). */
+  select: number;
+  /** --c-arena-telegraph: telegraph progress fill and the cast bar (the area itself takes the caster's ring colour). */
+  telegraph: number;
+  /** --c-arena-hit-flash: the hit wash on a body. */
+  hitFlash: number;
+  /** --c-fx-true, --c-fx-heal (follows the status-palette option), --c-fx-shield: the other hit and gain tones. */
+  fxTrue: number;
+  fxHeal: number;
+  fxShield: number;
+  /** --c-pip-* per pip kind (special = --c-arena-ink): the pip glyph and its chip outline. */
+  pipColor: Readonly<Record<PipKind, number>>;
+  /** The --glyph-pip-* tokens decoded to SVG markup, like roleGlyphSvg. */
+  pipGlyphSvg: Readonly<Record<PipKind, string>>;
+  /** The numeric --arena-* tokens. */
+  metrics: ArenaMetrics;
+}
+
+/**
+ * The UI designer's status pip kinds (tokens.css data-pip). A status shows the pip of its category: cc_hard
+ * control-hard, cc_soft control-soft, buff, debuff, dot, hot, special; the shield category has none (the bar segment).
+ */
+export type PipKind = 'buff' | 'debuff' | 'control-hard' | 'control-soft' | 'dot' | 'hot' | 'special';
+
+/**
+ * The numeric --arena-* tokens, converted by the host: px and ms as numbers, unitless as numbers, rem sizes
+ * measured once in CSS px (so --ui-scale reaches the canvas). Values under reduced motion are the reduced ones
+ * (hitFlashMs, pulseMs, easeMs and numberRisePx are 0); fxFadeMs stays (numbers fade in place).
+ */
+export interface ArenaMetrics {
+  /** --arena-ring-w: the player's solid side ring, CSS px at any zoom. */
+  ringWidthPx: number;
+  /** --arena-ring-line: each line of the opponent's double ring. */
+  ringLinePx: number;
+  /** --arena-ring-gap: the gap of the double ring and the plate keylines. */
+  ringGapPx: number;
+  /** --arena-down-opacity (asset-006: 0.4). */
+  downOpacity: number;
+  /** --arena-zone-alpha: zone floor disc in the owner's ring colour. */
+  zoneAlpha: number;
+  /** --arena-telegraph-fill, -edge, -progress. */
+  telegraphFillAlpha: number;
+  telegraphEdgeAlpha: number;
+  telegraphProgressAlpha: number;
+  /** --arena-hit-flash-alpha, --arena-hit-flash-ms. */
+  hitFlashAlpha: number;
+  hitFlashMs: number;
+  /** --arena-flash-limit: flashes a second per fighter, at any speed (04 §9). */
+  flashLimitPerSecond: number;
+  /** --arena-fx-fade-ms: an effect is gone within this at 1x. */
+  fxFadeMs: number;
+  /** --arena-number-merge-ms: at most one floating number per fighter per window. */
+  numberMergeMs: number;
+  /** --arena-number-rise, measured. */
+  numberRisePx: number;
+  /** --arena-pulse-ms: the rule badge pulse. */
+  pulseMs: number;
+  /** --arena-ease-ms: the camera ease. */
+  easeMs: number;
+  /** --arena-label-size, --arena-pip-size, --arena-bar-h, measured. */
+  labelSizePx: number;
+  pipSizePx: number;
+  barHeightPx: number;
 }
 
 /** A club's two colours from clubs.json (`colors.primary`, `colors.secondary`) as 0xRRGGBB. */
@@ -384,6 +465,8 @@ export interface StatusCue {
   ring: 'grey' | 'pulse' | 'none';
   /** Higher shows first when space is short (at most 4 pips). */
   priority: number;
+  /** Added by the M2 design review (§A18): the pip this status shows (its category's), or null for the shield category. */
+  pip: PipKind | null;
 }
 
 export interface CueTable {
