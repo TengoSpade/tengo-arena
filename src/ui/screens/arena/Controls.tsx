@@ -24,6 +24,7 @@ export function ArenaControls({
   capTicks,
   marks,
   statusNote,
+  saveNote,
   statusSlot,
   dockOpen,
   onToggleDock,
@@ -39,6 +40,8 @@ export function ArenaControls({
   marks: readonly FeedItem[];
   /** "Kael Dunmere was downed": the cause of an automatic pause, shown beside its tag. */
   statusNote: string | null;
+  /** The last cursor save failed: a quiet note (the next stop retries). */
+  saveNote?: boolean;
   /** A replay's round tabs. */
   statusSlot?: ComponentChildren;
   dockOpen: boolean;
@@ -85,10 +88,13 @@ export function ArenaControls({
               {statusNote && <span data-testid="status-note">{statusNote}</span>}
             </>
           ) : stop?.kind === 'end' ? (
-            <span class="tag">
-              <Icon name="check" size="sm" />
-              {t('statusOver')}
-            </span>
+            <>
+              <span class="tag">
+                <Icon name="check" size="sm" />
+                {t('statusOver')}
+              </span>
+              {statusNote && <span data-testid="status-note">{statusNote}</span>}
+            </>
           ) : sn.playing ? (
             <span class="tag tag--good" data-testid="status-live">
               <Icon name="eye" size="sm" />
@@ -104,6 +110,11 @@ export function ArenaControls({
             </>
           )
         ) : null)}
+      {saveNote && (
+        <span class="u-faint" role="status" data-testid="status-save">
+          {t('saveNote')}
+        </span>
+      )}
     </div>
   );
 
@@ -119,7 +130,7 @@ export function ArenaControls({
         aria-valuemin={0}
         aria-valuemax={Math.round(span * TICK_S)}
         aria-valuenow={Math.round(tick * TICK_S)}
-        aria-valuetext={live ? t('scrubLiveValue', { time: clock(tick * TICK_S) }) : t('scrubReplayValue', { time: clock(tick * TICK_S), end: clock(span * TICK_S) })}
+        aria-valuetext={live ? (behind ? t('scrubLiveBehind', { time: clock(tick * TICK_S), behind: clock((head - tick) * TICK_S) }) : t('scrubLiveValue', { time: clock(tick * TICK_S) })) : t('scrubReplayValue', { time: clock(tick * TICK_S), end: clock(span * TICK_S) })}
         aria-disabled={ready ? undefined : 'true'}
         data-testid="arena-scrubber"
         data-span={Math.round(span)}

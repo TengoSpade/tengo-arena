@@ -9,7 +9,12 @@ import { resetToasts } from '../../components';
 import { createDevEngine } from '../../debug/dev-engine';
 import { TestProviders, createTestStore } from '../../debug/test-store';
 import type { GameEngine } from '../../store/engine';
+import { resetViewerPrefetch } from '../arena/viewer-factory';
 import BetweenRoundsScreen from './index';
+
+// The viewer entry is a stand-in: PixiJS never loads into happy-dom (the prefetch test below only counts the calls).
+const viewerEntry = vi.hoisted(() => ({ prefetchViewerChunks: vi.fn(async () => undefined), createArenaViewer: vi.fn() }));
+vi.mock('../../../render/viewer', () => viewerEntry);
 
 let dispose: (() => void) | null = null;
 beforeEach(() => {
@@ -272,3 +277,37 @@ describe('Between-round screen', () => {
 });
 
 void asId<FighterId>;
+
+describe('the viewer prefetch from the between-round screen (A10: the next round opens warm)', () => {
+  const idle: (() => void)[] = [];
+  const realIdle = window.requestIdleCallback;
+  beforeEach(() => {
+    viewerEntry.prefetchViewerChunks.mockClear();
+    resetViewerPrefetch();
+    idle.length = 0;
+    vi.stubEnv('MODE', 'development');
+    window.requestIdleCallback = ((fn: () => void) => idle.push(fn)) as unknown as typeof window.requestIdleCallback;
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    window.requestIdleCallback = realIdle;
+  });
+  const watchMode = (mode: 'watch' | 'simulate') => (_s: GameState, ms: MatchState) => {
+    (ms as { watch?: unknown }).watch = { mode, round: null, cursorTick: 0, calls: [] };
+  };
+
+  it('a watched match warms the viewer chunks at idle while the player decides his swaps', async () => {
+    setup({ prepare: watchMode('watch') });
+    expect(viewerEntry.prefetchViewerChunks).not.toHaveBeenCalled();
+    await act(async () => {
+      idle.splice(0).forEach((fn) => fn());
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(viewerEntry.prefetchViewerChunks).toHaveBeenCalledTimes(1);
+  });
+
+  it('a simulated match does not', async () => {
+    setup({ prepare: watchMode('simulate') });
+    expect(idle).toHaveLength(0);
+  });
+});

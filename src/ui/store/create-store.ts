@@ -112,7 +112,7 @@ export interface AppStore extends GameStore {
   quickSave(): Promise<Result<SaveMeta, SaveError>>;
   /**
    * M2: the round autosave (auto-round) of the player's match, now. The arena writes it when playback stops (the
-   * cursor, tech-019). A failure is reported like any save failure (a toast); the caller does not retry.
+   * cursor, tech-019). A failure is returned to the caller quietly (no toast): the arena notes it in its status and retries at the next stop.
    */
   saveRound(): Promise<Result<SaveMeta | null, SaveError>>;
   /** Clear lastError after it was shown. */
@@ -481,10 +481,13 @@ export function createGameStore(platform: StorePlatform): AppStore {
     return writeSlot(slot, undefined, 'auto');
   };
 
-  /** The round autosave on demand (the arena's cursor save at a stop); null = skipped (a ticket reproduction). */
+  /**
+   * The round autosave on demand (the arena's cursor save at a stop); null = skipped (a ticket reproduction). A failure is
+   * returned to the caller, not raised as a toast: the arena says it quietly in its status and tries again at the next stop.
+   */
   const saveRound = async (): Promise<Result<SaveMeta | null, SaveError>> => {
-    if (!game.value) return fail({ code: 'save.storage', message: 'no game' });
-    return autosave('round');
+    if (!game.value) return err({ code: 'save.storage', message: 'no game' });
+    return autosave('round', true);
   };
 
   const load: GameStore['load'] = async (slotId) => {

@@ -9,10 +9,11 @@
  * A restores the suggestions, N clears them, Enter / Space plays on. Swaps ask once before playing
  * ("a fighter swapped out cannot return").
  */
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { BetweenRoundSideView } from '../../../core/game';
 import type { FighterId, StartingRow, SwapDecision } from '../../../core/model';
 import { afterMatch } from '../../app/after-match';
+import { retryNextRound, showLockFailedToast } from '../../app/lock-failed';
 import { useMounted } from '../../app/mounted';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
@@ -22,6 +23,7 @@ import { freshInfo, ratingNow } from '../../m11/model';
 import { FreshMeter, RatingEff } from '../../m11/parts';
 import { MATCH_PAUSED, MATCH_WATCHING, SAVE_ROUND_FAILED, useStore, type AppStore } from '../../store';
 import { useArena } from '../../store/arena';
+import { usePrefetchViewer } from '../arena/viewer-factory';
 import { errorText } from '../../store/messages';
 import { useEngine } from '../../store/engine';
 import { useMatchDay } from '../../store/match-day';
@@ -41,6 +43,8 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   const content = store.content.value;
   const view = state ? md.betweenRoundView(state) : null;
   const ms = state?.liveMatch ?? null;
+  // The next round of a watched match opens the arena: warm its chunks at idle while the player decides his swaps.
+  usePrefetchViewer(ms?.watch?.mode === 'watch');
   const sideKey = view?.playerSide ?? null;
   const mine: BetweenRoundSideView | null = view && sideKey ? view[sideKey] : null;
   const theirs: BetweenRoundSideView | null = view && sideKey ? view[sideKey === 'home' ? 'away' : 'home'] : null;
@@ -49,8 +53,12 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   const [plan, setPlan] = useState<SwapDecision[]>(() => [...(mine?.suggestions ?? [])]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A new step (the next round played): start again from its suggestions.
+  // A new step (the next round played): start again from its suggestions. The step key is empty for a moment while the next
+  // round's lock is written; coming back to the SAME step (a failed write) is not a new step and keeps the plan.
+  const lastStep = useRef(stepKey);
   useEffect(() => {
+    if (!stepKey || stepKey === lastStep.current) return;
+    lastStep.current = stepKey;
     setPlan([...(mine?.suggestions ?? [])]);
     setError(null);
   }, [stepKey]);
@@ -75,14 +83,18 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
         return;
       }
       const res = await store.advance();
+      // The lock could not be saved (nothing started): a toast with Retry, the Squad path's, said even when the screen is gone. The
+      // lock was in memory while the write ran, so this screen showed nothing; its state is not where the message can live.
+      if (!res.ok && res.error.code === SAVE_ROUND_FAILED) {
+        showLockFailedToast(() => void retryNextRound(store));
+        return;
+      }
       // Gone while the round was played (Back, another screen): the state has moved on; Continue reads where the match stands.
       if (!mounted.current) return;
       if (res.ok) afterMatch(store.game.value, res.value);
-      // M2: a watched match opens the next round in the arena (after its lock was saved); a lock that could not be
-      // saved stays here, with Continue as the retry.
+      // M2: a watched match opens the next round in the arena (after its lock was saved).
       else if (res.error.code === MATCH_WATCHING) navigate('#/arena');
-      else if (res.error.code === SAVE_ROUND_FAILED) setError(errorText(res.error));
-      else if (res.error.code !== MATCH_PAUSED) setError(res.error.message);
+      else if (res.error.code !== MATCH_PAUSED) setError(errorText(res.error));
     } finally {
       setBusy(false);
     }
@@ -116,6 +128,17 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   });
 
   if (!state || !content || !view || !mine || !theirs || !ms || !sideKey) {
+    // The next round's lock is in memory while its write runs, so the between-round view is gone for that moment: say so, not
+    // "No match is waiting" (a failed write puts the view back, and the toast has the Retry).
+    if (busy) {
+      return (
+        <section class="page" data-testid="screen-between-rounds" aria-busy="true">
+          <p class="u-muted" role="status" data-testid="br-locking">
+            {t('locking')}
+          </p>
+        </section>
+      );
+    }
     return (
       <section class="page" data-testid="screen-between-rounds">
         <Empty icon="swords" title={t('noMatch')} text={t('noMatchText')} actions={<a class="btn" href="#/home">{t('home')}</a>} />

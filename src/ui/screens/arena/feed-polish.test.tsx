@@ -8,7 +8,7 @@ import { fixtureContent } from '../../../core/testkit';
 import type { KeyMoment } from '../../../render';
 import { liveWatchState, roundPlaybackOf, watchWorld } from '../../debug/arena-test-world';
 import { buildRoundContext } from './context';
-import { feedItems } from './feed';
+import { decidingDown, feedItems } from './feed';
 import { readArenaPalette } from './palette';
 import { ArenaFeed } from './Panels';
 
@@ -119,5 +119,26 @@ describe('the feed is one roving tab stop', () => {
     render(<ArenaFeed items={[]} kind="live" playheadTick={0} onJump={vi.fn()} />);
     expect(screen.queryAllByTestId('feed-item')).toHaveLength(0);
     expect(screen.getByTestId('feed-empty')).toBeTruthy();
+  });
+});
+
+describe('decidingDown: the down that ended the round, from the moments at the end tick', () => {
+  const m = (seq: number, tick: number, kind: KeyMoment['kind'], target: number | null): KeyMoment => ({ tick, seq, kind, unit: 7, target, ability: null });
+
+  it('the last down, when it is on the end tick (or the tick before)', () => {
+    const moments = [m(1, 100, 'down', 2), m(2, 400, 'down', 3), m(3, 400, 'captain-down', 3), m(4, 600, 'overtime', null)];
+    expect(decidingDown(moments, 400)?.target).toBe(3);
+    expect(decidingDown(moments, 401)?.target).toBe(3);
+    expect(decidingDown([...moments, m(5, 600, 'down', 4)], 600)?.target).toBe(4);
+  });
+
+  it('nothing before the end is known, and a round that ended some time after its last down has none (the time cap)', () => {
+    expect(decidingDown([m(1, 400, 'down', 3)], null)).toBeNull();
+    expect(decidingDown([m(1, 400, 'down', 3)], 1000)).toBeNull();
+    expect(decidingDown([], 1000)).toBeNull();
+  });
+
+  it('of two downs on the end tick, the later one (by seq) is the deciding down', () => {
+    expect(decidingDown([m(7, 500, 'down', 1), m(8, 500, 'down', 2)], 500)?.target).toBe(2);
   });
 });

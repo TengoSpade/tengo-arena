@@ -27,6 +27,7 @@ import { t as uiT } from '../../text';
 import { registerArenaTicketInfo } from '../../tickets/arena-info';
 import { ArenaLayout } from './Arena';
 import { buildHud, buildRoundContext, fightInputOf } from './context';
+import { decidingDown, momentText } from './feed';
 import { readArenaPalette } from './palette';
 import { ROUND_END_MS, RoundEndOverlay, resetRoundEnd, roundEnd, type RoundEndResult } from './RoundEnd';
 import { recallStop, rememberStop, type StopAt } from './resume-cause';
@@ -39,7 +40,7 @@ const TICK_S = 0.05;
 export const watchingOf = watchingMatch;
 
 /** The finished round for the card: winner, match score (the player's side first), time and what opens next, from committed state only. */
-function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId, round: number, report: WeekReport | null): RoundEndResult | null {
+export function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId, round: number, report: WeekReport | null, decidingDown: string | null = null): RoundEndResult | null {
   const ms = state.liveMatch && state.liveMatch.fixtureId === fixtureId ? state.liveMatch : null;
   const result = state.results[fixtureId];
   const rounds = ms ? ms.rounds : (result?.rounds ?? []);
@@ -53,7 +54,8 @@ function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId
   const playerAway = state.playerClubId !== null && state.playerClubId === awayId;
   const involved = playerHome || playerAway;
   const ours = involved ? (r.winner === 'home') === playerHome : null;
-  const [a, b] = playerAway ? [score.away, score.home] : [score.home, score.away];
+  // Home first, as the HUD and the report have it, whichever side the player is on.
+  const [a, b] = [score.home, score.away];
   const matchOver = ms === null;
   const winnerName = (winnerId ? state.clubs[winnerId]?.name : undefined) ?? winnerId ?? '';
   const seconds = r.durationTicks * TICK_S;
@@ -61,11 +63,12 @@ function roundOutcome(state: GameState, content: ContentDB, fixtureId: FixtureId
     winner: winnerName,
     ours,
     score: [a, b],
-    winnerFirst: involved ? ours === true : r.winner === 'home',
+    winnerFirst: r.winner === 'home',
     time: clock(seconds),
     overtime: seconds >= content.combat.overtime.startS,
     reason: r.endReason,
     standing: r.survivors[r.winner],
+    decidingDown: r.endReason === 'elimination' ? decidingDown : null,
     who: involved ? (ours ? uiText('whoOurs') : uiText('whoTheirs')) : ((winnerId ? state.clubs[winnerId]?.shortName : undefined) ?? winnerName),
     matchOver,
     next: matchOver ? (report && opensReport(state, report) ? 'report' : 'home') : ms.watch?.round != null ? 'kickoff' : 'between',
@@ -244,6 +247,8 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
   const stopAt = (cursor: number): StopAt => ({ career: String(state.rng.root), fixtureId, round, cursor });
   const resumedStop = useMemo(() => (startTick > 0 ? recallStop(stopAt(startTick)) : null), []);
 
+  // The last cursor save failed for a real reason (not merely a busy store, which retries without a word): a quiet note.
+  const [saveFailed, setSaveFailed] = useState(false);
   const persistCursor = (viewer: ArenaViewer, stop: StopKind): void => {
     // The reveal frontier: an integer tick at or beyond everything shown (tech-019); a rewind never lowers it.
     const head = Math.ceil(viewer.headTick);
@@ -255,13 +260,20 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
         cursorSaved.value = Math.max(cursorSaved.value, head);
         // The cause travels with the cursor it belongs to: an automatic pause is recalled on resume, any other stop clears it.
         rememberStop(stopAt(head), stop.kind === 'auto' ? stop.stop : null);
-      } else lastSaved.current = before;
+        setSaveFailed(false);
+      } else {
+        lastSaved.current = before;
+        if (r.error.code !== 'engine.busy') setSaveFailed(true);
+      }
     });
   };
 
   /** Show the committed round for 1.5 s, then open what comes next. */
   const showResult = (after: GameState, next: () => void, report: WeekReport | null = null): void => {
-    const result = roundOutcome(after, content, fixtureId, round, report);
+    // The end stop carries no cause (WP-M2D): the card names the deciding down from the moments the viewer has shown, at the end tick.
+    const v = session.viewer();
+    const down = v ? decidingDown(v.keyMoments(), v.endTick) : null;
+    const result = roundOutcome(after, content, fixtureId, round, report, down ? momentText(down, ctx, content) : null);
     roundEnd.value = { phase: 'result', round, bestOf: ctx.bestOf, result, next, retry: null };
   };
 
@@ -395,6 +407,7 @@ function LiveRound({ store, content, fixtureId, round, loaded, hostRef }: { stor
       probe={(tick) => arena.inspect(store.game.value ?? state, fixtureId, round, tick)}
       cursorSaved={cursorSaved}
       busy={busy}
+      saveNote={saveFailed}
       onSkip={askSkip}
       onSimulateRest={askSimulate}
       onEscape={askLeave}
