@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arena screen · Arena League mockup</title>
+<link rel="stylesheet" href="../../../src/ui/styles/tokens.css">
+<link rel="stylesheet" href="../../../src/ui/styles/base.css">
+<link rel="stylesheet" href="../../../src/ui/styles/components.css">
+<style>
+  /* Mock-only chrome (not part of the game) and the club colour pairs after the 3:1 nudge. */
+  :root { --mock-h: 2.6rem; }
+  .mockbar { display: flex; align-items: center; gap: var(--sp-3); height: var(--mock-h); padding: 0 var(--sp-3); background: var(--c-surface-2); border-bottom: 1px solid var(--c-border-strong); font-size: var(--fs-xs); overflow-x: auto; white-space: nowrap; }
+  .mockbar strong { font-family: var(--font-display); font-size: var(--fs-md); }
+  .mockbar .segmented > button { height: 1.6rem; }
+  .mockbar__sep { width: 1px; height: 1.3rem; background: var(--c-border-strong); flex: none; }
+  .mockbar .select-wrap { width: 10rem; }
+  .mockbar .btn { height: 1.8rem; }
+  /* "Show focus rings": the curated elements show the same ring :focus-visible draws. Real keyboard focus works too. */
+  body.demo-focus [data-demo-focus] { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: var(--r-sm); }
+  body.demo-focus .arena-canvas[data-demo-focus] { outline: none; }
+  body.demo-focus .arena-canvas[data-demo-focus] .arena-wall { outline: 2px solid var(--c-focus); outline-offset: 3px; }
+  body.demo-focus .ascrub[data-demo-focus] { outline-offset: 0; }
+  .club-tw { --body-a: #609076; --body-b: #b8893a; }
+  :root[data-theme="light"] .club-tw { --body-a: #2f5d46; --body-b: #a77a2b; }
+  .club-cj { --body-a: #d16834; --body-b: #E4E7EA; }
+  :root[data-theme="light"] .club-cj { --body-a: #A3420F; --body-b: #808385; }
+</style>
+</head>
+<body>
+<div class="mockbar" role="toolbar" aria-label="Mock controls, not part of the game">
+  <strong>Arena screen</strong><span class="u-faint">mock · EXAMPLE data</span>
+  <span class="mockbar__sep"></span>
+  <div class="segmented" role="group" aria-label="Screen state" id="state-switch">
+    <button type="button" aria-pressed="false" data-state-btn="play">Play match</button>
+    <button type="button" aria-pressed="false" data-state-btn="live">Live</button>
+    <button type="button" aria-pressed="true" data-state-btn="paused">Paused + inspector</button>
+    <button type="button" aria-pressed="false" data-state-btn="round-end">Round end</button>
+    <button type="button" aria-pressed="false" data-state-btn="replay">Replay</button>
+  </div>
+  <span class="mockbar__sep"></span>
+  <button class="btn btn--sm" type="button" data-action="theme"><span class="icon" data-icon="sun" aria-hidden="true"></span>Theme</button>
+  <button class="btn btn--sm" type="button" id="toggle-motion" aria-pressed="false" data-tip="Sets data-motion=reduced: no pulses, no hit flash, the round-end timer is static.">Reduce motion</button>
+  <button class="btn btn--sm" type="button" id="toggle-focus" aria-pressed="false" data-tip="Draws the keyboard focus ring on the canvas, the scrubber, Pause and Watch. Tab shows the real one.">Show focus rings</button>
+  <label class="u-faint" for="cvd">Color vision</label>
+  <span class="select-wrap"><select class="select select--sm" id="cvd"><option value="none">Typical</option><option value="deutan">Deuteranopia (sim)</option><option value="protan">Protanopia (sim)</option><option value="tritan">Tritanopia (sim)</option><option value="gray">Grayscale</option></select></span>
+  <a class="btn btn--sm btn--ghost" href="index.html">Mockups</a>
+</div>
+
+<div class="arena-screen" id="arena" data-state="paused" style="height: calc(100dvh - var(--mock-h))">
+  <!-- ===== HUD: 56 px strip. Crests, score pips, round, clock, standing, speed, pause (DOM, fed by onFrame at 10 Hz or less) ===== -->
+  <header class="ahud" aria-label="Match status">
+    <div class="ahud__side" data-side="us">
+      <span class="crest crest--md" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true">TW</span>
+      <div class="ahud__who"><span class="ahud__name">Thornwick Wardens</span><span class="ahud__sub">You · <span data-only="live paused replay">3 of 5 standing</span><span data-only="round-end" hidden>0 of 5 standing</span></span></div>
+      <span class="ahud__pips" role="img" aria-label="Rounds won: 1 of 2" data-tip="Rounds won: 1. First to 2 takes the match."><i class="spip is-won"></i><i class="spip"></i></span>
+    </div>
+    <div class="ahud__center" data-only="live paused replay">
+      <div class="ahud__round"><span class="ahud__round-label">Round 2 of 3</span><span class="ahud__clock" role="timer" aria-label="Fight time 0:27" data-tip="Fight time. Overtime starts at 0:45.">0:27</span></div>
+    </div>
+    <div class="ahud__center" data-only="round-end" data-overtime="true" hidden>
+      <div class="ahud__round"><span class="ahud__round-label">Round 2 of 3</span><span class="ahud__clock" role="timer" aria-label="Fight time 0:52, overtime">0:52</span></div>
+      <span class="tag tag--warn ahud__ot" data-tip="Overtime from 0:45: damage ramps up, healing ramps down, until the 75 s cap."><span class="icon" data-icon="clock" aria-hidden="true"></span>Overtime</span>
+    </div>
+    <div class="ahud__side ahud__side--away" data-side="them">
+      <span class="crest crest--md" style="--crest-a:#A3420F;--crest-b:#E4E7EA" aria-hidden="true">CJ</span>
+      <div class="ahud__who"><span class="ahud__name">Cinderpan Cinderjacks</span><span class="ahud__sub"><span data-only="live paused replay">5 of 5 standing</span><span data-only="round-end" hidden>2 of 5 standing</span></span></div>
+      <span class="ahud__pips" role="img" aria-label="Rounds won: 0 of 2" data-tip="Rounds won: 0."><i class="spip" data-only="live paused replay"></i><i class="spip is-won" data-only="round-end" hidden></i><i class="spip"></i></span>
+    </div>
+    <div class="ahud__controls">
+      <span class="tag tag--accent" data-only="replay" hidden data-tip="A replay of a played round: the result is already recorded."><span class="icon" data-icon="play" aria-hidden="true"></span>Replay</span>
+      <button class="btn btn--sm btn--ghost" type="button" data-only="replay" hidden data-tip="Back to the match report (Esc)"><span class="icon" data-icon="chevron-left" aria-hidden="true"></span>Report <kbd>Esc</kbd></button>
+      <span class="ahud__calls" hidden>Calls left 2</span>
+      <div class="segmented" role="group" aria-label="Playback speed"><button type="button" aria-pressed="false" data-speed="1" aria-label="Speed 1x" data-tip="Speed 1x (key 1)">1x</button><button type="button" aria-pressed="true" data-speed="2" aria-label="Speed 2x" data-tip="Speed 2x (key 2)">2x</button><button type="button" aria-pressed="false" data-speed="4" aria-label="Speed 4x" data-tip="Speed 4x (key 4)">4x</button></div>
+      <button class="btn" type="button" data-only="live" hidden data-demo-focus data-act="pause" data-tip="Pause (Space). Pausing is free and unlimited."><span class="icon" data-icon="pause" aria-hidden="true"></span>Pause <kbd>Space</kbd></button>
+      <button class="btn btn--primary" type="button" data-only="paused replay" data-act="play" data-tip="Play (Space)"><span class="icon" data-icon="play" aria-hidden="true"></span>Play <kbd>Space</kbd></button>
+      <button class="btn" type="button" data-only="round-end" hidden aria-disabled="true" data-tip="The round is over."><span class="icon" data-icon="pause" aria-hidden="true"></span>Pause <kbd>Space</kbd></button>
+    </div>
+  </header>
+
+  <div class="arena-body" data-dock="open">
+    <div class="arena-main">
+      <!-- ===== Stage: the canvas (letterboxed 16:9, 32 x 18 m) with DOM overlays above it ===== -->
+      <section class="arena-stage" aria-label="Arena">
+        <div data-only="live paused replay" style="display:contents">
+        <div class="arena-canvas" role="img" tabindex="0" data-demo-focus aria-label="Arena, round 2, 0:27. Thornwick Wardens 3 of 5 standing, Cinderpan Cinderjacks 5 of 5 standing. Kael Dunmere was downed by Cato Vell. Ysolde Varn is selected.">
+          <span class="arena-wall"></span>
+          <i class="arena-line" style="--at:5"></i><i class="arena-line" style="--at:9"></i>
+          <i class="arena-line arena-line--centre" style="--at:16"></i>
+          <i class="arena-line" style="--at:23"></i><i class="arena-line" style="--at:27"></i>
+          <i class="azone" data-side="them" style="--x:9.4;--y:6.5;--r:1.5" title="Bear Trap"></i>
+          <i class="atele" data-side="them" style="--x:14.4;--y:8.9;--r:1.9;--p:0.6"></i>
+          <i class="aproj" data-tone="arcane" style="--x:17.4;--y:5.5;--ang:180"></i>
+          <i class="aimpact" data-tone="physical" style="--x:14.55;--y:9.15"></i>
+          <span class="anum" data-tone="physical" style="--x:16.3;--y:7.3">−38</span>
+          <i class="aimpact" data-tone="arcane" style="--x:8.95;--y:5.75"></i>
+          <span class="anum" data-tone="arcane" data-crit="true" style="--x:6.8;--y:6.6">−64</span>
+          <span class="anum" data-tone="heal" style="--x:12.3;--y:8.0">+45</span>
+          <span class="acallout" data-side="them" style="--x:18.4;--y:11.9">Kael Dunmere downed by Cato Vell · Flurry</span>
+          <div class="atoken club-tw is-cc" data-side="us" style="--x:8.4;--y:5.2;--face:0;--hp:0.88;--sh:0.12;--fo:0.7;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="ranged"></i></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R2</span><i class="apip" data-pip="control-hard"></i></span><span class="abars"><span class="abar"><i class="abar__hp"></i><i class="abar__shield"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-cj" data-side="them" style="--x:26.2;--y:5.6;--face:180;--hp:1;--sh:0;--fo:0.6;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="ranged"></i></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R2</span></span><span class="abars"><span class="abar"><i class="abar__hp"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-tw is-down" data-side="us" style="--x:15;--y:6.6;--face:0;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="melee"></i></span><i class="adown"></i></div>
+          <div class="atoken club-cj" data-side="them" style="--x:19.4;--y:8.2;--face:180;--hp:0.71;--sh:0.2;--fo:0.3;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="tank"></i></span><span class="atoken__crown" title="Captain"></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R1</span><i class="apip" data-pip="buff"></i></span><span class="abars"><span class="abar"><i class="abar__hp"></i><i class="abar__shield"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-cj" data-side="them" style="--x:27.8;--y:8.6;--face:180;--hp:1;--sh:0;--fo:0.3;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="healer"></i></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R1</span></span><span class="abars"><span class="abar"><i class="abar__hp"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-tw is-hit" data-side="us" style="--x:14.1;--y:8.7;--face:0;--hp:0.58;--sh:0;--fo:0.55;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="tank"></i></span><span class="atoken__crown" title="Captain"></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R3</span><i class="apip" data-pip="buff"></i><i class="apip" data-pip="dot"></i><i class="apip" data-pip="debuff"></i></span><span class="abars"><span class="abar"><i class="abar__hp"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-tw is-down" data-side="us" style="--x:18.2;--y:10.4;--face:0;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="melee"></i></span><i class="adown"></i></div>
+          <div class="atoken club-cj" data-side="them" style="--x:17.6;--y:11;--face:180;--hp:0.83;--sh:0;--fo:0.45;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="melee"></i></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R1</span><i class="apip" data-pip="buff"></i></span><span class="abars"><span class="abar"><i class="abar__hp"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-cj" data-side="them" style="--x:25;--y:11.8;--face:180;--hp:1;--sh:0;--fo:0.35;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="controller"></i></span><span class="atoken__stack"><span class="acast" style="--p:0.6"><span>Bear Trap</span></span><span class="apips" style="gap:3px"><span class="arule">R3</span></span><span class="abars"><span class="abar"><i class="abar__hp"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-tw" data-side="us" style="--x:9.6;--y:12.2;--face:0;--hp:1;--sh:0;--fo:0.4;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="healer"></i></span><span class="atoken__sel"></span><span class="atoken__stack"><span class="alabel">Ysolde Varn</span><span class="apips" style="gap:3px"><span class="arule">R4</span><i class="apip" data-pip="hot"></i></span><span class="abars"><span class="abar"><i class="abar__hp"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+        </div>
+        </div>
+        <div data-only="round-end" hidden style="display:contents">
+        <div class="arena-canvas" role="img" tabindex="0" aria-label="Arena, round 2 over at 0:52. Cinderpan Cinderjacks win the round. Thornwick Wardens 0 of 5 standing, Cinderpan Cinderjacks 2 of 5 standing.">
+          <span class="arena-wall"></span>
+          <i class="arena-line" style="--at:5"></i><i class="arena-line" style="--at:9"></i>
+          <i class="arena-line arena-line--centre" style="--at:16"></i>
+          <i class="arena-line" style="--at:23"></i><i class="arena-line" style="--at:27"></i>
+
+          <div class="atoken club-tw is-down is-cc" data-side="us" style="--x:8.4;--y:5.2;--face:0;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="ranged"></i></span><i class="adown"></i></div>
+          <div class="atoken club-cj is-down" data-side="them" style="--x:24.6;--y:6.4;--face:180;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="ranged"></i></span><i class="adown"></i></div>
+          <div class="atoken club-tw is-down" data-side="us" style="--x:15;--y:6.6;--face:0;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="melee"></i></span><i class="adown"></i></div>
+          <div class="atoken club-tw is-down is-hit" data-side="us" style="--x:13.2;--y:9;--face:0;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="tank"></i></span><i class="adown"></i></div>
+          <div class="atoken club-cj is-down" data-side="them" style="--x:27;--y:9;--face:180;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="healer"></i></span><i class="adown"></i></div>
+          <div class="atoken club-cj" data-side="them" style="--x:15.8;--y:9.2;--face:180;--hp:0.22;--sh:0;--fo:0.3;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="tank"></i></span><span class="atoken__crown" title="Captain"></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R1</span></span><span class="abars"><span class="abar"><i class="abar__hp"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-tw is-down" data-side="us" style="--x:18.2;--y:10.4;--face:0;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="melee"></i></span><i class="adown"></i></div>
+          <div class="atoken club-cj" data-side="them" style="--x:24;--y:11;--face:180;--hp:0.6;--sh:0;--fo:0.35;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="controller"></i></span><span class="atoken__stack"><span class="apips" style="gap:3px"><span class="arule">R3</span></span><span class="abars"><span class="abar"><i class="abar__hp"></i></span><span class="abar abar--focus"><i class="abar__hp"></i></span></span></span></div>
+          <div class="atoken club-cj is-down" data-side="them" style="--x:13.4;--y:11.6;--face:180;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="melee"></i></span><i class="adown"></i></div>
+          <div class="atoken club-tw is-down" data-side="us" style="--x:11;--y:12.6;--face:0;"><span class="atoken__wedge"></span><span class="atoken__body"></span><span class="atoken__plate"><i class="role-glyph" data-role="healer"></i></span><i class="adown"></i></div>
+        </div>
+        </div>
+        <!-- Round-end overlay: non-blocking; any key skips it; then the between-round screen opens by itself (A7) -->
+        <div class="around" data-only="round-end" hidden role="status">
+          <div class="around__card">
+            <span class="around__kicker">Round 2 of 3 · Overtime · 0:52</span>
+            <span class="around__title">Cinderpan Cinderjacks win the round</span>
+            <span class="around__score" aria-label="Match score 1 to 1"><span>1</span><span class="u-faint">–</span><span>1</span></span>
+            <span class="around__sub">Won by elimination: 2 of theirs standing. The match goes to round 3.</span>
+            <span class="around__foot"><span>Any key skips this card</span><span>Next, the between-round screen opens: <kbd>Enter</kbd> plays round 3</span></span>
+            <span class="around__timer" aria-hidden="true"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Transport: live (0 to the head, never past it) ===== -->
+      <div class="atransport" data-only="live paused round-end">
+        <div class="atransport__status">
+          <span data-only="live"><span class="tag tag--good"><span class="icon icon--sm" data-icon="eye" aria-hidden="true"></span>Live</span></span>
+          <span data-only="paused" hidden><span class="tag tag--warn"><span class="icon icon--sm" data-icon="pause" aria-hidden="true"></span>Paused automatically</span> <span class="col-narrow"><strong>Kael Dunmere</strong> was downed</span><span class="col-wide"><strong>Kael Dunmere</strong> was downed. Select a fighter to see why it acted <kbd>I</kbd></span></span>
+          <span data-only="round-end" hidden><span class="tag"><span class="icon icon--sm" data-icon="check" aria-hidden="true"></span>Round over</span></span>
+        </div>
+        <div class="ascrub" role="slider" tabindex="0" data-demo-focus aria-label="Round position, live" aria-valuemin="0" aria-valuemax="27" aria-valuenow="27" aria-valuetext="0:27, at the live head" style="--at:1" data-only="live paused" >
+          <span class="ascrub__track"><span class="ascrub__fill"></span></span>
+          <i class="amark" data-side="them" data-kind="down" style="--at:0.5185" data-tip="0:14 · Thrag Ironjaw downed by Cato Vell"></i><i class="amark" data-side="them" data-kind="down" style="--at:1.0000" data-tip="0:27 · Kael Dunmere downed by Cato Vell"></i>
+          <span class="ascrub__thumb"></span>
+        </div>
+        <div class="ascrub" role="slider" tabindex="0" aria-label="Round position, finished" aria-valuemin="0" aria-valuemax="52" aria-valuenow="52" aria-valuetext="0:52, round over" style="--at:1" data-only="round-end" hidden>
+          <span class="ascrub__track"><span class="ascrub__fill"></span></span>
+          <i class="amark" data-side="them" data-kind="down" style="--at:0.2692" data-tip="0:14 · Thrag Ironjaw downed by Cato Vell"></i><i class="amark" data-side="them" data-kind="down" style="--at:0.5192" data-tip="0:27 · Kael Dunmere downed by Cato Vell"></i><i class="amark" data-side="us" data-kind="down" style="--at:0.5962" data-tip="0:31 · Mira Quillon downs Lys Amberly"></i><i class="amark" data-side="us" data-kind="down" style="--at:0.6923" data-tip="0:36 · Mira Quillon downs Rinna Sook"></i><i class="amark" data-side="them" data-kind="down" style="--at:0.7500" data-tip="0:39 · Mira Quillon downed by Cato Vell"></i><i class="amark" data-side="them" data-kind="down" style="--at:0.8462" data-tip="0:44 · Ysolde Varn downed by Cato Vell"></i><i class="amark" data-side="them" data-kind="overtime" style="--at:0.8654" data-tip="0:45 · Overtime begins"></i><i class="amark" data-side="us" data-kind="down" style="--at:0.9231" data-tip="0:48 · Brannoc Hale downs Cato Vell"></i><i class="amark" data-side="them" data-kind="end" style="--at:1.0000" data-tip="0:52 · Round 2 lost"></i>
+          <span class="ascrub__thumb"></span>
+        </div>
+        <div class="atransport__right">
+          <span class="ascrub__end" data-only="live paused">0:27</span><span class="ascrub__end" data-only="round-end">0:52</span>
+          <button class="btn btn--sm btn--ghost btn--icon" type="button" aria-label="Back one frame (Left)" data-tip="Back one frame, 0.1 s (Left). Shift Left: one second. While paused."><span class="icon" data-icon="step-back" aria-hidden="true"></span></button>
+          <button class="btn btn--sm btn--ghost btn--icon" type="button" aria-label="Forward one frame (Right)" data-tip="Forward one frame, 0.1 s (Right). Not past the live head."><span class="icon" data-icon="step-fwd" aria-hidden="true"></span></button>
+          <button class="btn btn--sm" type="button" data-tip="Return to the live head (End)"><span class="icon icon--sm" data-icon="eye" aria-hidden="true"></span>Live</button>
+          <button class="btn btn--sm btn--ghost" type="button" data-tip="Skip to the end of this round (Shift S). Asks once. The result is the one the inputs give."><span class="icon" data-icon="skip-end" aria-hidden="true"></span><span class="col-narrow">Skip round</span><span class="col-wide">Skip to end of round</span> <kbd>Shift S</kbd></button>
+          <button class="btn btn--sm btn--ghost" type="button" data-tip="Play the rest of the match without watching. Watch does not come back in this match."><span class="col-narrow">Simulate rest</span><span class="col-wide">Simulate the rest</span></button>
+        </div>
+      </div>
+
+      <!-- ===== Transport: replay (the whole round, marks everywhere, round tabs) ===== -->
+      <div class="atransport" data-only="replay" hidden>
+        <div class="atransport__status">
+          <div class="segmented" role="tablist" aria-label="Round">
+            <button type="button" role="tab" aria-pressed="false" aria-selected="false">R1 <span class="u-faint">W</span></button>
+            <button type="button" role="tab" aria-pressed="true" aria-selected="true">R2 <span class="u-faint">L</span></button>
+            <button type="button" role="tab" aria-pressed="false" aria-selected="false">R3 <span class="u-faint">W</span></button>
+          </div>
+        </div>
+        <div class="ascrub" role="slider" tabindex="0" aria-label="Round position" aria-valuemin="0" aria-valuemax="52" aria-valuenow="27" aria-valuetext="0:27 of 0:52" style="--at:0.5192">
+          <span class="ascrub__track"><span class="ascrub__fill"></span></span>
+          <i class="amark" data-side="them" data-kind="down" style="--at:0.2692" data-tip="0:14 · Thrag Ironjaw downed by Cato Vell"></i><i class="amark" data-side="them" data-kind="down" style="--at:0.5192" data-tip="0:27 · Kael Dunmere downed by Cato Vell"></i><i class="amark is-future" data-side="us" data-kind="down" style="--at:0.5962" data-tip="0:31 · Mira Quillon downs Lys Amberly"></i><i class="amark is-future" data-side="us" data-kind="down" style="--at:0.6923" data-tip="0:36 · Mira Quillon downs Rinna Sook"></i><i class="amark is-future" data-side="them" data-kind="down" style="--at:0.7500" data-tip="0:39 · Mira Quillon downed by Cato Vell"></i><i class="amark is-future" data-side="them" data-kind="down" style="--at:0.8462" data-tip="0:44 · Ysolde Varn downed by Cato Vell"></i><i class="amark is-future" data-side="them" data-kind="overtime" style="--at:0.8654" data-tip="0:45 · Overtime begins"></i><i class="amark is-future" data-side="us" data-kind="down" style="--at:0.9231" data-tip="0:48 · Brannoc Hale downs Cato Vell"></i><i class="amark is-future" data-side="them" data-kind="end" style="--at:1.0000" data-tip="0:52 · Round 2 lost"></i>
+          <span class="ascrub__thumb"></span>
+        </div>
+        <div class="atransport__right">
+          <span class="ascrub__end">0:27 <small>/ 0:52</small></span>
+          <button class="btn btn--sm btn--ghost btn--icon" type="button" aria-label="Back one frame (Left)" data-tip="Back one frame, 0.1 s (Left). Shift Left: one second."><span class="icon" data-icon="step-back" aria-hidden="true"></span></button>
+          <button class="btn btn--sm btn--ghost btn--icon" type="button" aria-label="Forward one frame (Right)" data-tip="Forward one frame, 0.1 s (Right). Shift Right: one second."><span class="icon" data-icon="step-fwd" aria-hidden="true"></span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Dock: the pause inspector (paused, a fighter selected) above the key-moment feed ===== -->
+    <aside class="arena-dock" aria-label="Inspector and key moments">
+      <section class="panel ainspect" data-only="paused" aria-labelledby="h-inspect">
+        <header class="ainspect__head">
+          <span class="portrait portrait--sm" data-role="healer" data-race="elf" aria-hidden="true"></span>
+          <div class="ainspect__who">
+            <h2 class="ainspect__name" id="h-inspect">Ysolde Varn</h2>
+            <span class="u-xs u-muted"><span class="class-tag"><i class="role-glyph" data-role="healer"></i>Chirurgeon</span> · Triage · back row</span>
+          </div>
+          <button class="icon-btn l-push" type="button" aria-label="Close inspector (Esc)" data-tip="Close (Esc)"><span class="icon" data-icon="close" aria-hidden="true"></span></button>
+        </header>
+
+        <div class="ainspect__section">
+          <div class="ainspect__h"><span>Doing now</span><span class="u-faint u-num">since 0:25.9</span></div>
+          <p><span class="rule"><span class="rule__id rule__id--preset">R4</span> <span class="rule__kw">Always</span> <span class="rule__kw">then</span> <span class="rule__v">stay with</span> <span class="rule__kw">on</span> <span class="rule__v">our tank</span></span></p>
+          <p class="u-xs u-muted u-mt-2">Committed 0:26.3 after a 0.35 s reaction (an ally fell below 40% HP).</p>
+        </div>
+
+        <div class="ainspect__section">
+          <div class="ainspect__h"><span>Why this rule</span><span class="u-faint">first match wins</span></div>
+          <ol class="awhy" aria-label="Rules in order, with why each was skipped">
+            <li class="awhy__item" data-fired="false" data-reached="true"><span class="awhy__mark" aria-hidden="true">–</span><span><span class="rule"><span class="rule__id rule__id--preset">R1</span> <span class="rule__kw">If</span> <span class="rule__v">an ally is below 40% HP</span> <span class="rule__kw">then</span> <span class="rule__v">use Suture</span> <span class="rule__kw">on</span> <span class="rule__v">the lowest-HP ally</span></span></span><span class="awhy__why"><b>Out of range.</b> Kael Dunmere, the lowest-HP ally (18% HP), was 8.8 m away. Suture reaches 6 m.</span></li>
+            <li class="awhy__item" data-fired="false" data-reached="true"><span class="awhy__mark" aria-hidden="true">–</span><span><span class="rule"><span class="rule__id rule__id--preset">R2</span> <span class="rule__kw">If</span> <span class="rule__v">an ally has hard control</span> <span class="rule__kw">then</span> <span class="rule__v">use Purging Tincture</span> <span class="rule__kw">on</span> <span class="rule__v">the lowest-HP ally</span> <span class="rule__kw">only</span> <span class="rule__v">if it has hard control</span></span></span><span class="awhy__why"><b>On cooldown.</b> Mira Quillon was rooted, but Purging Tincture is ready in 4.1 s.</span></li>
+            <li class="awhy__item" data-fired="false" data-reached="true"><span class="awhy__mark" aria-hidden="true">–</span><span><span class="rule"><span class="rule__id rule__id--preset">R3</span> <span class="rule__kw">If</span> <span class="rule__v">an ally is below 80% HP</span> <span class="rule__kw">and</span> <span class="rule__v">my focus is at least 60</span> <span class="rule__kw">then</span> <span class="rule__v">use Suture</span> <span class="rule__kw">on</span> <span class="rule__v">the lowest-HP ally</span></span></span><span class="awhy__why"><b>Condition 2 was false.</b> Focus was 40, it needs 60.</span></li>
+            <li class="awhy__item" data-fired="true" data-reached="true"><span class="awhy__mark" aria-hidden="true"><span class="icon icon--sm" data-icon="check" aria-hidden="true"></span></span><span><span class="rule"><span class="rule__id rule__id--preset">R4</span> <span class="rule__kw">Always</span> <span class="rule__kw">then</span> <span class="rule__v">stay with</span> <span class="rule__kw">on</span> <span class="rule__v">our tank</span></span></span><span class="awhy__why"><b>Fired.</b> Nothing above could act, so she stayed with Brannoc Hale.</span></li>
+            <li class="awhy__item" data-fired="false" data-reached="false"><span class="awhy__mark" aria-hidden="true">·</span><span><span class="rule"><span class="rule__id">St</span> <span class="rule__v">Cautious</span> stance</span></span><span class="awhy__why">Not reached: a rule fired.</span></li>
+          </ol>
+          <p class="u-xs u-muted u-mt-2"><span class="icon icon--sm" data-icon="info" aria-hidden="true"></span> <b class="u-strong">Deciding now (0:27.0):</b> R4 again, same target.</p>
+        </div>
+
+        <div class="ainspect__section">
+          <div class="ainspect__h"><span>State</span></div>
+          <div class="ainspect__bars">
+            <div class="ainspect__bar"><span>HP</span><span class="abar"><i class="abar__hp" style="--hp:1"></i></span><span class="u-num u-strong">276 / 276</span></div>
+            <div class="ainspect__bar"><span>Shield</span><span class="abar"><i class="abar__shield" style="--sh:0"></i></span><span class="u-num u-strong">0</span></div>
+            <div class="ainspect__bar"><span>Focus</span><span class="abar abar--focus"><i class="abar__hp" style="--fo:0.4"></i></span><span class="u-num u-strong">40 / 100</span></div>
+          </div>
+          <dl class="kv">
+            <div><dt>Cooldowns</dt><dd>Suture ready · Tincture 4.1 s</dd></div>
+            <div><dt>Statuses</dt><dd><span class="l-cluster l-cluster--xs" style="justify-content:flex-end"><span class="u-sm">Regenerating 1.4 s</span><i class="apip" data-pip="hot" aria-hidden="true" style="width:1.1rem;height:1.1rem;display:inline-grid;vertical-align:middle"></i></span></dd></div>
+            <div><dt>Fired this round</dt><dd>R2 ×1 · R4 ×4</dd></div>
+            <div><dt>Not fired yet</dt><dd class="u-warn">R1 · R3</dd></div>
+            <div><dt>Freshness</dt><dd>Ready (74) · no penalty</dd></div>
+          </dl>
+        </div>
+      </section>
+      <section class="panel afeed" aria-labelledby="h-feed">
+        <header class="panel__header">
+          <h2 class="panel__title" id="h-feed"><span class="icon" data-icon="scroll" aria-hidden="true"></span>Key moments</h2>
+          <span class="panel__subtitle" data-only="live paused">up to now</span>
+          <span class="panel__subtitle" data-only="replay" hidden>whole round</span>
+        </header>
+        <div class="panel__body">
+              <ol class="timeline" aria-live="polite" aria-label="Key moments, round 2">
+                <li class="timeline__round" data-only="live paused round-end">Round 1 · won 0:38</li>
+                <li class="timeline__item" data-side="us" data-event="end" tabindex="0" data-only="live paused round-end"><span class="timeline__time">0:38</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Round 1 won</div><div class="timeline__text">3 of ours standing</div></div></li>
+                <li class="timeline__round">Round 2</li>
+                <li class="timeline__item" data-side="them" data-event="down" tabindex="0" data-tip="Click or press Enter to go back to 0:14"><span class="timeline__time">0:14</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Thrag Ironjaw downed by Cato Vell</div><div class="timeline__text">Flurry</div></div></li>
+                <li class="timeline__item is-now" data-side="them" data-event="down" tabindex="0" data-tip="Click or press Enter to go back to 0:27"><span class="timeline__time">0:27</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Kael Dunmere downed by Cato Vell</div><div class="timeline__text">Flurry</div></div></li>
+                <li class="timeline__item is-future" data-side="us" data-event="down" tabindex="0" data-only="replay" data-tip="Click or press Enter to go back to 0:31"><span class="timeline__time">0:31</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Mira Quillon downs Lys Amberly</div><div class="timeline__text">Aimed Shot</div></div></li>
+                <li class="timeline__item" data-side="us" data-event="down" tabindex="0" data-only="round-end" data-tip="Click or press Enter to go back to 0:31"><span class="timeline__time">0:31</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Mira Quillon downs Lys Amberly</div><div class="timeline__text">Aimed Shot</div></div></li>
+                <li class="timeline__item is-future" data-side="us" data-event="down" tabindex="0" data-only="replay" data-tip="Click or press Enter to go back to 0:36"><span class="timeline__time">0:36</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Mira Quillon downs Rinna Sook</div><div class="timeline__text">Aimed Shot</div></div></li>
+                <li class="timeline__item" data-side="us" data-event="down" tabindex="0" data-only="round-end" data-tip="Click or press Enter to go back to 0:36"><span class="timeline__time">0:36</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Mira Quillon downs Rinna Sook</div><div class="timeline__text">Aimed Shot</div></div></li>
+                <li class="timeline__item is-future" data-side="them" data-event="down" tabindex="0" data-only="replay" data-tip="Click or press Enter to go back to 0:39"><span class="timeline__time">0:39</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Mira Quillon downed by Cato Vell</div><div class="timeline__text">Flurry</div></div></li>
+                <li class="timeline__item" data-side="them" data-event="down" tabindex="0" data-only="round-end" data-tip="Click or press Enter to go back to 0:39"><span class="timeline__time">0:39</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Mira Quillon downed by Cato Vell</div><div class="timeline__text">Flurry</div></div></li>
+                <li class="timeline__item is-future" data-side="them" data-event="down" tabindex="0" data-only="replay" data-tip="Click or press Enter to go back to 0:44"><span class="timeline__time">0:44</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Ysolde Varn downed by Cato Vell</div><div class="timeline__text">Flurry</div></div></li>
+                <li class="timeline__item" data-side="them" data-event="down" tabindex="0" data-only="round-end" data-tip="Click or press Enter to go back to 0:44"><span class="timeline__time">0:44</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Ysolde Varn downed by Cato Vell</div><div class="timeline__text">Flurry</div></div></li>
+                <li class="timeline__item is-future" data-side="them" data-event="end" tabindex="0" data-only="replay" data-tip="Click or press Enter to go back to 0:45"><span class="timeline__time">0:45</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Overtime begins</div><div class="timeline__text">Damage ramps until the 75 s cap</div></div></li>
+                <li class="timeline__item" data-side="them" data-event="end" tabindex="0" data-only="round-end" data-tip="Click or press Enter to go back to 0:45"><span class="timeline__time">0:45</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Overtime begins</div><div class="timeline__text">Damage ramps until the 75 s cap</div></div></li>
+                <li class="timeline__item is-future" data-side="us" data-event="down" tabindex="0" data-only="replay" data-tip="Click or press Enter to go back to 0:48"><span class="timeline__time">0:48</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Brannoc Hale downs Cato Vell</div><div class="timeline__text">Gong Hammer</div></div></li>
+                <li class="timeline__item" data-side="us" data-event="down" tabindex="0" data-only="round-end" data-tip="Click or press Enter to go back to 0:48"><span class="timeline__time">0:48</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Brannoc Hale downs Cato Vell</div><div class="timeline__text">Gong Hammer</div></div></li>
+                <li class="timeline__item is-future" data-side="them" data-event="end" tabindex="0" data-only="replay" data-tip="Click or press Enter to go back to 0:52"><span class="timeline__time">0:52</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Round 2 lost</div><div class="timeline__text">Overtime · 2 of theirs standing</div></div></li>
+                <li class="timeline__item" data-side="them" data-event="end" tabindex="0" data-only="round-end" data-tip="Click or press Enter to go back to 0:52"><span class="timeline__time">0:52</span><span class="timeline__marker"><span class="timeline__dot"></span></span><div><div class="timeline__title">Round 2 lost</div><div class="timeline__text">Overtime · 2 of theirs standing</div></div></li>
+              </ol>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- ===== Fighter strip: 72 px, both sides, front row to back row ===== -->
+  <footer class="astrip" aria-label="Fighters">
+    <div data-only="live paused replay" style="display:contents">
+      <div class="astrip__side" role="group" aria-label="Thornwick Wardens, your side"><button class="afighter" type="button" data-side="us" data-fighter="brannoc" aria-pressed="false" aria-label="Brannoc Hale, Gongbearer (Tank), your side, 58% HP"><span class="portrait portrait--sm" data-role="tank" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Brannoc Hale</span><span class="captain-mark" data-tip="Captain"><span class="u-sr-only">Captain</span></span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R3</span><span class="afighter__hp"><i class="abar__hp" style="--hp:0.58"></i></span><span class="afighter__pct">58%</span></span><span class="afighter__line"><i class="role-glyph" data-role="tank"></i><span class="afighter__class">Gongbearer</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="us" data-fighter="kael" aria-pressed="false" aria-label="Kael Dunmere, Headsman (Melee DPS), your side, downed"><span class="portrait portrait--sm" data-role="melee" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Kael Dunmere</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Cato</span></span><span class="afighter__line"><i class="role-glyph" data-role="melee"></i><span class="afighter__class">Headsman</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="us" data-fighter="thrag" aria-pressed="false" aria-label="Thrag Ironjaw, Berserker (Melee DPS), your side, downed"><span class="portrait portrait--sm" data-role="melee" data-race="orc"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Thrag Ironjaw</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Cato</span></span><span class="afighter__line"><i class="role-glyph" data-role="melee"></i><span class="afighter__class">Berserker</span><span class="tag tag--warn" data-tip="Tired (52): starts the round with a Freshness penalty">Tired 52</span></span></span></button>
+            <button class="afighter" type="button" data-side="us" data-fighter="mira" aria-pressed="false" aria-label="Mira Quillon, Archer (Ranged DPS), your side, 88% HP"><span class="portrait portrait--sm" data-role="ranged" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Mira Quillon</span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R2</span><span class="afighter__hp"><i class="abar__hp" style="--hp:0.88"></i><i class="abar__shield" style="--sh:0.12"></i></span><span class="afighter__pct">88%</span></span><span class="afighter__line"><i class="role-glyph" data-role="ranged"></i><span class="afighter__class">Archer</span></span></span></button>
+            <button class="afighter" type="button" data-side="us" data-fighter="ysolde" aria-pressed="true" aria-label="Ysolde Varn, Chirurgeon (Healer), your side, 100% HP"><span class="portrait portrait--sm" data-role="healer" data-race="elf"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Ysolde Varn</span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R4</span><span class="afighter__hp"><i class="abar__hp" style="--hp:1"></i></span><span class="afighter__pct">100%</span></span><span class="afighter__line"><i class="role-glyph" data-role="healer"></i><span class="afighter__class">Chirurgeon</span></span></span></button></div>
+      <div class="astrip__side" role="group" aria-label="Cinderpan Cinderjacks, opponent"><button class="afighter" type="button" data-side="them" data-fighter="hesta" aria-pressed="false" aria-label="Hesta Morrow, Knight (Tank), opponent, 71% HP"><span class="portrait portrait--sm" data-role="tank" data-race="dwarf"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Hesta Morrow</span><span class="captain-mark" data-tip="Captain"><span class="u-sr-only">Captain</span></span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R1</span><span class="afighter__hp"><i class="abar__hp" style="--hp:0.71"></i><i class="abar__shield" style="--sh:0.2"></i></span><span class="afighter__pct">71%</span></span><span class="afighter__line"><i class="role-glyph" data-role="tank"></i><span class="afighter__class">Knight</span></span></span></button>
+            <button class="afighter" type="button" data-side="them" data-fighter="cato" aria-pressed="false" aria-label="Cato Vell, Twinfang (Melee DPS), opponent, 83% HP"><span class="portrait portrait--sm" data-role="melee" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Cato Vell</span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R1</span><span class="afighter__hp"><i class="abar__hp" style="--hp:0.83"></i></span><span class="afighter__pct">83%</span></span><span class="afighter__line"><i class="role-glyph" data-role="melee"></i><span class="afighter__class">Twinfang</span><span class="tag tag--warn" data-tip="Tired (48): starts the round with a Freshness penalty">Tired 48</span></span></span></button>
+            <button class="afighter" type="button" data-side="them" data-fighter="rinna" aria-pressed="false" aria-label="Rinna Sook, Thunderhand (Ranged DPS), opponent, 100% HP"><span class="portrait portrait--sm" data-role="ranged" data-race="elf"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Rinna Sook</span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R2</span><span class="afighter__hp"><i class="abar__hp" style="--hp:1"></i></span><span class="afighter__pct">100%</span></span><span class="afighter__line"><i class="role-glyph" data-role="ranged"></i><span class="afighter__class">Thunderhand</span></span></span></button>
+            <button class="afighter" type="button" data-side="them" data-fighter="oswin" aria-pressed="false" aria-label="Oswin Tarr, Snaresetter (Controller), opponent, 100% HP"><span class="portrait portrait--sm" data-role="controller" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Oswin Tarr</span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R3</span><span class="afighter__hp"><i class="abar__hp" style="--hp:1"></i></span><span class="afighter__pct">100%</span></span><span class="afighter__line"><i class="role-glyph" data-role="controller"></i><span class="afighter__class">Snaresetter</span></span></span></button>
+            <button class="afighter" type="button" data-side="them" data-fighter="lys" aria-pressed="false" aria-label="Lys Amberly, Cleric (Healer), opponent, 100% HP"><span class="portrait portrait--sm" data-role="healer" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Lys Amberly</span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R1</span><span class="afighter__hp"><i class="abar__hp" style="--hp:1"></i></span><span class="afighter__pct">100%</span></span><span class="afighter__line"><i class="role-glyph" data-role="healer"></i><span class="afighter__class">Cleric</span></span></span></button></div>
+    </div>
+    <div data-only="round-end" hidden style="display:contents">
+      <div class="astrip__side" role="group" aria-label="Thornwick Wardens, your side"><button class="afighter is-down" type="button" data-side="us" data-fighter="brannoc" aria-pressed="false" aria-label="Brannoc Hale, Gongbearer (Tank), your side, downed"><span class="portrait portrait--sm" data-role="tank" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Brannoc Hale</span><span class="captain-mark" data-tip="Captain"><span class="u-sr-only">Captain</span></span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Hesta</span></span><span class="afighter__line"><i class="role-glyph" data-role="tank"></i><span class="afighter__class">Gongbearer</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="us" data-fighter="kael" aria-pressed="false" aria-label="Kael Dunmere, Headsman (Melee DPS), your side, downed"><span class="portrait portrait--sm" data-role="melee" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Kael Dunmere</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Cato</span></span><span class="afighter__line"><i class="role-glyph" data-role="melee"></i><span class="afighter__class">Headsman</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="us" data-fighter="thrag" aria-pressed="false" aria-label="Thrag Ironjaw, Berserker (Melee DPS), your side, downed"><span class="portrait portrait--sm" data-role="melee" data-race="orc"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Thrag Ironjaw</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Cato</span></span><span class="afighter__line"><i class="role-glyph" data-role="melee"></i><span class="afighter__class">Berserker</span><span class="tag tag--warn" data-tip="Tired (52): starts the round with a Freshness penalty">Tired 52</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="us" data-fighter="mira" aria-pressed="false" aria-label="Mira Quillon, Archer (Ranged DPS), your side, downed"><span class="portrait portrait--sm" data-role="ranged" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Mira Quillon</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Cato</span></span><span class="afighter__line"><i class="role-glyph" data-role="ranged"></i><span class="afighter__class">Archer</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="us" data-fighter="ysolde" aria-pressed="false" aria-label="Ysolde Varn, Chirurgeon (Healer), your side, downed"><span class="portrait portrait--sm" data-role="healer" data-race="elf"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Ysolde Varn</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Cato</span></span><span class="afighter__line"><i class="role-glyph" data-role="healer"></i><span class="afighter__class">Chirurgeon</span></span></span></button></div>
+      <div class="astrip__side" role="group" aria-label="Cinderpan Cinderjacks, opponent"><button class="afighter" type="button" data-side="them" data-fighter="hesta" aria-pressed="false" aria-label="Hesta Morrow, Knight (Tank), opponent, 22% HP"><span class="portrait portrait--sm" data-role="tank" data-race="dwarf"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Hesta Morrow</span><span class="captain-mark" data-tip="Captain"><span class="u-sr-only">Captain</span></span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R1</span><span class="afighter__hp"><i class="abar__hp" style="--hp:0.22"></i></span><span class="afighter__pct">22%</span></span><span class="afighter__line"><i class="role-glyph" data-role="tank"></i><span class="afighter__class">Knight</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="them" data-fighter="cato" aria-pressed="false" aria-label="Cato Vell, Twinfang (Melee DPS), opponent, downed"><span class="portrait portrait--sm" data-role="melee" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Cato Vell</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Brannoc</span></span><span class="afighter__line"><i class="role-glyph" data-role="melee"></i><span class="afighter__class">Twinfang</span><span class="tag tag--warn" data-tip="Tired (48): starts the round with a Freshness penalty">Tired 48</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="them" data-fighter="rinna" aria-pressed="false" aria-label="Rinna Sook, Thunderhand (Ranged DPS), opponent, downed"><span class="portrait portrait--sm" data-role="ranged" data-race="elf"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Rinna Sook</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Mira</span></span><span class="afighter__line"><i class="role-glyph" data-role="ranged"></i><span class="afighter__class">Thunderhand</span></span></span></button>
+            <button class="afighter" type="button" data-side="them" data-fighter="oswin" aria-pressed="false" aria-label="Oswin Tarr, Snaresetter (Controller), opponent, 60% HP"><span class="portrait portrait--sm" data-role="controller" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Oswin Tarr</span></span><span class="afighter__line"><span class="rule__id" data-tip="The rule he is acting on now">R3</span><span class="afighter__hp"><i class="abar__hp" style="--hp:0.6"></i></span><span class="afighter__pct">60%</span></span><span class="afighter__line"><i class="role-glyph" data-role="controller"></i><span class="afighter__class">Snaresetter</span></span></span></button>
+            <button class="afighter is-down" type="button" data-side="them" data-fighter="lys" aria-pressed="false" aria-label="Lys Amberly, Cleric (Healer), opponent, downed"><span class="portrait portrait--sm" data-role="healer" data-race="human"></span><span class="afighter__body"><span class="afighter__line"><span class="afighter__name">Lys Amberly</span></span><span class="afighter__line"><span class="afighter__downmark">Downed · Mira</span></span><span class="afighter__line"><i class="role-glyph" data-role="healer"></i><span class="afighter__class">Cleric</span></span></span></button></div>
+    </div>
+  </footer>
+</div>
+
+<div class="app" id="play" hidden style="height: calc(100dvh - var(--mock-h))">
+  <header class="topbar">
+    <a class="topbar__club" href="home.html">
+      <span class="crest crest--md" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true">TW</span>
+      <span class="topbar__club-text"><span class="topbar__club-name">Thornwick Wardens</span><span class="topbar__club-tier">Banner Circuit · Tier 2</span></span>
+    </a>
+    <div class="topbar__group">
+      <div class="topbar__stat" tabindex="0" data-tip="Season 3, matchweek 6 of 16."><span class="topbar__stat-label">Season 3</span><span class="topbar__stat-value">Matchweek 6</span></div>
+      <div class="topbar__divider"></div>
+      <div class="topbar__stat" tabindex="0" data-tip="2nd of 8 in the Dawn Wing."><span class="topbar__stat-label">Standing</span><span class="topbar__stat-value">2nd · 9 pts</span></div>
+    </div>
+    <div class="topbar__actions">
+      <button class="icon-btn" type="button" data-action="theme" aria-label="Switch light or dark theme" data-tip="Theme: dark or light"><span class="icon" data-icon="sun" aria-hidden="true"></span></button>
+      <button class="icon-btn" type="button" aria-label="Keyboard shortcuts" data-tip="Keyboard shortcuts (?)"><span class="icon" data-icon="keyboard" aria-hidden="true"></span></button>
+      <div class="playmatch" role="group" aria-label="Play match">
+        <button class="continue" type="button" data-demo-focus data-watch data-tip="Locks the lineup, captain, rows and presets for the whole match, then opens the arena. The result is the one Simulate would give.">
+          <span class="icon" data-icon="eye" aria-hidden="true"></span>
+          <span class="continue__text"><span class="continue__main">Watch</span><span class="continue__sub">vs Cinderpan · locks lineup</span></span>
+          <kbd>Space</kbd>
+        </button>
+        <button class="continue continue--secondary" type="button" data-tip="Locks the lineup and plays the whole match without watching. Same result as Watch.">
+          <span class="continue__text"><span class="continue__main">Simulate</span><span class="continue__sub">result only</span></span>
+          <kbd>Shift Space</kbd>
+        </button>
+      </div>
+    </div>
+  </header>
+  <nav class="sidenav" aria-label="Main">
+    <a class="sidenav__item" href="home.html"><span class="icon" data-icon="home" aria-hidden="true"></span><span class="sidenav__label">Home</span></a>
+    <a class="sidenav__item" href="squad.html" aria-current="page"><span class="icon" data-icon="squad" aria-hidden="true"></span><span class="sidenav__label">Squad</span><span class="sidenav__key">2</span></a>
+    <a class="sidenav__item" href="index.html#specified"><span class="icon" data-icon="fixtures" aria-hidden="true"></span><span class="sidenav__label">Fixtures</span><span class="sidenav__key">3</span></a>
+    <a class="sidenav__item" href="league.html"><span class="icon" data-icon="league" aria-hidden="true"></span><span class="sidenav__label">League</span><span class="sidenav__key">4</span></a>
+    <a class="sidenav__item" href="market.html"><span class="icon" data-icon="market" aria-hidden="true"></span><span class="sidenav__label">Market</span><span class="sidenav__key">5</span></a>
+  </nav>
+  <main class="main" id="main">
+    <div class="page">
+      <header class="page-header">
+        <div class="page-header__text">
+          <span class="page-header__eyebrow">Matchweek 6 · vs Cinderpan Cinderjacks (home)</span>
+          <h1 class="page-header__title">Squad</h1>
+          <div class="page-header__meta"><span>Lineup is a draft until you press Watch or Simulate</span><span class="sep-dot"></span><span>Both give the same result: the lineup, captain, rows, presets and seed are locked and saved first</span></div>
+        </div>
+      </header>
+
+      <div class="l-grid">
+        <section class="panel span-12" aria-labelledby="h-lineup">
+          <header class="panel__header">
+            <h2 class="panel__title" id="h-lineup"><span class="icon" data-icon="squad" aria-hidden="true"></span>Lineup</h2>
+            <span class="panel__subtitle">Front row faces the enemy side, as in the arena</span>
+          </header>
+          <div class="panel__body">
+            <div class="lineup">
+              <div class="lineup__row" style="--slots:2" aria-label="Back row">
+                <div class="lineup__row-label"><span>Back row</span><span class="u-faint">2</span></div>
+                <div class="lineup__slots">
+                  <article class="lineup-card" data-role="ranged" tabindex="0" aria-selected="false" aria-label="Mira Quillon, Archer · Human 26">
+                    <span class="portrait portrait--sm" data-role="ranged" data-race="human"></span>
+                    <div class="lineup-card__head">
+                      <span class="lineup-card__name"><span>Mira Quillon</span><span class="tag tag--outline">VC</span></span>
+                      <span class="lineup-card__class">Archer · Human 26</span>
+                    </div>
+                    <div class="lineup-card__foot">
+                      <span class="select-wrap select-wrap--inline u-grow"><select class="select select--inline" aria-label="Preset for Mira Quillon"><option>Headhunter</option></select></span>
+                      <span class="rating" data-band="3">65</span>
+                    </div>
+                  </article>
+                  <article class="lineup-card" data-role="healer" tabindex="0" aria-selected="false" aria-label="Ysolde Varn, Chirurgeon · Elf 33">
+                    <span class="portrait portrait--sm" data-role="healer" data-race="elf"></span>
+                    <div class="lineup-card__head">
+                      <span class="lineup-card__name"><span>Ysolde Varn</span></span>
+                      <span class="lineup-card__class">Chirurgeon · Elf 33</span>
+                    </div>
+                    <div class="lineup-card__foot">
+                      <span class="select-wrap select-wrap--inline u-grow"><select class="select select--inline" aria-label="Preset for Ysolde Varn"><option>Triage</option></select></span>
+                      <span class="rating" data-band="3">59</span>
+                    </div>
+                  </article>
+                </div>
+              </div>
+              <div class="lineup__row" style="--slots:3" aria-label="Front row">
+                <div class="lineup__row-label"><span>Front row</span><span class="u-faint">3</span></div>
+                <div class="lineup__slots">
+                  <article class="lineup-card" data-role="tank" tabindex="0" aria-selected="false" aria-label="Brannoc Hale, Gongbearer · Human 29">
+                    <span class="portrait portrait--sm" data-role="tank" data-race="human"></span>
+                    <div class="lineup-card__head">
+                      <span class="lineup-card__name"><span>Brannoc Hale</span><span class="captain-mark"><span class="u-sr-only">Captain</span></span></span>
+                      <span class="lineup-card__class">Gongbearer · Human 29</span>
+                    </div>
+                    <div class="lineup-card__foot">
+                      <span class="select-wrap select-wrap--inline u-grow"><select class="select select--inline" aria-label="Preset for Brannoc Hale"><option>Gatekeeper</option></select></span>
+                      <span class="rating" data-band="3">62</span>
+                    </div>
+                  </article>
+                  <article class="lineup-card" data-role="melee" tabindex="0" aria-selected="false" aria-label="Kael Dunmere, Headsman · Human 24">
+                    <span class="portrait portrait--sm" data-role="melee" data-race="human"></span>
+                    <div class="lineup-card__head">
+                      <span class="lineup-card__name"><span>Kael Dunmere</span></span>
+                      <span class="lineup-card__class">Headsman · Human 24</span>
+                    </div>
+                    <div class="lineup-card__foot">
+                      <span class="select-wrap select-wrap--inline u-grow"><select class="select select--inline" aria-label="Preset for Kael Dunmere"><option>Reaper</option></select></span>
+                      <span class="rating" data-band="3">58</span>
+                    </div>
+                  </article>
+                  <article class="lineup-card" data-role="melee" tabindex="0" aria-selected="false" aria-label="Thrag Ironjaw, Berserker · Orc 27">
+                    <span class="portrait portrait--sm" data-role="melee" data-race="orc"></span>
+                    <div class="lineup-card__head">
+                      <span class="lineup-card__name"><span>Thrag Ironjaw</span></span>
+                      <span class="lineup-card__class">Berserker · Orc 27</span>
+                    </div>
+                    <div class="lineup-card__foot">
+                      <span class="select-wrap select-wrap--inline u-grow"><select class="select select--inline" aria-label="Preset for Thrag Ironjaw"><option>Red Mist</option></select></span>
+                      <span class="rating" data-band="3">52</span>
+                    </div>
+                  </article>
+                </div>
+              </div>
+              <div class="lineup__facing" aria-hidden="true"><span class="icon" data-icon="arrow-right"></span>Enemy side</div>
+            </div>
+          </div>
+          <footer class="panel__footer lineup-check" aria-label="Lineup check">
+            <ul class="checklist checklist--inline" role="list">
+              <li>5 of 5 places filled, all fit</li>
+              <li>Captain Brannoc Hale · vice-captain Mira Quillon</li>
+              <li>Every fighter has a preset</li>
+            </ul>
+          </footer>
+        </section>
+
+        <section class="panel span-12" aria-labelledby="h-states">
+          <header class="panel__header">
+            <h2 class="panel__title" id="h-states"><span class="icon" data-icon="eye" aria-hidden="true"></span>Other states of this button (EXAMPLE)</h2>
+            <span class="panel__subtitle">Specified in 05-technical-m2 A3 and A7</span>
+          </header>
+          <div class="panel__body l-stack">
+            <div class="l-row" style="align-items:flex-start;gap:var(--sp-5)">
+              <div class="u-sm u-muted" style="width:15rem">The save at the lock failed: the arena stays closed, nothing is locked.</div>
+              <div class="l-stack l-stack--sm u-grow">
+                <div class="callout callout--bad"><span class="icon" data-icon="warning" aria-hidden="true"></span><div><div class="callout__title">Could not save</div><div class="callout__text">The lineup is locked only once it is saved, so a reload can never change the round. Nothing was locked.</div></div><button class="btn btn--sm l-push" type="button" data-demo-focus>Retry</button></div>
+              </div>
+            </div>
+            <div class="l-row" style="align-items:center;gap:var(--sp-5)">
+              <div class="u-sm u-muted" style="width:15rem">Home or another screen while a round is being watched: Continue takes you back to the arena instead of advancing.</div>
+              <div class="playmatch" style="margin-left:0"><a class="continue" href="#"><span class="icon" data-icon="eye" aria-hidden="true"></span><span class="continue__text"><span class="continue__main">Resume watching</span><span class="continue__sub">Round 2 · paused at 0:27</span></span><kbd>Space</kbd></a></div>
+            </div>
+            <div class="l-row" style="align-items:center;gap:var(--sp-5)">
+              <div class="u-sm u-muted" style="width:15rem">After a reload mid-round: the arena opens paused at the last stop.</div>
+              <div class="toast" style="animation:none;position:static"><span class="icon" data-icon="info" aria-hidden="true"></span><div class="toast__text"><div class="toast__title">Resumed</div><div class="toast__sub">Round 2, paused at 0:27, where playback last stopped.</div></div></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="mockups.js"></script>
+<script src="arena.js"></script>
+</body>
+</html>

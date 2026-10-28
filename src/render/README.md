@@ -1,6 +1,6 @@
 # src/render — PixiJS arena viewer (M2)
 
-**Owner:** architect (contract files); WP-M2C (pure half: `timeline/`, `cues/`, `colors/`, `camera/`); WP-M2D (PixiJS half: `viewer/` except `skin.ts`, `skins/`). **Status:** contracts only (M2 contracts phase, branch `m2/contracts`): every function is a typed stub that throws `NotImplementedError`. Design: [`docs/design/_drafts/05-technical-m2.md`](../../docs/design/_drafts/05-technical-m2.md) (draft revision 3: the owner approved Q53–Q60 on 2026-10-27). `pixi.js` v8 is a pinned dependency (8.22).
+**Owner:** architect (contract files); WP-M2C (pure half: `timeline/`, `cues/`, `colors/`, `camera/`); WP-M2D (PixiJS half: `viewer/` except `skin.ts`, `skins/`). **Status (2026-10-28):** the contract is on main (d1d666e), with the arena palette additions of §A18. The pure half (`timeline/`, `cues/`, `colors/`, `camera/`) is implemented by WP-M2C on `m2/wp-c-render-model`; its guarantees are in `timeline/README.md` there, and it replaces the stubs on main when it merges. The PixiJS half (`viewer/`, `skins/`) is WP-M2D's and is still a stub on main. Design: [`docs/design/_drafts/05-technical-m2.md`](../../docs/design/_drafts/05-technical-m2.md) (draft revision 3: the owner approved Q53–Q60 on 2026-10-27). `pixi.js` v8 is a pinned dependency (8.22).
 
 ## Responsibility
 - Show one round of a fight from its full-level `FightLog` (`core/model` events): the live round the player is watching, or a replay. The log always comes from `core/game` (`liveRoundPlayback`, `roundPlayback`), which runs the same `simulateRound` call headless play uses, so what is shown is the headless result (vis-009, tech-015).
@@ -34,6 +34,7 @@
 ## Rules for implementers
 - **The viewer owns meaning** (tech-020): side ring, role glyph(s), facing wedge, HP/shield/focus bars, status pips, captain crown, rule badge, telegraphs and cues are drawn by the viewer above any skin. A skin draws bodies and the floor only, so a sprite skin (open-032; base + two tinted team-mask layers, art research §6) can never hide a vis-003 cue.
 - **One colour source:** role hues, side colours and glyph shapes come from `tokens.css` through `ArenaPalette` (read by the host from computed style), never from literals in code. Role hues mean roles only (04 §3).
+- **Palette and metrics** (05-technical-m2 §A18): every arena colour (plate, ink, edge, line, HP, track, shield, focus, select, telegraph, hit flash, the five fx tones, the pip colours and glyphs) and every size, alpha and duration (`palette.metrics`) comes from the designer's tokens (`tokens.css` arena group, `mockups/arena-notes.md`); the token layout is notes §1. Rings, the glyph plate, bars and pips reach 3:1 on the floor; body colours stay the clubs' exact colours.
 - **The HUD is DOM** (tech-018): score, clock, fighter strip, controls, feed and inspector live in `src/ui`, fed by `onFrame` at ≤ 10 Hz. The canvas draws the arena only.
 - **No future leaks:** a live round never seeks past `headTick`, and nothing derived from events after the head is exposed (`untilTick`-bounded queries, a null live end tick; the UI's truncated-log equivalence test checks it).
 - **Accessibility** (04 §9): shape before colour, ring style as the colour-free side cue, ≤ 3 flashes a second, reduced motion removes pulses, trails and floating motion but keeps telegraph progress; every control has a key.
@@ -45,15 +46,15 @@
 | --- | --- |
 | `index.ts` | the pure public API (architect) |
 | `types.ts` | contract types (architect) |
-| `timeline/index.ts` | render-state model (WP-M2C) |
-| `cues/index.ts` | cue table from content (WP-M2C) |
-| `colors/index.ts` | team colours, contrast (WP-M2C) |
-| `camera/index.ts` | camera defaults and the world-to-screen transform (WP-M2C) |
+| `timeline/` | render-state model (WP-M2C): `index.ts` (the contract and the injectable `timeline`), `build.ts` (indexing), `frames.ts` (frame table), `sample.ts` (`sampleAt`), `queries.ts` (bounded queries), `effects.ts` (effect lifetimes and ids), `data.ts`, `model.ts`, `util.ts`; `fixtures/` (seven real full-level rounds and `make-fixtures.mjs`), `support.mts` (test support); `README.md` (what the model guarantees) |
+| `cues/index.ts` | cue table from content, the exhaustive effect switches, `TELEGRAPH_MIN_TICKS` (WP-M2C) |
+| `colors/index.ts` | team colours (`colorsForMatch`, rings at 3:1, body colours exact, §A18), contrast and CIEDE2000, `DEFAULT_ARENA_PALETTES`, `defaultArenaPalette`, `PRIMARY_CLASH_DELTA_E` (WP-M2C; all re-exported by `index.ts`) |
+| `camera/index.ts` | `DEFAULT_CAMERA` (padding 16 px for the wall, §A18) and the world-to-screen transform (WP-M2C) |
 | `viewer/index.ts` | `createArenaViewer` (WP-M2D) |
 | `viewer/skin.ts` | the skin interface (architect) |
 | `skins/placeholder/index.ts` | the M2 placeholder skin (WP-M2D) |
 
-## Known gaps (contracts phase)
+## Known gaps (on main until the packages merge)
 - Log format 1 frames have no shield or focus; format 2 (WP-M2A) adds them. Until then `UnitRenderState.shield` and `.focus` are null and the bars hide them.
 - Calls are staged after M2 (approved, Q53, P-01): `replaceLog` and `samePrefix` exist for them.
 - No sprites, class icons or arena sound in M2 (approved, Q59; open-032).
