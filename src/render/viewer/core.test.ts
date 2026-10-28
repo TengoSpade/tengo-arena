@@ -1,0 +1,551 @@
+/**
+ * Viewer logic on a fake timeline (05-technical-m2 §A11, "Viewer logic (happy-dom, WP-M2D)"): the playback clock, the
+ * live head, bounded queries, auto-pause stops, log swaps, load awaiting the skin, frame feed throttling.
+ * No GPU: a real ViewerCore and ArenaScene over the placeholder skin's scene-graph objects.
+ */
+import { describe, expect, it } from 'vitest';
+import type { AutoPauseRules } from '../types';
+import { assemble } from './testing/headless';
+import { fakeContext, fakeLog } from './testing/fake-timeline';
+
+const NO_PAUSE: AutoPauseRules = { ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null };
+
+async function loaded(kind: 'live' | 'replay' = 'replay', extra: { startTick?: number; hudHz?: number; autoPause?: AutoPauseRules; playerSide?: 0 | 1 | null; spec?: Parameters<typeof fakeLog>[0] } = {}) {
+  const h = assemble({ hudHz: extra.hudHz, autoPause: extra.autoPause });
+  await h.core.load(fakeLog(extra.spec), fakeContext({ kind, startTick: extra.startTick, playerSide: extra.playerSide }));
+  return h;
+}
+
+/** Play at `speed` until the core stops itself (or `maxFrames`). */
+function playOut(h: Awaited<ReturnType<typeof loaded>>, maxFrames = 20_000): void {
+  h.core.play();
+  h.run(maxFrames);
+}
+
+describe('load', () => {
+  it('awaits skin.prepare before the first frame and draws paused at ctx.startTick', async () => {
+    const h = assemble();
+    let release!: () => void;
+    h.skin.gate = new Promise<void>((r) => (release = r));
+    const pending = h.core.load(fakeLog(), fakeContext({ kind: 'replay', startTick: 120 }));
+    await Promise.resolve();
+    expect(h.skin.prepareCalls).toEqual([10]);
+    expect(h.frames).toHaveLength(0); // nothing shown while the skin is still preparing
+    expect(h.skin.bodiesCreated).toBe(0);
+    expect(h.core.loaded).toBe(false);
+    release();
+    await pending;
+    expect(h.core.loaded).toBe(true);
+    expect(h.core.playing).toBe(false);
+    expect(h.core.tick).toBe(120);
+    expect(h.frames).toHaveLength(1); // the HUD gets the opening state once
+    expect(h.frames[0]!.tick).toBe(120);
+    expect(h.skin.bodiesCreated).toBe(10);
+  });
+
+  it('lets a newer load overtake an older one that is still preparing', async () => {
+    const h = assemble();
+    let release!: () => void;
+    h.skin.gate = new Promise<void>((r) => (release = r));
+    const first = h.core.load(fakeLog({ endTick: 500 }), fakeContext({ kind: 'replay' }));
+    const second = h.core.load(fakeLog({ endTick: 900 }), fakeContext({ kind: 'replay' }));
+    release();
+    await Promise.all([first, second]);
+    expect(h.core.endTick).toBe(900);
+    expect(h.skin.liveBodies).toBe(10); // one round of bodies, not two
+  });
+
+  it('frees the previous round before showing the next', async () => {
+    const h = await loaded('replay');
+    expect(h.skin.liveBodies).toBe(10);
+    await h.core.load(fakeLog(), fakeContext({ kind: 'replay' }));
+    expect(h.skin.bodiesCreated).toBe(20);
+    expect(h.skin.liveBodies).toBe(10);
+  });
+
+  it('a log the model refuses leaves the viewer unloaded and rejects', async () => {
+    const h = assemble();
+    h.timeline.indexFightLog = () => {
+      throw new Error('not a full-level log');
+    };
+    await expect(h.core.load(fakeLog(), fakeContext())).rejects.toThrow('not a full-level log');
+    expect(h.core.loaded).toBe(false);
+  });
+});
+
+describe('the playback clock', () => {
+  it('plays 1x, 2x and 4x: about 20, 40 and 80 ticks per wall second', async () => {
+    for (const [speed, expected] of [[1, 20], [2, 40], [4, 80]] as const) {
+      const h = await loaded('replay', { autoPause: NO_PAUSE });
+      h.core.setSpeed(speed);
+      h.core.play();
+      h.run(60);
+      expect(h.core.tick).toBeCloseTo(expected, 0);
+    }
+  });
+
+  it('never advances more than 100 ms of fight per frame after a stall', async () => {
+    const h = await loaded('replay', { autoPause: NO_PAUSE });
+    h.core.play();
+    h.run(1, 30_000);
+    expect(h.core.tick).toBeLessThanOrEqual(2 + 1e-9);
+  });
+
+  it('pause stops the clock and feeds the HUD once; speed changes keep the tick', async () => {
+    const h = await loaded('replay', { autoPause: NO_PAUSE });
+    h.core.play();
+    h.run(30);
+    const before = h.frames.length;
+    h.core.pause();
+    expect(h.core.playing).toBe(false);
+    expect(h.frames.length).toBe(before + 1);
+    expect(h.frames.at(-1)!.tick).toBeCloseTo(h.core.tick, 9);
+    const t = h.core.tick;
+    h.core.setSpeed(4);
+    expect(h.core.tick).toBe(t);
+    expect(h.core.speed).toBe(4);
+  });
+
+  it('remembers the speed across loads', async () => {
+    const h = await loaded('replay');
+    h.core.setSpeed(2);
+    await h.core.load(fakeLog(), fakeContext({ kind: 'replay' }));
+    expect(h.core.speed).toBe(2);
+  });
+
+  it('feeds the HUD at most hudHz while playing, and at every pause, seek and stop', async () => {
+    const h = await loaded('replay', { hudHz: 10, autoPause: NO_PAUSE });
+    h.frames.length = 0;
+    h.core.play();
+    h.run(120); // 2 s of 60 fps frames
+    expect(h.frames.length).toBeGreaterThanOrEqual(18);
+    expect(h.frames.length).toBeLessThanOrEqual(22);
+    const n = h.frames.length;
+    h.core.seek(10);
+    expect(h.frames.length).toBe(n + 1);
+    h.core.pause();
+    expect(h.frames.length).toBe(n + 2);
+  });
+
+  it('seeking leaves the play state unchanged and shows the sought tick', async () => {
+    const h = await loaded('replay', { autoPause: NO_PAUSE });
+    h.core.play();
+    h.core.seek(400);
+    expect(h.core.playing).toBe(true);
+    expect(h.core.tick).toBe(400);
+    expect(h.core.currentState!.tick).toBe(400);
+    h.core.pause();
+    h.core.seek(5000);
+    expect(h.core.tick).toBe(1200);
+  });
+
+  it('shows the same state at a tick whether it was played to or sought to', async () => {
+    const h = await loaded('replay', { autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(200);
+    const played = h.core.currentState!;
+    const t = h.core.tick;
+    h.core.pause();
+    h.core.seek(0);
+    h.core.seek(t);
+    expect(JSON.stringify(h.core.currentState)).toBe(JSON.stringify(played));
+  });
+});
+
+describe('stops', () => {
+  it('keeps the ticker alive when the UI calls play() inside onStop (frame() follows the clock, not the stop)', async () => {
+    let resumed = 0;
+    const h = assemble({
+      onStop: (stop, hh) => {
+        if (stop.kind === 'auto' && resumed++ === 0) hh.core.play();
+      },
+    });
+    await h.core.load(fakeLog(), fakeContext({ kind: 'replay', playerSide: 0 }));
+    h.core.setSpeed(4);
+    h.core.play();
+    // The frame that fires the stop is the one that must tell the ticker to go on.
+    let kept = false;
+    for (let i = 0; i < 4000 && h.stops.length < 1; i++) {
+      h.skipTime(16.7);
+      kept = h.core.frame(16.7);
+    }
+    expect(h.stops[0]).toMatchObject({ kind: 'auto', stop: { tick: 600 } });
+    expect(h.core.playing).toBe(true); // resumed inside the callback
+    expect(kept).toBe(true);
+    // frame() reports it: the ticker must keep running or the tick stays stuck at 600
+    const before = h.core.tick;
+    expect(h.core.frame(16.7)).toBe(true);
+    expect(h.core.tick).toBeGreaterThan(before);
+    h.run(300);
+    expect(h.core.tick).toBeGreaterThan(600);
+    expect(h.stops.at(-1)).toMatchObject({ kind: 'auto', stop: { tick: 700 } });
+  });
+
+  it('a live round asks the model for stops once per tick reached, not once per frame', async () => {
+    const h = await loaded('live', { startTick: 0, playerSide: 0 });
+    h.core.play();
+    h.run(300); // 300 frames at 1x is 100 ticks
+    expect(h.timeline.calls.autoPauseStops.length).toBeLessThanOrEqual(104);
+    expect(h.timeline.calls.autoPauseStops.length).toBeGreaterThan(90);
+  });
+
+  it('stops exactly on an auto-pause tick, once, and resumes past it', async () => {
+    const h = await loaded('replay', { playerSide: 0 });
+    h.core.setSpeed(4);
+    playOut(h);
+    expect(h.stops).toHaveLength(1);
+    const stop = h.stops[0]!;
+    expect(stop.kind).toBe('auto');
+    if (stop.kind !== 'auto') throw new Error();
+    expect(stop.stop.tick).toBe(600); // our first down; the enemy down at 300 is off by default
+    expect(stop.stop.reason).toBe('ownDowned');
+    expect(h.core.tick).toBe(600);
+    expect(h.core.playing).toBe(false);
+    expect(h.frames.at(-1)!.tick).toBe(600); // the HUD sees the stop tick
+    // Resume: the stop at the tick we are on does not fire again; the next one does.
+    playOut(h);
+    expect(h.stops).toHaveLength(2);
+    expect(h.stops[1]).toMatchObject({ kind: 'auto', stop: { tick: 700 } });
+    playOut(h);
+    expect(h.stops[2]).toMatchObject({ kind: 'auto', stop: { tick: 900, reason: 'overtime' } });
+    playOut(h);
+    expect(h.stops[3]).toEqual({ kind: 'end', tick: 1200 });
+    expect(h.core.endTick).toBe(1200);
+  });
+
+  it('honours setAutoPause (enemy downs on, ours off)', async () => {
+    const h = await loaded('replay', { playerSide: 0 });
+    h.core.setAutoPause({ ownDowned: false, enemyDowned: true, ownCaptainDown: false, overtime: false, ownHpBelowPct: null });
+    h.core.setSpeed(4);
+    playOut(h);
+    expect(h.stops[0]).toMatchObject({ kind: 'auto', stop: { tick: 300, reason: 'enemyDowned' } });
+    playOut(h);
+    expect(h.stops[1]).toEqual({ kind: 'end', tick: 1200 }); // none of ours or overtime
+  });
+
+  it('playing at the end stops again at once', async () => {
+    const h = await loaded('replay', { autoPause: NO_PAUSE });
+    h.core.seek(1200);
+    h.core.play();
+    h.run(5);
+    expect(h.stops).toEqual([{ kind: 'end', tick: 1200 }]);
+    expect(h.core.tick).toBe(1200);
+    expect(h.core.playing).toBe(false);
+  });
+
+  it('a stop never fires when seeking over it', async () => {
+    const h = await loaded('replay', { playerSide: 0 });
+    h.core.seek(650);
+    expect(h.stops).toHaveLength(0);
+  });
+
+  it('a live round stops at the head after a rewind, then plays on past it', async () => {
+    const h = await loaded('live', { startTick: 450, autoPause: NO_PAUSE });
+    h.core.seek(300);
+    expect(h.core.tick).toBe(300);
+    h.core.setSpeed(4);
+    playOut(h);
+    expect(h.stops).toEqual([{ kind: 'head', tick: 450 }]);
+    expect(h.core.tick).toBe(450);
+    expect(h.core.headTick).toBe(450);
+    playOut(h, 500);
+    expect(h.core.tick).toBeGreaterThan(450);
+    expect(h.stops).toHaveLength(1); // at the head, play simply continues
+  });
+});
+
+describe('a live round (no future leaks, review B1)', () => {
+  it('seeks at most to the head; the end is null until playback reaches it', async () => {
+    const h = await loaded('live', { startTick: 100, autoPause: NO_PAUSE });
+    expect(h.core.headTick).toBe(100);
+    expect(h.core.endTick).toBeNull();
+    h.core.seek(1000);
+    expect(h.core.tick).toBe(100);
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(300);
+    expect(h.core.headTick).toBeGreaterThan(100);
+    expect(h.core.endTick).toBeNull();
+    h.core.seek(1100);
+    expect(h.core.tick).toBe(h.core.headTick);
+    for (const state of h.frames) {
+      expect(state.endTick).toBeNull();
+      expect(state.ended).toBe(false);
+    }
+  });
+
+  it('learns the end only when it is reached, then reports it', async () => {
+    const h = await loaded('live', { startTick: 0, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    playOut(h);
+    expect(h.stops).toEqual([{ kind: 'end', tick: 1200 }]);
+    expect(h.core.endTick).toBe(1200);
+    expect(h.core.headTick).toBe(1200);
+  });
+
+  it('never asks the model for anything beyond what it is about to show', async () => {
+    const h = await loaded('live', { startTick: 0, playerSide: 0 });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(200);
+    h.core.keyMoments();
+    h.core.decisionAt(1);
+    const head = h.core.headTick;
+    // One frame at 4x moves 1.33 ticks; stops are looked up to the end of the frame being drawn, no further.
+    expect(h.timeline.maxTickAsked()).toBeLessThanOrEqual(head + 1.4);
+  });
+
+  it('bounds key moments and decisions by the head', async () => {
+    const h = await loaded('live', { startTick: 650, autoPause: NO_PAUSE });
+    const moments = h.core.keyMoments();
+    expect(moments.map((m) => m.tick)).toEqual([300, 600]); // the down at 700, overtime at 900 and the end are not shown
+    expect(moments.every((m) => m.tick <= h.core.headTick)).toBe(true);
+    expect(h.timeline.calls.keyMoments.every((t) => t <= 650)).toBe(true);
+    h.core.seek(100); // rewinding does not shrink what was already shown
+    expect(h.core.keyMoments().map((m) => m.tick)).toEqual([300, 600]);
+    h.core.decisionAt(3);
+    expect(h.timeline.calls.decisionAt.at(-1)).toBe(100);
+  });
+
+  it('a replay shows every key moment up to the end', async () => {
+    const h = await loaded('replay');
+    expect(h.core.keyMoments().map((m) => m.kind)).toEqual(['down', 'down', 'down', 'overtime', 'end']);
+  });
+
+  it('caches key moments per head', async () => {
+    const h = await loaded('replay');
+    h.core.keyMoments();
+    h.core.keyMoments();
+    expect(h.timeline.calls.keyMoments).toHaveLength(1);
+  });
+});
+
+describe('replaceLog (calls)', () => {
+  it('swaps a log that extends the shown prefix, keeping the tick and refreshing queries', async () => {
+    const h = await loaded('live', { startTick: 0, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(40);
+    h.core.pause();
+    const t = h.core.tick;
+    const next = fakeLog({ endTick: 1000, divergeAfter: { tick: t, tag: 'call-1' } });
+    const before = h.core.tick;
+    expect(h.core.replaceLog(next, t)).toBe(true);
+    expect(h.core.tick).toBe(before);
+    expect(h.timeline.calls.indexFightLog).toBe(2);
+  });
+
+  it('refuses a log that breaks the prefix, and one for a tick beyond the head', async () => {
+    const h = await loaded('live', { startTick: 400, autoPause: NO_PAUSE });
+    const changedEarly = fakeLog({ endTick: 1200, downs: [{ tick: 100, unit: 3, by: 6 }] });
+    expect(h.core.replaceLog(changedEarly, 400)).toBe(false);
+    expect(h.core.replaceLog(fakeLog(), 401)).toBe(false); // ahead of the head
+    // Still showing the original round.
+    h.core.seek(0);
+    h.core.play();
+    expect(h.core.tick).toBe(0);
+  });
+
+  it('a swap in the middle of what was shown rolls the head back: later ticks of the new log were never shown', async () => {
+    const h = await loaded('live', { startTick: 500, autoPause: NO_PAUSE });
+    h.core.seek(300);
+    const next = fakeLog({ endTick: 1100, divergeAfter: { tick: 450, tag: 'call-1' } });
+    expect(h.core.replaceLog(next, 450)).toBe(true);
+    expect(h.core.headTick).toBe(450);
+    expect(h.core.tick).toBe(300);
+    h.core.seek(1000);
+    expect(h.core.tick).toBe(450); // no seeking into ticks of the new log that were not shown
+    expect(h.core.endTick).toBeNull();
+  });
+
+  it('forgets an end that lies beyond the swap tick, and keeps none it did not announce', async () => {
+    const h = await loaded('live', { startTick: 0, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    playOut(h);
+    expect(h.core.endTick).toBe(1200);
+    const next = fakeLog({ endTick: 1000, divergeAfter: { tick: 800, tag: 'call-2' } });
+    expect(h.core.replaceLog(next, 800)).toBe(true);
+    expect(h.core.endTick).toBeNull();
+    expect(h.core.headTick).toBe(800);
+  });
+
+  it('refuses when nothing is loaded', () => {
+    const h = assemble();
+    expect(h.core.replaceLog(fakeLog(), 0)).toBe(false);
+  });
+});
+
+describe('a live clock has no end until it is reached', () => {
+  it('ignores an end the model volunteers for a live index', async () => {
+    const h = assemble({ autoPause: NO_PAUSE });
+    const real = h.timeline.indexFightLog.bind(h.timeline);
+    h.timeline.indexFightLog = (log, content, cues, kind) => ({ ...real(log, content, cues, kind), endTick: 1200 });
+    await h.core.load(fakeLog(), fakeContext({ kind: 'live', startTick: 100 }));
+    expect(h.core.endTick).toBeNull();
+    h.core.seek(900);
+    expect(h.core.tick).toBe(100);
+  });
+});
+
+describe('selection and input', () => {
+  it('select() is silent; a click reports through onSelect (the UI focuses that fighter card)', async () => {
+    const h = await loaded('replay');
+    h.core.select(3);
+    expect(h.core.selection).toBe(3);
+    expect(h.selections).toEqual([]);
+    const pos = h.scene.tokenPosition(6)!;
+    h.core.pointerSelect(pos.x, pos.y);
+    expect(h.core.selection).toBe(6);
+    h.core.pointerSelect(2, 2); // empty floor
+    expect(h.core.selection).toBeNull();
+    h.core.pointerSelect(2, 2); // nothing changes, nothing reported
+    expect(h.selections).toEqual([6, null]);
+  });
+
+  it('has no keyboard of its own: Tab selection belongs to the fighter strip (A18), so the canvas never traps focus', async () => {
+    const h = await loaded('replay');
+    expect('cycleSelection' in h.core).toBe(false);
+    expect('clearSelectionFromKeyboard' in h.core).toBe(false);
+  });
+
+  it('describes the arena for the canvas label', async () => {
+    const h = await loaded('replay', { playerSide: 0 });
+    h.core.seek(650);
+    expect(h.core.describe()).toBe('Arena, round 1, 32.5 seconds. HOM 4 standing, AWY 4 standing.');
+  });
+});
+
+describe('destroy', () => {
+  it('is idempotent and silences every callback', async () => {
+    const h = await loaded('replay', { autoPause: NO_PAUSE });
+    h.core.play();
+    h.core.destroy();
+    h.core.destroy();
+    const frames = h.frames.length;
+    expect(h.core.frame(16)).toBe(false);
+    h.core.seek(10);
+    h.core.pause();
+    expect(h.frames.length).toBe(frames);
+    expect(h.skin.liveBodies).toBe(0);
+    await h.core.load(fakeLog(), fakeContext());
+    expect(h.core.loaded).toBe(false);
+  });
+
+  it('a load in flight when destroyed shows nothing', async () => {
+    const h = assemble();
+    let release!: () => void;
+    h.skin.gate = new Promise<void>((r) => (release = r));
+    const pending = h.core.load(fakeLog(), fakeContext());
+    h.core.destroy();
+    release();
+    await pending;
+    expect(h.skin.bodiesCreated).toBe(0);
+    expect(h.frames).toHaveLength(0);
+  });
+});
+
+describe('the real model contract (A19)', () => {
+  it('passes knownUntilTick = the live head on every live sample, and none for a replay', async () => {
+    const h = await loaded('live', { startTick: 200, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(120);
+    h.core.seek(50); // a rewind: still bounded by the head
+    h.core.pause();
+    const { sampleAt, knownUntil } = h.timeline.calls;
+    expect(knownUntil.length).toBe(sampleAt.length);
+    let furthest = 200; // the resume tick is the head the round starts with
+    knownUntil.forEach((known, i) => {
+      expect(known, `sample ${i}`).toBeDefined();
+      furthest = Math.max(furthest, sampleAt[i]!);
+      expect(known!).toBeGreaterThanOrEqual(sampleAt[i]!); // never below the tick it samples (the kickoff sample at 0 is bounded by the head, 200)
+      expect(known!).toBeLessThanOrEqual(furthest + 1e-9); // never ahead of anything shown so far
+    });
+    // The rewind sample (tick 50) is bounded by the head the round had reached, not by 50.
+    expect(knownUntil.at(-1)!).toBe(h.core.headTick);
+
+    const r = await loaded('replay', { autoPause: NO_PAUSE });
+    r.core.play();
+    r.run(20);
+    expect(r.timeline.calls.knownUntil.every((k) => k === undefined)).toBe(true);
+  });
+
+  it('decisionsUpTo lists a unit\'s committed decisions oldest first, never past the head', async () => {
+    const h = await loaded('live', { startTick: 650, autoPause: NO_PAUSE });
+    const commits = (list: readonly { commitTick: number }[]): number[] => list.map((d) => d.commitTick);
+    expect(commits(h.core.decisionsUpTo(3))).toEqual([0, 100, 200, 300, 400, 500, 600]);
+    expect(commits(h.core.decisionsUpTo(3, 9999))).toEqual([0, 100, 200, 300, 400, 500, 600]); // clamped to the head
+    expect(commits(h.core.decisionsUpTo(3, 250))).toEqual([0, 100, 200]);
+    expect(h.timeline.calls.decisionAt.every((t) => t <= 650)).toBe(true);
+    h.core.seek(130); // defaults to the current tick, a rewind
+    expect(commits(h.core.decisionsUpTo(3))).toEqual([0, 100]);
+    expect(h.core.decisionsUpTo(3).every((d) => d.unit === 3)).toBe(true);
+    const replay = await loaded('replay');
+    expect(replay.core.decisionsUpTo(2, 1200)).toHaveLength(13);
+    expect(assemble().core.decisionsUpTo(1)).toEqual([]); // nothing loaded
+  });
+});
+
+describe('a live round draws one frame interval behind the revealed head', () => {
+  it('while playing at the edge the head runs ahead of the drawn tick by one frame interval, and never goes back', async () => {
+    const h = await loaded('live', { startTick: 100, autoPause: NO_PAUSE });
+    expect(h.core.headTick).toBe(100);
+    h.core.setSpeed(2);
+    h.core.play();
+    let last = h.core.headTick;
+    for (let i = 0; i < 90; i++) {
+      h.run(1);
+      expect(h.core.headTick).toBeGreaterThanOrEqual(last);
+      last = h.core.headTick;
+      expect(h.core.headTick - h.core.tick).toBeLessThanOrEqual(2 + 1e-6);
+      expect(h.core.currentState!.tick).toBe(h.core.tick); // the HUD gets the state that is drawn
+    }
+    expect(h.core.headTick - h.core.tick).toBeCloseTo(2, 6); // the full interval at the edge
+    expect(h.core.tick).toBeGreaterThan(100);
+  });
+
+  it('every live sample is bounded by the head and at most one frame behind it', async () => {
+    const h = await loaded('live', { startTick: 100, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(100);
+    const { sampleAt, knownUntil } = h.timeline.calls;
+    sampleAt.forEach((tick, i) => {
+      if (tick === 0) return; // the kickoff sample
+      expect(knownUntil[i]!).toBeGreaterThanOrEqual(tick);
+      expect(knownUntil[i]! - tick).toBeLessThanOrEqual(2 + 1e-6);
+    });
+  });
+
+  it('at a stop the display catches up: it shows the stop tick, the head is the stop tick, the HUD got that state', async () => {
+    const h = await loaded('live', { startTick: 560, playerSide: 0 });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(2000);
+    expect(h.stops).toHaveLength(1);
+    expect(h.stops[0]).toMatchObject({ kind: 'auto', stop: { tick: 600 } });
+    expect(h.core.tick).toBe(600);
+    expect(h.core.headTick).toBe(600);
+    expect(h.core.currentState!.tick).toBe(600);
+    expect(h.frames.at(-1)!.tick).toBe(600);
+    // Resuming reveals ahead again and the display moves on from the stop tick.
+    h.core.play();
+    h.run(5);
+    expect(h.core.tick).toBeGreaterThan(600);
+    expect(h.core.headTick - h.core.tick).toBeLessThanOrEqual(2 + 1e-6);
+  });
+
+  it('a live end is learned when the revealed range reaches it, and the display catches up to it', async () => {
+    const h = await loaded('live', { startTick: 1150, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    expect(h.core.endTick).toBeNull();
+    h.core.play();
+    h.run(200);
+    expect(h.stops).toEqual([{ kind: 'end', tick: 1200 }]);
+    expect(h.core.tick).toBe(1200);
+    expect(h.core.headTick).toBe(1200);
+    expect(h.core.endTick).toBe(1200);
+    expect(h.core.currentState!.ended).toBe(true);
+  });
+});
