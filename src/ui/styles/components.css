@@ -1498,6 +1498,12 @@ a.card:hover {
   width: 1%;
 }
 
+/* A tight column is as wide as its content on one line: a button and an icon button side by side
+   (Fixtures: Report + Replay) must not wrap, or the row grows. */
+.data-table .cell-tight .l-cluster {
+  flex-wrap: nowrap;
+}
+
 .data-table .cell-muted {
   color: var(--c-text-muted);
 }
@@ -5269,7 +5275,7 @@ dialog.modal::backdrop {
   grid-template-columns: auto minmax(16rem, 1fr) auto;
   align-items: center;
   gap: var(--sp-3);
-  min-height: 3rem;
+  min-height: 3.5rem; /* a two-line status (tag, then the note) fits, so the bar never changes height on a pause and the arena never rescales */
   padding: var(--sp-1) var(--sp-3);
   background: var(--c-surface-0);
   border-top: 1px solid var(--c-border);
@@ -5277,8 +5283,9 @@ dialog.modal::backdrop {
 
 .atransport__status {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 2px var(--sp-2);
   min-width: 0;
   font-size: var(--fs-sm);
   color: var(--c-text-muted);
@@ -5286,6 +5293,14 @@ dialog.modal::backdrop {
 
 .atransport__status strong {
   color: var(--c-text);
+}
+
+/* The note beside the tag ("Fenek Tallworth was downed") keeps at least 8 rem; where the status column
+   is narrower than tag + note it drops under the tag instead of wrapping to a few characters a line. */
+.atransport__status > :not(.tag) {
+  flex: 1 1 8rem;
+  min-width: 8rem;
+  overflow-wrap: anywhere;
 }
 
 .atransport__right {
