@@ -23,7 +23,7 @@ export const FIGHT_LOG_FORMAT = 'arena-league-fight';
  * re-pinned) but never a result, a round checksum or the replayability of a stored match, because replays
  * are verified by round checksums, which are identical at every record level.
  */
-export const FIGHT_LOG_FORMAT_VERSION = 1;
+export const FIGHT_LOG_FORMAT_VERSION = 2;
 
 /**
  * How much the sim records. The OUTCOME must be identical at every level

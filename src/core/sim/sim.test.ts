@@ -83,13 +83,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "85d5d9ff74c93ebbeb1534d8a6705a9d",
+            "d3411bfa976741e195711f12cb036187",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "286a84d292a9ec0a450a82d5d4df5bd7",
+            "9663065be5c5ce0604a1751def912758",
           ],
         ],
         "score": {
@@ -111,7 +111,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
         "home",
         896,
         "128648c2c01315596ceda6c8db45ee69",
-        "bc7b91445f9ffe98200c8549c5919000",
+        "0727f8b62fc6c4f63cb394cd9ce28d98",
       ]
     `);
   });

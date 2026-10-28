@@ -126,7 +126,7 @@ export function commitDecision(f: Fight, u: Unit, d: Decision, trace: TraceEntry
   if (f.rec && f.rec.full) {
     f.rec.emit('unit.decide', t, u.index, d.target ?? undefined, {
       rule: d.rule,
-      action: d.action === 'ability' ? `ability:${d.slot}` : d.action,
+      action: decisionAction(d),
       targetUnit: d.target,
       reactTicks,
       reactCauses: causes,
@@ -134,6 +134,11 @@ export function commitDecision(f: Fight, u: Unit, d: Decision, trace: TraceEntry
       trace,
     });
   }
+}
+
+/** A decision's action as events and probes name it: "attack", "kite", ..., "ability:a1". */
+export function decisionAction(d: Decision): string {
+  return d.action === 'ability' ? `ability:${d.slot}` : d.action;
 }
 
 function isMovementAction(a: Decision['action']): boolean {
@@ -144,6 +149,67 @@ function startRuleCooldown(f: Fight, u: Unit, rule: number): void {
   const internal = u.tactics.internal as { rules: { cooldownTicks: number }[] };
   const cd = internal.rules[rule]?.cooldownTicks ?? 0;
   if (cd > 0) u.ruleCdEnd[rule] = f.tick + cd;
+}
+
+/** Why a unit does not evaluate its rules (inspectRoundAt's `blockedBy`); null when it is free to. Mirrors the checks decisions() makes. */
+export type EvaluationBlock = 'downed' | 'stunned' | 'asleep' | 'displaced' | 'winding_up' | 'casting' | 'channelling' | 'taunted';
+
+export function evaluationBlock(u: Unit): EvaluationBlock | null {
+  if (!u.standing) return 'downed';
+  if (has(u, SC_STUN)) return 'stunned';
+  if (has(u, SC_SLEEP)) return 'asleep';
+  if (u.disp !== null) return 'displaced';
+  if (u.act === ACT_WINDUP) return 'winding_up';
+  if (u.act === ACT_CAST) return 'casting';
+  if (u.act === ACT_CHANNEL) return 'channelling';
+  if (u.forced) return 'taunted';
+  return null;
+}
+
+/** One unit's probed decision: a fresh traced evaluation, or why there is none. */
+export interface ProbedDecision {
+  blockedBy: EvaluationBlock | null;
+  evaluation: { rule: number; action: string; target: number | null; trace: TraceEntry[] } | null;
+}
+
+/**
+ * M2 probe (inspectRoundAt): what every unit would decide in this tick's decision phase, each with a traced evaluation,
+ * ignoring the decision cadence (u.nextEval) and the reaction delay. It takes the steps decisions() takes before it
+ * evaluates a unit (the start-of-tick snapshot, the unit's due pending commit), so an evaluation equals the one the sim
+ * itself makes at a tick where it evaluates (tested against the recorded traces). It draws no randomness and emits
+ * nothing, but it mutates the Fight it is given (a due commit, the snapshot): the caller owns a throwaway fight.
+ */
+export function probeDecisions(f: Fight): ProbedDecision[] {
+  snapshotTargets(f);
+  const view = viewOf(f);
+  view.sync();
+  const t = f.tick;
+  const out = new Array<ProbedDecision>(f.units.length);
+  for (const idx of f.order) {
+    const u = f.units[idx]!;
+    if (!u.standing) {
+      out[idx] = { blockedBy: 'downed', evaluation: null };
+      continue;
+    }
+    const p = u.pending;
+    if (p && t >= p.commitAt) {
+      const tgt = p.decision.target;
+      if (tgt !== null && !f.units[tgt]!.standing) {
+        u.pending = null;
+        u.nextEval = t;
+      } else {
+        commitDecision(f, u, p.decision, p.trace, t - p.createdAt, p.causes);
+      }
+    }
+    const blockedBy = evaluationBlock(u);
+    if (blockedBy !== null) {
+      out[idx] = { blockedBy, evaluation: null };
+      continue;
+    }
+    const ev = evaluateTactics(u.tactics, view, idx);
+    out[idx] = { blockedBy: null, evaluation: { rule: ev.decision.rule, action: decisionAction(ev.decision), target: ev.decision.target, trace: ev.trace } };
+  }
+  return out;
 }
 
 /** A forced decision (taunt) commits at once. */
