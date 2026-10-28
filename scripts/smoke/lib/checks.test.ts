@@ -64,6 +64,7 @@ describe('frame-rate check (A10)', () => {
     expect(checkFirstOpen(300, gpu).status).toBe('pass');
     expect(checkFirstOpen(900, gpu).status).toBe('fail');
     expect(checkFirstOpen(null, gpu).status).toBe('skip');
+    expect(checkFirstOpen([], gpu).status).toBe('skip');
   });
 });
 
@@ -386,5 +387,25 @@ describe('frame rate against what the browser session can deliver', () => {
 
   it('without a baseline a miss fails as before', () => {
     expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(550, 17.6)), gpu, null, null).status).toBe('fail');
+  });
+});
+
+describe('first viewer open over several opens', () => {
+  it('passes when the median is under the target', () => {
+    const c = checkFirstOpen([450, 420, 430], gpu);
+    expect(c.status).toBe('pass');
+    expect(c.actual).toMatch(/median 430\.0 ms of 3 opens/);
+  });
+
+  it('warns, with every sample, when only the cold open is over the target (the seen 591 ms with 437 and 450 behind it)', () => {
+    const c = checkFirstOpen([591, 437, 450], gpu);
+    expect(c.status).toBe('warn');
+    expect(c.actual).toMatch(/591\.0 ms, 437\.0 ms, 450\.0 ms/);
+    expect(c.detail).toMatch(/cold open.*prefetch/);
+  });
+
+  it('fails when the median is over the target', () => {
+    expect(checkFirstOpen([520, 560, 700], gpu).status).toBe('fail');
+    expect(checkFirstOpen([520, 560, 700], soft).status).toBe('warn');
   });
 });

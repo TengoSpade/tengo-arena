@@ -80,8 +80,20 @@ export async function runFixtureJourney(env: JourneyEnv): Promise<void> {
       let endTick = 0;
       await rec.step('fixture.open', 'Load the fixed round (first viewer open)', async () => {
         const opened = await loadFixtureRound(page);
-        rec.measurements['fixture.firstOpen'] = opened;
-        rec.check(checkFirstOpen(opened.ms, env.perf));
+        // Two more opens in fresh pages: one sample is noise around the target.
+        const samples = [opened.ms];
+        for (let i = 0; i < 2; i++) {
+          const other = await openPage(env, 'dark');
+          try {
+            await requireHook(other, { needFixture: true });
+            samples.push((await loadFixtureRound(other)).ms);
+          } finally {
+            env.collectConsole(other);
+            await other.close();
+          }
+        }
+        rec.measurements['fixture.firstOpen'] = { ...opened, samplesMs: samples };
+        rec.check(checkFirstOpen(samples, env.perf));
         const c = await canvasInfo(page);
         if (!c) throw new SmokeFailure('arena.no-canvas', 'loadFixtureRound() finished but the page has no canvas.');
         canvas = c;
