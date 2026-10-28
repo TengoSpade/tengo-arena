@@ -18,8 +18,14 @@ describe('src/render pure half', () => {
     expect(TELEGRAPH_MIN_TICKS).toBe(6);
   });
 
-  it('exposes the model as one injectable object; bodies are stubs until WP-M2C', () => {
+  it('exposes the model as one injectable object whose bodies are implemented (WP-M2C landed)', () => {
     expect(timeline.keyMoments).toBe(keyMoments);
-    expect(() => keyMoments(null as never, null as never, 0)).toThrow(NotImplementedError);
+    let thrown: unknown = null;
+    try {
+      keyMoments(null as never, null as never, 0);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).not.toBeInstanceOf(NotImplementedError);
   });
 });
