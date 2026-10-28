@@ -22,6 +22,7 @@ import { freshInfo, ratingNow } from '../../m11/model';
 import { FreshMeter, RatingEff } from '../../m11/parts';
 import { MATCH_PAUSED, MATCH_WATCHING, SAVE_ROUND_FAILED, useStore, type AppStore } from '../../store';
 import { useArena } from '../../store/arena';
+import { usePrefetchViewer } from '../arena/viewer-factory';
 import { errorText } from '../../store/messages';
 import { useEngine } from '../../store/engine';
 import { useMatchDay } from '../../store/match-day';
@@ -41,6 +42,8 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   const content = store.content.value;
   const view = state ? md.betweenRoundView(state) : null;
   const ms = state?.liveMatch ?? null;
+  // The next round of a watched match opens the arena: warm its chunks at idle while the player decides his swaps.
+  usePrefetchViewer(ms?.watch?.mode === 'watch');
   const sideKey = view?.playerSide ?? null;
   const mine: BetweenRoundSideView | null = view && sideKey ? view[sideKey] : null;
   const theirs: BetweenRoundSideView | null = view && sideKey ? view[sideKey === 'home' ? 'away' : 'home'] : null;

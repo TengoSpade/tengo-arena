@@ -14,6 +14,7 @@ import type { Speed } from '../../../render';
 import type { AppStore } from '../../store';
 import { buildFixtureRound, FIXTURE_ROUND_ID } from '../../debug/arena-fixture';
 import { hookSlot } from './hook-registry';
+import { prefetchViewer } from './viewer-factory';
 
 export interface ArenaTestHook {
   frame(): ReturnType<NonNullable<typeof hookSlot.frame>> | null;
@@ -29,6 +30,8 @@ export interface ArenaTestHook {
 }
 
 export function installArenaTestHook(store: AppStore): ArenaTestHook {
+  // The smoke measures the first open: the viewer's lazy chunks are warm before it asks for the fixture round.
+  setTimeout(() => prefetchViewer(), 0);
   const hook: ArenaTestHook = {
     frame: () => hookSlot.frame?.() ?? null,
     seek: (tick) => hookSlot.viewer?.seek(tick),
@@ -40,6 +43,7 @@ export function installArenaTestHook(store: AppStore): ArenaTestHook {
     ready: () => hookSlot.viewer !== null,
     async loadFixtureRound() {
       hookSlot.fixture = { fixtureId: FIXTURE_ROUND_ID, playback: buildFixtureRound(store) };
+      prefetchViewer();
       location.hash = `#/replay/${FIXTURE_ROUND_ID}`;
       return FIXTURE_ROUND_ID;
     },
