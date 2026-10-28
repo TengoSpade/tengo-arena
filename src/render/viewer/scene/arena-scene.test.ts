@@ -7,7 +7,7 @@ import { Container, Graphics, type GraphicsContext } from 'pixi.js';
 import { describe, expect, it } from 'vitest';
 import type { ArenaFrameState, EffectKind, EffectRenderState, UnitRenderState } from '../../types';
 import { DEFAULT_CAMERA } from '../../camera';
-import { defaultArenaPalette } from '../palette';
+import { defaultArenaPalette } from '../../colors';
 import { FlashLimiter } from '../flash-limiter';
 import { type StubLabel } from './text';
 import { assemble, type Headless } from '../testing/headless';
@@ -627,3 +627,43 @@ function stubLabels(h: Headless): StubLabel[] {
   return factory.created;
 }
 
+
+describe('reduced motion and the model\'s age 1 (A19)', () => {
+  const chipAlphaOf = (h: Headless, text: string): number | null => {
+    const label = stubLabels(h).find((l) => l.text === text && isShown(l.view));
+    return label ? (label.view.parent as Container).alpha : null;
+  };
+
+  it('draws non-number effects static, not faded out, when the model says age 1 under reduced motion', async () => {
+    const h = assemble({ reducedMotion: true });
+    await h.core.load(fakeLog(), fakeContext());
+    const base = blankState(h.core.currentState!);
+    const frame = (age: number): void =>
+      h.scene.draw({ ...base, effects: [effect({ id: 1, kind: 'evade', unit: 1, target: 7, age }), effect({ id: 2, kind: 'rally', unit: 0, age })] }, { tick: 50, dtMs: 16, speed: 1, playing: true, nowMs: 1000 });
+    frame(1);
+    expect(chipAlphaOf(h, 'Evade')).toBeCloseTo(1, 5);
+    expect(chipAlphaOf(h, 'Rally')).toBeCloseTo(1, 5);
+
+    // Without reduced motion the same age is the end of the fade.
+    const m = assemble({ reducedMotion: false });
+    await m.core.load(fakeLog(), fakeContext());
+    m.scene.draw({ ...blankState(m.core.currentState!), effects: [effect({ id: 1, kind: 'evade', unit: 1, target: 7, age: 1 })] }, { tick: 50, dtMs: 16, speed: 1, playing: true, nowMs: 1000 });
+    expect(chipAlphaOf(m, 'Evade')).toBe(0);
+  });
+
+  it('still fades numbers in place under reduced motion (age 1: gone; and they do not rise)', async () => {
+    const h = assemble({ reducedMotion: true });
+    await h.core.load(fakeLog(), fakeContext());
+    const base = blankState(h.core.currentState!);
+    const at = (age: number): { alpha: number; y: number } => {
+      h.scene.draw({ ...base, effects: [effect({ id: 3, kind: 'number', unit: 2, target: 7, amount: 10, age })] }, { tick: 50, dtMs: 16, speed: 1, playing: true, nowMs: 2000 + age * 1000 });
+      const label = stubLabels(h).find((l) => l.text === '\u221210' && isShown(l.view))!;
+      return { alpha: label.view.alpha, y: label.view.position.y };
+    };
+    const early = at(0.2);
+    const late = at(1);
+    expect(early.alpha).toBe(1);
+    expect(late.alpha).toBe(0);
+    expect(late.y).toBe(early.y); // in place
+  });
+});

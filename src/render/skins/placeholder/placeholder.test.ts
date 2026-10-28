@@ -5,7 +5,7 @@
 import { Container, type Graphics } from 'pixi.js';
 import { describe, expect, it } from 'vitest';
 import type { UnitRenderState } from '../../types';
-import { defaultArenaPalette } from '../../viewer/palette';
+import { defaultArenaPalette } from '../../colors';
 import type { BodyFrame } from '../../viewer/skin';
 import { fakeColors, fakeContext, fakeLog, createFakeTimeline, fakeContent } from '../../viewer/testing/fake-timeline';
 import { placeholderSkin } from './index';
@@ -21,7 +21,7 @@ function unitState(over: Partial<UnitRenderState> = {}): UnitRenderState {
 describe('placeholder skin', () => {
   it('loads and prepares without any asset (nothing to fetch)', async () => {
     const skin = placeholderSkin();
-    await skin.load({ renderer: null as never, content: fakeContent(), palette: defaultArenaPalette() });
+    await skin.load({ renderer: null as never, content: fakeContent(), palette: defaultArenaPalette('dark') });
     await expect(skin.prepare(fakeContext().units)).resolves.toBeUndefined();
     expect(skin.id).toBe('placeholder');
   });

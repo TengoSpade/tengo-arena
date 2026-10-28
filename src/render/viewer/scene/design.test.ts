@@ -9,7 +9,7 @@ import { join, relative } from 'node:path';
 import { type Container } from 'pixi.js';
 import { describe, expect, it } from 'vitest';
 import type { ArenaFrameState, ArenaPalette, UnitRenderState } from '../../types';
-import { defaultArenaPalette } from '../palette';
+import { defaultArenaPalette } from '../../colors';
 import { assemble, type Headless } from '../testing/headless';
 import { fakeContext, fakeLog } from '../testing/fake-timeline';
 
@@ -44,7 +44,8 @@ describe('the token follows the palette and its metrics', () => {
     expect(shown.focusTint).toBe(0x00ff00);
     expect(shown.barsHeight).toBeCloseTo(10 + 1 + 10 * 0.6 + 2, 3); // HP bar, 1 px, the 60% focus bar, the hairline
     const dflt = await shownWith(defaultArenaPalette('dark'));
-    expect(dflt.scene.tokenOf(1)!.shown().barsHeight).toBeCloseTo(6.4 + 1 + 6.4 * 0.6 + 2, 3);
+    const bar = defaultArenaPalette('dark').metrics.barHeightPx;
+    expect(dflt.scene.tokenOf(1)!.shown().barsHeight).toBeCloseTo(bar + 1 + bar * 0.6 + 2, 3);
     expect(dflt.scene.tokenOf(1)!.shown().hpTint).toBe(defaultArenaPalette('dark').hp);
   });
 

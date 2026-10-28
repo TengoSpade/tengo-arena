@@ -1,26 +1,73 @@
 /**
- * The dev harness (see harness.html): the real createArenaViewer over the scripted fake Timeline, in a real browser.
- * It is how WP-M2D proves WebGL canvas capture, reads an early frame rate and runs the 20-round teardown check, and a
- * starting point for the smoke (WP-M2F). Not bundled into the app.
+ * The dev harness (see harness.html): the real createArenaViewer in a real browser, over the REAL timeline, cue table,
+ * camera and content with a committed simulator log (src/render/timeline/fixtures), or with `?fake=1` over the scripted
+ * fake Timeline (src/render/viewer/testing). It is how WP-M2D proves WebGL canvas capture, reads an early frame rate and
+ * runs the teardown checks, and a starting point for the smoke (WP-M2F). Not bundled into the app.
  */
+import type { ContentDB } from '../../../core/content';
+import type { FightLog } from '../../../core/model';
 import { DEFAULT_CAMERA } from '../../camera';
-import { createArenaViewer, defaultArenaPalette, type ArenaSkin, type ArenaViewer } from '../index';
-import type { PlaybackStop } from '../../types';
+import { defaultArenaPalette } from '../../colors';
+import { buildCueTable } from '../../cues';
 import { placeholderSkin } from '../../skins/placeholder';
+import type { Timeline } from '../../timeline';
+import type { ArenaPalette, ArenaRoundContext, CueTable, PlaybackStop, ViewTransformFn } from '../../types';
+import { createArenaViewer, type ArenaSkin, type ArenaViewer } from '../index';
 import { createFakeTimeline, fakeContent, fakeContext, fakeCues, fakeLog, fakeViewTransform } from '../testing/fake-timeline';
+import { FIXTURES, realContent, realContext, realLog } from './real';
 
 const q = new URLSearchParams(location.search);
 const theme = q.get('theme') === 'light' ? 'light' : 'dark';
 const reduced = q.get('reduced') === '1';
+const fake = q.get('fake') === '1';
 const host = document.getElementById('host') as HTMLElement;
 const hud = document.getElementById('hud') as HTMLElement;
 document.body.style.background = theme === 'light' ? '#e9e5dc' : '#0e1013';
 document.body.style.color = theme === 'light' ? '#1d1c19' : '#ebe6da';
 
-const timeline = createFakeTimeline();
 const frames: number[] = [];
 /** A test can set this to act inside onStop (call play(), as a UI might). */
 let stopHook: ((stop: PlaybackStop) => void) | null = null;
+
+/** What the harness feeds the viewer: the real modules, or the scripted fakes. */
+interface Kit {
+  name: 'real' | 'fake';
+  content: ContentDB;
+  cues: CueTable;
+  /** Undefined = the viewer's default (the real timeline). */
+  timeline: Timeline | undefined;
+  viewTransform: ViewTransformFn | undefined;
+  palette: ArenaPalette;
+  log(): Promise<FightLog>;
+  ctx(log: FightLog, kind?: 'live' | 'replay'): ArenaRoundContext;
+}
+
+async function makeKit(): Promise<Kit> {
+  const palette = defaultArenaPalette(theme);
+  if (fake) {
+    return { name: 'fake', content: fakeContent(), cues: fakeCues(), timeline: createFakeTimeline(), viewTransform: fakeViewTransform, palette, log: () => Promise.resolve(fakeLog()), ctx: (_log, kind = 'replay') => fakeContext({ kind }) };
+  }
+  const content = realContent();
+  const logs = new Map<string, FightLog>();
+  const name = FIXTURES.includes(q.get('fixture') as never) ? (q.get('fixture') as (typeof FIXTURES)[number]) : 'long';
+  return {
+    name: 'real',
+    content,
+    cues: buildCueTable(content),
+    timeline: undefined,
+    viewTransform: undefined,
+    palette,
+    async log() {
+      let l = logs.get(name);
+      if (!l) {
+        l = await realLog(name);
+        logs.set(name, l);
+      }
+      return l;
+    },
+    ctx: (log, kind = 'replay') => realContext(log, content, kind, 0, theme),
+  };
+}
 
 export interface HarnessMeasure {
   n: number;
@@ -33,14 +80,10 @@ export interface HarnessMeasure {
 }
 
 async function main(): Promise<void> {
+  const kit = await makeKit();
+  const options = (h: HTMLElement = host): Parameters<typeof createArenaViewer>[0] => ({ host: h, content: kit.content, palette: kit.palette, reducedMotion: reduced, cues: kit.cues, ...(kit.timeline ? { timeline: kit.timeline } : {}), ...(kit.viewTransform ? { viewTransform: kit.viewTransform } : {}) });
   const viewer: ArenaViewer = await createArenaViewer({
-    host,
-    content: fakeContent(),
-    palette: defaultArenaPalette(theme),
-    reducedMotion: reduced,
-    timeline,
-    cues: fakeCues(),
-    viewTransform: fakeViewTransform,
+    ...options(),
     camera: { ...DEFAULT_CAMERA },
     onFrame: (s) => {
       frames.push(s.tick);
@@ -51,8 +94,8 @@ async function main(): Promise<void> {
       stopHook?.(stop);
     },
   });
-  const log = fakeLog();
-  const ctx = fakeContext({ kind: 'replay' });
+  const log = await kit.log();
+  const ctx = kit.ctx(log);
   await viewer.load(log, ctx);
   viewer.setSpeed((Number(q.get('speed')) as 1 | 2 | 4) || 1);
   if (q.get('tick')) viewer.seek(Number(q.get('tick')));
@@ -76,16 +119,17 @@ async function main(): Promise<void> {
     canvas.getContext('2d')!.drawImage(bmp, 0, 0);
     return { canvas, bytes: blob.size, scale: bmp.width / host.clientWidth };
   };
+  const NO_PAUSE = { ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null };
 
   const api = {
+    kit: kit.name,
     viewer,
-    setStopHook(fn: ((stop: PlaybackStop) => void) | null): void {
-      stopHook = fn;
-    },
-    timeline,
     log,
     ctx,
     frames,
+    setStopHook(fn: ((stop: PlaybackStop) => void) | null): void {
+      stopHook = fn;
+    },
     /** The RGBA of one pixel of the snapshot at a position in CSS px. */
     async pixelAt(x: number, y: number): Promise<number[]> {
       const { canvas, scale } = await toCanvas();
@@ -120,7 +164,7 @@ async function main(): Promise<void> {
     async measure(ms: number, speed: 1 | 2 | 4): Promise<HarnessMeasure> {
       viewer.pause();
       viewer.seek(0);
-      viewer.setAutoPause({ ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null });
+      viewer.setAutoPause(NO_PAUSE);
       viewer.setSpeed(speed);
       viewer.play();
       const intervals: number[] = [];
@@ -149,8 +193,8 @@ async function main(): Promise<void> {
       scratch.style.cssText = 'position:absolute;left:0;top:0;width:640px;height:360px;visibility:hidden';
       document.body.appendChild(scratch);
       for (let i = 0; i < n; i++) {
-        const v = await createArenaViewer({ host: scratch, content: fakeContent(), palette: defaultArenaPalette(theme), reducedMotion: false, timeline: createFakeTimeline(), cues: fakeCues(), viewTransform: fakeViewTransform });
-        await v.load(fakeLog(), fakeContext({ kind: 'replay' }));
+        const v = await createArenaViewer(options(scratch));
+        await v.load(await kit.log(), kit.ctx(await kit.log()));
         v.setSpeed(4);
         v.play();
         await new Promise((r) => setTimeout(r, 120));
@@ -166,7 +210,6 @@ async function main(): Promise<void> {
       const scratch = document.createElement('div');
       scratch.style.cssText = 'position:absolute;left:0;top:0;width:640px;height:360px;visibility:hidden';
       document.body.appendChild(scratch);
-      const base = { host: scratch, content: fakeContent(), palette: defaultArenaPalette(theme), reducedMotion: false, timeline: createFakeTimeline(), cues: fakeCues(), viewTransform: fakeViewTransform };
       const message = (e: unknown): string => (e instanceof Error ? `${e.constructor.name}: ${e.message}` : String(e));
       const inner = placeholderSkin();
       const bad: ArenaSkin = { id: 'bad', load: () => Promise.reject(new Error('skin boom')), prepare: (u) => inner.prepare(u), createBody: (i, c) => inner.createBody(i, c), createFloor: (a, p) => inner.createFloor(a, p), setPalette: (p) => inner.setPalette(p), destroy: () => inner.destroy() };
@@ -174,21 +217,22 @@ async function main(): Promise<void> {
       let cues = 'resolved';
       let webgl = 'resolved';
       try {
-        await createArenaViewer({ ...base, skin: bad });
+        await createArenaViewer({ ...options(scratch), skin: bad });
       } catch (e) {
         skin = message(e);
       }
       try {
-        const { cues: _omit, ...noCues } = base;
+        // No cue table and content the cue builder cannot read: buildCueTable throws after init.
+        const { cues: _omit, ...rest } = options(scratch);
         void _omit;
-        await createArenaViewer(noCues);
+        await createArenaViewer({ ...rest, content: {} as ContentDB });
       } catch (e) {
         cues = message(e);
       }
       const getContext = HTMLCanvasElement.prototype.getContext;
       HTMLCanvasElement.prototype.getContext = (() => null) as typeof getContext;
       try {
-        await createArenaViewer(base);
+        await createArenaViewer(options(scratch));
       } catch (e) {
         webgl = message(e);
       } finally {
@@ -205,7 +249,7 @@ async function main(): Promise<void> {
       mo.observe(canvas, { attributes: true, attributeFilter: ['aria-label'] });
       viewer.pause();
       viewer.seek(0);
-      viewer.setAutoPause({ ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null });
+      viewer.setAutoPause(NO_PAUSE);
       await new Promise((r) => setTimeout(r, 50));
       mo.takeRecords();
       viewer.play();
@@ -219,7 +263,8 @@ async function main(): Promise<void> {
     /** Load the round `n` times back to back, playing a little each time (the teardown check). */
     async rounds(n: number, playMs: number): Promise<void> {
       for (let i = 0; i < n; i++) {
-        await viewer.load(fakeLog(), fakeContext({ kind: 'replay' }));
+        const l = await kit.log();
+        await viewer.load(l, kit.ctx(l));
         viewer.setSpeed(4);
         viewer.play();
         await new Promise((r) => setTimeout(r, playMs));

@@ -166,7 +166,7 @@ export class ViewerCore {
 
   private kickoffOf(index: PlaybackIndex, ctx: ArenaRoundContext): KickoffInfo | null {
     try {
-      const s0 = this.o.timeline.sampleAt(index, 0, ctx, { reducedMotion: true });
+      const s0 = this.o.timeline.sampleAt(index, 0, ctx, ctx.kind === 'live' ? { reducedMotion: true, knownUntilTick: Math.max(0, ctx.startTick) } : { reducedMotion: true });
       const rows = new Map(index.header.units.map((u) => [u.index, u.row]));
       return { units: s0.units.map((u) => ({ unit: u.unit, side: u.side, row: rows.get(u.unit) ?? 'front', x: u.x })) };
     } catch {
@@ -250,6 +250,26 @@ export class ViewerCore {
   }
 
   // ---- settings --------------------------------------------------------------------------------------------------
+
+  /**
+   * The unit's committed decisions from round start, oldest first, up to and including `tick` (default: the current
+   * tick), never past the head: a live round reveals nothing beyond what has been shown (§A19). Each entry is what
+   * `decisionAt` returns, so counting by `rule` gives the fires so far (inspector "rules fired so far").
+   */
+  decisionsUpTo(unit: UnitIndex, tick?: number): readonly DecisionSnapshot[] {
+    const { index, clock } = this;
+    if (!index || !clock) return [];
+    let at = Math.min(tick ?? clock.tick, clock.head);
+    const out: DecisionSnapshot[] = [];
+    // Walk back: the latest decision committed at or before `at`, then the latest before that one's commit tick.
+    for (let guard = 0; guard < 10_000 && Number.isFinite(at) && at >= 0; guard++) {
+      const d = this.o.timeline.decisionAt(index, unit, at);
+      if (!d) break;
+      out.push(d);
+      at = d.commitTick - 1e-6; // strictly decreasing: the next older decision
+    }
+    return out.reverse();
+  }
 
   setAutoPause(rules: AutoPauseRules): void {
     this.autoPause = rules;
@@ -369,7 +389,16 @@ export class ViewerCore {
     return true;
   }
 
+  /**
+   * Sample the model. A LIVE round passes `knownUntilTick` = the head (the furthest tick shown, or the tick this very
+   * frame is about to show), so interpolated positions, effect anchors and projectile starts never use a frame past
+   * it (§A19). A replay passes none.
+   */
   private sample(index: PlaybackIndex, ctx: ArenaRoundContext, tick: number): ArenaFrameState {
+    if (ctx.kind === 'live') {
+      const head = Math.max(this.clock?.head ?? 0, tick);
+      return this.o.timeline.sampleAt(index, tick, ctx, { reducedMotion: this.reducedMotion, knownUntilTick: head });
+    }
     return this.o.timeline.sampleAt(index, tick, ctx, { reducedMotion: this.reducedMotion });
   }
 

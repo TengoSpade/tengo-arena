@@ -78,6 +78,8 @@ export function fakeLog(spec: FakeRoundSpec = {}): FightLog {
 export interface FakeTimelineCalls {
   indexFightLog: number;
   sampleAt: number[];
+  /** The `knownUntilTick` of each sampleAt call (undefined when none was passed). */
+  knownUntil: (number | undefined)[];
   autoPauseStops: number[];
   keyMoments: number[];
   decisionAt: number[];
@@ -113,7 +115,7 @@ function parse(log: FightLog): Script {
 }
 
 export function createFakeTimeline(): FakeTimeline {
-  const calls: FakeTimelineCalls = { indexFightLog: 0, sampleAt: [], autoPauseStops: [], keyMoments: [], decisionAt: [], samePrefix: [] };
+  const calls: FakeTimelineCalls = { indexFightLog: 0, sampleAt: [], knownUntil: [], autoPauseStops: [], keyMoments: [], decisionAt: [], samePrefix: [] };
   const timeline: FakeTimeline = {
     calls,
     maxTickAsked: () => Math.max(0, ...calls.sampleAt, ...calls.autoPauseStops, ...calls.keyMoments, ...calls.decisionAt, ...calls.samePrefix),
@@ -124,6 +126,7 @@ export function createFakeTimeline(): FakeTimeline {
     },
     sampleAt(index, tick, _ctx, options): ArenaFrameState {
       calls.sampleAt.push(tick);
+      calls.knownUntil.push(options?.knownUntilTick);
       return sample(scriptOf(index), tick, options?.reducedMotion ?? false);
     },
     eventsBetween(index, fromTick, toTick) {

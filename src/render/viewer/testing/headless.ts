@@ -8,9 +8,10 @@ import type { UnitIndex } from '../../../core/model';
 import { DEFAULT_AUTO_PAUSE } from '../../index';
 import { DEFAULT_CAMERA } from '../../camera';
 import { placeholderSkin } from '../../skins/placeholder';
-import type { ArenaFrameState, ArenaPalette, AutoPauseRules, CameraConfig, PlaybackStop } from '../../types';
+import type { Timeline } from '../../timeline';
+import type { ArenaFrameState, ArenaPalette, AutoPauseRules, CameraConfig, CueTable, PlaybackStop, ViewTransformFn } from '../../types';
 import { ViewerCore } from '../core';
-import { defaultArenaPalette } from '../palette';
+import { defaultArenaPalette } from '../../colors';
 import { ArenaScene } from '../scene/arena-scene';
 import { createStubTextFactory } from '../scene/text';
 import type { ArenaSkin, BodyVisual, SkinContext } from '../skin';
@@ -92,16 +93,22 @@ export interface HeadlessOptions {
   palette?: ArenaPalette;
   camera?: Partial<CameraConfig>;
   content?: ContentDB;
+  /** The model to run on (default: the scripted fake). The real one works too; only the fake records `calls`. */
+  timeline?: Timeline;
+  /** The cue table (default: the fake's). */
+  cues?: CueTable;
+  /** The world-to-screen transform (default: the fake's letterbox). */
+  viewTransform?: ViewTransformFn;
   /** Called after a stop is recorded (a test can call play() inside it, as a UI might). */
   onStop?: (stop: PlaybackStop, h: Headless) => void;
 }
 
 export function assemble(options: HeadlessOptions = {}): Headless {
-  const timeline = createFakeTimeline();
+  const timeline = (options.timeline ?? createFakeTimeline()) as FakeTimeline;
   const skin = new TrackingSkin();
   const palette = options.palette ?? defaultArenaPalette('dark');
   const content = options.content ?? fakeContent();
-  const cues = fakeCues();
+  const cues = options.cues ?? fakeCues();
   const text = createStubTextFactory();
   skin.setPalette(palette); // the real viewer loads the skin with the palette before the first round
   const scene = new ArenaScene({
@@ -110,7 +117,7 @@ export function assemble(options: HeadlessOptions = {}): Headless {
     cues,
     palette,
     text,
-    viewTransform: fakeViewTransform,
+    viewTransform: options.viewTransform ?? fakeViewTransform,
     camera: { ...DEFAULT_CAMERA, ...options.camera },
     reducedMotion: options.reducedMotion ?? false,
     flashLimitPerSecond: null,

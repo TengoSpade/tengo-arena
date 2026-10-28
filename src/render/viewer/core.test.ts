@@ -444,3 +444,45 @@ describe('destroy', () => {
     expect(h.frames).toHaveLength(0);
   });
 });
+
+describe('the real model contract (A19)', () => {
+  it('passes knownUntilTick = the live head on every live sample, and none for a replay', async () => {
+    const h = await loaded('live', { startTick: 200, autoPause: NO_PAUSE });
+    h.core.setSpeed(4);
+    h.core.play();
+    h.run(120);
+    h.core.seek(50); // a rewind: still bounded by the head
+    h.core.pause();
+    const { sampleAt, knownUntil } = h.timeline.calls;
+    expect(knownUntil.length).toBe(sampleAt.length);
+    let furthest = 200; // the resume tick is the head the round starts with
+    knownUntil.forEach((known, i) => {
+      expect(known, `sample ${i}`).toBeDefined();
+      furthest = Math.max(furthest, sampleAt[i]!);
+      expect(known!).toBeGreaterThanOrEqual(sampleAt[i]!); // never below the tick it samples (the kickoff sample at 0 is bounded by the head, 200)
+      expect(known!).toBeLessThanOrEqual(furthest + 1e-9); // never ahead of anything shown so far
+    });
+    // The rewind sample (tick 50) is bounded by the head the round had reached, not by 50.
+    expect(knownUntil.at(-1)!).toBe(h.core.headTick);
+
+    const r = await loaded('replay', { autoPause: NO_PAUSE });
+    r.core.play();
+    r.run(20);
+    expect(r.timeline.calls.knownUntil.every((k) => k === undefined)).toBe(true);
+  });
+
+  it('decisionsUpTo lists a unit\'s committed decisions oldest first, never past the head', async () => {
+    const h = await loaded('live', { startTick: 650, autoPause: NO_PAUSE });
+    const commits = (list: readonly { commitTick: number }[]): number[] => list.map((d) => d.commitTick);
+    expect(commits(h.core.decisionsUpTo(3))).toEqual([0, 100, 200, 300, 400, 500, 600]);
+    expect(commits(h.core.decisionsUpTo(3, 9999))).toEqual([0, 100, 200, 300, 400, 500, 600]); // clamped to the head
+    expect(commits(h.core.decisionsUpTo(3, 250))).toEqual([0, 100, 200]);
+    expect(h.timeline.calls.decisionAt.every((t) => t <= 650)).toBe(true);
+    h.core.seek(130); // defaults to the current tick, a rewind
+    expect(commits(h.core.decisionsUpTo(3))).toEqual([0, 100]);
+    expect(h.core.decisionsUpTo(3).every((d) => d.unit === 3)).toBe(true);
+    const replay = await loaded('replay');
+    expect(replay.core.decisionsUpTo(2, 1200)).toHaveLength(13);
+    expect(assemble().core.decisionsUpTo(1)).toEqual([]); // nothing loaded
+  });
+});

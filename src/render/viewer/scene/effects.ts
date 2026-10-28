@@ -316,6 +316,14 @@ function fade(age: number, from = 0): number {
   return age <= from ? 1 : Math.max(0, 1 - (age - from) / (1 - from));
 }
 
+/**
+ * The fade of an effect. Under reduced motion the model gives non-number effects age 1, meaning "drawn static at the
+ * end state" (§A19), so they must not fade by 1 - age (they would vanish); numbers fade in place.
+ */
+function fadeOf(env: FxEnv, e: EffectRenderState, from = 0): number {
+  return env.reducedMotion && e.kind !== 'number' ? 1 : fade(e.age, from);
+}
+
 /** The shape of a damage tone: spark (physical), round burst (arcane), diamond (true); others use the spark. */
 function impactShape(g: Graphics, x: number, y: number, size: number, tone: Tone, color: number, alpha: number, env: FxEnv): void {
   const h = size / 2;
@@ -347,7 +355,7 @@ function floatingNumber(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: 
   l.setText(`${gain ? '+' : '−'}${Math.abs(amount)}${crit ? '!' : ''}`);
   const p = here(env, e);
   l.view.position.set(p.x, p.y - env.ppm * 0.9 - settle(env, env.palette.metrics.numberRisePx * e.age, 0));
-  l.view.alpha = alpha * fade(e.age, 0.55);
+  l.view.alpha = alpha * fadeOf(env, e, 0.55);
 }
 
 /** A short word on a plate chip at a point (Evade, Resisted, Deathward, Rally, Call). */
@@ -379,7 +387,7 @@ function callout(v: EffectView, e: EffectRenderState, env: FxEnv, alpha: number,
   // Under the downed fighter, kept inside the canvas, simultaneous callouts stacked downwards.
   const x = Math.max(w / 2 + 4, Math.min(env.viewport.width - w / 2 - 4, anchor.x));
   const y = Math.min(env.viewport.height - h - 4, anchor.y + env.ppm * 0.5 + rem * 0.8) + slot * (h + 4);
-  const a = alpha * fade(e.age, 0.7);
+  const a = alpha * fadeOf(env, e, 0.7);
   chip.view.position.set(x - w / 2, y);
   chip.view.alpha = a;
   const d = rem * 0.3;
@@ -403,15 +411,15 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     const r = env.ppm * 0.95;
     const start = aim - sweep / 2 + settle(env, sweep * 0.5 * e.age, 0);
     v.g.clear();
-    v.g.arc(from.x, from.y, r, start, start + sweep * 0.55).stroke({ width: 8, color: env.palette.plate, alpha: alpha * 0.45 * fade(e.age) });
-    v.g.arc(from.x, from.y, r, start, start + sweep * 0.55).stroke({ width: 4, color, alpha: alpha * 0.95 * fade(e.age) });
+    v.g.arc(from.x, from.y, r, start, start + sweep * 0.55).stroke({ width: 8, color: env.palette.plate, alpha: alpha * 0.45 * fadeOf(env, e) });
+    v.g.arc(from.x, from.y, r, start, start + sweep * 0.55).stroke({ width: 4, color, alpha: alpha * 0.95 * fadeOf(env, e) });
   },
   beam(v, e, env, alpha) {
     v.hideText();
     const a = unitXY(env, e.unit);
     const b = unitXY(env, e.target);
     v.g.clear();
-    if (a && b) line(v.g, a.x, a.y, b.x, b.y, toneColor(e.tone, env.palette), alpha * fade(e.age), 3, env);
+    if (a && b) line(v.g, a.x, a.y, b.x, b.y, toneColor(e.tone, env.palette), alpha * fadeOf(env, e), 3, env);
   },
   impact(v, e, env, alpha) {
     v.hideText();
@@ -420,7 +428,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     const base = Math.max(1.1 * rem, 0.7 * env.ppm);
     const size = base * settle(env, 0.6 + 0.5 * e.age, 1) * (e.crit ? 1.3 : 1);
     v.g.clear();
-    impactShape(v.g, p.x, p.y, size, e.tone, toneColor(e.tone, env.palette), alpha * fade(e.age, 0.2), env);
+    impactShape(v.g, p.x, p.y, size, e.tone, toneColor(e.tone, env.palette), alpha * fadeOf(env, e, 0.2), env);
   },
   number(v, e, env, alpha) {
     floatingNumber(v, e, env, alpha);
@@ -428,21 +436,21 @@ const DRAWERS: Record<EffectKind, Drawer> = {
   evade(v, e, env, alpha) {
     v.g.clear();
     const p = here(env, e);
-    wordChip(v, 'Evade', p.x, p.y - env.ppm * 0.9 - settle(env, env.palette.metrics.numberRisePx * 0.5 * e.age, 0), env, alpha * fade(e.age, 0.55));
+    wordChip(v, 'Evade', p.x, p.y - env.ppm * 0.9 - settle(env, env.palette.metrics.numberRisePx * 0.5 * e.age, 0), env, alpha * fadeOf(env, e, 0.55));
   },
   'heal-pulse'(v, e, env, alpha) {
     v.hideText();
     const p = unitXY(env, e.target ?? e.unit) ?? here(env, e);
     v.g.clear();
-    ring(v.g, p.x, p.y, env.ppm * (0.5 + 0.6 * e.age), env.palette.fxHeal, alpha * fade(e.age), 3, env);
+    ring(v.g, p.x, p.y, env.ppm * (0.5 + 0.6 * e.age), env.palette.fxHeal, alpha * fadeOf(env, e), 3, env);
   },
   'shield-gain'(v, e, env, alpha) {
     v.hideText();
     const p = unitXY(env, e.target ?? e.unit) ?? here(env, e);
     v.g.clear();
     const r = env.ppm * 0.78;
-    v.g.arc(p.x, p.y, r, -Math.PI * 0.8, -Math.PI * 0.2).stroke({ width: 7, color: env.palette.plate, alpha: alpha * 0.5 * fade(e.age, 0.4) });
-    v.g.arc(p.x, p.y, r, -Math.PI * 0.8, -Math.PI * 0.2).stroke({ width: 3.5, color: env.palette.fxShield, alpha: alpha * fade(e.age, 0.4) });
+    v.g.arc(p.x, p.y, r, -Math.PI * 0.8, -Math.PI * 0.2).stroke({ width: 7, color: env.palette.plate, alpha: alpha * 0.5 * fadeOf(env, e, 0.4) });
+    v.g.arc(p.x, p.y, r, -Math.PI * 0.8, -Math.PI * 0.2).stroke({ width: 3.5, color: env.palette.fxShield, alpha: alpha * fadeOf(env, e, 0.4) });
   },
   'shield-break'(v, e, env, alpha) {
     v.hideText();
@@ -451,19 +459,19 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     v.g.clear();
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * TAU + hash01(e.id) * 0.6;
-      line(v.g, p.x + Math.cos(a) * r0, p.y + Math.sin(a) * r0, p.x + Math.cos(a) * (r0 + 7), p.y + Math.sin(a) * (r0 + 7), env.palette.fxShield, alpha * fade(e.age), 2.5, env);
+      line(v.g, p.x + Math.cos(a) * r0, p.y + Math.sin(a) * r0, p.x + Math.cos(a) * (r0 + 7), p.y + Math.sin(a) * (r0 + 7), env.palette.fxShield, alpha * fadeOf(env, e), 2.5, env);
     }
   },
   'status-apply'(v, e, env, alpha) {
     v.hideText();
     const p = unitXY(env, e.target ?? e.unit) ?? here(env, e);
     v.g.clear();
-    ring(v.g, p.x, p.y, env.ppm * settle(env, 0.45 + 0.3 * e.age, 0.7), toneColor(e.tone, env.palette), alpha * fade(e.age) * 0.9, 2, env);
+    ring(v.g, p.x, p.y, env.ppm * settle(env, 0.45 + 0.3 * e.age, 0.7), toneColor(e.tone, env.palette), alpha * fadeOf(env, e) * 0.9, 2, env);
   },
   'status-resist'(v, e, env, alpha) {
     v.g.clear();
     const p = here(env, e);
-    wordChip(v, 'Resisted', p.x, p.y - env.ppm * 0.9 - settle(env, env.palette.metrics.numberRisePx * 0.5 * e.age, 0), env, alpha * fade(e.age, 0.55));
+    wordChip(v, 'Resisted', p.x, p.y - env.ppm * 0.9 - settle(env, env.palette.metrics.numberRisePx * 0.5 * e.age, 0), env, alpha * fadeOf(env, e, 0.55));
   },
   interrupt(v, e, env, alpha) {
     v.hideText();
@@ -475,7 +483,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     const x = p.x;
     const y = p.y - env.ppm * 0.5 - rem * 3;
     const s = rem * 0.4 * settle(env, 1 + 0.6 * (1 - e.age), 1);
-    const a = alpha * fade(e.age, 0.3);
+    const a = alpha * fadeOf(env, e, 0.3);
     line(v.g, x - s, y - s, x + s, y + s, env.palette.warn, a, 3, env);
     line(v.g, x - s, y + s, x + s, y - s, env.palette.warn, a, 3, env);
   },
@@ -486,7 +494,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     v.g.clear();
     if (!p || env.reducedMotion) return;
     const s = here(env, e);
-    line(v.g, s.x, s.y, p.x, p.y, toneColor(e.tone, env.palette), alpha * 0.55 * fade(e.age), 6, env);
+    line(v.g, s.x, s.y, p.x, p.y, toneColor(e.tone, env.palette), alpha * 0.55 * fadeOf(env, e), 6, env);
   },
   displace(v, e, env, alpha) {
     v.hideText();
@@ -495,7 +503,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     if (!p || env.reducedMotion) return;
     const s = here(env, e);
     const color = toneColor(e.tone, env.palette);
-    const a = alpha * 0.7 * fade(e.age);
+    const a = alpha * 0.7 * fadeOf(env, e);
     line(v.g, s.x, s.y, p.x, p.y, color, a, 4, env);
     const ang = Math.atan2(p.y - s.y, p.x - s.x);
     const head = 8;
@@ -505,7 +513,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     v.hideText();
     const p = unitXY(env, e.target ?? e.unit) ?? here(env, e);
     v.g.clear();
-    ring(v.g, p.x, p.y - settle(env, 18 * e.age, 0), env.ppm * 0.65, env.palette.fxHeal, alpha * fade(e.age), 2.5, env);
+    ring(v.g, p.x, p.y - settle(env, 18 * e.age, 0), env.ppm * 0.65, env.palette.fxHeal, alpha * fadeOf(env, e), 2.5, env);
   },
   dispel(v, e, env, alpha) {
     v.hideText();
@@ -515,8 +523,8 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     // A broken ring: three arcs with gaps.
     for (let i = 0; i < 3; i++) {
       const a0 = (i / 3) * TAU + 0.2;
-      v.g.arc(p.x, p.y, r, a0, a0 + TAU / 3 - 0.7).stroke({ width: 5.5, color: env.palette.plate, alpha: alpha * 0.5 * fade(e.age) });
-      v.g.arc(p.x, p.y, r, a0, a0 + TAU / 3 - 0.7).stroke({ width: 2.5, color: env.palette.ink, alpha: alpha * fade(e.age) });
+      v.g.arc(p.x, p.y, r, a0, a0 + TAU / 3 - 0.7).stroke({ width: 5.5, color: env.palette.plate, alpha: alpha * 0.5 * fadeOf(env, e) });
+      v.g.arc(p.x, p.y, r, a0, a0 + TAU / 3 - 0.7).stroke({ width: 2.5, color: env.palette.ink, alpha: alpha * fadeOf(env, e) });
     }
   },
   'guard-link'(v, e, env, alpha) {
@@ -530,7 +538,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     for (let i = 0; i < n; i += 2) {
       const t0 = i / n;
       const t1 = (i + 1) / n;
-      line(v.g, a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0, a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1, env.palette.ink, alpha * 0.8 * fade(e.age, 0.85), 2, env);
+      line(v.g, a.x + (b.x - a.x) * t0, a.y + (b.y - a.y) * t0, a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1, env.palette.ink, alpha * 0.8 * fadeOf(env, e, 0.85), 2, env);
     }
   },
   'chain-arc'(v, e, env, alpha) {
@@ -553,7 +561,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
       const off = i === 4 ? 0 : (hash01(e.id * 7 + i) - 0.5) * 16;
       const qx = a.x + dx * t + nx * off;
       const qy = a.y + dy * t + ny * off;
-      line(v.g, px, py, qx, qy, color, alpha * fade(e.age), 2.5, env);
+      line(v.g, px, py, qx, qy, color, alpha * fadeOf(env, e), 2.5, env);
       px = qx;
       py = qy;
     }
@@ -562,7 +570,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     v.hideText();
     const o = here(env, e);
     const color = toneColor(e.tone, env.palette);
-    const a = alpha * fade(e.age);
+    const a = alpha * fadeOf(env, e);
     // The area is the ability's own: its cue's telegraph (circle, cone or line); a plain 0.9 m burst when it has none.
     const tg = e.ability !== null ? env.cues.ability(e.ability).telegraph : null;
     v.g.clear();
@@ -599,7 +607,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     const s = env.palette.metrics.pipSizePx * 0.6 * (1 - e.age * 0.5);
     const y = p.y - env.ppm * 0.9;
     const pts = [p.x, y - s, p.x + s * 0.28, y - s * 0.28, p.x + s, y, p.x + s * 0.28, y + s * 0.28, p.x, y + s, p.x - s * 0.28, y + s * 0.28, p.x - s, y, p.x - s * 0.28, y - s * 0.28];
-    v.g.poly(pts).fill({ color: env.palette.ink, alpha: alpha * fade(e.age) }).stroke({ width: 1.5, color: env.palette.plate, alpha: alpha * fade(e.age), alignment: 0 });
+    v.g.poly(pts).fill({ color: env.palette.ink, alpha: alpha * fadeOf(env, e) }).stroke({ width: 1.5, color: env.palette.plate, alpha: alpha * fadeOf(env, e), alignment: 0 });
   },
   'focus-gain'(v, e, env, alpha) {
     v.hideText();
@@ -612,7 +620,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     const barW = Math.max(1.7 * env.ppm, 3 * m.pipSizePx);
     const r = env.ppm * 0.5;
     const y = p.y - r - m.ringGapPx - m.ringWidthPx - 4 - m.barHeightPx * 0.3;
-    v.g.rect(p.x - barW / 2 - 2, y - 3, barW + 4, m.barHeightPx * 0.6 + 6).stroke({ width: 2, color: env.palette.focus, alpha: alpha * fade(e.age, 0.2) });
+    v.g.rect(p.x - barW / 2 - 2, y - 3, barW + 4, m.barHeightPx * 0.6 + 6).stroke({ width: 2, color: env.palette.focus, alpha: alpha * fadeOf(env, e, 0.2) });
   },
   'zone-trigger'(v, e, env, alpha) {
     v.hideText();
@@ -628,7 +636,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
       }
     }
     v.g.clear();
-    ring(v.g, o.x, o.y, radius * settle(env, 0.5 + 0.5 * e.age, 1), toneColor(e.tone, env.palette), alpha * fade(e.age), 2.5, env);
+    ring(v.g, o.x, o.y, radius * settle(env, 0.5 + 0.5 * e.age, 1), toneColor(e.tone, env.palette), alpha * fadeOf(env, e), 2.5, env);
   },
   down(v, e, env, alpha, slot) {
     callout(v, e, env, alpha, slot);
@@ -637,14 +645,14 @@ const DRAWERS: Record<EffectKind, Drawer> = {
     // unit is the fighter that was saved (target is the saver).
     const p = unitXY(env, e.unit ?? e.target) ?? here(env, e);
     v.g.clear();
-    ring(v.g, p.x, p.y, env.ppm * settle(env, 0.5 + 0.9 * e.age, 1), env.palette.warn, alpha * fade(e.age), 3.5, env);
-    wordChip(v, 'Deathward', p.x, p.y - env.ppm * 1.1, env, alpha * fade(e.age, 0.5));
+    ring(v.g, p.x, p.y, env.ppm * settle(env, 0.5 + 0.9 * e.age, 1), env.palette.warn, alpha * fadeOf(env, e), 3.5, env);
+    wordChip(v, 'Deathward', p.x, p.y - env.ppm * 1.1, env, alpha * fadeOf(env, e, 0.5));
   },
   rally(v, e, env, alpha) {
     const p = unitXY(env, e.unit ?? e.target) ?? here(env, e);
     v.g.clear();
-    ring(v.g, p.x, p.y, env.ppm * settle(env, 0.5 + 1.3 * e.age, 1.4), env.palette.ink, alpha * fade(e.age), 3, env);
-    wordChip(v, 'Rally', p.x, p.y - env.ppm * 1.1, env, alpha * fade(e.age, 0.5));
+    ring(v.g, p.x, p.y, env.ppm * settle(env, 0.5 + 1.3 * e.age, 1.4), env.palette.ink, alpha * fadeOf(env, e), 3, env);
+    wordChip(v, 'Rally', p.x, p.y - env.ppm * 1.1, env, alpha * fadeOf(env, e, 0.5));
   },
   'captain-down'(v, e, env, alpha, slot) {
     callout(v, e, env, alpha, slot);
@@ -652,7 +660,7 @@ const DRAWERS: Record<EffectKind, Drawer> = {
   call(v, e, env, alpha) {
     const p = unitXY(env, e.unit) ?? here(env, e);
     v.g.clear();
-    ring(v.g, p.x, p.y, env.ppm * 0.8, env.palette.ink, alpha * fade(e.age), 2.5, env);
-    wordChip(v, 'Call', p.x, p.y - env.ppm * 1.1, env, alpha * fade(e.age, 0.5));
+    ring(v.g, p.x, p.y, env.ppm * 0.8, env.palette.ink, alpha * fadeOf(env, e), 2.5, env);
+    wordChip(v, 'Call', p.x, p.y - env.ppm * 1.1, env, alpha * fadeOf(env, e, 0.5));
   },
 };

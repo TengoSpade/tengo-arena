@@ -22,7 +22,7 @@ import { DEFAULT_CAMERA, viewTransform as realViewTransform } from '../camera';
 import { buildCueTable } from '../cues';
 import { placeholderSkin } from '../skins/placeholder';
 import { timeline as realTimeline, type Timeline } from '../timeline';
-import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, AutoPauseRules, CameraConfig, CueTable, DecisionSnapshot, KeyMoment, PlaybackStop, Speed, ViewerStats } from '../types';
+import type { ArenaFrameState, ArenaPalette, ArenaRoundContext, ArenaViewerDecisionHistory, ArenaViewerOptionExtras, AutoPauseRules, CameraConfig, DecisionSnapshot, KeyMoment, PlaybackStop, Speed, ViewerStats } from '../types';
 import { MAX_DT_MS } from './clock';
 import { ViewerCore } from './core';
 import { canvasResolution, watchDevicePixelRatio } from './host';
@@ -33,9 +33,8 @@ import type { ArenaSkin } from './skin';
 import { RingStats } from './stats';
 
 export type { ArenaSkin, BodyFrame, BodyVisual, SkinContext } from './skin';
-export { defaultArenaPalette } from './palette';
 
-export interface ArenaViewerOptions {
+export interface ArenaViewerOptions extends ArenaViewerOptionExtras {
   /** The element the canvas is created in; the viewer follows its size (ResizeObserver) and the device pixel ratio. */
   host: HTMLElement;
   content: ContentDB;
@@ -57,17 +56,7 @@ export interface ArenaViewerOptions {
   onSelect?: (unit: UnitIndex | null) => void;
   /** The render-state model (default: the real src/render timeline); tests inject a fake (review B8). */
   timeline?: Timeline;
-  // ---- additive (WP-M2D): all optional; defaults are the real modules ----
-  /** The cue table (default: buildCueTable(content)). The caller may cache one per content hash and pass it. */
-  cues?: CueTable;
-  /** The world-to-screen transform (default: src/render/camera viewTransform); tests and the dev harness inject one. */
-  viewTransform?: typeof realViewTransform;
-  /**
-   * Make the canvas one tab stop (default true: tabindex 0, role img, a label rewritten at each pause). Selection by
-   * keyboard belongs to the fighter strip (A18 decision 3), never to the canvas. Pass false when the host element is
-   * the tab stop instead.
-   */
-  tabStop?: boolean;
+  // cues, viewTransform and tabStop come from ArenaViewerOptionExtras (src/render/types.ts, §A19).
 }
 
 /**
@@ -75,7 +64,7 @@ export interface ArenaViewerOptions {
  * decisionAt(), all bounded by headTick, and endTick stays null until the end is reached. The UI never indexes a
  * live log itself; the fake-viewer leak test (05-technical-m2 §A11) holds it to that.
  */
-export interface ArenaViewer {
+export interface ArenaViewer extends ArenaViewerDecisionHistory {
   /** Load a round (paused at ctx.startTick) after the skin has prepared its units. Replaces any previous round; frees its visuals. */
   load(log: FightLog, ctx: ArenaRoundContext): Promise<void>;
   /**
@@ -293,6 +282,7 @@ export async function createArenaViewer(options: ArenaViewerOptions): Promise<Ar
       },
       keyMoments: () => core.keyMoments(),
       decisionAt: (unit) => core.decisionAt(unit),
+    decisionsUpTo: (unit, tick) => core.decisionsUpTo(unit, tick),
       setAutoPause: (rules) => core.setAutoPause(rules),
       setCamera(patch) {
         cameraConfig = { ...cameraConfig, ...patch };
