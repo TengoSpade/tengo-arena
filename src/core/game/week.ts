@@ -490,6 +490,9 @@ function watchRefusal(state: GameState, canPause: boolean, options: AdvanceOptio
 export function processWeekLive(ports: GamePorts, state: GameState, content: ContentDB, canPause: boolean, options: AdvanceOptions = {}): Result<LiveWeekOutcome, EngineError> {
   const refused = watchRefusal(state, canPause, options);
   if (refused) return err(refused);
+  // Every result of the week records the sim content hash (MatchResult.simHash): computed once per ContentDB, here at
+  // the start of the transition rather than in the middle of a match (the first call costs 55-130 ms, then it is cached).
+  ports.sim.simContentHash?.(content);
   if (state.liveMatch !== null) {
     const draft = beginTransition(state);
     const run: WeekRun = { draft, newsFrom: newsFromOnResume(draft), ledgerFrom: draft.ledger.nextSeq, log: { rejections: [] } };

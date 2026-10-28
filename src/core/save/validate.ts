@@ -284,6 +284,9 @@ export function referenceIssues(state: GameState, content: ContentDB): StateIssu
       if (w.mode === 'watch' && w.round === null && live.phase === 'round_pending') add('liveMatch.watch.round', 'a watched match waits for its pending round to be watched');
       const cap = Math.round(content.combat.overtime.hardCapS * content.combat.tick.ticksPerSecond);
       if (w.cursorTick > cap) add('liveMatch.watch.cursorTick', `${w.cursorTick} is past the time cap (${cap} ticks)`);
+      // Calls are RESERVED until the calls package (P-01): core/sim refuses any plan but none, so a live match holding
+      // one could never play its round. Refused at load instead (the calls package lifts this check).
+      if (w.calls.length > 0) add('liveMatch.watch.calls', 'calls are not part of this build');
     }
   }
 

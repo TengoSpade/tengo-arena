@@ -5,8 +5,8 @@
  * player is watching), so what the player sees is the headless result (vis-009). Nothing here changes
  * GameState; the watch cursor and calls change it only through commands ('match.watch', 'match.call').
  *
- * Implemented by WP-M2B. `inspectPlayback` throws NotImplementedError while core/sim's probe is a stub (WP-M2A);
- * the UI reads every view through safeView.
+ * Implemented by WP-M2B on WP-M2A's sim (format 2 logs, inspectRoundAt, simContentHash). The UI reads every view
+ * through safeView.
  */
 import type { ContentDB } from '../content';
 import type { RoundProbe } from '../sim';
@@ -297,9 +297,11 @@ export function replayAvailabilityWith(ports: GamePorts, state: GameState, fixtu
 /**
  * The pause inspector's "now" view (P-22, tech-022): the round's input (live or replay, with its calls) handed
  * to sim inspectRoundAt at `tick`. Same errors as the playback functions; 'inspect.tick' when the tick is past
- * the round's end or, live, past liveMatch.watch.cursorTick (the inspector opens while paused, and the pause has
- * persisted the cursor first; no peeking ahead). Throws NotImplementedError while core/sim's probe is a stub (the UI
- * reads it through safeView).
+ * the round's end tick (durationTicks - 1) or, live, past liveMatch.watch.cursorTick (the inspector opens while
+ * paused, and the pause has persisted the cursor first; no peeking ahead). The probe's state is as of the END of
+ * `tick` (what the frame at `tick` shows); its evaluations are the sim's decision phase at `RoundProbe.evaluatedTick`
+ * (tick + 1), and trace values are as of that tick. The opening evaluation (tick 0) is never a probe's: a probe at 0
+ * evaluates tick 1. At the end tick the survivors read `blockedBy: 'round_over'`.
  */
 export function inspectPlaybackWith(ports: GamePorts, state: GameState, fixtureId: FixtureId, round: number, tick: number, content: ContentDB): Result<RoundProbe, EngineError> {
   return guardedRead<RoundProbe>('inspectPlayback', () => {
@@ -315,7 +317,9 @@ export function inspectPlaybackWith(ports: GamePorts, state: GameState, fixtureI
     } else {
       const c = committedRound(ports, state, fixtureId, round, content);
       if (!c.ok) return c;
-      if (tick > c.value.result.durationTicks) return err(engineError('inspect.tick', `Tick ${tick} is past the round's end (${c.value.result.durationTicks})`, { tick, endTick: c.value.result.durationTicks }));
+      // The round's last tick (its fight.end) is durationTicks - 1; a probe there shows the survivors 'round_over'.
+      const endTick = c.value.result.durationTicks - 1;
+      if (tick > endTick) return err(engineError('inspect.tick', `Tick ${tick} is past the round's end (${endTick})`, { tick, endTick }));
       input = c.value.input;
       seed = c.value.seed;
     }

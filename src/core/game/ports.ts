@@ -12,7 +12,6 @@ import * as league from '../league';
 import * as sim from '../sim';
 import * as tactics from '../tactics';
 import type { ContentDB } from '../content';
-import { NotImplementedError } from '../util';
 
 export interface GamePorts {
   /** M1.1: simulateRound (WP-A) is what the orchestrator calls; simulateMatch stays for the M1 whole-match path and tests. */
@@ -20,9 +19,10 @@ export interface GamePorts {
     engineVersion: number;
     /**
      * M2 (05-technical-m2 §A4, tech-026): core/sim simContentHash, a hash of only what the fight reads; written on every
-     * result (`MatchResult.simHash`) and compared by replayAvailability. Null when this sim cannot name it (core/sim's
-     * function is still a stub until WP-M2A merges, a stand-in sim): results then carry no simHash and replays fall
-     * back to the career content hash. Optional so older port bundles (tests, tools) keep compiling.
+     * result (`MatchResult.simHash`) and compared by replayAvailability. Cached per ContentDB by core/sim; the first call
+     * costs 55-130 ms, so week processing warms it at its start (and `warmReplayHash` lets the UI do it at idle). Absent
+     * or null for a sim that cannot name one (the stand-ins): results then carry no simHash and replays fall back to the
+     * career content hash. Optional so older port bundles (tests, tools) keep compiling.
      */
     simContentHash?: (content: ContentDB) => string | null;
     /** M2 pause inspector probe (tech-022; WP-M2A). Absent: inspectPlayback is not available (NotImplementedError). */
@@ -126,31 +126,12 @@ export interface GamePorts {
   ai: AiApi;
 }
 
-/**
- * core/sim simContentHash, or null while it is a stub (it throws NotImplementedError until WP-M2A merges). Cached per
- * ContentDB: every result of a week asks for it.
- */
-const simHashes = new WeakMap<ContentDB, string | null>();
-function realSimContentHash(content: ContentDB): string | null {
-  const known = simHashes.get(content);
-  if (known !== undefined) return known;
-  let h: string | null;
-  try {
-    h = sim.simContentHash(content);
-  } catch (e) {
-    if (!(e instanceof NotImplementedError)) throw e;
-    h = null;
-  }
-  simHashes.set(content, h);
-  return h;
-}
-
 export const realGamePorts: GamePorts = {
   sim: {
     simulateMatch: sim.simulateMatch,
     simulateRound: sim.simulateRound,
     engineVersion: sim.ENGINE_VERSION,
-    simContentHash: realSimContentHash,
+    simContentHash: sim.simContentHash,
     inspectRoundAt: sim.inspectRoundAt,
   },
   tactics: { resolveTactics: tactics.resolveTactics },

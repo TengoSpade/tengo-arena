@@ -9,8 +9,10 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asId, type ClubId, type FixtureId, type GameState, type MatchResult, type MatchState, type RoundInput, type SwapDecision } from '../model';
-import { fixtureContent } from '../testkit';
-import { NotImplementedError, cloneJson, hashString, stableStringify } from '../util';
+import { loadContent } from '../content';
+import { simContentHash } from '../sim';
+import { FIXTURE_CONTENT_RAW, fixtureContent } from '../testkit';
+import { cloneJson, hashString, stableStringify } from '../util';
 import { createGameEngine, createStandInPorts, prepareRound, realGamePorts, roundInputOf as roundInputOfResult, type BetweenRoundView, type GameEngine, type GamePorts } from './index';
 
 const content = fixtureContent();
@@ -188,8 +190,12 @@ describe('Watch season = Simulate season (test-first item 1; vis-009, P-05)', ()
     expect(watched.simulatedRest).toBe(1);
     expect(roundChecksums(watched.final)).toEqual(roundChecksums(simulated.final));
     expect(checksumState(watched.final)).toBe(checksumState(simulated.final));
-    // Committed rounds never store an event hash, watched ones included.
-    for (const r of Object.values(watched.final.results)) for (const x of r.rounds) expect(x.eventHash).toBeNull();
+    // Committed rounds never store an event hash, watched ones included; no round was played with a call plan (core/sim
+    // refuses any but none until the calls package, and prepareRound never builds one: 'match.call' is refused).
+    for (const r of Object.values(watched.final.results)) {
+      for (const x of r.rounds) expect(x.eventHash).toBeNull();
+      for (const l of r.roundLineups ?? []) expect(l.calls).toBeUndefined();
+    }
     // What the season exercised (the player's matches).
     const club = watched.final.playerClubId!;
     const mine = Object.values(watched.final.results).filter((r) => r.homeClubId === club || r.awayClubId === club);
@@ -487,13 +493,22 @@ describe('replayAvailability: one rule for replays and the report timeline', () 
 
   it('other build: the engine version; the sim content hash (simHash); the career content hash for results without a simHash', () => {
     const full = Object.values(state.results).find((r) => !realGamePorts.league.isCompactedResult(r))!;
-    expect(full.simHash).toBeUndefined(); // core/sim cannot name its content hash before WP-M2A: no simHash is written
+    // Every result records the sim content hash of the content that played it (core/sim simContentHash, WP-M2A).
+    for (const r of Object.values(state.results)) expect(r.simHash).toBe(simContentHash(content));
+    // The same content under another career content hash (a non-sim edit, as far as replays can tell): same sim hash.
+    const relabelled = loadContent('fixture', FIXTURE_CONTENT_RAW, { profile: 'fixture', hash: 'another-career-hash' });
+    if (!relabelled.ok) throw new Error('fixture content');
+    const real = createGameEngine(realGamePorts);
+    expect(relabelled.value.ref.hash).not.toBe(content.ref.hash);
+    expect(real.replayAvailability(state, full.fixtureId, relabelled.value)).toEqual({ available: true, rounds: full.rounds.length });
+    expect(must(real.buildMatchReport(state, full.fixtureId, relabelled.value)).timelineAvailable).toBe(true);
     // Engine version.
     const newer = createGameEngine(withSimHash(null, realGamePorts.sim.engineVersion + 1));
     expect(newer.replayAvailability(state, full.fixtureId, content)).toEqual({ available: false, reason: 'other-build' });
     expect(must(newer.buildMatchReport(state, full.fixtureId, content)).timelineAvailable).toBe(false);
-    // Content hash fallback (no simHash): a career content hash that differs ends the replay, even if the sim could name its own.
-    const otherHash = { ...state.results[full.fixtureId]!, contentHash: 'another-content' };
+    // Content hash fallback (no simHash, as before save v5): a career content hash that differs ends the replay, even if the sim could name its own.
+    const { simHash: _drop, ...older } = state.results[full.fixtureId]!;
+    const otherHash = { ...older, contentHash: 'another-content' };
     const edited = { ...state, results: { ...state.results, [full.fixtureId]: otherHash } };
     const engine = createGameEngine(withSimHash('sim-A'));
     expect(engine.replayAvailability(edited, full.fixtureId, content)).toEqual({ available: false, reason: 'other-build' });
@@ -554,14 +569,14 @@ describe('inspectPlayback (the pause inspector probe; core/sim inspectRoundAt fr
     const calls: { input: RoundInput; seed: string; tick: number }[] = [];
     const probe: GamePorts = {
       ...realGamePorts,
-      sim: { ...realGamePorts.sim, inspectRoundAt: (input, seed, _c, tick) => (calls.push({ input: cloneJson(input), seed, tick }), { tick, units: [] }) },
+      sim: { ...realGamePorts.sim, inspectRoundAt: (input, seed, _c, tick) => (calls.push({ input: cloneJson(input), seed, tick }), { tick, evaluatedTick: tick + 1, units: [] }) },
     };
     const engine = createGameEngine(probe);
     const mw1 = careerAtMw1(engine, 'inspect-1');
     const r = must(engine.advance(unblock(engine, mw1), content, { playerMatch: 'watch' }));
     const { fixtureId } = r.watch!;
     const at = must(engine.applyCommand(r.state, { type: 'match.watch', clubId: r.state.playerClubId!, fixtureId, round: 1, tick: 200 }, content)).state;
-    expect(must(engine.inspectPlayback(at, fixtureId, 1, 200, content))).toEqual({ tick: 200, units: [] });
+    expect(must(engine.inspectPlayback(at, fixtureId, 1, 200, content))).toEqual({ tick: 200, evaluatedTick: 201, units: [] });
     const prepared = prepareRound(probe, at, at.liveMatch!, content);
     expect(calls[0]).toEqual({ input: prepared.input, seed: prepared.seed, tick: 200 });
     for (const tick of [201, -1, 2.5]) {
@@ -571,20 +586,42 @@ describe('inspectPlayback (the pause inspector probe; core/sim inspectRoundAt fr
     // A committed round of a stored match: its replay input, up to its last tick.
     const s = must(engine.advanceWeek(unblock(engine, mw1), content)).state;
     const result = Object.values(s.results).find((x) => x.roundLineups !== undefined)!;
-    const end = result.rounds[0]!.durationTicks;
+    const end = result.rounds[0]!.durationTicks - 1; // the round's last tick (its fight.end)
     expect(engine.inspectPlayback(s, result.fixtureId, 1, end, content).ok).toBe(true);
     expect(calls[1]).toEqual({ input: roundInputOfResult(result, 1), seed: result.rounds[0]!.seed, tick: end });
     const past = engine.inspectPlayback(s, result.fixtureId, 1, end + 1, content);
     expect(past.ok ? null : past.error.code).toBe('inspect.tick');
   });
 
-  it('is not available while core/sim\'s probe is a stub (the UI reads it through safeView)', () => {
+  it('the real probe (core/sim inspectRoundAt): end-of-tick state, evaluations as of tick + 1, the survivors round_over at the end tick', () => {
     const engine = createGameEngine(realGamePorts);
     const mw1 = careerAtMw1(engine, 'inspect-1');
     const r = must(engine.advance(unblock(engine, mw1), content, { playerMatch: 'watch' }));
-    // Until WP-M2A merges core/sim's inspectRoundAt throws NotImplementedError. Integrating WP-M2A replaces this test
-    // with the real probe (it must then fail here, so the integration cannot forget it).
-    expect(() => engine.inspectPlayback(r.state, r.watch!.fixtureId, 1, 0, content)).toThrow(NotImplementedError);
+    const { fixtureId } = r.watch!;
+    const live = must(engine.liveRoundPlayback(r.state, content));
+    const at = must(engine.applyCommand(r.state, { type: 'match.watch', clubId: r.state.playerClubId!, fixtureId, round: 1, tick: 120 }, content)).state;
+    const probe = must(engine.inspectPlayback(at, fixtureId, 1, 120, content));
+    expect(probe.tick).toBe(120);
+    expect(probe.evaluatedTick).toBe(121);
+    expect(probe.units).toHaveLength(10);
+    // The state is what the shown log's frame at that tick shows (format 2 frames: x, y, hp, state bits, shield, focus).
+    const frame = live.log.events.find((e) => e.type === 'frame' && e.tick === 120) as unknown as { data: { u: number[][] } } | undefined;
+    expect(frame).toBeDefined();
+    probe.units.forEach((u, i) => expect(u.hp).toBe(frame!.data.u[i]![2]));
+    for (const u of probe.units) expect(u.evaluation === null).toBe(u.blockedBy !== null);
+    // Probing changes nothing: the commit after it is the commit without it.
+    const after = must(engine.advance(at, content, { watched: { round: 1, logHash: live.log.hash } }));
+    const plain = must(engine.advance(r.state, content, { watched: { round: 1, logHash: live.log.hash } }));
+    expect(after.state.liveMatch?.rounds ?? null).toEqual(plain.state.liveMatch?.rounds ?? null);
+    // A committed round at its last tick (durationTicks - 1): the survivors have nothing left to decide.
+    const between = after.state;
+    expect(between.liveMatch).not.toBeNull();
+    const end = between.liveMatch!.rounds[0]!.durationTicks - 1;
+    const last = must(engine.inspectPlayback(between, fixtureId, 1, end, content));
+    expect(last.tick).toBe(end);
+    for (const u of last.units) expect(u.blockedBy).toBe(u.standing ? 'round_over' : 'downed');
+    const past = engine.inspectPlayback(between, fixtureId, 1, end + 1, content);
+    expect(past.ok ? null : past.error.code).toBe('inspect.tick');
   });
 });
 

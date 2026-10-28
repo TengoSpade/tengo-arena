@@ -268,13 +268,19 @@ describe('migrations', () => {
     expect(issues(state)).toEqual([]);
     const reparsed = parseSave(serializeSave(envelopeOf(state)), content);
     expect(reparsed.ok ? reparsed.value.envelope.state.liveMatch!.watch : reparsed.error).toEqual({ mode: 'watch', round: 1, cursorTick: 340, calls: [] });
-    // Reserved call records (the calls package): bounded by SAVE_BOUNDS.callsPerRound.
+    // Reserved call records (the calls package): the structure is bounded by SAVE_BOUNDS.callsPerRound, and until the
+    // calls package a live match holding calls is refused (core/sim refuses every plan but none: it could not play on).
     const call = { tick: 41, kind: 'focus', target: 7 };
     const withCalls = cloneJson(state);
+    const structure = (x: GameState): string[] => {
+      const r = GameStateSchema.safeParse(x);
+      return r.success ? [] : r.error.issues.map((i) => i.path.join('.'));
+    };
     withCalls.liveMatch!.watch!.calls = Array.from({ length: SAVE_BOUNDS.callsPerRound }, () => ({ ...call }));
-    expect(issues(withCalls)).toEqual([]);
+    expect(structure(withCalls)).toEqual([]);
+    expect(issues(withCalls)).toEqual(['liveMatch.watch.calls: calls are not part of this build']);
     withCalls.liveMatch!.watch!.calls.push({ ...call });
-    expect(issues(withCalls).some((p) => p.includes('watch.calls'))).toBe(true);
+    expect(structure(withCalls).some((p) => p.includes('watch.calls'))).toBe(true);
     const rl = cloneJson(state);
     rl.liveMatch!.roundLineups = [{ round: 1, home: lineup(), away: lineup(), calls: { home: { mode: 'explicit', calls: [call] }, away: { mode: 'policy' } } }];
     rl.liveMatch!.rounds = [];
