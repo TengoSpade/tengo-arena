@@ -227,6 +227,30 @@
     };
   };
 
+  /**
+   * The control of the frame-rate check: a full-window WebGL canvas that clears itself every frame (antialias and a preserved
+   * drawing buffer, like the arena's), nothing else on the page. Its cadence is what this browser session can deliver.
+   */
+  S.bareWebgl = () => {
+    document.body.replaceChildren();
+    const c = document.createElement('canvas');
+    c.width = window.innerWidth;
+    c.height = window.innerHeight;
+    c.style.cssText = 'position:fixed;inset:0;width:100%;height:100%';
+    document.body.appendChild(c);
+    const gl = c.getContext('webgl', { preserveDrawingBuffer: true, antialias: true });
+    let n = 0;
+    const draw = () => {
+      if (gl) {
+        gl.clearColor((n++ % 60) / 60, 0.2, 0.3, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      requestAnimationFrame(draw);
+    };
+    draw();
+    return !!gl;
+  };
+
   /** The HUD's overtime marks (arena screen): the amber clock, the Overtime tag, the scrubber mark, the feed line. */
   S.overtimeUi = () => {
     const clock = document.querySelector('[data-testid="arena-clock"]');

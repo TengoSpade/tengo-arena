@@ -346,3 +346,45 @@ describe('the ring band', () => {
     expect(ringBand(0.001).innerPx).toBeGreaterThanOrEqual(4);
   });
 });
+
+describe('frame rate against what the browser session can deliver', () => {
+  const baseSlow = summarizeIntervals(steady(300, 17.9));
+  const baseFast = summarizeIntervals(steady(300, 16.67));
+
+  it('a viewer on target passes whatever the baseline', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(600)), gpu, null, baseFast).status).toBe('pass');
+  });
+
+  it('a miss that equals an empty canvas in a slow session is environment-limited: a warning with the evidence, not a failure', () => {
+    const viewer = summarizeIntervals(steady(550, 17.6));
+    const c = checkFrameRate('perf.fps-1x', '1x', viewer, gpu, { wallS: 10, task: 0.08, script: 0.05, layout: 0, style: 0 }, baseSlow);
+    expect(c.status).toBe('warn');
+    expect(c.detail).toMatch(/Environment-limited, not a product miss/);
+    expect(c.detail).toMatch(/empty full-window WebGL canvas.*55\.9 fps/);
+    expect(c.detail).toMatch(/reference machine/);
+    expect(c.actual).toMatch(/empty-canvas baseline 55\.9 fps/);
+  });
+
+  it('strict mode does not turn an environment-limited miss into a failure of the product', () => {
+    expect(checkFrameRate('perf.fps-4x', '4x', summarizeIntervals(steady(550, 17.6)), { softwareGl: false, strict: true }, null, baseSlow).status).toBe('warn');
+  });
+
+  it('a viewer slower than the empty canvas fails, with the comparison', () => {
+    const c = checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(500, 21)), gpu, null, baseSlow);
+    expect(c.status).toBe('fail');
+    expect(c.detail).toMatch(/empty full-window WebGL canvas/);
+  });
+
+  it('a viewer with a hitch fails even in a slow session', () => {
+    const c = checkFrameRate('perf.fps-1x', '1x', summarizeIntervals([...steady(550, 17.6), 80]), gpu, null, baseSlow);
+    expect(c.status).toBe('fail');
+  });
+
+  it('a fast session where the viewer misses is a failure: the browser could have delivered', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(550, 25)), gpu, null, baseFast).status).toBe('fail');
+  });
+
+  it('without a baseline a miss fails as before', () => {
+    expect(checkFrameRate('perf.fps-1x', '1x', summarizeIntervals(steady(550, 17.6)), gpu, null, null).status).toBe('fail');
+  });
+});

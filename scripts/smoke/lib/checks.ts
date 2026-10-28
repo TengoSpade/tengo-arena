@@ -35,24 +35,37 @@ export function loadNote(load: MainThreadLoad | null): string | null {
   return `Main thread busy ${pct(load.task)} of ${load.wallS.toFixed(1)} s (script ${pct(load.script)}, layout ${pct(load.layout)}, style ${pct(load.style)}): ${where}.`;
 }
 
-export function checkFrameRate(id: 'perf.fps-1x' | 'perf.fps-4x', speedLabel: string, s: IntervalSummary, ctx: PerfContext, load: MainThreadLoad | null = null): CheckResult {
+/**
+ * Frame rate (A10: 60 fps median, p95 interval 20 ms, nothing over 33 ms). The viewer is judged against two things: the
+ * target, and what this browser session can deliver at all, measured on a bare full-window WebGL canvas (`baseline`). A
+ * session whose empty canvas already runs under the target (a headless browser's frame cadence follows its display) cannot show
+ * the target: if the viewer keeps up with that empty canvas (median within 3%, p95 within 2 ms, nothing over 33 ms) the
+ * check warns "environment-limited" instead of failing the product, and says so; a viewer slower than the empty canvas fails.
+ */
+export function checkFrameRate(id: 'perf.fps-1x' | 'perf.fps-4x', speedLabel: string, s: IntervalSummary, ctx: PerfContext, load: MainThreadLoad | null = null, baseline: IntervalSummary | null = null): CheckResult {
   const enough = s.frames >= 60;
   const ok = enough && s.medianFps >= TARGETS.fpsMedianMin && s.p95Ms <= TARGETS.p95IntervalMsMax && s.over33 === 0;
-  const status: CheckStatus = !enough ? 'fail' : perfStatus(ok, ctx);
+  const keepsUp = baseline !== null && baseline.frames >= 30 && s.medianMs <= baseline.medianMs * 1.03 && s.p95Ms <= baseline.p95Ms + 2 && s.over33 === 0;
+  const environmentLimited = enough && !ok && keepsUp && baseline!.medianFps < TARGETS.fpsMedianMin;
+  const status: CheckStatus = !enough ? 'fail' : environmentLimited ? 'warn' : perfStatus(ok, ctx);
+  const baseNote = baseline ? `An empty full-window WebGL canvas in this browser session runs at ${fps(baseline.medianFps)} (median ${ms(baseline.medianMs)}, p95 ${ms(baseline.p95Ms)}); the viewer at ${fps(s.medianFps)} (median ${ms(s.medianMs)}, p95 ${ms(s.p95Ms)}).` : null;
+  const detail = !enough
+    ? `Only ${s.frames} playing frames were recorded (at least 60 needed): the fight clock did not advance long enough.`
+    : environmentLimited
+      ? `Environment-limited, not a product miss: ${baseNote} The viewer keeps up with it, so the ${TARGETS.fpsMedianMin}-60 fps target cannot be shown in this session; run it on the reference machine or on a 60 Hz display. ${loadNote(load) ?? ''}`.trim()
+      : status === 'warn'
+        ? [SOFTWARE_NOTE, baseNote, loadNote(load)].filter(Boolean).join(' ')
+        : status === 'fail'
+          ? [baseNote, loadNote(load)].filter(Boolean).join(' ') || undefined
+          : undefined;
   return {
     id,
     title: `Arena frame rate at ${speedLabel}`,
     status,
     ref: 'A10',
     expected: `median >= ${TARGETS.fpsMedianMin} fps, p95 interval <= ${TARGETS.p95IntervalMsMax} ms, none over ${TARGETS.maxIntervalMs} ms`,
-    actual: `${s.frames} frames: median ${fps(s.medianFps)}, p95 ${ms(s.p95Ms)}, max ${ms(s.maxMs)}, ${s.over33} over ${TARGETS.maxIntervalMs} ms`,
-    ...(!enough
-      ? { detail: `Only ${s.frames} playing frames were recorded (at least 60 needed): the fight clock did not advance long enough.` }
-      : status === 'warn'
-        ? { detail: [SOFTWARE_NOTE, loadNote(load)].filter(Boolean).join(' ') }
-        : status === 'fail' && loadNote(load)
-          ? { detail: loadNote(load)! }
-          : {}),
+    actual: `${s.frames} frames: median ${fps(s.medianFps)}, p95 ${ms(s.p95Ms)}, max ${ms(s.maxMs)}, ${s.over33} over ${TARGETS.maxIntervalMs} ms${baseline ? `; empty-canvas baseline ${fps(baseline.medianFps)}` : ''}`,
+    ...(detail ? { detail } : {}),
   };
 }
 
