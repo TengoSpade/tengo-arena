@@ -24,6 +24,7 @@ import { buildSmoke, startPreview, type Served } from './lib/serve';
 import { runCareerJourney } from './journeys/career';
 import { runCrossJourney } from './journeys/cross-hash';
 import type { JourneyEnv } from './journeys/env';
+import { runFirstOpenJourney } from './journeys/first-open';
 import { runFixtureJourney } from './journeys/fixture';
 import { mockHeadless, runMockCareer, runMockVis003, startMock } from './journeys/mock';
 import { runVis003Capture } from './journeys/vis003-capture';
@@ -96,10 +97,10 @@ ${event}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
     } else if (opts.url) {
       buildInfo.url = opts.url;
     } else {
-      const outBuild = join(opts.reportsDir, 'build');
+      const outBuild = join(opts.reportsDir, opts.buildMode === 'smoke' ? 'build' : `build-${opts.buildMode}`);
       if (!opts.noBuild) {
-        console.log('building the smoke bundle (vite build --mode smoke) ...');
-        buildInfo.buildMs = buildSmoke(REPO_ROOT, outBuild).ms;
+        console.log(`building the bundle (vite build --mode ${opts.buildMode}) ...`);
+        buildInfo.buildMs = buildSmoke(REPO_ROOT, outBuild, opts.buildMode).ms;
       }
       served = await startPreview(REPO_ROOT, outBuild);
     }
@@ -141,6 +142,7 @@ ${event}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
     if (opts.only.has('cross')) await runCrossJourney(env);
     if (opts.only.has('fixture')) await runFixtureJourney(env);
     if (opts.only.has('career')) await (opts.selfTest ? runMockCareer(env) : runCareerJourney(env));
+    if (opts.only.has('open')) await runFirstOpenJourney(env);
     if (opts.only.has('vis003')) await (mock ? runMockVis003(env, mock.round) : runVis003Capture(env));
   } catch (e) {
     setupFailure = e instanceof Error ? e.message : String(e);
