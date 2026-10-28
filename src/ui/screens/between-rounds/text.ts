@@ -63,6 +63,7 @@ const T = {
   them: '{club}',
   themSub: 'Their decisions are blind: you see them when the round starts.',
   continue: 'Play round {n}',
+  locking: 'Locking the next round and saving it…',
   continueTip: 'Plays the next round with these five.',
   continueAutoTip: 'Plays round {round} with the {n} suggested {n?swap|swaps} from your rules, as an unpaused match would. A fighter swapped out cannot return.',
   suggestedNote: '{n} suggested {n?swap|swaps} · cannot return',

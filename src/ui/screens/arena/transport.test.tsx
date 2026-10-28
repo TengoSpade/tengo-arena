@@ -60,8 +60,8 @@ describe('mergeMarks', () => {
   });
 });
 
-function stubSession(): ArenaSession {
-  const snap = signal<ViewerSnap>({ playing: false, tick: 400, head: 1500, end: null, speed: 1 });
+function stubSession(over: Partial<ViewerSnap> = {}): ArenaSession {
+  const snap = signal<ViewerSnap>({ playing: false, tick: 400, head: 1500, end: null, speed: 1, ...over });
   return {
     status: signal('ready'),
     error: signal(null),
@@ -82,8 +82,8 @@ function stubSession(): ArenaSession {
   } as unknown as ArenaSession;
 }
 
-function mountControls(marks: FeedItem[] = []) {
-  return render(<ArenaControls session={stubSession()} kind="live" capTicks={1500} marks={marks} statusNote={null} dockOpen onToggleDock={() => undefined} onSkip={() => undefined} onSimulateRest={() => undefined} busy={false} />);
+function mountControls(marks: FeedItem[] = [], snap: Partial<ViewerSnap> = {}) {
+  return render(<ArenaControls session={stubSession(snap)} kind="live" capTicks={1500} marks={marks} statusNote={null} dockOpen onToggleDock={() => undefined} onSkip={() => undefined} onSimulateRest={() => undefined} busy={false} />);
 }
 
 describe('the transport: collapsible buttons and merged marks', () => {
@@ -138,5 +138,26 @@ describe('the transport: collapsible buttons and merged marks', () => {
     trackWidth(0);
     mountControls([item('a', 200), item('b', 230), item('c', 250)]);
     expect(screen.getByTestId('arena-marks').querySelectorAll('.amark')).toHaveLength(3);
+  });
+});
+
+describe('the live scrubber value text (D3)', () => {
+  afterEach(cleanup);
+  const valueText = () => screen.getByTestId('arena-scrubber').getAttribute('aria-valuetext');
+
+  it('at the live head it says so', () => {
+    mountControls([], { tick: 265, head: 265 });
+    expect(valueText()).toBe('0:13, at the live head');
+  });
+
+  it('rewound it says how far behind the live head the playhead is, never "at the live head"', () => {
+    mountControls([], { tick: 44, head: 265 }); // 2.2 s of 13.25 s
+    expect(valueText()).toBe('0:02, 0:11 behind the live head');
+    expect(valueText()).not.toContain('at the live head');
+  });
+
+  it('a frame behind the head still reads as at it (the head runs ahead of the drawn tick by a frame)', () => {
+    mountControls([], { tick: 264, head: 265 });
+    expect(valueText()).toContain('at the live head');
   });
 });

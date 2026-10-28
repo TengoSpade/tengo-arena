@@ -138,7 +138,11 @@ export class FakeViewer implements ArenaViewer {
     this.calls.push('palette');
   }
 
-  setReducedMotion(): void {
+  /** The last value handed to setReducedMotion (null before any call). */
+  reducedMotion: boolean | null = null;
+
+  setReducedMotion(on = false): void {
+    this.reducedMotion = on;
     this.calls.push('motion');
   }
 

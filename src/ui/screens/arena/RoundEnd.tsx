@@ -20,7 +20,7 @@ export interface RoundEndResult {
   /** The side that won the round (club name), and whether it is the player's. */
   winner: string;
   ours: boolean | null;
-  /** The match score, the player's side first; the winner's of the round is marked. */
+  /** The match score, home first (as the HUD and the report); the round winner's is marked. */
   score: [number, number];
   winnerFirst: boolean;
   time: string;

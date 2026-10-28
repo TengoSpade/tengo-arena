@@ -14,7 +14,7 @@ import { navigate } from '../../app/router';
 import { resetToasts, toasts } from '../../components';
 import { createTestStore } from '../../debug/test-store';
 import { DEFAULT_SETTINGS, updateSettings } from '../../store/settings';
-import { resetLiveRoundCache } from './index';
+import { resetLiveRoundCache, roundOutcome } from './index';
 import { liveWatchState } from '../../debug/arena-test-world';
 import { forgetStop, recallStop, rememberStop } from './resume-cause';
 import { resetRoundEnd, roundEnd } from './RoundEnd';
@@ -800,4 +800,227 @@ describe('a step that outlives its screen does not act afterwards (Back while a 
     expect(ran).toBe(0);
     expect(location.hash).toBe('#/arena');
   }, 20_000);
+});
+
+describe('final QA defects', () => {
+  const NO_STOPS = { ownDowned: false, enemyDowned: false, ownCaptainDown: false, overtime: false, ownHpBelowPct: null };
+
+  /** Watch round 1 to the end and wait on the between-round screen. */
+  async function toBetweenRounds(m: Mounted) {
+    await waitFor(() => expect(screen.getByTestId('continue').textContent).toContain('Play match'));
+    await settle();
+    press(' ');
+    await arenaReady(m, 1);
+    await playOut(m);
+    await waitFor(() => expect(location.hash).toBe('#/between-rounds'), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByTestId('br-continue')).toBeTruthy());
+    await settle();
+  }
+  /** The auto-round write of the NEXT lock: held, then failed (or passed on). */
+  function gateLockWrite(m: Mounted) {
+    const write = m.t.saves.write.bind(m.t.saves);
+    let release!: (ok: boolean) => void;
+    let gate = new Promise<boolean>((r) => (release = r));
+    let mode: 'ok' | 'hold' = 'ok';
+    m.t.saves.write = async (...a: Parameters<typeof m.t.saves.write>) => {
+      if (a[0] === 'auto-round' && mode === 'hold') {
+        if (!(await gate)) throw new Error('disk full');
+      }
+      return write(...a);
+    };
+    return {
+      hold: () => {
+        mode = 'hold';
+        gate = new Promise<boolean>((r) => (release = r));
+      },
+      finish: (ok: boolean) => {
+        mode = 'ok';
+        release(ok);
+      },
+    };
+  }
+
+  describe('D1: a failed lock write on the between-round Continue is not silent', () => {
+    beforeEach(() => updateSettings({ ...DEFAULT_SETTINGS, pacing: 'custom', pacingCustom: { lineup: false, reportAlways: false, reportOnLoss: false, reportOnInjury: true }, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: NO_STOPS } }));
+
+    it('says what is happening while the write runs, then a toast with Retry (the screen is back); Retry opens the round', async () => {
+      const m = mountApp();
+      await toBetweenRounds(m);
+      const gate = gateLockWrite(m);
+      gate.hold();
+      await act(async () => void fireEvent.click(screen.getByTestId('br-continue')));
+      // The lock is in memory while the write runs: not "No match is waiting".
+      await waitFor(() => expect(screen.getByTestId('br-locking')).toBeTruthy());
+      expect(screen.getByTestId('screen-between-rounds').textContent).not.toContain('No match is waiting');
+      gate.finish(false);
+      await waitFor(() => expect(toasts.value.some((x) => x.title === 'Could not save the lineup lock')).toBe(true), { timeout: 4000 });
+      const toast = toasts.value.find((x) => x.title === 'Could not save the lineup lock')!;
+      expect(toast.action?.label).toBe('Retry');
+      expect(toasts.value).toHaveLength(1);
+      // The between-round view is back, the lock rolled back, nothing opened.
+      await waitFor(() => expect(screen.getByTestId('br-continue')).toBeTruthy());
+      expect(location.hash).toBe('#/between-rounds');
+      expect(m.t.store.game.value!.liveMatch!.phase).toBe('between_rounds');
+      expect(m.harness.all).toHaveLength(1);
+      toast.action!.onClick();
+      await waitFor(() => expect(location.hash).toBe('#/arena'), { timeout: 4000 });
+      await arenaReady(m, 2);
+    }, 20_000);
+
+    it('the toast survives a screen that is gone: Back during the write, the failure still says so, and Retry works from the toast', async () => {
+      const m = mountApp();
+      await toBetweenRounds(m);
+      const gate = gateLockWrite(m);
+      gate.hold();
+      await act(async () => void fireEvent.click(screen.getByTestId('br-continue')));
+      await waitFor(() => expect(screen.getByTestId('br-locking')).toBeTruthy());
+      navigate('#/home'); // Back
+      await waitFor(() => expect(screen.queryByTestId('screen-between-rounds')).toBeNull());
+      gate.finish(false);
+      await waitFor(() => expect(toasts.value.some((x) => x.title === 'Could not save the lineup lock')).toBe(true), { timeout: 4000 });
+      expect(location.hash).toBe('#/home'); // nobody was routed anywhere
+      toasts.value.find((x) => x.title === 'Could not save the lineup lock')!.action!.onClick();
+      await waitFor(() => expect(location.hash).toBe('#/arena'), { timeout: 4000 });
+      await arenaReady(m, 2);
+    }, 20_000);
+  });
+
+  describe('D2: a manual pause clears the cause of an earlier automatic one', () => {
+    it('own down pauses automatically with its cause; resume, then Space: just Paused, nothing announced', async () => {
+      updateSettings({ ...DEFAULT_SETTINGS, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: { ...NO_STOPS, ownDowned: true } } });
+      const m = mountApp({ state: 'round-waiting', hash: '#/arena' });
+      await arenaReady(m, 1);
+      await settle();
+      await act(async () => {
+        m.harness.current().advanceTo(1000); // stops on the own down at 400
+      });
+      await waitFor(() => expect(screen.getByText('Paused automatically')).toBeTruthy());
+      expect(screen.getByTestId('status-note').textContent).toMatch(/ was downed$/);
+      expect(screen.getByTestId('arena-announce').textContent).toMatch(/^Paused: one of yours went down/);
+      await settle();
+      press(' '); // resume
+      await waitFor(() => expect(m.harness.current().playing).toBe(true));
+      await act(async () => {
+        m.harness.current().advanceTo(450);
+      });
+      await settle();
+      press(' '); // a manual pause
+      await waitFor(() => expect(m.harness.current().playing).toBe(false));
+      await waitFor(() => expect(screen.getByTestId('status-paused')).toBeTruthy());
+      expect(screen.queryByText('Paused automatically')).toBeNull();
+      expect(screen.queryByTestId('status-note')).toBeNull();
+      expect(screen.getByTestId('arena-announce').textContent).toBe('');
+    }, 20_000);
+  });
+
+  describe('D7: feedback and consistency', () => {
+    it('Ctrl S while the round runs says to pause first; paused, it saves with no such message', async () => {
+      updateSettings({ ...DEFAULT_SETTINGS, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: NO_STOPS } });
+      const m = mountApp({ state: 'round-waiting', hash: '#/arena' });
+      await arenaReady(m, 1);
+      await settle();
+      expect(m.harness.current().playing).toBe(true);
+      fireEvent.keyDown(document.body, { key: 's', ctrlKey: true });
+      await waitFor(() => expect(toasts.value.some((x) => x.title === 'Pause first, then save')).toBe(true));
+      expect((await m.t.saves.list()).some((s) => s.slotId.startsWith('manual'))).toBe(false);
+      resetToasts();
+      press(' ');
+      await waitFor(() => expect(m.harness.current().playing).toBe(false));
+      await settle();
+      fireEvent.keyDown(document.body, { key: 's', ctrlKey: true });
+      await waitFor(async () => expect((await m.t.saves.list()).some((s) => s.slotId.startsWith('manual'))).toBe(true), { timeout: 4000 });
+      expect(toasts.value.some((x) => x.title === 'Pause first, then save')).toBe(false);
+    });
+
+    it('a cursor save that fails at a stop leaves a quiet note (no toast); the next stop that saves clears it', async () => {
+      updateSettings({ ...DEFAULT_SETTINGS, arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: NO_STOPS } });
+      const m = mountApp({ state: 'round-waiting', hash: '#/arena' });
+      await arenaReady(m, 1);
+      await settle();
+      const write = m.t.saves.write.bind(m.t.saves);
+      let failing = true;
+      m.t.saves.write = async (...a: Parameters<typeof m.t.saves.write>) => {
+        if (a[0] === 'auto-round' && failing) throw new Error('disk full');
+        return write(...a);
+      };
+      await act(async () => {
+        m.harness.current().advanceTo(250);
+      });
+      await settle();
+      press(' '); // pause: the save fails
+      await waitFor(() => expect(screen.getByTestId('status-save')).toBeTruthy(), { timeout: 4000 });
+      expect(toasts.value).toHaveLength(0);
+      failing = false;
+      await settle();
+      press(' '); // resume
+      await waitFor(() => expect(m.harness.current().playing).toBe(true));
+      await act(async () => {
+        m.harness.current().advanceTo(400);
+      });
+      await settle();
+      press(' '); // pause: saved this time
+      await waitFor(() => expect(screen.queryByTestId('status-save')).toBeNull(), { timeout: 4000 });
+      expect(m.core.watchCommands.at(-1)?.tick).toBe(400);
+    }, 20_000);
+
+    it('an OS reduced-motion change while the arena is open reaches the viewer at once', async () => {
+      const realMatchMedia = window.matchMedia;
+      const listeners: (() => void)[] = [];
+      let reduce = false;
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (q: string) => ({ matches: /reduce/.test(q) ? reduce : false, addEventListener: (_: string, fn: () => void) => void listeners.push(fn), removeEventListener: () => undefined }),
+      });
+      try {
+        updateSettings({ ...DEFAULT_SETTINGS, reducedMotion: 'system', arena: { ...DEFAULT_SETTINGS.arena, watchPreference: 'watch', autoPause: NO_STOPS } });
+        const m = mountApp({ state: 'round-waiting', hash: '#/arena' });
+        await arenaReady(m, 1);
+        await settle();
+        reduce = true; // the player turns "reduce motion" on in the OS
+        await act(async () => listeners.forEach((fn) => fn()));
+        expect(m.harness.current().reducedMotion).toBe(true);
+      } finally {
+        Object.defineProperty(window, 'matchMedia', { configurable: true, value: realMatchMedia });
+      }
+    });
+  });
+});
+
+describe('D7: the round-end card is home-left like the HUD', () => {
+  const state = (playerClubId: string) =>
+    ({
+      playerClubId,
+      clubs: { h: { name: 'Home Club', shortName: 'HC' }, a: { name: 'Away Club', shortName: 'AC' } },
+      results: {},
+      liveMatch: {
+        fixtureId: 'f1',
+        home: { clubId: 'h' },
+        away: { clubId: 'a' },
+        score: { home: 1, away: 0 },
+        rounds: [{ round: 1, winner: 'home', endReason: 'elimination', durationTicks: 600, survivors: { home: 3, away: 0 } }],
+        watch: { mode: 'watch', round: null },
+      },
+    }) as never;
+  const content = { combat: { overtime: { startS: 60 } } } as never;
+
+  it('the player away: home first, the home winner marked first; the player at home reads the same', () => {
+    for (const player of ['a', 'h']) {
+      const r = roundOutcome(state(player), content, 'f1' as never, 1, null)!;
+      expect(r.score).toEqual([1, 0]); // home, away: not "you, them"
+      expect(r.winnerFirst).toBe(true); // the home side won the round
+    }
+    const away = roundOutcome(state('a'), content, 'f1' as never, 1, null)!;
+    expect(away.ours).toBe(false); // the winner is the player's opponent
+    expect(away.winner).toBe('Home Club');
+  });
+
+  it('an away winner is marked second', () => {
+    const s = state('a') as unknown as { liveMatch: { score: { home: number; away: number }; rounds: { winner: string }[] } };
+    s.liveMatch.score = { home: 0, away: 1 };
+    s.liveMatch.rounds[0]!.winner = 'away';
+    const r = roundOutcome(s as never, content, 'f1' as never, 1, null)!;
+    expect(r.score).toEqual([0, 1]);
+    expect(r.winnerFirst).toBe(false);
+    expect(r.ours).toBe(true);
+  });
 });

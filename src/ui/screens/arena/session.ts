@@ -237,7 +237,20 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
     let theme = effectiveTheme(settings.value);
     let motion = reducedMotion(settings.value);
     let scale = settings.value.scale;
-    return effect(() => {
+    // The OS preference (Settings: reduced motion 'system') changing mid-arena applies at once, not at the next mount.
+    const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    const onOsMotion = (): void => {
+      const v = viewerRef.current;
+      if (!v) return;
+      const nowMotion = reducedMotion(settings.peek());
+      v.setReducedMotion(nowMotion);
+      if (nowMotion !== motion) {
+        motion = nowMotion;
+        v.setPalette(readArenaPalette(effectiveTheme(settings.peek())));
+      }
+    };
+    mq?.addEventListener?.('change', onOsMotion);
+    const stopSettings = effect(() => {
       const st = settings.value;
       const v = viewerRef.current;
       if (!v) return;
@@ -254,6 +267,10 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
         v.setPalette(readArenaPalette(now));
       }
     });
+    return () => {
+      stopSettings();
+      mq?.removeEventListener?.('change', onOsMotion);
+    };
   }, []);
 
   // A live round pauses when the window is hidden (setting, on by default), which also saves the cursor.
@@ -286,12 +303,16 @@ export function useViewerSession(hostRef: { current: HTMLElement | null }, opts:
       const v = view();
       if (!v || v.playing) return;
       v.play();
+      // An earlier stop's cause is over once the round runs again (the round's end stays until the card moves on).
+      if (s.lastStop.value?.kind !== 'end') s.lastStop.value = null;
       sync(v);
     },
     pause() {
       const v = view();
       if (!v || !v.playing) return;
       v.pause();
+      // A manual pause is its own stop: it must not keep showing (or announcing) the cause of an earlier automatic one.
+      s.lastStop.value = { kind: 'pause' };
       sync(v);
       optsRef.current.onStopped?.({ kind: 'pause' }, v);
     },

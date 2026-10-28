@@ -21,7 +21,7 @@ import type { RoundProbe } from '../../../core/sim';
 import type { EngineError, Result } from '../../../core/util';
 import type { ArenaRoundContext } from '../../../render';
 import { installShortcuts, useShortcuts, type ShortcutMap } from '../../app/shortcuts';
-import { Empty } from '../../components';
+import { Empty, showToast } from '../../components';
 import { settings, updateArenaSettings } from '../../store/settings';
 import './arena.css';
 import { ArenaControls } from './Controls';
@@ -49,6 +49,8 @@ export interface ArenaLayoutProps {
   cursorSaved?: ReadonlySignal<number>;
   /** A commit is running. */
   busy: boolean;
+  /** Live: the last cursor save failed (not merely busy); the next stop tries again. */
+  saveNote?: boolean;
   onSkip: () => void;
   onSimulateRest?: () => void;
   /** Esc with nothing left to close: live asks to leave, a replay goes back to the report. */
@@ -197,9 +199,11 @@ export function ArenaLayout(p: ArenaLayoutProps) {
   useEffect(
     () =>
       installShortcuts(() => ({
-        // Ctrl S while paused (the pause has already saved the cursor); while the round runs the key is swallowed, not the browser's.
+        // Ctrl S while paused (the pause has already saved the cursor); while the round runs the key is swallowed, not the browser's,
+        // and the player is told how to save.
         'ctrl+s': () => {
           if (!session.snap.peek().playing) k.current.onSave?.();
+          else showToast({ kind: 'info', title: t('saveWhilePlaying'), sub: t('saveWhilePlayingSub') });
           return true;
         },
       })),
@@ -269,6 +273,7 @@ export function ArenaLayout(p: ArenaLayoutProps) {
             onSkip={p.onSkip}
             onSimulateRest={p.onSimulateRest}
             busy={p.busy}
+            saveNote={p.saveNote}
           />
         </div>
         {dockOpen && (
