@@ -487,8 +487,8 @@ describe('new predicates, triggers and extensions', () => {
     nextTick(f);
     resolution(f);
     f.commit();
-    // Balance passes: Last Wall shield 20% -> 12% -> 8% of max HP (integration: harness lift +6.0 at 12%). Shield = trunc(maxHp x 800 bp / 10000).
-    expect(u.shields.reduce((a, s) => a + s.amount, 0)).toBe(Math.trunc((u.maxHp * 800) / 10000));
+    // Balance passes: Last Wall shield 20% -> 12% -> 8% -> 5% of max HP (harness lift +6.0 at 12%, +5.2 at 8%; KI-19). Shield = trunc(maxHp x 500 bp / 10000).
+    expect(u.shields.reduce((a, s) => a + s.amount, 0)).toBe(Math.trunc((u.maxHp * 500) / 10000));
     expect(u.perkProcs.get('t_last_wall')).toBe(1);
     expect(f.units[1]!.perkProcs.get('h_warding_lantern')).toBe(1);
     // Lamplight (30%) fired too, from its own memory.
