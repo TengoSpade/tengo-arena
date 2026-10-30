@@ -7,7 +7,7 @@ Only this protocol, with real people, is evidence for vis-003. The automated pro
 ## What you need
 
 - A build with the arena viewer merged (M2). `npm run dev` or `npm run build` then `npm run preview`.
-- The fights. Run `npx tsx scripts/smoke/run.ts --only vis003 --seed <seed>` once (a few minutes, headless; the package script `smoke:arena` is to be added and will do the same). It plays a new career with that seed and writes `reports/smoke/<run>/vis003/`, among others:
+- The fights. Run `npx tsx scripts/smoke/run.ts --only vis003 --seed <seed>` once (a few minutes, headless; `npm run smoke:arena -- --only vis003 --seed <seed>` does the same). It plays a new career with that seed and writes `reports/smoke/<run>/vis003/`, among others:
   - `sheets/fight-1.md` ... `fight-5.md`: one sheet per fight, to be handed over **after** that fight. Print them, or fill copies.
   - `owner-tally.md`: the page you fill in per observer once the sheets are marked.
   - `owner-answer-key.md`: the answers. **Do not open it** before every observer has handed in every sheet.

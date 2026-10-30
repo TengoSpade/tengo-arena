@@ -1,4 +1,4 @@
-/** Command-line options of the smoke driver (`npx tsx scripts/smoke/run.ts`; the package script `smoke:arena` is to be added). */
+/** Command-line options of the smoke driver (`npx tsx scripts/smoke/run.ts`; the package script `smoke:arena` runs it). */
 import { join } from 'node:path';
 import { intArg, parseArgs, stringArg } from '../../lib/args';
 import { REPO_ROOT } from '../../lib/node-content';
@@ -51,7 +51,7 @@ export interface RunOptions {
   quiet: boolean;
 }
 
-const HELP = `usage: npx tsx scripts/smoke/run.ts [options]   (the package script smoke:arena is to be added)
+const HELP = `usage: npx tsx scripts/smoke/run.ts [options]   (the package script smoke:arena runs it)
 
   --only cross,fixture,career,vis003,open   journeys to run (default cross,fixture,career; vis003 captures the observer packets;
                         open times the first viewer open from Watch in three seeded careers, after the idle prefetch)

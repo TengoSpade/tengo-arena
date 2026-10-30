@@ -1,6 +1,6 @@
 /**
  * npx tsx scripts/smoke/vis003/cli.ts <command> --run <run folder or its vis003 folder> [options]
- * (the package script `smoke:vis003` is to be added by the architect)
+ * (the package script `smoke:vis003` runs it)
  *
  *   score      --answers <file> [--answers <file> ...] [--strict-ability] [--min 90]
  *              score observers' answers (the agent observers' JSON replies, or a person's transcription) against the key

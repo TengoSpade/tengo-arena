@@ -93,6 +93,11 @@ export interface LaunchedBrowser {
   close(): Promise<void>;
 }
 
+/** True when the driver runs as the root user (posix only). */
+export function isRoot(): boolean {
+  return typeof process.getuid === 'function' && process.getuid() === 0;
+}
+
 /** The flags that make a headless run stable and comparable (no throttling of background pages, no first-run UI). */
 export function browserArgs(opts: LaunchOptions, userDataDir: string): string[] {
   const size = opts.windowSize ?? { width: 1920, height: 1080 };
@@ -123,6 +128,8 @@ export function browserArgs(opts: LaunchOptions, userDataDir: string): string[] 
   if (gpu === 'auto') args.push('--enable-unsafe-swiftshader');
   else if (gpu === 'software') args.push('--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader');
   else args.push('--enable-gpu', '--ignore-gpu-blocklist', ...(process.platform === 'win32' ? ['--use-angle=d3d11'] : []));
+  // Chromium refuses to start as root without it (a container); the throwaway profile and local pages need no sandbox.
+  if (isRoot()) args.push('--no-sandbox');
   args.push(...(opts.extraArgs ?? []), 'about:blank');
   return args.filter((a) => a !== '');
 }

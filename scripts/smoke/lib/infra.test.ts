@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { needsPlayPress } from './arena-ui';
-import { browserArgs, browserCandidates, browserEnv, findBrowser, killByProfileScript } from './browser';
+import { isRoot, browserArgs, browserCandidates, browserEnv, findBrowser, killByProfileScript } from './browser';
 import { CdpClient, CdpError } from './cdp';
 import { parseOptions } from './options';
 import { SmokeFailure } from './page';
@@ -40,6 +40,8 @@ describe('browser launch', () => {
 
   it('headed mode drops the headless flag; hardware mode drops the software fallback', () => {
     expect(browserArgs({ exe: 'x', headless: false }, 'p')).not.toContain('--headless=new');
+    // Root (a container) needs --no-sandbox for Chromium to start; anyone else keeps the sandbox.
+    expect(browserArgs({ exe: 'x' }, 'p').includes('--no-sandbox')).toBe(isRoot());
     const hw = browserArgs({ exe: 'x', gpu: 'hardware' }, 'p');
     expect(hw).not.toContain('--enable-unsafe-swiftshader');
     expect(hw).toContain('--enable-gpu');

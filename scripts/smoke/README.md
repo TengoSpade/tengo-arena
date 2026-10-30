@@ -15,12 +15,12 @@ npx tsx scripts/smoke/run.ts --help               # every option
 npx tsx scripts/smoke/vis003/cli.ts <command>     # score, precheck, sheet, template (the vis-003 kit)
 ```
 
-The package scripts **`smoke:arena`** (`tsx scripts/smoke/run.ts`) and **`smoke:vis003`** (`tsx scripts/smoke/vis003/cli.ts`) are **to be added** by the architect and do not exist yet; the commands above are the same thing. Once they exist, `npm run smoke:arena -- <options>` and `npm run smoke:vis003 -- <command>` do the same. On Windows put Node on the path first (`$env:Path = "C:\Program Files\nodejs;" + $env:Path`).
+The package scripts **`smoke:arena`** (`tsx scripts/smoke/run.ts`) and **`smoke:vis003`** (`tsx scripts/smoke/vis003/cli.ts`) are in `package.json`: `npm run smoke:arena -- <options>` and `npm run smoke:vis003 -- <command>` do the same as the commands above. On Windows put Node on the path first (`$env:Path = "C:\Program Files\nodejs;" + $env:Path`).
 
 What a run does, in order:
 
 1. `vite build --mode smoke --outDir reports/smoke/build`, then `vite preview` of that folder on a free port. The `smoke` mode compiles in the test hook and the dev world's fixture round (tech-027); the production build has neither.
-2. Launches Edge (else Chrome) headless with a throwaway profile and a DevTools port the browser picks. Override with `--browser <exe>` or `SMOKE_BROWSER`; `--gpu auto|hardware|software` chooses the WebGL source (`auto` takes the GPU if there is one). Profile folders left by earlier runs killed hard (`arena-smoke-profile-*` in the temp folder, older than an hour) are removed first.
+2. Launches Edge (else Chrome) headless with a throwaway profile and a DevTools port the browser picks. Override with `--browser <exe>` or `SMOKE_BROWSER` (on Linux, for example `--browser $(node -e "console.log(require('playwright').chromium.executablePath())")`; as root, as in a container, the driver adds `--no-sandbox`, and with no GPU the WebGL is SwiftShader, so the frame-rate checks are not the reference machine's); `--gpu auto|hardware|software` chooses the WebGL source (`auto` takes the GPU if there is one). Profile folders left by earlier runs killed hard (`arena-smoke-profile-*` in the temp folder, older than an hour) are removed first.
 3. **cross**: bundles core/sim and the render model for the browser, and simulates six fixed rounds of `content/default` at record level `full` in Chromium and in Node, five passes each. Round checksums and event hashes must be identical across runtimes and across passes (05 §10 "golden hash in Node and Chromium"); the warm passes also time the round load. Needs no viewer, so the hash check runs today.
 4. **fixture**: the dev world's fixed round through `window.__arena.viewer` (`loadFixtureRound`, `seek`, `play`, `pause`, `setSpeed`, `frame`, `stats`, `logHash`): first-open time, WebGL context, non-blank canvas, ten ringed tokens, 11 screenshots (1280x720 and 1920x1080, both themes, reduced motion, four colour-vision deficiencies), fps and frame time at 1x and 4x, heap over 20 round loads (each a mount and unmount), the log hash stable across loads.
 5. **career**: a seeded new career through the real UI (typed seed, first club of the lowest tier, preseason, kick-off), then **Watch** (the primary Continue button reads "Watch"; "Play match" in an M1.1 build) and the arena: the same render checks, the viewed round's hash against core/game's headless one (`vis-009`), the **frame-time trace across a cursor save** at 4x (an auto-pause stop, the save, the resume; test-first item 5), then the match played on at 4x through the between-round screens to its report.
@@ -116,7 +116,7 @@ The proxy reads the DOM (text, live regions, `[data-role]` elements and the text
 ## Files
 
 ```
-run.ts                    the driver (npx tsx scripts/smoke/run.ts; package script smoke:arena to be added)
+run.ts                    the driver (npx tsx scripts/smoke/run.ts; package script `smoke:arena`)
 lib/                      field (the field found in a screenshot), overtime (the HUD in overtime), arena-ui (the arena's own Play button), cdp (WebSocket client), browser (find, launch, clean up, the process-safety guard), page (a driven page), serve (build, preview,
                           static), viewer (the hook), saves (the page's IndexedDB saves), checks and stats (pure check logic), report (types, verdict,
                           markdown), png, options, selectors, headless

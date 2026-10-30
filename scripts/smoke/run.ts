@@ -1,5 +1,5 @@
 /**
- * npx tsx scripts/smoke/run.ts [options]      (the package script `smoke:arena` is to be added by the architect)
+ * npx tsx scripts/smoke/run.ts [options]      (the package script `smoke:arena` runs it)
  *
  * The M2 arena smoke (WP-M2F, 05-technical-m2 §A11): builds `vite build --mode smoke`, serves it with `vite preview`,
  * launches headless Edge (or Chrome) over the DevTools protocol, and drives the game through the test hook and through
