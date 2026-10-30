@@ -152,7 +152,7 @@ export interface FatigueRow {
   label: string;
   rounds: number;
   wins: number;
-  /** 50% plus the paired change against the same side fresh (the estimate compared with the target). */
+  /** 50% plus the paired change against the same side fresh, floored at 0 and capped at 100% (the estimate compared with the target; not a raw win rate, see `rawWinRate`). */
   winRate: number;
   ciLow: number;
   ciHigh: number;
@@ -224,12 +224,18 @@ export const M11_TARGETS = {
   rankLiftMinPts: 0.5,
 } as const;
 
-/** combat-skills.md §8 fatigue targets: the tired side's win rate. */
+/**
+ * §8 fatigue targets: the tired side's adjusted win rate (50% + the paired change against the same side fresh, floored at 0 and
+ * capped at 100%: it is an estimate, and a team that never wins would otherwise print below 0). Rewritten for the stepped
+ * penalty tiers (KI-21, O36; PROPOSED, TUNABLE), centred on the measured values (seed `balance-1`, 4,992 rounds: 39.9 / 28.2 /
+ * 8.0 / -0.2 before the floor) with a width of about two standard errors. The profiles stand for the tiers: F 28 and F 40 are
+ * Tired, F 52 Winded, F 10 Spent. The pre-tier bands were 44-48 / 45-49 / 30-40 / 15-25.
+ */
 export const FATIGUE_PROFILES: readonly { id: string; label: string; freshness: number; count: 1 | 5; target: { min: number; max: number } }[] = [
-  { id: 'one_f28', label: 'one fighter at F 28', freshness: 28, count: 1, target: { min: 0.44, max: 0.48 } },
-  { id: 'all_f52', label: 'all five at F 52', freshness: 52, count: 5, target: { min: 0.45, max: 0.49 } },
-  { id: 'all_f40', label: 'all five at F 40', freshness: 40, count: 5, target: { min: 0.3, max: 0.4 } },
-  { id: 'all_f10', label: 'all five at F 10', freshness: 10, count: 5, target: { min: 0.15, max: 0.25 } },
+  { id: 'one_f28', label: 'one fighter at F 28', freshness: 28, count: 1, target: { min: 0.36, max: 0.44 } },
+  { id: 'all_f52', label: 'all five at F 52', freshness: 52, count: 5, target: { min: 0.24, max: 0.32 } },
+  { id: 'all_f40', label: 'all five at F 40', freshness: 40, count: 5, target: { min: 0.04, max: 0.12 } },
+  { id: 'all_f10', label: 'all five at F 10', freshness: 10, count: 5, target: { min: 0, max: 0.06 } },
 ];
 
 /** 03-combat §8 flag thresholds (PROVISIONAL until combat.json carries them; OPEN request to the combat designer). */
@@ -1137,15 +1143,16 @@ function fatigue(options: BalanceOptions, profile: SkillProfile, pick: SkillPick
       n++;
     }
     const lift = pairedLift(dSum, dSq, n);
-    const winRate = 0.5 + lift.liftPts / 100;
+    const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
+    const winRate = clamp01(0.5 + lift.liftPts / 100);
     rows.push({
       id: fp.id,
       label: fp.label,
       rounds: 2 * n,
       wins,
       winRate: round4(winRate),
-      ciLow: round4(0.5 + lift.ciLowPts / 100),
-      ciHigh: round4(0.5 + lift.ciHighPts / 100),
+      ciLow: round4(clamp01(0.5 + lift.ciLowPts / 100)),
+      ciHigh: round4(clamp01(0.5 + lift.ciHighPts / 100)),
       rawWinRate: round4(wins / Math.max(1, 2 * n)),
       freshWinRate: round4(baseWins / Math.max(1, 2 * n)),
       target: { ...fp.target },

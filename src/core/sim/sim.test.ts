@@ -76,6 +76,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
   // (2) M1.1 round (fighters at Freshness 100, 45, 70, 30, 100): outcome, duration and checksum moved ON PURPOSE: the Freshness penalty is now the stepped tiers
   // (Winded 50-74 -5%, Tired 25-49 -10%, Spent below 25 -15%, F >= 75 none) instead of the sliding scale, so Tired fighters play differently. ENGINE_VERSION stays 2:
   // no sim code path changed shape, only the penalty lookup and its content (see 05 sec. 9.4 on what bumps it).
+  // (3) The olderDrainMult keys left the fixture content again (owner answer of 2026-10-30): event hashes only, checksums unchanged.
   // Re-derived at the M1.1 integration: fixture orc injury values (chanceMult 0.75, recoveryMult 0.8, scarMult 0.9), levelEta defaults as data, the six development.json
   // removals (the header's content hash moved); round checksums unchanged.
   it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
@@ -88,13 +89,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "84c4daa4652353effd9bab0a90c80241",
+            "fffec0ff583b3ea6e7a9bf7f7442ed21",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "8deb18d5c4ec5deae281263abb16cb5e",
+            "3e296c1709fa07f6c9ca34465f0f9500",
           ],
         ],
         "score": {
@@ -116,7 +117,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
         "home",
         943,
         "4ab39e9902c34a01de090c398b10fa3b",
-        "6106f45e8db7f273d68367baf7138404",
+        "89138f055384fc486ee9fbad4f2b39dc",
       ]
     `);
   });

@@ -482,7 +482,7 @@ describe('Freshness', () => {
   });
 
   it('frs-002 / frs-003 / frs-008: 10.9 (STA 6, 34, brutal round); 7.8 (elf 30, STA 10); 3.6 (Campaign Legs)', () => {
-    expect(roundDrain10(plain({ stamina: 6 }, { age: 34 }), load(38, 1100, true), content)).toBe(136); // 10.9 x 1.25 (older drain, human-age 31+, KI-21)
+    expect(roundDrain10(plain({ stamina: 6 }, { age: 34 }), load(38, 1100, true), content)).toBe(109);
     expect(roundDrain10(plain({ stamina: 10 }, { raceId: 'elf' as RaceId, age: 30 }), load(30, 600, false), content)).toBe(Math.round(7.08 * (0.55 + 0.25 + 0.12) * 1.1 * 10));
     expect(typicalRoundDrain10(plain({ stamina: 10 }, { raceId: 'elf' as RaceId, age: 30 }), content)).toBe(78);
     expect(typicalRoundDrain10(plain({ stamina: 16 }, { perkIds: ['g_campaign_legs' as PerkId] }), content)).toBe(36);
@@ -586,7 +586,7 @@ describe('Freshness', () => {
   const typicalLoad = { durationS: 36, damageTaken: 600, maxHp: 1000, downed: false };
   const TIRED10 = content.levels.freshness.threshold * 10;
 
-  it('frs-013 (KI-21, O36): starting fresh and playing a full 3-round match every week, a Stamina-13 fighter plays 4 (young), 3 (middle) and 2 (older) matches before a round starts Tired (< 50)', () => {
+  it('frs-013 (KI-21, O36): starting fresh and playing a full 3-round match every week, a Stamina-13 fighter plays 4 (young), 3 (middle) and 3 (older) matches before a round starts Tired (< 50)', () => {
     const matchesBeforeTired = (age: number): number => {
       let f: Fighter = { ...plain({ stamina: 13 }, { age }), freshness10: 1000 };
       for (let match = 0; match < 12; match++) {
@@ -600,10 +600,10 @@ describe('Freshness', () => {
     };
     expect(matchesBeforeTired(22)).toBe(4);
     expect(matchesBeforeTired(28)).toBe(3);
-    expect(matchesBeforeTired(34)).toBe(2);
+    expect(matchesBeforeTired(34)).toBe(3);
   });
 
-  it('frs-013 through the real week path: weeklyLifecycle applies the played-week recovery to a starter over several weeks, 4 / 3 / 2 matches', () => {
+  it('frs-013 through the real week path: weeklyLifecycle applies the played-week recovery to a starter over several weeks, 4 / 3 / 3 matches', () => {
     const matchesBeforeTired = (age: number): number => {
       const { s, a, b } = world();
       const id = s.clubs[a]!.lineup.fighters[0]!.fighterId;
@@ -629,7 +629,7 @@ describe('Freshness', () => {
     };
     expect(matchesBeforeTired(22)).toBe(4);
     expect(matchesBeforeTired(28)).toBe(3);
-    expect(matchesBeforeTired(34)).toBe(2);
+    expect(matchesBeforeTired(34)).toBe(3);
   });
 
   it('frs-006 / frs-007: Second Breath gives +8 between rounds to active fighters and unused reserves, never to the withdrawn', () => {

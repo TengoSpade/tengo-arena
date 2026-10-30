@@ -38,7 +38,7 @@ describe('npm run balance report text', () => {
   it('the M1.1 paired modes print their own table', { timeout: 120_000 }, () => {
     expect(lines('perk-impact', 4, 2).join('\n')).toContain('perks (by dominance');
     expect(lines('rank-impact', 4, 2).join('\n')).toContain('ranks (rank 3 vs rank 1');
-    expect(lines('fatigue', 8).join('\n')).toContain('fatigue (tired side');
+    expect(lines('fatigue', 8).join('\n')).toContain('fatigue (adjusted win%');
   });
 
   it('labels what the count is: matches for squad-match, fights (rounds) elsewhere', { timeout: 120_000 }, () => {

@@ -138,9 +138,31 @@ export const SOAK_CHECKS: readonly { id: string; description: string; severity?:
   { id: 'save-roundtrip', description: 'serialize -> parse -> deep-equal after every season' },
   // M1.1 (levels.json soakTargets; combat sys-match)
   { id: 'freshness-rotation', description: 'AI round starts Tired / Spent within levels.json soakTargets' },
+  // Warning-level (KI-21, O36): the overall Spent share can pass while the league drifts toward tiredness; this reads it per season.
+  { id: 'spent-share', description: 'AI Spent share of round starts stays under its cap in every season and does not trend upward across seasons', severity: 'warn' },
   { id: 'level-ups', description: 'Starter levels per season by human-age, matches per level, bench ratio (age-matched), starter Stamina within levels.json soakTargets' },
   { id: 'match-squads', description: 'Squad records legal (5 a side every round, <= 2 swaps, no return); swaps per match within the PROVISIONAL band' },
 ];
+
+/**
+ * The Spent-share alarm (KI-21, O36; PROVISIONAL): warns when any measured season is over the cap (levels.json
+ * soakTargets.aiSpentRoundStartShareMax), or when the mean Spent share of the later half of the seasons is more than
+ * SPENT_TREND_MAX_PTS points above the earlier half (4 or more seasons). Pure, for the soak check and its test.
+ */
+export const SPENT_TREND_MAX_PTS = 1.5;
+export function spentShareAlarm(perSeason: readonly { spent: number; starts: number }[], cap: number): { ok: boolean; detail: string } {
+  const shares = perSeason.map((s) => (s.starts > 0 ? (s.spent * 100) / s.starts : 0));
+  const over = shares.map((v, i) => ({ v, season: i + 1 })).filter((x) => x.v > cap * 100);
+  const half = Math.floor(shares.length / 2);
+  const mean = (xs: number[]): number => (xs.length ? xs.reduce((n, x) => n + x, 0) / xs.length : 0);
+  const rise = shares.length >= 4 ? mean(shares.slice(shares.length - half)) - mean(shares.slice(0, half)) : 0;
+  const trending = rise > SPENT_TREND_MAX_PTS;
+  const list = shares.map((v) => `${v.toFixed(1)}%`).join(' ');
+  const why: string[] = [];
+  if (over.length) why.push(`over the ${cap * 100}% cap in measured season${over.length > 1 ? 's' : ''} ${over.map((x) => x.season).join(', ')}`);
+  if (trending) why.push(`rising ${rise.toFixed(1)} points from the first half to the second (max ${SPENT_TREND_MAX_PTS})`);
+  return { ok: why.length === 0, detail: `Spent share by measured season ${list}${why.length ? `: ${why.join('; ')}` : ` (cap ${cap * 100}%, rise ${rise.toFixed(1)} points, max ${SPENT_TREND_MAX_PTS})`}` };
+}
 
 /** Swaps per match, both sides (PROVISIONAL: no content band; lifecycle model ~0.5, combat squad-match 0.6-1.4 at harsher Freshness). */
 export const PROVISIONAL_SWAPS_PER_MATCH: readonly [number, number] = [0.1, 1.5];
@@ -884,6 +906,14 @@ function evaluate(options: SoakOptions, main: RunResult, replay: RunResult | nul
       const ok = tired <= lt.aiTiredRoundStartShareMax * starts && spent <= lt.aiSpentRoundStartShareMax * starts;
       const per = measured.map((s) => `${pct(s.tiredStarts, s.roundStarts)}/${pct(s.spentStarts, s.roundStarts)}`).join(' ');
       set('freshness-rotation', ok, `Tired ${pct(tired, starts)} (max ${lt.aiTiredRoundStartShareMax * 100}%), Spent ${pct(spent, starts)} (max ${lt.aiSpentRoundStartShareMax * 100}%) of ${starts} AI round starts; by season ${per}`);
+    }
+  }
+  // spent-share (measured seasons, per season)
+  if (needSeasons('spent-share')) {
+    if (measured.every((s) => s.roundStarts === 0)) result.set('spent-share', { status: 'pending', detail: 'no round-by-round matches recorded' });
+    else {
+      const a = spentShareAlarm(measured.map((s) => ({ spent: s.spentStarts, starts: s.roundStarts })), lt.aiSpentRoundStartShareMax);
+      set('spent-share', a.ok, a.detail);
     }
   }
   // level-ups (measured seasons)

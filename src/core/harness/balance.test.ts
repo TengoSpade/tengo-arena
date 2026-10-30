@@ -122,7 +122,8 @@ describe('balance harness', () => {
     expect(r.fatigue!.map((x) => x.id)).toEqual(FATIGUE_PROFILES.map((x) => x.id));
     for (const row of r.fatigue!) {
       expect(row.rounds).toBe(20);
-      expect(row.winRate).toBeCloseTo(0.5 + row.rawWinRate - row.freshWinRate, 4);
+      expect(row.winRate).toBeCloseTo(Math.min(1, Math.max(0, 0.5 + row.rawWinRate - row.freshWinRate)), 4);
+      expect(row.winRate).toBeGreaterThanOrEqual(0);
       expect(row.inTarget).toBe(row.winRate >= row.target.min && row.winRate <= row.target.max);
     }
     // All five at F 10 against fresh twins.

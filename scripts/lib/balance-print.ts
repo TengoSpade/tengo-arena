@@ -59,7 +59,7 @@ export function balanceReportLines(report: BalanceReport, mode: BalanceMode): st
     }
   }
   if (report.fatigue) {
-    log('  fatigue (tired side: 50% + change vs the same side fresh):  rounds   win%   95% CI          raw    fresh   target');
+    log('  fatigue (adjusted win% = 50% + tired raw - fresh raw, floored at 0):  rounds   adj%   95% CI          raw    fresh   target (adj%)');
     for (const r of report.fatigue) {
       log(
         `    ${r.label.padEnd(22)} ${String(r.rounds).padStart(6)} ${pct(r.winRate).padStart(6)}   ${`${pct(r.ciLow)}-${pct(r.ciHigh)}`.padEnd(13)} ${pct(r.rawWinRate).padStart(6)} ${pct(r.freshWinRate).padStart(6)}   ${pct(r.target.min)}-${pct(r.target.max)}${r.inTarget ? '' : '  <-- off target'}`,

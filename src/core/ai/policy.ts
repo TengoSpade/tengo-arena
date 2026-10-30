@@ -525,6 +525,22 @@ function reservesFor(ctx: Ctx, pool: readonly Fighter[], chosen: readonly Fighte
   const left = pool.filter((o) => !chosen.includes(o) && ctx.fresh10(o) >= t10);
   const rowOf = (f: Fighter): 'front' | 'back' => ctx.content.classes.require(f.classId).startingRow;
   const out: Fighter[] = [];
+  // Reserve cover (KI-21, O36): when starters are likely to tire, first take the rested fighters who could replace one under the auto-swap rules.
+  const rot = ctx.content.levels.aiRotation;
+  if (rot.reserveCoverRounds !== undefined && rot.reserveCoverFreshMin !== undefined) {
+    const sub = ctx.content.levels.aiSubstitution;
+    const swapBelow10 = (sub.freshnessBelowByPersonality[ctx.personality.id] ?? sub.freshnessBelow) * 10;
+    const atRisk = chosen.filter((s) => ctx.fresh10(s) - rot.reserveCoverRounds! * ctx.ports.fighters.typicalRoundDrain10(s, ctx.content) < swapBelow10);
+    const covers = (o: Fighter, s: Fighter): boolean => ctx.fresh10(o) >= ctx.fresh10(s) + sub.reserveMargin * 10 && ctx.rating(o) * 10 >= ctx.rating(s) * 10 - sub.maxRatingGap * 10;
+    const score = (o: Fighter): number => {
+      if (ctx.fresh10(o) < rot.reserveCoverFreshMin! * 10) return 0;
+      let n = 0;
+      for (const s of atRisk) if (covers(o, s)) n += 1 + (ctx.families(o).some((x) => ctx.families(s).includes(x)) ? 1 : 0);
+      return n;
+    };
+    const ranked = left.map((o) => ({ o, n: score(o) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n || ctx.byRating(a.o, b.o));
+    for (const x of ranked) if (out.length < max) out.push(x.o);
+  }
   for (const row of ['front', 'back'] as const) {
     const f = left.find((o) => rowOf(o) === row && !out.includes(o));
     if (f && out.length < max) out.push(f);
