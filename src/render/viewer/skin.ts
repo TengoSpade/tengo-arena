@@ -45,6 +45,15 @@ export interface BodyVisual {
   /** Positioned (translated, depth-sorted) by the viewer at the unit's screen point; the body draws around its feet at (0, 0) and handles facing itself. */
   readonly view: Container;
   update(state: UnitRenderState, frame: BodyFrame): void;
+  /**
+   * Optional (fighter-token skin). The body draws the fighter's roles itself, so the viewer omits its role-glyph plate.
+   * The side ring, HP / shield / focus bars, pips, badges, crown and cues stay the viewer's.
+   */
+  readonly drawsRole?: boolean;
+  /** Optional. The disc is at least this many CSS px across (a token that carries text is larger than a metre of arena at small zoom); the viewer sizes its ring, wedge and stack to it. */
+  readonly minDiameterPx?: number;
+  /** Optional. CSS px the body prints below the viewer's ring (the class name), so a stack drawn below the disc clears it. */
+  extentBelowPx?(pxPerMetre: number): number;
   destroy(): void;
 }
 

@@ -52,6 +52,8 @@ export interface ArenaUnitInfo {
   isHiredBlade: boolean;
   /** Entered from the reserves for this round (M1.1). */
   entered: boolean;
+  /** Overall rating (OVR) at the round start: the fight input's kickoff rating (null when unknown). Optional so older builders and fixtures stay valid. */
+  overall?: number | null;
   /** Freshness 0-100 at the round start and its tag (report tags "Tired (52)"). */
   freshness: number | null;
   fatigueTag: 'tired' | 'spent' | null;

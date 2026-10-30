@@ -1,82 +1,62 @@
 /**
  * The M2 placeholder skin (T1: "placeholder sprites or simple shapes first"; WP-M2D).
  *
- * Bodies are flat shapes generated at load, no image files: a filled circle of the fighter radius (0.5 m) in the
- * side's club primary with a secondary rim (the exact club colours: the body carries identity only, A18 decision 4),
- * flattened to 60% height at the palette's down opacity when downed (asset-006, arena-notes §1). The floor is a flat
+ * Bodies are the owner's fighter token (2026-10-30; token-body.ts): a disc in the fighter's role colour (split
+ * diagonally for a hybrid) with OVR and the role mark inside, a Freshness ring around it, the class name under it and a
+ * thin club-colour rim, generated at load with no image files; flattened to 60% height at the palette's down opacity
+ * when downed (asset-006, arena-notes §1). The viewer's side ring, bars and pips go around it. The floor is a flat
  * plane with a centre line and a wall band outside the field (04 §5; components.css §25.2). Everything with game
  * meaning (ring, plate and role glyphs, bars, pips, badges, cues) is drawn by the viewer, not here.
  *
  * Interface notes (tech-020): the viewer translates and depth-sorts `body.view` and never rotates it; a disc has no
  * facing, so this skin ignores `state.facing` (the viewer's own wedge shows it). There are no textures, so `prepare`
- * has nothing to load and `destroy` has nothing to release beyond the Graphics objects. Colours and the down opacity
- * come from the palette it was given (`load`, `setPalette`).
+ * has nothing to load; the token text uses bitmap fonts baked once per palette (token-text.ts) and released in
+ * `destroy`. Colours and the down opacity come from the palette it was given (`load`, `setPalette`).
  */
 import { Container, Graphics } from 'pixi.js';
-import type { ArenaMetrics, ArenaPalette, ArenaUnitInfo, TeamColors, UnitRenderState } from '../../types';
+import type { ContentDB } from '../../../core/content';
+import type { ArenaPalette, ArenaUnitInfo, TeamColors } from '../../types';
 import { DESTROY_ALL } from '../../viewer/destroy';
-import type { ArenaSkin, BodyFrame, BodyVisual, SkinContext } from '../../viewer/skin';
+import type { ArenaSkin, BodyVisual, SkinContext } from '../../viewer/skin';
+import { TokenBody } from './token-body';
+import { createPixiTokenText, type TokenTextFactory } from './token-text';
 
-/** Fighter radius, metres (03 §1). */
-const BODY_RADIUS_M = 0.5;
-/** A downed body is flattened to this fraction of its height (arena-notes §1: 60%). */
-const DOWNED_FLATTEN = 0.6;
-/** The body rim (secondary colour) is this fraction of the disc diameter wide (components.css: inset m * 0.07). */
-const RIM_OF_DIAMETER = 0.07;
+export { MIN_TOKEN_DIAMETER_PX, ROLE_LABEL_MIN_DIAMETER_PX, freshnessTier, tierColor, TokenBody } from './token-body';
+export { createStubTokenText } from './token-text';
+
 /** The wall band outside the field, metres (components.css .arena-wall: 0.35 m). */
 const WALL_THICKNESS_M = 0.35;
-/** Used before any palette arrives. */
-const FALLBACK_DOWN_OPACITY = 0.4;
 
-class DiscBody implements BodyVisual {
-  readonly view = new Container();
-  private readonly disc = new Graphics();
-  private drawnRadius = -1;
-  /** 0 = standing, 1 = fully downed. */
-  private flat = 0;
-  private destroyed = false;
-
-  constructor(
-    private readonly colors: TeamColors,
-    private readonly metrics: () => ArenaMetrics | null,
-  ) {
-    this.view.addChild(this.disc);
-    this.view.eventMode = 'none';
-  }
-
-  update(state: UnitRenderState, frame: BodyFrame): void {
-    if (this.destroyed) return;
-    const radius = BODY_RADIUS_M * frame.pxPerMetre;
-    if (radius !== this.drawnRadius) this.draw(radius, frame.pxPerMetre);
-    // Downed bodies flatten at once (components.css .is-down has no transition), so a seek and playing agree.
-    this.flat = state.standing ? 0 : 1;
-    const downOpacity = this.metrics()?.downOpacity ?? FALLBACK_DOWN_OPACITY;
-    this.disc.scale.y = 1 - (1 - DOWNED_FLATTEN) * this.flat;
-    this.view.alpha = 1 - (1 - downOpacity) * this.flat;
-  }
-
-  private draw(radius: number, diameter: number): void {
-    this.drawnRadius = radius;
-    const rim = Math.max(1.5, diameter * RIM_OF_DIAMETER);
-    this.disc.clear();
-    this.disc.circle(0, 0, radius).fill({ color: this.colors.primary });
-    this.disc.circle(0, 0, radius - rim / 2).stroke({ width: rim, color: this.colors.secondary });
-  }
-
-  destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
-    this.view.destroy(DESTROY_ALL);
-  }
+export interface PlaceholderSkinOptions {
+  /** The token's text seam (default: PixiJS bitmap fonts when the viewer has a renderer; tests pass a stub). */
+  text?: TokenTextFactory;
 }
 
 class PlaceholderSkin implements ArenaSkin {
   readonly id = 'placeholder';
   private palette: ArenaPalette | null = null;
+  private content: ContentDB | null = null;
+  private text: TokenTextFactory | null;
+  private readonly bodies = new Set<TokenBody>();
   private readonly floors = new Set<Container>();
+
+  constructor(private readonly opts: PlaceholderSkinOptions) {
+    this.text = opts.text ?? null;
+  }
 
   load(ctx: SkinContext): Promise<void> {
     this.palette = ctx.palette;
+    this.content = ctx.content;
+    if (!this.text && ctx.renderer) {
+      try {
+        const factory = createPixiTokenText(ctx.renderer.resolution || 1, ctx.palette);
+        factory.create('small').destroy(); // probe: installing a bitmap font needs a canvas 2D
+        this.text = factory;
+      } catch {
+        this.text = null; // no canvas 2D: tokens without text rather than none
+      }
+    }
+    this.text?.configure(ctx.palette);
     return Promise.resolve();
   }
 
@@ -85,8 +65,11 @@ class PlaceholderSkin implements ArenaSkin {
     return Promise.resolve();
   }
 
-  createBody(_info: ArenaUnitInfo, colors: TeamColors): BodyVisual {
-    return new DiscBody(colors, () => this.palette?.metrics ?? null);
+  createBody(info: ArenaUnitInfo, colors: TeamColors): BodyVisual {
+    const body = new TokenBody(info, colors, { palette: () => this.palette, content: () => this.content, text: () => this.text });
+    this.bodies.add(body);
+    body.view.on('destroyed', () => this.bodies.delete(body));
+    return body;
   }
 
   createFloor(arenaCm: { width: number; height: number }, pxPerMetre: number): Container {
@@ -113,16 +96,23 @@ class PlaceholderSkin implements ArenaSkin {
 
   setPalette(palette: ArenaPalette): void {
     this.palette = palette;
+    this.text?.configure(palette);
+    for (const body of this.bodies) body.restyle();
   }
 
   destroy(): void {
     for (const floor of this.floors) if (!floor.destroyed) floor.destroy(DESTROY_ALL);
     this.floors.clear();
+    for (const body of [...this.bodies]) body.destroy();
+    this.bodies.clear();
+    if (!this.opts.text) this.text?.destroy();
+    this.text = null;
     this.palette = null;
+    this.content = null;
   }
 }
 
 /** The M2 placeholder skin: generated shapes, no assets (Q59). */
-export function placeholderSkin(): ArenaSkin {
-  return new PlaceholderSkin();
+export function placeholderSkin(opts: PlaceholderSkinOptions = {}): ArenaSkin {
+  return new PlaceholderSkin(opts);
 }

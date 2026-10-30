@@ -96,7 +96,8 @@ export function buildRoundContext(input: ContextInput): ArenaRoundContext {
     const slot = lu ? lu.fighterIds.indexOf(u.fighterId) : -1;
     const freshness = slot >= 0 && lu ? (lu.freshness[slot] ?? null) : null;
     const label = freshness === null ? null : labelFor(freshness, content).id;
-    const tactics = fightInputOf(state, playback.fixtureId, u.fighterId)?.tactics;
+    const input = fightInputOf(state, playback.fixtureId, u.fighterId);
+    const tactics = input?.tactics;
     return {
       unit: u.index,
       side: u.side,
@@ -108,6 +109,7 @@ export function buildRoundContext(input: ContextInput): ArenaRoundContext {
       raceId: f?.raceId ?? '',
       isHiredBlade: f?.status === 'hired-blade',
       entered: slot >= 0 && lu ? Boolean(lu.entered[slot]) : false,
+      overall: input?.rating ?? null,
       freshness,
       fatigueTag: label === 'tired' || label === 'spent' ? label : null,
       ruleCount: presetOfTactics(content, tactics)?.rules.length ?? 0,

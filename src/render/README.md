@@ -54,7 +54,7 @@
 | `camera/index.ts` | `DEFAULT_CAMERA` (padding 16 px for the wall, §A18) and the world-to-screen transform (WP-M2C) |
 | `viewer/index.ts` | `createArenaViewer` (WP-M2D) |
 | `viewer/skin.ts` | the skin interface (architect) |
-| `skins/placeholder/index.ts` | the M2 placeholder skin (WP-M2D) |
+| `skins/placeholder/` | the M2 placeholder skin (WP-M2D): `index.ts`; `token-body.ts` (the owner's fighter token: role-colour disc, OVR, Freshness ring, class name), `token-text.ts` (its cached bitmap text, with a stub for tests) |
 
 ## Known gaps (on main until the packages merge)
 - Log format 1 frames have no shield or focus; format 2 (WP-M2A) adds them. Until then `UnitRenderState.shield` and `.focus` are null and the bars hide them.

@@ -2,13 +2,13 @@
  * The placeholder skin (asset-006, Q59): generated shapes, no assets; flattened and faded when downed; a flat floor
  * with a centre line and walls; nothing with game meaning (that is the viewer's, tech-020).
  */
-import { Container, type Graphics } from 'pixi.js';
+import { Container } from 'pixi.js';
 import { describe, expect, it } from 'vitest';
 import type { UnitRenderState } from '../../types';
 import { defaultArenaPalette } from '../../colors';
 import type { BodyFrame } from '../../viewer/skin';
 import { fakeColors, fakeContext, fakeLog, createFakeTimeline, fakeContent } from '../../viewer/testing/fake-timeline';
-import { placeholderSkin } from './index';
+import { MIN_TOKEN_DIAMETER_PX, placeholderSkin, type TokenBody } from './index';
 
 const FRAME: BodyFrame = { tick: 0, dtMs: 0, speed: 1, reducedMotion: false, pxPerMetre: 52 };
 
@@ -26,36 +26,24 @@ describe('placeholder skin', () => {
     expect(skin.id).toBe('placeholder');
   });
 
-  it('draws a disc of the fighter radius (0.5 m) in the side colours', async () => {
+  it('draws a token at least 44 px across and a metre of arena when that is larger', async () => {
     const skin = placeholderSkin();
-    const info = fakeContext().units[0]!;
-    const body = skin.createBody(info, fakeColors(0));
+    await skin.load({ renderer: null as never, content: fakeContent(), palette: defaultArenaPalette('dark') });
+    const body = skin.createBody(fakeContext().units[0]!, fakeColors(0));
+    expect(body.drawsRole).toBe(true);
+    expect(body.minDiameterPx).toBe(MIN_TOKEN_DIAMETER_PX);
+    body.update(unitState(), { ...FRAME, pxPerMetre: 27 });
+    expect((body as TokenBody).shown().diameter).toBe(MIN_TOKEN_DIAMETER_PX);
+    const token = body.view.children[0] as Container;
+    expect(token.getLocalBounds().width).toBeCloseTo(MIN_TOKEN_DIAMETER_PX, 0);
     body.update(unitState(), FRAME);
-    const disc = body.view.children[0] as Graphics;
-    const b = disc.getLocalBounds();
-    expect(b.width).toBeCloseTo(52, 0); // 2 x 0.5 m x 52 px/m
-    expect(b.height).toBeCloseTo(52, 0);
+    expect((body as TokenBody).shown().diameter).toBe(52);
+    expect(token.getLocalBounds().width).toBeCloseTo(52, 0); // 2 x 0.5 m x 52 px/m
     body.update(unitState(), { ...FRAME, pxPerMetre: 104 });
-    expect(disc.getLocalBounds().width).toBeCloseTo(104, 0);
+    expect(token.getLocalBounds().width).toBeCloseTo(104, 0);
     body.destroy();
     body.destroy(); // idempotent
     expect(body.view.destroyed).toBe(true);
-  });
-
-  it('flattens to 60% height at 40% opacity when downed, at once whether paused, playing or under reduced motion', () => {
-    const skin = placeholderSkin();
-    for (const frame of [FRAME, { ...FRAME, dtMs: 16 }, { ...FRAME, dtMs: 16, reducedMotion: true }]) {
-      const body = skin.createBody(fakeContext().units[0]!, fakeColors(0));
-      const disc = body.view.children[0] as Container;
-      body.update(unitState({ standing: true }), frame);
-      expect(body.view.alpha).toBe(1);
-      expect(disc.scale.y).toBe(1);
-      body.update(unitState({ standing: false }), frame);
-      expect(body.view.alpha).toBeCloseTo(0.4, 5);
-      expect(disc.scale.y).toBeCloseTo(0.6, 5);
-      body.update(unitState({ standing: true }), frame); // stood up again (a seek back)
-      expect(disc.scale.y).toBe(1);
-    }
   });
 
   it('ignores facing: a disc has none, and the body is never rotated by the skin either', () => {

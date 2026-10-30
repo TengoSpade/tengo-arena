@@ -60,7 +60,8 @@ export function realContext(log: FightLog, content: ContentDB, kind: 'live' | 'r
       raceId: 'human',
       isHiredBlade: false,
       entered: false,
-      freshness: u.index === 2 ? 52 : u.index === 7 ? 28 : 100,
+      overall: 38 + ((u.index * 7) % 13),
+      freshness: u.index === 2 ? 52 : u.index === 7 ? 28 : u.index === 4 ? 70 : 100,
       fatigueTag: u.index === 2 ? 'tired' : u.index === 7 ? 'spent' : null,
       ruleCount: preset.rules.length,
     };

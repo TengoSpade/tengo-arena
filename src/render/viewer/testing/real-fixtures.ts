@@ -63,6 +63,7 @@ export function makeCtx(log: FightLog, playerSide: Side | null = 0, kind: 'live'
       raceId: 'human',
       isHiredBlade: false,
       entered: false,
+      overall: 40 + u.index,
       freshness: 100,
       fatigueTag: null,
       ruleCount: c.presets.require(cls.defaultPresetId).rules.length,
