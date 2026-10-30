@@ -57,7 +57,10 @@ describe('save v4 -> v5 on a real v4 save (paused between rounds)', () => {
     expect(loaded.from).toBe(4);
     expect(loaded.state.schemaVersion).toBe(5);
     expect(validateState(loaded.state, content)).toEqual([]);
-    expect(loaded.warnings).toEqual([]); // same content (unchanged since the save was written)
+    // The shipped content changed after the save was written (KI-21, O36: combat.json and levels.json Freshness), so the
+    // only warning allowed is the content-hash notice; every referenced id still exists.
+    for (const w of loaded.warnings) expect(w).toMatch(/^Save was made with different content \(hash [0-9a-f]+, loaded [0-9a-f]+\); every referenced id exists$/);
+    expect(loaded.warnings.length).toBeLessThanOrEqual(1);
     expect(body(loaded.state)).toBe(body(v4.state));
     expect(loaded.state.liveMatch?.watch).toBeUndefined(); // a v4 live match is a simulated one
   });

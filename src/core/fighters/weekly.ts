@@ -22,7 +22,7 @@ import {
 import { pushNews } from './news';
 import { fighterHumanAge100, ratingOf } from './stats';
 import { tables } from './tables';
-import { freshness10Of, preseasonRest10, rest10, setFreshness10 } from './freshness';
+import { freshness10Of, playedWeekRest10, preseasonRest10, rest10, setFreshness10 } from './freshness';
 import { freshnessOf } from './levels';
 import { weekParticipation } from './progression';
 
@@ -244,6 +244,9 @@ export function weekly(draft: GameState, content: ContentDB): NewsId[] {
     else if (played && !played.started.has(f.id)) {
       setFreshness10(f, freshness10Of(f) + rest10(f, content, played.reserves.has(f.id)));
       f.season.restWeeks += 1;
+    } else if (played) {
+      // A week with a round started still recovers a little (KI-21, O36): young most, older least.
+      setFreshness10(f, freshness10Of(f) + playedWeekRest10(f, content));
     }
     // Injury countdown (not the week the injury happened; career-ending injuries never count down).
     if (f.injury && f.injury.weeksOut > 0 && !isCareerEnded(f)) {

@@ -125,6 +125,17 @@ export function rest10(fighter: Fighter, content: ContentDB, wasSquadReserve: bo
   return roundN((fr.restAt0 + fr.restPerStaminaPoint * staminaOf(fighter, content)) * recoveryAgeMult(fighter, content) * share * fr.storageUnitsPerPoint);
 }
 
+/**
+ * Weekly rest gain in tenths for a fighter who started a round that week (KI-21, O36): the same base as `rest10`
+ * (restAt0 + restPerStaminaPoint x STA) times the share for his human-age band (levels.json freshness.playedWeekRestShare),
+ * so a played week still recovers a little: young most, older least. Spent Stamina still decides how much a round costs.
+ */
+export function playedWeekRest10(fighter: Fighter, content: ContentDB): number {
+  const fr = content.levels.freshness;
+  const share = stepLookup(fr.playedWeekRestShare, Math.floor(fighterHumanAge100(fighter, content) / 100));
+  return roundN((fr.restAt0 + fr.restPerStaminaPoint * staminaOf(fighter, content)) * share * fr.storageUnitsPerPoint);
+}
+
 /** Preseason week recovery in tenths (+50 × age multiplier). */
 export function preseasonRest10(fighter: Fighter, content: ContentDB): number {
   const fr = content.levels.freshness;

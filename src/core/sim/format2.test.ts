@@ -223,11 +223,16 @@ describe('log format 2 changes no outcome and nothing but frames and the header'
     const HOME = ['oathguard', 'gutterknife', 'longeye', 'rimebinder', 'chirurgeon'];
     const AWAY = ['siegebreaker', 'oathguard', 'longeye', 'chirurgeon', 'rimebinder'];
 
+    // The fixture content's hash when these were captured. The header's content hash is replaced with it, so a later
+    // fixture key the fight does not read (KI-21: levels.json freshness.playedWeekRestShare) leaves this comparison of the
+    // streams intact; a change the fight reads still moves the events and fails it.
+    const FIXTURE_HASH_AT_CAPTURE = 'd459725e48114003772d826fdd11d15b';
+
     function legacyHash(log: FightLog, dropFrames: boolean): string {
       const h = new StreamHasher();
       const { logFormat, ...header } = log.header;
       expect(logFormat).toBe(2);
-      h.update(stableStringify(header));
+      h.update(stableStringify({ ...header, contentHash: FIXTURE_HASH_AT_CAPTURE }));
       for (const e of log.events) {
         if (dropFrames) {
           if (e.type === 'frame') continue;

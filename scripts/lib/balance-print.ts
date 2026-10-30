@@ -68,7 +68,7 @@ export function balanceReportLines(report: BalanceReport, mode: BalanceMode): st
   }
   if (report.squadMatch) {
     const q = report.squadMatch;
-    log(`  squad-match: ${q.matches} matches (${q.matchups} matchups x 5 rows x 2 sides x policy/off)`);
+    log(`  squad-match: ${q.matches} matches (${q.matchups} matchups x 5 rows x 2 clubs x 2 sides, one shared off-against-off pair)`);
     log('    policy side vs off       matches   win%   95% CI          comeback  (off)   swaps/match  target');
     for (const r of q.rows) {
       const cb = r.comebackRate === null ? '   -' : pct(r.comebackRate);
