@@ -127,7 +127,7 @@ describe('Between-round screen', () => {
     for (const id of ms.home.active) expect(screen.getByTestId(`br-row-${id}`)).toBeTruthy();
     for (const id of ms.home.unusedReserves) expect(screen.getByTestId(`br-reserve-${id}`)).toBeTruthy();
     expect(screen.getByTestId('screen-between-rounds').textContent).toContain('2 swaps left');
-    expect(screen.getByTestId('br-rules').textContent).toContain('below 40');
+    expect(screen.getByTestId('br-rules').textContent).toContain('below 50');
     expect(screen.getByTestId('br-cover').textContent).toMatch(/Cover:|No role cover/);
     // No suggestion (everyone fresh): one click plays on, with no swap command.
     await act(async () => {

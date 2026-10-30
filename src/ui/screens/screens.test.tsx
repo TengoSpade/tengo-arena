@@ -168,8 +168,8 @@ describe('Home', () => {
     const { store } = createTestStore({ weekIndex: 11 });
     const next = structuredClone(store.game.value!) as GameState;
     const roster = Object.values(next.fighters).filter((f) => f.clubId === next.playerClubId && !(f.injury && f.injury.weeksOut > 0));
-    next.fighters[roster[0]!.id]!.freshness10 = 450; // Tired (40–59)
-    next.fighters[roster[1]!.id]!.freshness10 = 300; // Spent (below 40)
+    next.fighters[roster[0]!.id]!.freshness10 = 450; // Tired (25–49)
+    next.fighters[roster[1]!.id]!.freshness10 = 200; // Spent (below 25)
     store.replaceWorld(next);
     mount(<HomeScreen params={{}} />, store);
     const panel = screen.getByTestId('availability');
@@ -178,7 +178,7 @@ describe('Home', () => {
     const tired = rows.find((r) => r.textContent!.includes(roster[0]!.name.full))!;
     const spent = rows.find((r) => r.textContent!.includes(roster[1]!.name.full))!;
     expect(within(tired).getByLabelText('Freshness 45, Tired')).toBeTruthy();
-    expect(within(spent).getByLabelText('Freshness 30, Spent')).toBeTruthy();
+    expect(within(spent).getByLabelText('Freshness 20, Spent')).toBeTruthy();
     expect(tired.querySelector('.fresh--compact')).toBeTruthy();
     expect(tired.textContent).toContain('Tired');
     // Every row in the panel shows his Freshness (injured fighters show a dash).

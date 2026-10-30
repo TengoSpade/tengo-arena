@@ -54,7 +54,7 @@ export interface ArenaUnitInfo {
   entered: boolean;
   /** Freshness 0-100 at the round start and its tag (report tags "Tired (52)"). */
   freshness: number | null;
-  fatigueTag: 'tired' | 'spent' | null;
+  fatigueTag: 'ready' | 'tired' | 'spent' | null;
   /** Rules in his list (the stance badge is "S"). */
   ruleCount: number;
 }

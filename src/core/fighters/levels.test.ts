@@ -96,13 +96,13 @@ describe('Freshness reads (sys-freshness)', () => {
     expect(freshnessOf({} as Fighter)).toBe(100);
   });
 
-  it('labels: Fresh >= 80, Ready 60-79, Tired 40-59, Spent < 40', () => {
-    expect([100, 80, 79, 60, 59, 40, 39, 0].map((v) => freshnessLabel(v, content))).toEqual(['fresh', 'fresh', 'ready', 'ready', 'tired', 'tired', 'spent', 'spent']);
+  it('labels (the penalty tiers, KI-21): Fresh >= 75, Winded 50-74, Tired 25-49, Spent < 25', () => {
+    expect([100, 75, 74, 50, 49, 25, 24, 0].map((v) => freshnessLabel(v, content))).toEqual(['fresh', 'fresh', 'ready', 'ready', 'tired', 'tired', 'spent', 'spent']);
   });
 
-  it('frs-009: injury multiplier x1.09 at 45, x1 at 60, x1.36 at 0 (cap x1.4)', () => {
-    expect(freshnessInjuryMultBp(45, content)).toBe(10_900);
-    expect(freshnessInjuryMultBp(60, content)).toBe(10_000);
-    expect(freshnessInjuryMultBp(0, content)).toBe(13_600);
+  it('frs-009: injury multiplier x1.03 at 45, x1 at 50, x1.3 at 0 (cap x1.4)', () => {
+    expect(freshnessInjuryMultBp(45, content)).toBe(10_300);
+    expect(freshnessInjuryMultBp(50, content)).toBe(10_000);
+    expect(freshnessInjuryMultBp(0, content)).toBe(13_000);
   });
 });

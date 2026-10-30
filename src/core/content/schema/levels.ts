@@ -123,6 +123,9 @@ export const LevelsFileSchema = z
         intensityMax: z.number(),
         youngHumanAgeBelow: z.number(),
         youngDrainMult: z.number().positive(),
+        /** Older fighters tire faster (O19: age affects both drain and recovery; KI-21, O36): drain x this from this human-age. */
+        olderHumanAgeFrom: z.number(),
+        olderDrainMult: z.number().positive(),
         /** Share of a round's drain paid by a fighter who starts it below `threshold` (a Tired fighter paces himself). Absent = 1: no taper. */
         tiredDrainShare: z.number().min(0).max(1).optional(),
         restAt0: z.number(),

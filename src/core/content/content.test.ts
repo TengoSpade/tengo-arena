@@ -215,6 +215,53 @@ describe('loadContent: errors are precise and collected', () => {
     expect(errorsOf(files)).toEqual([]);
   });
 
+  it('validates the stepped Freshness tiers (KI-21): descending minimums, a penalty-free top, penalties never milder further down, 0-1 ranges, labels equal to the tiers', () => {
+    const tiersOf = (f: Record<string, Mutable>) => (f['combat']!['freshness'] as Mutable)['tiers'] as Mutable[];
+    const at = (files: Record<string, Mutable>) => errorsOf(files).map((i) => `${i.file} ${i.path}`);
+    expect(errorsOf(raw())).toEqual([]);
+    // Not descending.
+    let f = raw();
+    tiersOf(f)[1]!['minFreshness'] = 80;
+    expect(at(f)).toContain('combat.json freshness.tiers[1].minFreshness');
+    // A penalty on the top tier.
+    f = raw();
+    tiersOf(f)[0]!['attackSpeed'] = -0.01;
+    expect(at(f)).toContain('combat.json freshness.tiers[0]');
+    // Milder further down.
+    f = raw();
+    tiersOf(f)[3]!['power'] = -0.01;
+    expect(at(f)).toContain('combat.json freshness.tiers[3].power');
+    f = raw();
+    tiersOf(f)[3]!['reactionDelay'] = 0.05;
+    expect(at(f)).toContain('combat.json freshness.tiers[3].reactionDelay');
+    // Out of range (schema).
+    f = raw();
+    tiersOf(f)[2]!['moveSpeed'] = -1.5;
+    expect(errorsOf(f).length).toBeGreaterThan(0);
+    f = raw();
+    tiersOf(f)[2]!['reactionDelay'] = 1.5;
+    expect(errorsOf(f).length).toBeGreaterThan(0);
+    // The last tier must start at 0.
+    f = raw();
+    tiersOf(f)[3]!['minFreshness'] = 5;
+    expect(at(f)).toContain('combat.json freshness.tiers');
+    // The labels must be the tiers; the threshold a penalty tier's boundary.
+    f = raw();
+    (((f['levels']!['freshness'] as Mutable)['labels'] as Mutable[])[1] as Mutable)['min'] = 55;
+    expect(at(f)).toContain('levels.json freshness.labels');
+    f = raw();
+    (f['levels']!['freshness'] as Mutable)['threshold'] = 60;
+    expect(at(f)).toContain('levels.json freshness.threshold');
+  });
+
+  it('the played-week recovery share is 0 to 1: a played week never recovers more than a week without a round (KI-21)', () => {
+    for (const bad of [-0.1, 1.2]) {
+      const f = raw();
+      (((f['levels']!['freshness'] as Mutable)['playedWeekRestShare'] as number[][])[1] as number[])[1] = bad;
+      expect(errorsOf(f).map((i) => `${i.file} ${i.path}`)).toContain('levels.json freshness.playedWeekRestShare');
+    }
+  });
+
   it('refuses a rank step that changes a control duration, hard or soft (control never grows with rank)', () => {
     expect(errorsOf(raw())).toEqual([]);
     const rankRow = (files: Record<string, Mutable>, abilityId: string): Mutable => list(files['ability-ranks']!, 'ranks').find((r) => r['abilityId'] === abilityId)!;

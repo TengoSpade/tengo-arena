@@ -132,13 +132,14 @@ describe('balance harness', () => {
   it('squad-match plays full matches through game.playMatchAuto: policy rows against off, reserve value, swaps and Freshness', { timeout: 120_000 }, () => {
     const r = runBalance({ seed: 's', fights: 40, content, mode: 'squad-match' });
     const q = r.squadMatch!;
-    expect(q.rows.map((x) => x.id)).toEqual(['off', 'injured_only', 'threshold40', 'threshold60', 'reserves2v0']);
+    expect(q.rows.map((x) => x.id)).toEqual(['off', 'injured_only', 'threshold50', 'threshold75', 'reserves2v0']);
     expect(q.matchups).toBe(2);
-    for (const row of q.rows) expect(row.matches).toBe(8);
-    expect(q.matches).toBe(40);
+    expect(q.rows[0]!.matches).toBe(4); // the shared off-against-off matches, each played once
+    for (const row of q.rows.slice(1)) expect(row.matches).toBe(8);
+    expect(q.matches).toBe(36);
     expect(q.roundsPerMatch).toBeGreaterThanOrEqual(2);
-    expect(q.tiredShare + q.spentShare).toBeGreaterThan(0);
-    expect(r.fights).toBe(40);
+    expect(q.windedShare + q.tiredShare + q.spentShare).toBeGreaterThan(0);
+    expect(r.fights).toBe(36);
   });
 
   it('auto-pick values follow combat-skills.md §5 (captain tag, tier III, preset use, clamp)', () => {

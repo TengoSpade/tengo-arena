@@ -46,12 +46,15 @@ export interface FreshInfo {
   value: number;
   label: FreshnessLabel;
   labelText: string;
+  /** The Tired-tier boundary (levels.json freshness.threshold): Q48's half drain, the injury multiplier, the AI rotation. */
   threshold: number;
+  /** Freshness below which a round starts with a penalty (the first penalty tier, combat.json freshness.tiers). */
+  penaltyFrom: number;
   /** Points lost in a typical round (intensity 1.0). */
   drain: number;
   /** Points regained in a week with no round started. */
   rest: number;
-  /** Typical rounds he can still start at or above the threshold. */
+  /** Typical rounds he can still start at or above the threshold (not yet Tired). */
   readyRounds: number;
   /** Freshness after a typical match (2.5 rounds), never below 0. */
   afterMatch: number;
@@ -83,6 +86,7 @@ export function typicalDrain(engine: GameEngine, state: GameState, content: Cont
   const sta = effectiveStats(engine, state, content, fighter)['stamina'] ?? 10;
   let d = clamp(fr.drainAt0 + fr.drainPerStaminaPoint * sta, fr.drainMin, fr.drainMax);
   if (humanAgeOf(fighter, content) < fr.youngHumanAgeBelow) d *= fr.youngDrainMult;
+  if (humanAgeOf(fighter, content) >= fr.olderHumanAgeFrom) d *= fr.olderDrainMult;
   for (const id of fighter.perkIds ?? []) {
     for (const e of content.perks.get(id)?.lifecycleEffects ?? []) if (e.type === 'freshnessDrainMult') d *= e.mult;
   }
@@ -99,9 +103,21 @@ export function weeklyRest(engine: GameEngine, state: GameState, content: Conten
   return Math.round(r * 10) / 10;
 }
 
+/** The stepped penalty tier at a Freshness (combat.json freshness.tiers) and its rank among the penalty tiers, 0 (none) to 1 (the last). */
+export function tierAt(value: number, content: ContentDB): { tier: ContentDB['combat']['freshness']['tiers'][number]; rank: number } {
+  const tiers = [...content.combat.freshness.tiers].sort((a, b) => b.minFreshness - a.minFreshness);
+  const i = tiers.findIndex((t) => value >= t.minFreshness);
+  const at = i === -1 ? tiers.length - 1 : i;
+  return { tier: tiers[at]!, rank: at / Math.max(1, tiers.length - 1) };
+}
+
+/** Where the first penalty tier begins: at or above it a round starts with no penalty. */
+export function penaltyFrom(content: ContentDB): number {
+  return Math.max(...content.combat.freshness.tiers.map((t) => t.minFreshness));
+}
+
 export function severityAt(value: number, content: ContentDB): number {
-  const f = content.combat.freshness;
-  return clamp((f.thresholdBelow - value) / (f.thresholdBelow - f.fullPenaltyAtOrBelow), 0, 1);
+  return tierAt(value, content).rank;
 }
 
 export function injuryMultAt(value: number, content: ContentDB): number {
@@ -127,6 +143,7 @@ export function freshInfo(engine: GameEngine, state: GameState, content: Content
     label: id,
     labelText: text,
     threshold,
+    penaltyFrom: penaltyFrom(content),
     drain,
     rest: weeklyRest(engine, state, content, fighter),
     readyRounds: readyRoundsFrom(value, drain, threshold),
@@ -140,8 +157,8 @@ export function freshInfo(engine: GameEngine, state: GameState, content: Content
 export function penaltyText(value: number, content: ContentDB): string | null {
   const s = severityAt(value, content);
   if (s <= 0) return null;
-  const p = content.combat.freshness.penaltyAtFull;
-  const pct = (x: number) => `${x > 0 ? '+' : '−'}${Math.abs(Math.round(x * s * 1000) / 10)}%`;
+  const p = tierAt(value, content).tier;
+  const pct = (x: number) => `${x > 0 ? '+' : '−'}${Math.abs(Math.round(x * 1000) / 10)}%`;
   return `${pct(p.attackSpeed)} attack speed · ${pct(p.moveSpeed)} move speed · ${pct(p.power)} Power and Support · ${pct(p.reactionDelay)} reaction delay`;
 }
 
@@ -405,7 +422,7 @@ export function pickLine(content: ContentDB, option: LevelOption | null): string
 // ---- effective rating (AL-R002-T002 / T004) -----------------------------------------------------------------
 
 /**
- * A fighter's rating and what it is worth at his Freshness now. Below the Freshness threshold he fights with a
+ * A fighter's rating and what it is worth at his Freshness now. Below the first penalty tier (Freshness 75) he fights with a
  * penalty (attack and move speed, Power, Support, reaction); core prices it as the effective rating
  * (core/fighters freshness-rating.ts, on `FighterView.effectiveRating`), shown as "45 → 41" wherever the
  * rating sits next to a Freshness meter.

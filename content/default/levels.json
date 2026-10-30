@@ -156,19 +156,21 @@
     "intensityMax": 1.5,
     "youngHumanAgeBelow": 21,
     "youngDrainMult": 1.1,
+    "olderHumanAgeFrom": 31,
+    "olderDrainMult": 1.25,
     "tiredDrainShare": 0.5,
     "restAt0": 30,
     "restPerStaminaPoint": 1.0,
     "squadReserveRestShare": 0.8,
     "preseasonWeekRecovery": 50,
     "recoveryAgeMult": [[0, 1.0], [31, 0.85], [35, 0.7]],
-    "playedWeekRestShare": [[0, 0.2], [25, 0.1], [31, 0.03]],
+    "playedWeekRestShare": [[0, 0.1], [25, 0.05], [31, 0.02]],
     "seasonEndReset": 100,
-    "threshold": 60,
+    "threshold": 50,
     "labels": [
-      { "id": "fresh", "label": "Fresh", "min": 80, "icon": "fresh_full" },
-      { "id": "ready", "label": "Ready", "min": 60, "icon": "fresh_ready" },
-      { "id": "tired", "label": "Tired", "min": 40, "icon": "fresh_tired" },
+      { "id": "fresh", "label": "Fresh", "min": 75, "icon": "fresh_full" },
+      { "id": "ready", "label": "Winded", "min": 50, "icon": "fresh_ready" },
+      { "id": "tired", "label": "Tired", "min": 25, "icon": "fresh_tired" },
       { "id": "spent", "label": "Spent", "min": 0, "icon": "fresh_spent" }
     ],
     "betweenRounds": "At each between-round step (combat's applyBetweenRound) every squad member who is active or an unused reserve, not withdrawn and not injured, gains his freshnessBetweenRounds total (perk Second Breath +8; none otherwise), after that round's drain and before the next round; clamp 100.",
@@ -192,23 +194,23 @@
     "leagueMaxRatingGap": 6,
     "extraGapPerPointBelow": 0.45,
     "projectOneRound": true,
-    "tournamentRestBelow": 40,
+    "tournamentRestBelow": 25,
     "tournamentMaxRatingGap": 3,
     "maxRestsPerMatch": 3,
-    "spentFloorAtLock": 30,
-    "spentFloorAltMin": 40
+    "spentFloorAtLock": 15,
+    "spentFloorAltMin": 25
   },
 
   "aiSubstitution": {
     "_doc": "Lifecycle inputs to combat's auto-swap procedure (combat-skills.md sys-match 'Auto-swap'; combat.patch.json match.autoSwapDefaults). The procedure is combat's: 1) forced injury replacement (an unused reserve, costing a swap; else an emergency entrant from outside the squad, no swap; never 4 v 5); 2) threshold: active fighters with freshness < freshnessBelow (+ lostRoundThresholdBonus if the side lost the round just played), lowest first, each swapped for the best-fit unused reserve with freshness >= the starter's + reserveMargin and rating >= the starter's - maxRatingGap (same role family first); 3) keepOneForInjury: the last swap is not used for freshness before the last possible between-round step. A swapped-out fighter cannot return. Lifecycle supplies the per-personality freshnessBelow (economy.json aiPersonalities ids) and proposes lostRoundThresholdBonus to combat.",
-    "freshnessBelowByPersonality": { "balanced": 40, "thrifty": 35, "star_chasing": 30, "youth_focused": 50, "veteran": 40 },
-    "playerAutoDefault": 40,
+    "freshnessBelowByPersonality": { "balanced": 50, "thrifty": 45, "star_chasing": 40, "youth_focused": 60, "veteran": 50 },
+    "playerAutoDefault": 50,
     "lostRoundThresholdBonus": 10,
     "reserveMargin": 15,
     "maxRatingGap": 6,
     "keepOneForInjury": true,
     "sameRoleFamilyFirst": true,
-    "freshnessBelow": 40
+    "freshnessBelow": 50
   },
 
   "hooks": {

@@ -71,7 +71,11 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
 
   // The round checksums pin the fight itself. The event hash also covers the fight header (content hash):
   // re-pinned 2026-10 when the fixture content gained the D-P/D-T keys; checksums unchanged, no engine change.
-  // Re-pinned for KI-21 (O36): the fixture content gained levels.json freshness.playedWeekRestShare, so the content hash in the event header moved; outcomes, durations and round checksums are unchanged, and ENGINE_VERSION stays 2 (no sim code changed).
+  // Re-pinned for KI-21 (O36), twice. (1) Fixture match (all fighters at Freshness 100): only the event hashes moved, because the fixture content gained
+  // levels.json freshness keys and combat.json freshness.tiers, so the content hash in the event header changed; outcomes, durations and round checksums are unchanged.
+  // (2) M1.1 round (fighters at Freshness 100, 45, 70, 30, 100): outcome, duration and checksum moved ON PURPOSE: the Freshness penalty is now the stepped tiers
+  // (Winded 50-74 -5%, Tired 25-49 -10%, Spent below 25 -15%, F >= 75 none) instead of the sliding scale, so Tired fighters play differently. ENGINE_VERSION stays 2:
+  // no sim code path changed shape, only the penalty lookup and its content (see 05 sec. 9.4 on what bumps it).
   // Re-derived at the M1.1 integration: fixture orc injury values (chanceMult 0.75, recoveryMult 0.8, scarMult 0.9), levelEta defaults as data, the six development.json
   // removals (the header's content hash moved); round checksums unchanged.
   it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
@@ -84,13 +88,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "3c7255f368fa2e6866a607da7b67ec36",
+            "84c4daa4652353effd9bab0a90c80241",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "bfb72fb1d235ff917e61e945d20b851a",
+            "8deb18d5c4ec5deae281263abb16cb5e",
           ],
         ],
         "score": {
@@ -110,9 +114,9 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
     expect([out.result.winner, out.result.durationTicks, out.result.checksum, out.log!.hash]).toMatchInlineSnapshot(`
       [
         "home",
-        896,
-        "128648c2c01315596ceda6c8db45ee69",
-        "f7e84193c8a3a99f2c04fe47d25bca60",
+        943,
+        "4ab39e9902c34a01de090c398b10fa3b",
+        "6106f45e8db7f273d68367baf7138404",
       ]
     `);
   });

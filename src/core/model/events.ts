@@ -159,7 +159,7 @@ export interface RoundRecap {
   /** levels.json freshness label id at the round start. */
   freshnessLabel?: string;
   /** 'tired' / 'spent' when the round started below the threshold (report tag "Tired (52)"). */
-  fatigueTag?: 'tired' | 'spent' | null;
+  fatigueTag?: 'ready' | 'tired' | 'spent' | null;
   fatigueBp?: number;
   /** Trigger fires per perk this round. */
   perkProcs?: Record<string, number>;

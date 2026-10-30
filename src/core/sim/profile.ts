@@ -70,13 +70,17 @@ function constantPred(p: CPred, freshness: number, entered: boolean): boolean | 
   }
 }
 
-/** Freshness penalty severity in bp: clamp((threshold - F) / (threshold - full), 0, 1) x (1 - fatigueResist). */
+/** The Freshness penalty tier at a round start (KI-21, O36): the first tier, from the top, whose minimum `freshness` reaches. */
+export function fatigueTier(tb: SimTables, freshness: number): SimTables['freshness']['tiers'][number] {
+  const tiers = tb.freshness.tiers;
+  return tiers.find((t) => freshness >= t.min) ?? tiers[tiers.length - 1]!;
+}
+
+/** Freshness penalty severity in bp: the tier's rank among the penalty tiers (0, 3,333, 6,666, 10,000) x (1 - fatigueResist). Display and tags only. */
 export function fatigueSeverityBp(tb: SimTables, freshness: number, fatigueResistBp: number): number {
   const fr = tb.freshness;
-  const span = fr.thresholdBelow - fr.fullAtOrBelow;
-  const s = Math.min(BP, Math.max(0, Math.trunc(((fr.thresholdBelow - freshness) * BP) / span)));
   const resist = Math.min(fr.resistMaxBp, Math.max(fr.resistMinBp, fatigueResistBp));
-  return Math.trunc((s * (BP - resist)) / BP);
+  return Math.trunc((fatigueTier(tb, freshness).severityBp * (BP - resist)) / BP);
 }
 
 export function clampAttrs(f: FightFighterInput): number[] {
@@ -157,13 +161,16 @@ export function staticValues(input: FightFighterInput, cls: CClass, tb: SimTable
   }
   // M1.1 Freshness penalty at round build: constant stat mods for the whole round.
   const fatigueBp = fatigueSeverityBp(tb, freshness, staticMods[ST.fatigueResist]!);
-  if (fatigueBp > 0) {
+  {
+    // Stepped tiers: the tier's penalties, each scaled by (1 - fatigueResist), fixed for the whole round.
     const fr = tb.freshness;
-    staticMods[ST.attackSpeed]! += Math.trunc((fr.attackSpeedBp * fatigueBp) / BP);
-    staticMods[ST.moveSpeed]! += Math.trunc((fr.moveSpeedBp * fatigueBp) / BP);
-    staticMods[ST.power]! += Math.trunc((fr.powerBp * fatigueBp) / BP);
-    staticMods[ST.support]! += Math.trunc((fr.supportBp * fatigueBp) / BP);
-    staticMods[ST.reactionDelay]! += Math.trunc((fr.reactionDelayBp * fatigueBp) / BP);
+    const tier = fatigueTier(tb, freshness);
+    const keep = BP - Math.min(fr.resistMaxBp, Math.max(fr.resistMinBp, staticMods[ST.fatigueResist]!));
+    staticMods[ST.attackSpeed]! += Math.trunc((tier.attackSpeedBp * keep) / BP);
+    staticMods[ST.moveSpeed]! += Math.trunc((tier.moveSpeedBp * keep) / BP);
+    staticMods[ST.power]! += Math.trunc((tier.powerBp * keep) / BP);
+    staticMods[ST.support]! += Math.trunc((tier.supportBp * keep) / BP);
+    staticMods[ST.reactionDelay]! += Math.trunc((tier.reactionDelayBp * keep) / BP);
   }
 
   const hpFactor = Math.max(d.hpMinFactorBp, BP + d.hpPerTghBp * dd(ATTR.tgh) + d.hpPerStrBp * dd(ATTR.str));

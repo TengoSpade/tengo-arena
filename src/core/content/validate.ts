@@ -699,9 +699,8 @@ function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
   if (m.swaps.maxPerMatch > m.squad.reservesMax) c.warn(CF, 'match.swaps.maxPerMatch', 'more swaps than reserves (only injuries could use them)');
   validateSaveBounds(c, f);
   const fz = combat.freshness;
-  if (fz.fullPenaltyAtOrBelow >= fz.thresholdBelow) c.error(CF, 'freshness.fullPenaltyAtOrBelow', 'must be below thresholdBelow');
   if (fz.resistClamp[0] > fz.resistClamp[1]) c.error(CF, 'freshness.resistClamp', 'min > max');
-  if (fz.default < fz.thresholdBelow) c.error(CF, 'freshness.default', 'the default freshness must carry no penalty');
+  validateFreshnessTiers(c, CF, fz);
 
   // ---- classes.json: 13 weights summing to 1, stamina weight and emphasis ----
   const KF = 'classes.json';
@@ -837,7 +836,16 @@ function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
   if (mins.some((v, i) => i > 0 && v >= mins[i - 1]!) || mins[mins.length - 1] !== 0) {
     c.error(LV, 'freshness.labels', 'labels are ordered by descending min and the last starts at 0');
   }
-  if (fr.threshold !== fz.thresholdBelow) c.error(LV, 'freshness.threshold', `must equal combat.json freshness.thresholdBelow (${fz.thresholdBelow})`);
+  // The labels ARE the combat tiers (KI-21, O36): same ids, same minimums.
+  if (fr.labels.length !== fz.tiers.length || fr.labels.some((l, i) => l.id !== fz.tiers[i]!.id || l.min !== fz.tiers[i]!.minFreshness)) {
+    c.error(LV, 'freshness.labels', 'must match combat.json freshness.tiers (same ids and minimums, in order)');
+  }
+  // `threshold` is the Tired-tier boundary the lifecycle rules key to (Q48 half drain, injury multiplier, AI rotation): a tier boundary below the first.
+  if (!fz.tiers.slice(1).some((t) => t.minFreshness === fr.threshold)) c.error(LV, 'freshness.threshold', `must equal a penalty tier's minFreshness in combat.json freshness.tiers (${fz.tiers.slice(1).map((t) => t.minFreshness).join(', ')})`);
+  // A played week recovers a share of the same base as a week without a round, so it can never recover more than that week (share 0 to 1).
+  for (const [age, share] of fr.playedWeekRestShare) {
+    if (!(share >= 0 && share <= 1)) c.error(LV, 'freshness.playedWeekRestShare', `the share from human-age ${age} must be 0 to 1 (got ${share}): a played week recovers at most the rest of a week without a round`);
+  }
   if (fr.start !== fz.default) c.error(LV, 'freshness.start', `must equal combat.json freshness.default (${fz.default})`);
   if (fr.drainMin > fr.drainMax || fr.intensityMin > fr.intensityMax) c.error(LV, 'freshness', 'drain and intensity clamps need min <= max');
   // matchSquad repeats combat.json match (combat owns it).
@@ -884,4 +892,23 @@ function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
   };
   checkOffer(levels.traitOfferPool.positive, 'traitOfferPool.positive', ['boon', 'edge']);
   checkOffer(levels.traitOfferPool.burdens, 'traitOfferPool.burdens', ['burden']);
+}
+
+/** combat.json freshness.tiers: descending minFreshness from a penalty-free first tier down to 0; penalties 0 at the top and never milder further down; the default Freshness is penalty-free. */
+function validateFreshnessTiers(c: Collector, file: string, fz: ContentFiles['combat']['freshness']): void {
+  const t = fz.tiers;
+  const first = t[0]!;
+  const zero = (x: (typeof t)[number]): boolean => x.attackSpeed === 0 && x.moveSpeed === 0 && x.power === 0 && x.support === 0 && x.reactionDelay === 0;
+  if (!zero(first)) c.error(file, 'freshness.tiers[0]', 'the top tier carries no penalty');
+  if (t[t.length - 1]!.minFreshness !== 0) c.error(file, 'freshness.tiers', 'the last tier starts at 0');
+  t.forEach((x, i) => {
+    if (i === 0) return;
+    const p = t[i - 1]!;
+    if (x.minFreshness >= p.minFreshness) c.error(file, `freshness.tiers[${i}].minFreshness`, 'tiers are listed in descending minFreshness');
+    for (const k of ['attackSpeed', 'moveSpeed', 'power', 'support'] as const) {
+      if (x[k] > p[k]) c.error(file, `freshness.tiers[${i}].${k}`, 'penalties never get milder further down');
+    }
+    if (x.reactionDelay < p.reactionDelay) c.error(file, `freshness.tiers[${i}].reactionDelay`, 'penalties never get milder further down');
+  });
+  if (fz.default < first.minFreshness) c.error(file, 'freshness.default', 'the default freshness must carry no penalty');
 }

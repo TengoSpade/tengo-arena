@@ -174,13 +174,12 @@ function sideState(state: GameState, club: Club): MatchSideState {
   void state;
 }
 
-/** Combat's penalty share s = clamp((threshold − F) ÷ 50, 0, 1) (combat.json freshness; full at F 10). */
+/** Combat's penalty share (combat.json freshness.tiers): the tier's rank among the penalty tiers, 0 (no penalty) to 1 (the last tier). */
 function penaltyShare(f: Fighter, content: ContentDB): number {
-  const fr = content.combat.freshness;
-  const t = fr.thresholdBelow;
-  const full = fr.fullPenaltyAtOrBelow;
-  const s = (t - freshnessOf(f)) / (t - full);
-  return s < 0 ? 0 : s > 1 ? 1 : s;
+  const tiers = [...content.combat.freshness.tiers].sort((x, y) => y.minFreshness - x.minFreshness);
+  const v = freshnessOf(f);
+  const i = tiers.findIndex((t) => v >= t.minFreshness);
+  return (i === -1 ? tiers.length - 1 : i) / Math.max(1, tiers.length - 1);
 }
 
 function sideRating(state: GameState, ids: readonly FighterId[], content: ContentDB): number {

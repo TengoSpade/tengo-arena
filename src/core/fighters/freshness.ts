@@ -79,8 +79,10 @@ export function roundIntensity(load: RoundLoad, content: ContentDB): number {
 
 function drainMults(fighter: Fighter, content: ContentDB): number {
   const fr = content.levels.freshness;
-  const young = fighterHumanAge100(fighter, content) < fr.youngHumanAgeBelow * 100 ? fr.youngDrainMult : 1;
-  return young * perkDrainMult(fighter, content);
+  const age100 = fighterHumanAge100(fighter, content);
+  const young = age100 < fr.youngHumanAgeBelow * 100 ? fr.youngDrainMult : 1;
+  const older = age100 >= fr.olderHumanAgeFrom * 100 ? fr.olderDrainMult : 1;
+  return young * older * perkDrainMult(fighter, content);
 }
 
 /**

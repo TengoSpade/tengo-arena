@@ -496,7 +496,7 @@
     "_squadDoc": "sys-match (M1.1): match squads and swaps. Owner rules: squad of 5 starters + 2 reserves; at most 2 swaps per match, between rounds only; a fighter swapped out cannot return in that match (owner ruling 2026-10-26).",
     "squad": { "starters": 5, "reservesMax": 2, "reservesMin": 0 },
     "swaps": { "maxPerMatch": 2, "between": "rounds only (never before round 1, never after the deciding round)", "returnAllowed": false, "decision": "simultaneous and blind; applied home then away", "injuryReplacement": "forced; an unused reserve enters and uses a swap; with none left an emergency entrant enters without a swap", "emergencyEntrant": "best-fit fit roster fighter outside the match squad (same role family, then rating, then freshness, then fighter id); else a hired blade" },
-    "autoSwapDefaults": { "mode": "threshold", "freshnessBelow": 40, "reserveMargin": 15, "maxRatingGap": 6, "keepOneForInjury": true, "sameRoleFamilyFirst": true },
+    "autoSwapDefaults": { "mode": "threshold", "freshnessBelow": 50, "reserveMargin": 15, "maxRatingGap": 6, "keepOneForInjury": true, "sameRoleFamilyFirst": true },
     "autoSwapModes": ["off", "injured_only", "threshold"],
     "pauseBetweenRounds": { "options": ["always", "when_urgent", "never"], "defaultM11": "always" }
   },
@@ -1234,5 +1234,18 @@
     },
     { "id": "fatigueResist", "kind": "fraction" }
   ],
-  "freshness": { "_doc": "Per-fighter freshness 0-100 arrives in each round input (lifecycle owns drain per round played, recovery and labels). Severity s = clamp((thresholdBelow - F) / (thresholdBelow - fullPenaltyAtOrBelow), 0, 1) from the freshness at the start of that round; fixed for the whole round. Each penalty = penaltyAtFull x s x (1 - fatigueResist). KI-21 (O36): steeper, penaltyAtFull x1.375 of the M1.1 values and full at 25.", "appliedAt": "round_start", "thresholdBelow": 60, "fullPenaltyAtOrBelow": 25, "penaltyAtFull": { "attackSpeed": -0.11, "moveSpeed": -0.066, "power": -0.088, "support": -0.088, "reactionDelay": 0.28 }, "labelsFrom": "levels.json freshness.labels (fresh >= 80, ready >= 60, tired >= 40, spent < 40); reports tag a fighter Tired or Spent with the penalty applied", "thresholdFrom": "levels.json freshness.threshold (must equal thresholdBelow)", "resistStat": "fatigueResist", "resistClamp": [0, 1], "default": 100 }
+  "freshness": {
+    "_doc": "Per-fighter freshness 0-100 arrives in each round input (lifecycle owns drain per round played, recovery and labels). STEPPED tiers (KI-21, owner decision O36 of 2026-10-30): the tier is the first row, from the top, whose minFreshness the fighter's freshness at the START of that round reaches; its penalties are fixed for the whole round, each scaled by (1 - fatigueResist). tiers are listed in descending minFreshness, the first row has no penalty and the last starts at 0; penalties are fractions (attackSpeed, moveSpeed, power, support <= 0, reactionDelay >= 0) and never get milder further down.",
+    "appliedAt": "round_start",
+    "tiers": [
+      { "id": "fresh", "minFreshness": 75, "attackSpeed": 0, "moveSpeed": 0, "power": 0, "support": 0, "reactionDelay": 0 },
+      { "id": "ready", "minFreshness": 50, "attackSpeed": -0.05, "moveSpeed": -0.05, "power": -0.05, "support": -0.05, "reactionDelay": 0.1 },
+      { "id": "tired", "minFreshness": 25, "attackSpeed": -0.1, "moveSpeed": -0.1, "power": -0.1, "support": -0.1, "reactionDelay": 0.2 },
+      { "id": "spent", "minFreshness": 0, "attackSpeed": -0.15, "moveSpeed": -0.15, "power": -0.15, "support": -0.15, "reactionDelay": 0.3 }
+    ],
+    "labelsFrom": "levels.json freshness.labels (fresh >= 75, winded >= 50, tired >= 25, spent < 25; the label ids are the tier ids and the minimums must equal the tiers' minFreshness); reports tag a fighter in a penalty tier with the penalty applied",
+    "resistStat": "fatigueResist",
+    "resistClamp": [0, 1],
+    "default": 100
+  }
 }

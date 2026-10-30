@@ -17,11 +17,11 @@ describe('Match report: squads and swaps (M1.1)', () => {
     const starters = new Set(state.clubs[club.id]!.lineup.fighters.map((e) => e.fighterId as string));
     const bench = Object.values(state.fighters).filter((f) => f.clubId === club.id && !starters.has(f.id) && !(f.injury && f.injury.weeksOut > 0));
     expect(bench.length).toBeGreaterThanOrEqual(2);
-    // A Spent starter (30) and two fresh reserves of his class and stats: the auto rule swaps him after round 1.
+    // A Spent starter (20) and two fresh reserves of his class and stats: the auto rule swaps him after round 1.
     const next = structuredClone(state) as GameState;
     const lineup = next.clubs[club.id]!.lineup;
     const spent = lineup.fighters[0]!.fighterId;
-    next.fighters[spent]!.freshness10 = 300;
+    next.fighters[spent]!.freshness10 = 200;
     for (const b of bench.slice(0, 2)) {
       const f = next.fighters[b.id]!;
       const s = next.fighters[spent]!;
@@ -43,7 +43,7 @@ describe('Match report: squads and swaps (M1.1)', () => {
       </TestProviders>,
     );
     const panel = await screen.findByTestId('panel-matchday');
-    expect(within(panel).getByTestId('md-round-1').textContent).toContain('Spent 30');
+    expect(within(panel).getByTestId('md-round-1').textContent).toContain('Spent 20');
     const swaps = within(panel).getByTestId('md-swaps-1');
     expect(swaps.textContent).toContain(next.fighters[spent]!.name.full);
     expect(swaps.textContent).toContain('auto');

@@ -7,6 +7,7 @@ import type { AbilityId, FightLog, FighterId, FighterMatchStats, MatchInput, Rec
 import { deriveSeed } from '../rng';
 import { InvariantError } from '../util';
 import { Fight } from './fight';
+import { fatigueTier } from './profile';
 import type { Unit } from './state';
 
 /**
@@ -70,7 +71,8 @@ export interface RoundRecapM11 extends RoundRecap {
   /** levels.json freshness label id at the round start (fresh, ready, tired, spent). */
   freshnessLabel: string;
   /** 'tired' or 'spent' when the round started below the threshold, else null (report tag "Tired (52)"). */
-  fatigueTag: 'tired' | 'spent' | null;
+  /** The penalty tier's label (Winded 'ready', 'tired', 'spent'); null in the penalty-free tier. */
+  fatigueTag: 'ready' | 'tired' | 'spent' | null;
   fatigueBp: number;
   /** Trigger fires per perk this round. */
   perkProcs: Record<string, number>;
@@ -90,7 +92,7 @@ function recapOf(f: Fight, u: Unit): RoundRecapM11 {
   return {
     freshness: u.freshness,
     freshnessLabel: label,
-    fatigueTag: u.freshness < f.tb.freshness.thresholdBelow ? (label === 'spent' ? 'spent' : 'tired') : null,
+    fatigueTag: fatigueTier(f.tb, u.freshness).severityBp > 0 ? (fatigueTier(f.tb, u.freshness).id as 'ready' | 'tired' | 'spent') : null,
     fatigueBp: u.fatigueBp,
     perkProcs: procs,
     enteredThisRound: u.input.enteredThisRound === true,

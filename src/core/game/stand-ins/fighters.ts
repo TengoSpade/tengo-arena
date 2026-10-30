@@ -178,8 +178,8 @@ function freshnessAfterRound(draft: GameState, ms: MatchState, outcome: RoundOut
     const side = lineups?.[a.side];
     const at = side ? side.fighterIds.indexOf(a.fighterId) : -1;
     const start = at >= 0 ? side!.freshness[at]! : 100;
-    if (start < 40) f.season.spentRoundStarts += 1;
-    else if (start < 60) f.season.tiredRoundStarts += 1;
+    if (start < 25) f.season.spentRoundStarts += 1;
+    else if (start < 50) f.season.tiredRoundStarts += 1;
     f.freshness10 = Math.max(0, (f.freshness10 ?? 1000) - 45 - (a.downed ? 25 : 0));
   }
 }
@@ -399,7 +399,7 @@ export function standInFighters(): Port {
     announceFinalSeasons: () => [],
     // ---- M1.1: reads as the real module; hooks are stubs until WP-C needs them in stand-in runs ----
     freshnessOf: (f) => Math.floor((f.freshness10 ?? 1000) / 10),
-    freshnessLabel: (v) => (v >= 80 ? 'fresh' : v >= 60 ? 'ready' : v >= 40 ? 'tired' : 'spent'),
+    freshnessLabel: (v) => (v >= 75 ? 'fresh' : v >= 50 ? 'ready' : v >= 25 ? 'tired' : 'spent'),
     // Stand-in rating: no Freshness penalty on the displayed rating.
     ratingAtFreshness: (f, freshness, content) => {
       const r = rating(f, content);
