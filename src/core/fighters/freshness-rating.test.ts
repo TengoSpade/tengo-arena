@@ -130,3 +130,14 @@ describe('ratingAtFreshness (R2-T002)', () => {
     expect(quick.parts.reaction).toBeCloseTo(-5 * 0.04 * 7.2, 9);
   });
 });
+
+describe('ratingAtFreshness: a Freshness below every tier minimum', () => {
+  it('falls to the last (harshest) tier, as the sim does, not to the penalty-free one', () => {
+    const content = fixtureContent();
+    const fr = content.combat.freshness;
+    const noZeroTier = { ...content, combat: { ...content.combat, freshness: { ...fr, tiers: fr.tiers.filter((t) => t.minFreshness > 0) } } };
+    expect(freshnessSeverityBp(10, 0, content)).toBe(10000);
+    expect(freshnessSeverityBp(10, 0, noZeroTier)).toBe(10000);
+    expect(freshnessSeverityBp(90, 0, noZeroTier)).toBe(0);
+  });
+});

@@ -30,7 +30,7 @@ export function freshTip(info: FreshInfo, content: ContentDB): TipContent {
   };
 }
 
-/** Compact meter + value; `label` adds the word (Fresh, Ready, Tired, Spent); `compact` shortens the bar (side columns, lists). */
+/** Compact meter + value; `label` adds the word (Fresh, Winded, Tired, Spent); `compact` shortens the bar (side columns, lists). */
 export function FreshMeter({ info, content, label, testId, compact }: { info: FreshInfo; content: ContentDB; label?: boolean; testId?: string; compact?: boolean }) {
   return (
     <span class={`fresh condition${compact ? ' fresh--compact' : ''}`} data-label={info.label} tabIndex={0} aria-label={`Freshness ${info.value}, ${info.labelText}`} data-testid={testId} {...tipAttrs(freshTip(info, content))}>

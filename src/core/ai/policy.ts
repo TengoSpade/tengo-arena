@@ -518,7 +518,13 @@ function rotate(ctx: Ctx, pool: readonly Fighter[], chosen: Fighter[]): void {
   }
 }
 
-/** The 2 squad reserves: the best remaining fit fighters with Freshness >= threshold, one front-line and one back-line when available, then by rating. */
+/**
+ * The 2 squad reserves: fit fighters with Freshness >= threshold (levels.json freshness.threshold, the Tired boundary). First, the O37 cover
+ * rule: when starters are likely to tire (their Freshness minus aiRotation.reserveCoverRounds typical rounds falls below the auto-swap
+ * threshold), take the rested fighters (>= reserveCoverFreshMin) who could replace one under the auto-swap rules (>= reserveMargin
+ * fresher, <= maxRatingGap rating lower), those sharing a role family counting double. Then fill with one front-line and one back-line when
+ * available, then by rating.
+ */
 function reservesFor(ctx: Ctx, pool: readonly Fighter[], chosen: readonly Fighter[]): Fighter[] {
   const max = ctx.content.combat.match.squad.reservesMax;
   const t10 = ctx.content.levels.freshness.threshold * 10;

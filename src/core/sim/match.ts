@@ -86,7 +86,6 @@ export interface RoundRecapM11 extends RoundRecap {
   freshness: number;
   /** levels.json freshness label id at the round start (fresh, ready, tired, spent). */
   freshnessLabel: string;
-  /** 'tired' or 'spent' when the round started below the threshold, else null (report tag "Tired (52)"). */
   /** The penalty tier's label (Winded 'ready', 'tired', 'spent'); null in the penalty-free tier. */
   fatigueTag: 'ready' | 'tired' | 'spent' | null;
   fatigueBp: number;

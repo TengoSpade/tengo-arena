@@ -79,8 +79,10 @@ export function fatigueResistOf(fighter: Pick<Fighter, 'perkIds'>, content: Cont
 /** The penalty tier of a whole Freshness (combat.json freshness.tiers, as the sim reads it) and its rank among the penalty tiers in bp (0 for the top tier, 10,000 for the last). */
 function tierAt(f: number, content: ContentDB): { tier: ContentDB['combat']['freshness']['tiers'][number]; rankBp: number } {
   const tiers = [...content.combat.freshness.tiers].sort((a, b) => b.minFreshness - a.minFreshness);
-  const i = Math.max(0, tiers.findIndex((t) => f >= t.minFreshness));
-  return { tier: tiers[i === -1 ? tiers.length - 1 : i]!, rankBp: Math.trunc((i * BP) / Math.max(1, tiers.length - 1)) };
+  const found = tiers.findIndex((t) => f >= t.minFreshness);
+  // Below every tier's minimum (content without a 0 tier): the last, harshest tier, as the sim's fatigueTier does.
+  const at = found === -1 ? tiers.length - 1 : found;
+  return { tier: tiers[at]!, rankBp: Math.trunc((at * BP) / Math.max(1, tiers.length - 1)) };
 }
 
 /** The sim's Freshness penalty severity in bp (sim/profile.ts fatigueSeverityBp): the tier's rank among the penalty tiers x (1 - clamp(fatigueResist)). */

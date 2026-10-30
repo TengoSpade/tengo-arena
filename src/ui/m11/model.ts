@@ -115,6 +115,14 @@ export function penaltyFrom(content: ContentDB): number {
   return Math.max(...content.combat.freshness.tiers.map((t) => t.minFreshness));
 }
 
+/** The Freshness bands the UI words, all read from content: the penalty start, the Tired boundary and the Tired / Spent labels. */
+export function freshBands(content: ContentDB): { penaltyFrom: number; threshold: number; tiredName: string; spentName: string; spentFrom: number } {
+  const labels = content.levels.freshness.labels;
+  const tired = labels.find((l) => l.id === 'tired') ?? labels[labels.length - 2] ?? labels[labels.length - 1]!;
+  const spent = labels.find((l) => l.id === 'spent') ?? labels[labels.length - 1]!;
+  return { penaltyFrom: penaltyFrom(content), threshold: content.levels.freshness.threshold, tiredName: tired.label, spentName: spent.label, spentFrom: tired.min };
+}
+
 export function severityAt(value: number, content: ContentDB): number {
   return tierAt(value, content).rank;
 }

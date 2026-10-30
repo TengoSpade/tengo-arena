@@ -9,7 +9,7 @@
 import type { ContentDB } from '../../../core/content';
 import type { ClubId, Fighter, FighterSeasonRow, GameState, ResolvedLevelUp, SeasonRecord } from '../../../core/model';
 import { DataTable, Panel, Tag, tipAttrs, type Column } from '../../components';
-import { pickLine } from '../../m11/model';
+import { freshBands, pickLine } from '../../m11/model';
 import { useWp7Engine } from '../league/lib/engine';
 import { rosterOf } from '../league/lib/season';
 import { Delta, Empty, FighterLink, Portrait, RatingPill, Stars } from '../league/lib/ui';
@@ -119,7 +119,10 @@ export function LevelsStep({ game, content, record, clubId }: { game: GameState;
       align: 'num',
       class: 'col-mid',
       sortValue: (r) => r.row?.tiredRoundStarts ?? 0,
-      cellAttrs: () => ({ 'data-tip': 'Rounds he started below 60 Freshness (Tired or Spent), with the penalty' }),
+      cellAttrs: () => {
+        const b = freshBands(content);
+        return { 'data-tip': `Rounds he started below ${b.threshold} Freshness (${b.tiredName} or ${b.spentName}), with the penalty` };
+      },
       cell: (r) => (r.row?.tiredRoundStarts != null ? r.row.tiredRoundStarts : '—'),
     },
     { id: 'potential', header: 'Potential', class: 'col-mid', sortValue: (r) => r.potential ?? 0, cell: (r) => (r.potential !== null ? <Stars potential={r.potential} /> : '—') },

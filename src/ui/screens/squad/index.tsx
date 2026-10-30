@@ -68,7 +68,7 @@ import { safeView, useEngine, type GameEngine } from '../../store/engine';
 import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from '../../store/views';
 import { usePrefetchViewer } from '../arena/viewer-factory';
 import { format, t } from '../../text';
-import { freshInfo, levelInfo, ratingFromView, type RatingNow } from '../../m11/model';
+import { freshBands, freshInfo, levelInfo, ratingFromView, type RatingNow } from '../../m11/model';
 import { FreshMeter, LevelChip, RatingEff, freshTip } from '../../m11/parts';
 import { ReservesZone, RotationStrip, applySuggestedSquad, rotationTips, toggleReserve } from './MatchSquad';
 import { T } from './text';
@@ -405,7 +405,7 @@ function LineupBoard(props: BoardProps) {
   // One-click fix for an unfit starter: the best fit reserves, highest rating first, one per unfit place.
   const fitReserves = rows.filter((r) => !r.entry && engineFit(engine, r.f)).sort((a, b) => (b.view?.rating ?? 0) - (a.view?.rating ?? 0));
   const name = (id: FighterId | null) => (id ? (state.fighters[id]?.name.full ?? id) : '');
-  // A Spent starter (Freshness below 40) with no rested fighter of his role to rest him for: Auto-pick keeps him, so say why.
+  // A Spent starter (Freshness in the Spent band, below the Tired label's minimum) with no rested fighter of his role to rest him for: Auto-pick keeps him, so say why.
   const tips = rotationTips(state, content, engine, club);
   const covered = new Set(tips.map((tp) => tp.out as string));
   const spentNoCover = lineupRows.filter((r) => engineFit(engine, r.f) && freshInfo(engine, state, content, r.f).label === 'spent' && !covered.has(r.f.id));
@@ -678,7 +678,7 @@ function LineupCard(props: BoardProps & { r: Row; isSelected: boolean }) {
         <FreshMeter info={fresh} content={content} testId={`fresh-${r.f.id}`} />
         <span
           class={`lineup-card__proj u-xs${willTire ? ' u-warn' : ' u-muted'}`}
-          {...tipAttrs(format(T.freshProjectionTip, { drain: fresh.drain.toFixed(1), n: fresh.afterMatch, tired: willTire ? T.freshWillTire : T.freshFine }))}
+          {...tipAttrs(format(T.freshProjectionTip, { drain: fresh.drain.toFixed(1), n: fresh.afterMatch, tired: format(willTire ? T.freshWillTire : T.freshFine, { threshold: fresh.threshold, tired: freshBands(content).tiredName }) }))}
         >
           {format(T.freshProjection, { n: fresh.afterMatch })}
         </span>
@@ -864,7 +864,7 @@ function columnsFor(view: View, ctx: ClubContext, actions: ReturnType<typeof clu
   const freshness: Column<Row> = {
     id: 'freshness',
     header: T.colFresh,
-    headerTip: T.colFreshTip,
+    headerTip: format(T.colFreshTip, (() => { const b = freshBands(content); return { penalty: b.penaltyFrom, threshold: b.threshold, tired: b.tiredName, spentFrom: b.spentFrom, spent: b.spentName }; })()),
     class: 'squad-fresh',
     sortValue: (r) => r.f.freshness10 ?? 1000,
     cell: (r) => {

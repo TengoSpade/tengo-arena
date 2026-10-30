@@ -77,7 +77,7 @@ export interface RotationTip {
 
 /**
  * Quick-rotate suggestions: each starter who would start a round of this match Tired or worse (now, or
- * after one typical round) gets the best fit, fresher (≥ 80) bench fighter of a shared role, within 6
+ * after one typical round) gets the best fit, fresher (at or above the Freshness where the penalty starts) bench fighter of a shared role, within 6
  * rating. Same family as the AI's rotation (levels.json aiRotation), as a suggestion.
  */
 export function rotationTips(state: GameState, content: ContentDB, engine: GameEngine, club: Club): RotationTip[] {
@@ -96,7 +96,7 @@ export function rotationTips(state: GameState, content: ContentDB, engine: GameE
     const pick = roster
       .filter((c) => !starters.has(c.id) && !used.has(c.id) && fit(engine, c) && rolesOf(content, c).some((r) => roles.includes(r)))
       .map((c) => ({ c, fresh: freshInfo(engine, state, content, c), r: rating(c), reserve: reserves.has(c.id) ? 1 : 0 }))
-      .filter((x) => x.fresh.value >= 80 && x.r >= rating(f) - MAX_RATING_GAP)
+      .filter((x) => x.fresh.value >= info.penaltyFrom && x.r >= rating(f) - MAX_RATING_GAP)
       // Bench fighters first: taking a match reserve into the five leaves his reserve place empty.
       .sort((a, b) => a.reserve - b.reserve || b.r - a.r || b.fresh.value - a.fresh.value)[0];
     if (!pick) continue;
@@ -113,7 +113,7 @@ export function suggestReserves(state: GameState, content: ContentDB, engine: Ga
   const bench = Object.values(state.fighters)
     .filter((f) => f.clubId === club.id && f.status === 'active' && !starters.has(f.id) && fit(engine, f))
     .map((f) => ({ f, fresh: freshInfo(engine, state, content, f).value, r: fighterViewOf(engine, state, content, f.id)?.rating ?? 0, cover: rolesOf(content, f).filter((r) => needed.has(r)).length }))
-    .filter((x) => x.fresh >= 60)
+    .filter((x) => x.fresh >= content.levels.freshness.threshold)
     .sort((a, b) => b.cover - a.cover || b.r - a.r || b.fresh - a.fresh);
   return bench.slice(0, RESERVES_MAX).map((x) => x.f.id);
 }
@@ -268,7 +268,7 @@ export function RotationStrip({ tips, state, onRotate }: { tips: RotationTip[]; 
             type="button"
             onClick={() => onRotate(tip)}
             data-testid={`rotate-${tip.out}`}
-            {...tipAttrs(format(T.rotateTip, { out: a.name.full, outF: tip.outFresh.value, label: tip.outFresh.labelText, in: b.name.full, inF: tip.inFresh.value }))}
+            {...tipAttrs(format(T.rotateTip, { out: a.name.full, outF: tip.outFresh.value, label: tip.outFresh.labelText, threshold: tip.outFresh.threshold, in: b.name.full, inF: tip.inFresh.value }))}
           >
             {format(T.rotateBtn, { out: a.name.given, in: b.name.given })}{' '}
             <Tag kind={tip.outFresh.label === 'spent' ? 'bad' : 'warn'}>
