@@ -1,0 +1,98 @@
+{
+  "_doc": "Original name parts per race. Spec: docs/design/_drafts/03-fighter-lifecycle.md (sys-generation, names). A name = pattern filled from the race's part lists with the generation RNG. Parts are concatenated as written (capitalise the first letter of each assembled word). All parts are original; the blocklist rejects accidental matches with well-known fictional names.",
+  "version": 1,
+  "status": "DRAFT 2026-10-25 (fighter-lifecycle designer). Lists TUNABLE; rules REQUIRED.",
+  "rules": {
+    "maxAttempts": 20,
+    "uniqueFullNameAmongLivingFighters": true,
+    "onExhaustion": "append a roman numeral epithet (II, III, ...) to the last attempt",
+    "minGivenLength": 3,
+    "maxGivenLength": 11,
+    "rejectTripleLetters": true,
+    "placeholders": {
+      "{given}, {given2}": "given.prefixes + (given.middles if present) + given.suffixes, each picked uniformly",
+      "{family}, {familyA}, {familyB}": "family.prefixes + family.suffixes, picked uniformly; familyA != familyB",
+      "{place}, {house}, {epithet}, {flame}": "one entry of the race list with that key, picked uniformly"
+    },
+    "blocklistCaseInsensitive": true,
+    "blocklist": ["Legolas", "Gimli", "Thorin", "Durin", "Balin", "Dwalin", "Elrond", "Galadriel", "Arwen", "Aragorn", "Gandalf", "Frodo", "Bilbo", "Sauron", "Thrall", "Grommash", "Durotan", "Orgrim", "Drizzt", "Elric", "Geralt", "Ciri", "Tyrion", "Arya", "Jaina", "Sylvanas", "Illidan", "Arthas", "Tauriel", "Thranduil", "Bronzebeard", "Hellscream", "Doomhammer", "Saurfang", "Ironforge", "Blackrock"]
+  },
+  "races": {
+    "human": {
+      "patterns": [
+        { "format": "{given} {family}", "weight": 88 },
+        { "format": "{given} {familyA}-{familyB}", "weight": 4 },
+        { "format": "{given} of {place}", "weight": 8 }
+      ],
+      "given": {
+        "prefixes": ["Al", "Bran", "Cor", "Ed", "Fen", "Gar", "Hal", "Is", "Jor", "Kel", "Lor", "Mar", "Ned", "Os", "Per", "Quen", "Ros", "Sel", "Tam", "Ul", "Ver", "Wil", "Yor", "Bel", "Dar", "Em", "Har", "Mer", "Rho", "Tib", "Cass", "Hew"],
+        "suffixes": ["ric", "wen", "an", "el", "a", "in", "ett", "ia", "o", "us", "ard", "ira", "ys", "ane", "ek", "isa", "on", "ette", "ald", "ina", "ow", "ida"]
+      },
+      "family": {
+        "prefixes": ["Ash", "Bram", "Cole", "Dun", "Fair", "Gale", "Hart", "Hollow", "Kett", "Lark", "Marsh", "Nettle", "Oak", "Pike", "Quill", "Reed", "Rook", "Salt", "Thorn", "Tall", "Wex", "Wren", "Yarrow", "Copper", "Mill", "Sedge", "Tanner", "Bell"],
+        "suffixes": ["wood", "ford", "well", "mere", "ley", "wick", "by", "ham", "stead", "croft", "more", "gate", "ridge", "worth", "ton", "field", "brook", "shaw", "den", "low"]
+      },
+      "place": ["Saltmarsh Reach", "the Low Fens", "Kettle Ford", "Harrow Vale", "the Copper Coast", "Wexmoor", "the Tallow Hills", "Brindlewick"]
+    },
+    "elf": {
+      "patterns": [
+        { "format": "{given} {family}", "weight": 75 },
+        { "format": "{given} of House {house}", "weight": 25 }
+      ],
+      "given": {
+        "prefixes": ["Ae", "Cael", "Ili", "Lir", "Myr", "Nae", "Ser", "Thal", "Vae", "Ys", "Elo", "Fae", "Ira", "Lue", "Orn", "Saes", "Tir", "Wyn", "Ei", "Ull", "Sio", "Quae"],
+        "middles": ["", "", "", "a", "e", "i", "ri", "la", "ne"],
+        "suffixes": ["wyn", "thir", "ael", "ion", "ira", "eth", "ys", "ari", "iel", "enne", "ith", "ova", "une", "iss", "aine", "oth", "eli", "assa"]
+      },
+      "family": {
+        "prefixes": ["Sil", "Tel", "Aur", "Nim", "Ser", "Val", "Hel", "Ith", "Lun", "Fen", "Cyr", "Ora", "Eld", "Mae", "Wen", "Sythe"],
+        "suffixes": ["vaen", "aris", "oreth", "ennis", "yra", "oleth", "wynd", "ashe", "eluin", "aran", "iriel", "ovae", "essen", "imar"]
+      },
+      "house": ["Moonfallow", "Silverreed", "Hollowlight", "Ninebough", "Starwater", "Paleglass", "Thistledawn", "Farecho"]
+    },
+    "dwarf": {
+      "patterns": [
+        { "format": "{given} {family}", "weight": 85 },
+        { "format": "{given} {given2}'s-kin", "weight": 15 }
+      ],
+      "given": {
+        "prefixes": ["Bor", "Grum", "Hald", "Kor", "Mag", "Nor", "Orl", "Rur", "Stog", "Vog", "Brok", "Dagg", "Fenn", "Gor", "Hrod", "Kald", "Torv", "Ulm", "Skal", "Bre"],
+        "suffixes": ["ek", "im", "ra", "rik", "da", "und", "ga", "ur", "ok", "a", "orn", "ild", "ma", "ett", "ul", "ig", "ny"]
+      },
+      "family": {
+        "prefixes": ["Anvil", "Deep", "Flint", "Coal", "Grey", "Stone", "Copper", "Slate", "Ore", "Tallow", "Brass", "Granite", "Gravel", "Barrow", "Lode", "Peat", "Chisel", "Tin", "Marl", "Cairn"],
+        "suffixes": ["brow", "vein", "hand", "mantle", "delve", "back", "heart", "shoulder", "girdle", "knuckle", "crag", "hold", "seam", "mark", "boot", "shank"]
+      }
+    },
+    "orc": {
+      "patterns": [
+        { "format": "{given} {family}", "weight": 80 },
+        { "format": "{given} the {epithet}", "weight": 20 }
+      ],
+      "given": {
+        "prefixes": ["Gra", "Ur", "Mok", "Zar", "Dru", "Kho", "Ska", "Bru", "Vor", "Ruk", "Tor", "Nag", "Shu", "Kra", "Ogg", "Hur", "Yag", "Zug", "Bol", "Mag", "Rha", "Uzh"],
+        "suffixes": ["kk", "sh", "gar", "na", "rok", "za", "ug", "ath", "ka", "mar", "ra", "osh", "uk", "eth", "ga", "dak", "rum", "ba"]
+      },
+      "family": {
+        "prefixes": ["Split", "Tusk", "Scar", "Ash", "Red", "Stone", "Gut", "Ember", "Broken", "Crag", "Snarl", "Howl", "Rust", "Thorn", "Mud", "Hook", "Gravel", "Knot", "Sour", "Wide"],
+        "suffixes": ["jaw", "tooth", "hand", "brow", "maw", "hide", "back", "knuckle", "eye", "gut", "skull", "fist", "tusk", "grin", "mane", "heel"]
+      },
+      "epithet": ["Unbent", "Loud", "Patched", "Second-Born", "Low Thunder", "Ash-Eater", "Long-Arm", "Gravel-Voiced", "Red Morning", "Last Up"]
+    },
+    "ashkin": {
+      "patterns": [
+        { "format": "{given} {family}", "weight": 85 },
+        { "format": "{given} of the {flame}", "weight": 15 }
+      ],
+      "given": {
+        "prefixes": ["Ves", "Ryx", "Sol", "Tash", "Ner", "Ilx", "Zo", "Cin", "Oru", "Bex", "Lio", "Sef", "Tav", "Hesh", "Quo", "Yen", "Pell", "Isk", "Mav", "Rhe"],
+        "suffixes": ["", "", "a", "ix", "en", "o", "ae", "eth", "ys", "ra", "un", "el", "i"]
+      },
+      "family": {
+        "prefixes": ["Cinder", "Soot", "Kindle", "Flare", "Glow", "Spark", "Char", "Brand", "Wick", "Tinder", "Coal", "Hearth", "Blaze", "Sear", "Fume", "Ember"],
+        "suffixes": ["wake", "born", "mark", "step", "song", "line", "heart", "wise", "fall", "leap", "call", "weft", "drift", "lit"]
+      },
+      "flame": ["Ninth Coal", "Low Flame", "Banked Fire", "Blue Wick", "Long Spark", "Red Ash", "Bright Hour", "Last Ember"]
+    }
+  }
+}

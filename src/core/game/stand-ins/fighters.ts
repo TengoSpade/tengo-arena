@@ -1,0 +1,421 @@
+/**
+ * STAND-IN for core/fighters (WP2). Deliberately simple, deterministic and
+ * rule-light: it exists so the season engine, AI and soak can run end to end
+ * in tests before (and independently of) the real module. It is NOT the
+ * game's lifecycle; never wire it into the shipped game.
+ */
+import { combatRating, type CaptaincyGradeDef, type ContentDB } from '../../content';
+import type { CaptaincyValue, FighterSpec, LevelUpChoice, MatchLifecycleOutcome, MatchProgressionOutcome, StatContext } from '../../fighters';
+import {
+  putFighter,
+  setMembership,
+  allocateId,
+  asId,
+  blankProgression,
+  emptyCareerStats,
+  emptySeasonCounters,
+  type ClassId,
+  type ClubId,
+  type Fighter,
+  type FighterId,
+  type GameState,
+  type MatchResult,
+  type PaceId,
+  type RaceId,
+  type RetirementRecord,
+  type StatId,
+  type LevelOption,
+  type LevelUpMode,
+  type LevelUpResolution,
+  type MatchState,
+  type PendingLevelUp,
+  type ResolvedLevelUp,
+  type RoundOutcome,
+} from '../../model';
+import { Rng, STREAM } from '../../rng';
+import { clamp, engineError, err, ok, type EngineError, type Result } from '../../util';
+import type { GamePorts } from '../ports';
+
+type Port = GamePorts['fighters'];
+
+function statIds(content: ContentDB): StatId[] {
+  return content.stats.list.map((s) => s.id as StatId);
+}
+
+function humanAge100(f: Fighter, content: ContentDB): number {
+  return Math.trunc((f.age * 8000) / content.races.require(f.raceId).lifespan);
+}
+
+function createFighter(draft: GameState, spec: FighterSpec, content: ContentDB): FighterId {
+  const id = allocateId(draft.ids, 'fighter');
+  const rng = Rng.create(draft.rng.root, STREAM.rookies, 'stand-in', id);
+  const race = spec.raceId ? content.races.require(spec.raceId) : rng.pick(content.races.list);
+  const klass = spec.classId ? content.classes.require(spec.classId) : rng.pick(content.classes.list);
+  const band =
+    spec.humanAge ??
+    (spec.kind === 'rookie' ? null : spec.kind === 'journeyman' || spec.kind === 'hired-blade' ? { min: 24, max: 33 } : { min: 18, max: 35 });
+  const age = band === null ? rng.int(race.debutAge.min, race.debutAge.max) : Math.max(race.debutAge.min, Math.trunc((rng.int(band.min, band.max) * race.lifespan) / 80));
+  const base = (spec.kind === 'hired-blade' && spec.ratingTarget ? spec.ratingTarget * 20 : 900) + spec.potentialShift * 30 + rng.int(-100, 300);
+  const per = (f: (i: number) => number): Record<StatId, number> => Object.fromEntries(statIds(content).map((s, i) => [s, f(i)])) as Record<StatId, number>;
+  const cap100 = per(() => clamp(base + rng.int(-250, 250), 200, 2000));
+  const f: Fighter = {
+    id,
+    name: { given: `Stand${idNum(id)}`, family: null, epithet: null, full: `Stand ${idNum(id)}` },
+    raceId: asId<RaceId>(race.id),
+    classId: asId<ClassId>(klass.id),
+    originRegionId: spec.regionId,
+    age,
+    debutSeason: draft.calendar.season,
+    clubId: null,
+    status: spec.kind === 'hired-blade' ? 'hired-blade' : 'free-agent',
+    contract: null,
+    contractProfile: { greedBp: 0 },
+    freeAgency: spec.kind === 'hired-blade' ? null : { unsignedSeasonEnds: 0, formerClubId: null, releasedByClubId: null, releasedSeason: null },
+    potentialRoll: clamp(Math.trunc(base / 20) + rng.int(0, 15), 1, 100),
+    paceId: asId<PaceId>(content.development.pace.levels[0]!.id),
+    cap100,
+    bloom: per(() => 0),
+    dev100: { physical: 2400, mental: 2400 },
+    wear100: per(() => 0),
+    traits: [],
+    statuses: [],
+    injury: null,
+    trainingEmphasis: 'balanced',
+    finalSeason: false,
+    career: emptyCareerStats(),
+    season: emptySeasonCounters(),
+    history: [],
+    learnedAbilityIds: [],
+    academy: null,
+    // Stand-in stats are cap − wear: the trained value is the cap.
+    ...blankProgression(cap100),
+  };
+  putFighter(draft, f);
+  return id;
+}
+
+function idNum(id: string): number {
+  return Number(id.slice(id.indexOf('-') + 1));
+}
+
+function effectiveStats(f: Fighter, content: ContentDB, context?: StatContext): Record<StatId, number> {
+  const out = {} as Record<StatId, number>;
+  for (const s of statIds(content)) out[s] = clamp(Math.trunc(((f.train100[s] ?? f.cap100[s] ?? 1000) - (f.wear100[s] ?? 0)) / 100), 1, 20);
+  const cmp = 'cmp' as StatId;
+  if (context?.chemistry) out[cmp] = clamp((out[cmp] ?? 10) + Math.trunc(context.chemistry / 2), 1, 20);
+  return out;
+}
+
+function rating(f: Fighter, content: ContentDB): number {
+  return combatRating(content, f.classId, effectiveStats(f, content));
+}
+
+function grade(content: ContentDB, cq: number): CaptaincyGradeDef {
+  const grades = content.development.captaincy.grades;
+  return grades.find((g) => cq >= g.minCq) ?? grades[grades.length - 1]!;
+}
+
+function captaincy(state: GameState, fighterId: FighterId, _clubId: ClubId, content: ContentDB): CaptaincyValue {
+  const f = state.fighters[fighterId]!;
+  const s = effectiveStats(f, content);
+  const cq = clamp(Math.trunc(((s['ldr' as StatId] ?? 10) * 5 * 45 + (s['cmp' as StatId] ?? 10) * 5 * 25 + 50 * 30) / 100), 1, 100);
+  return { cq, grade: grade(content, cq) };
+}
+
+function isFit(f: Fighter): boolean {
+  return f.status !== 'retired' && (f.injury === null || f.injury.weeksOut <= 0);
+}
+
+function applyMatchLifecycle(draft: GameState, result: MatchResult, content: ContentDB): MatchLifecycleOutcome {
+  const out: MatchLifecycleOutcome = { xp: {}, injuries: [], newsIds: [] };
+  for (const [id, st] of Object.entries(result.fighterStats)) {
+    const fid = id as FighterId;
+    const f = draft.fighters[fid];
+    if (!f) continue;
+    const xp = st.roundsPlayed * content.development.xp.perRoundStarted;
+    out.xp[fid] = xp;
+    f.season.xp += xp;
+    f.season.roundsStarted += st.roundsPlayed;
+    f.season.matchesStarted += 1;
+    f.career.matches += 1;
+    f.career.roundsStarted += st.roundsPlayed;
+    f.career.xpTotal += xp;
+    const rng = Rng.create(draft.rng.root, STREAM.injury, result.season, result.fixtureId, fid);
+    if (f.status === 'active' && rng.chanceBp(150)) {
+      f.injury = { severity: 'knock', weeksOut: 1, fixtureId: result.fixtureId, round: 1, causeFighterId: null, damageBp: 0, since: { season: result.season, weekIndex: result.weekIndex } };
+      f.season.injuries += 1;
+      out.injuries.push({ fighterId: fid, severity: 'knock', weeksOut: 1 });
+    }
+  }
+  return out;
+}
+
+/** Stand-in weekly step: injury countdown; +30 Freshness for everyone who started no round this week (a rough weekly rest). */
+function weeklyLifecycle(draft: GameState): [] {
+  const played = new Set<FighterId>();
+  for (const r of Object.values(draft.results)) {
+    if (r.season !== draft.calendar.season || r.weekIndex !== draft.calendar.weekIndex) continue;
+    for (const id of Object.keys(r.fighterStats)) played.add(id as FighterId);
+  }
+  for (const f of Object.values(draft.fighters)) {
+    if (!played.has(f.id)) f.freshness10 = Math.min(1000, (f.freshness10 ?? 1000) + 300);
+    if (f.injury === null) continue;
+    if (f.injury.since.season === draft.calendar.season && f.injury.since.weekIndex === draft.calendar.weekIndex) continue;
+    f.injury.weeksOut -= 1;
+    if (f.injury.weeksOut <= 0) f.injury = null;
+  }
+  return [];
+}
+
+// ---- M1.1 stand-in hooks (deliberately crude; NOT the lifecycle rules) ------------------------------------------
+
+/** Drain 4.5 a round (+2.5 if downed); counts Tired and Spent round starts. */
+function freshnessAfterRound(draft: GameState, ms: MatchState, outcome: RoundOutcome): void {
+  const lineups = ms.roundLineups[ms.roundLineups.length - 1];
+  for (const a of outcome.aftermath) {
+    const f = draft.fighters[a.fighterId];
+    if (!f) continue;
+    const side = lineups?.[a.side];
+    const at = side ? side.fighterIds.indexOf(a.fighterId) : -1;
+    const start = at >= 0 ? side!.freshness[at]! : 100;
+    if (start < 40) f.season.spentRoundStarts += 1;
+    else if (start < 60) f.season.tiredRoundStarts += 1;
+    f.freshness10 = Math.max(0, (f.freshness10 ?? 1000) - 45 - (a.downed ? 25 : 0));
+  }
+}
+
+function xpAfterRound(draft: GameState, _ms: MatchState, outcome: RoundOutcome, content: ContentDB): void {
+  for (const a of outcome.aftermath) {
+    const f = draft.fighters[a.fighterId];
+    if (!f || f.status === 'hired-blade') continue;
+    const xp = content.development.xp.perRoundStarted;
+    f.season.xp += xp;
+    f.season.roundXp += xp;
+    f.season.roundsStarted += 1;
+    f.career.roundsStarted += 1;
+    f.career.xpTotal += xp;
+    f.xpIntoLevel += xp;
+  }
+}
+
+/** Immediate injuries: 60 bp a round started (a knock: misses the next match). */
+function injuriesAfterRound(draft: GameState, ms: MatchState, outcome: RoundOutcome): FighterId[] {
+  const out: FighterId[] = [];
+  for (const a of outcome.aftermath) {
+    const f = draft.fighters[a.fighterId];
+    if (!f || f.status !== 'active' || f.injury !== null) continue;
+    const rng = Rng.create(draft.rng.root, STREAM.injury, draft.calendar.season, ms.fixtureId, outcome.result.round, f.id);
+    if (!rng.chanceBp(60)) continue;
+    f.injury = { severity: 'knock', weeksOut: 1, fixtureId: ms.fixtureId, round: outcome.result.round, causeFighterId: null, damageBp: 0, since: { season: draft.calendar.season, weekIndex: draft.calendar.weekIndex } };
+    f.season.injuries += 1;
+    out.push(f.id);
+  }
+  return out;
+}
+
+function standInOffer(f: Fighter, level: number, draft: GameState, content: ContentDB): PendingLevelUp {
+  const options: LevelOption[] = statIds(content)
+    .filter((s) => (f.cap100[s] ?? 0) < 2000)
+    .slice(level % 4, (level % 4) + 3)
+    .map((stat) => ({ kind: 'stat', stat, gain100: 100 }));
+  return { level, season: draft.calendar.season, weekIndex: draft.calendar.weekIndex, options, traitOffer: null };
+}
+
+function resolveLevelUp(draft: GameState, fighterId: FighterId, level: number, choice: LevelUpChoice, how: LevelUpResolution): Result<ResolvedLevelUp, EngineError> {
+  const f = draft.fighters[fighterId];
+  const i = f ? f.pendingLevelUps.findIndex((p) => p.level === level) : -1;
+  if (!f || i < 0) return err(engineError('levelup.unknown', `No pending level-up ${level} for ${fighterId}`));
+  const offer = f.pendingLevelUps[i]!;
+  if (choice.optionIndex === null ? offer.options.length > 0 : !offer.options[choice.optionIndex]) return err(engineError('levelup.option', 'Unknown option'));
+  if (choice.traitIndex !== null && !offer.traitOffer?.[choice.traitIndex]) return err(engineError('levelup.trait', 'Unknown trait option'));
+  const picked = choice.optionIndex === null ? null : offer.options[choice.optionIndex]!;
+  if (picked?.kind === 'stat') {
+    f.cap100[picked.stat] = Math.min(2000, (f.cap100[picked.stat] ?? 0) + picked.gain100);
+    f.train100[picked.stat] = f.cap100[picked.stat]!;
+  }
+  f.pendingLevelUps.splice(i, 1);
+  const rec: ResolvedLevelUp = { level, season: offer.season, weekIndex: offer.weekIndex, picked, trait: null, how };
+  f.season.levelLog.push(rec);
+  return ok(rec);
+}
+
+/** Bench XP (a third of a lineup slot's round XP), level-ups every 120 XP (at most 2 a match, queue 3), auto modes resolve at once. */
+function matchEndProgression(draft: GameState, result: MatchResult, content: ContentDB): MatchProgressionOutcome {
+  // `xp` (match XP per fighter, round + bench) is an extra the game's match news reads when present.
+  const out: MatchProgressionOutcome & { xp: Record<FighterId, number> } = { benchXp: {}, levelUps: [], autoResolved: [], newsIds: [], xp: {} };
+  for (const clubId of [result.homeClubId, result.awayClubId]) {
+    const played = Object.entries(result.fighterStats).filter(([, s]) => s.clubId === clubId);
+    const roundXp = played.reduce((n, [, s]) => n + s.roundsPlayed * content.development.xp.perRoundStarted, 0);
+    for (const [id, s] of played) {
+      const f = draft.fighters[id as FighterId];
+      if (!f) continue;
+      f.season.matchesStarted += 1;
+      f.career.matches += 1;
+      if (f.status !== 'hired-blade') out.xp[f.id] = s.roundsPlayed * content.development.xp.perRoundStarted;
+    }
+    for (const f of Object.values(draft.fighters)) {
+      if (f.clubId !== clubId || f.status !== 'active' || result.fighterStats[f.id] || !isFit(f)) continue;
+      const xp = Math.trunc(roundXp / 15);
+      if (xp <= 0) continue;
+      f.season.xp += xp;
+      f.season.benchXp += xp;
+      f.career.xpTotal += xp;
+      f.xpIntoLevel += xp;
+      out.benchXp[f.id] = xp;
+      out.xp[f.id] = xp;
+    }
+  }
+  const ids = Object.values(draft.fighters)
+    .filter((f) => (f.clubId === result.homeClubId || f.clubId === result.awayClubId) && f.status === 'active')
+    .map((f) => f.id)
+    .sort((a, b) => idNum(a) - idNum(b));
+  for (const id of ids) {
+    const f = draft.fighters[id]!;
+    for (let n = 0; n < 2 && f.xpIntoLevel >= f.xpNeeded; n++) {
+      f.xpIntoLevel -= f.xpNeeded;
+      f.level += 1;
+      f.career.levelsGained += 1;
+      f.pendingLevelUps.push(standInOffer(f, f.level, draft, content));
+      out.levelUps.push({ fighterId: id, level: f.level });
+      if (f.pendingLevelUps.length > 3) {
+        const oldest = f.pendingLevelUps[0]!;
+        const r = resolveLevelUp(draft, id, oldest.level, autoPick(f, oldest), 'queue_full');
+        if (r.ok) out.autoResolved.push(r.value);
+      }
+    }
+    if (effectiveLevelUpMode(draft, f) === 'manual') continue;
+    for (const p of [...f.pendingLevelUps]) {
+      const r = resolveLevelUp(draft, id, p.level, autoPick(f, p), 'auto');
+      if (r.ok) out.autoResolved.push(r.value);
+    }
+  }
+  return out;
+}
+
+function autoPick(_f: Fighter, offer: PendingLevelUp): LevelUpChoice {
+  return { optionIndex: offer.options.length > 0 ? 0 : null, traitIndex: null };
+}
+
+function effectiveLevelUpMode(state: GameState, f: Fighter): LevelUpMode {
+  if (f.levelUpMode !== 'inherit') return f.levelUpMode;
+  const club = f.clubId === null ? undefined : state.clubs[f.clubId];
+  return club && f.status === 'active' ? club.levelUpDefault : 'auto';
+}
+
+function seasonEndDevelopment(draft: GameState, content: ContentDB): [] {
+  for (const f of Object.values(draft.fighters)) {
+    if (f.status === 'retired') continue;
+    const r = rating(f, content);
+    f.history.push({
+      season: draft.calendar.season,
+      age: f.age,
+      clubId: f.clubId,
+      rating: r,
+      potential: f.potentialRoll,
+      stats: effectiveStats(f, content),
+      xp: f.season.xp,
+      usageBp: clamp(Math.trunc((f.season.xp * 10000) / content.development.xp.seasonTarget), 0, 10000),
+      injuries: f.season.injuries,
+      traitsGained: [],
+      traitsLost: [],
+      levelStart: f.level,
+      levelEnd: f.level,
+      stamina: null,
+      benchXp: f.season.benchXp,
+      tiredRoundStarts: 0,
+    });
+    if (f.clubId !== null) f.career.proSeasons += 1;
+    f.career.peakRating = Math.max(f.career.peakRating, r);
+    f.age += 1;
+    f.season = emptySeasonCounters();
+  }
+  return [];
+}
+
+function seasonEndRetirements(draft: GameState, content: ContentDB): RetirementRecord[] {
+  const out: RetirementRecord[] = [];
+  for (const f of Object.values(draft.fighters).sort((a, b) => idNum(a.id) - idNum(b.id))) {
+    if (f.status === 'retired' || f.status === 'hired-blade') continue;
+    if (humanAge100(f, content) < 3600) continue;
+    const rec: RetirementRecord = { fighterId: f.id, age: f.age, lastClubId: f.clubId, proSeasons: f.career.proSeasons, peakRating: f.career.peakRating, cause: 'age' };
+    out.push(rec);
+    draft.history[draft.history.length - 1]?.retirements.push(rec);
+    setMembership(draft, f, null, 'retired');
+    f.contract = null;
+    f.freeAgency = null;
+  }
+  return out;
+}
+
+function generateRookies(draft: GameState, content: ContentDB, n?: number): FighterId[] {
+  const clubs = Object.keys(draft.clubs).length;
+  const prev = draft.history[draft.history.length - 1];
+  const retired = prev ? prev.retirements.filter((r) => r.cause !== 'left-unsigned').length : 0;
+  const count = n ?? Math.round(clubs * 0.6) + retired;
+  const ids: FighterId[] = [];
+  const region = content.regions.list[0]!.id;
+  for (let i = 0; i < count; i++) ids.push(createFighter(draft, { kind: 'rookie', potentialShift: 0, regionId: asId(region) }, content));
+  return ids;
+}
+
+export function standInFighters(): Port {
+  return {
+    createFighter,
+    humanAge100,
+    effectiveStats,
+    rating,
+    potential: (f) => f.potentialRoll,
+    captaincy,
+    lineupChemistry: () => 0,
+    isFit,
+    injuryChanceBp: () => 150,
+    retirementChanceBp: (state, id, content) => (humanAge100(state.fighters[id]!, content) >= 3600 ? 10000 : 0),
+    lineupCaptain: (state, clubId, ids, content) => {
+      if (ids.length === 0) return null;
+      const club = state.clubs[clubId];
+      let index = club?.captainId ? ids.indexOf(club.captainId) : -1;
+      const viceIndex = club?.viceCaptainId ? ids.indexOf(club.viceCaptainId) : -1;
+      if (index < 0) index = viceIndex;
+      if (index < 0 && club?.lineup.matchCaptainId) index = ids.indexOf(club.lineup.matchCaptainId);
+      if (index < 0) index = 0;
+      const fighterId = ids[index]!;
+      const isClubCaptain = club?.captainId === fighterId;
+      const cq = captaincy(state, fighterId, clubId, content).cq - (isClubCaptain ? 0 : content.development.captaincy.actingCaptainCqPenalty);
+      return { fighterId, index, cqForFight: Math.max(0, cq), isClubCaptain, viceIndex: viceIndex >= 0 && viceIndex !== index ? viceIndex : null };
+    },
+    captainChangeConsequences: () => ({ snubbedId: null, snubExemption: null, passedOverIds: [] }),
+    lineupLock: () => [],
+    applyMatchLifecycle,
+    weeklyLifecycle,
+    seasonEndDevelopment,
+    seasonEndRetirements,
+    offseasonRecovery: (draft) => {
+      for (const f of Object.values(draft.fighters)) {
+        if (f.injury) f.injury = null;
+        f.freshness10 = 1000;
+      }
+    },
+    generateRookies,
+    announceFinalSeasons: () => [],
+    // ---- M1.1: reads as the real module; hooks are stubs until WP-C needs them in stand-in runs ----
+    freshnessOf: (f) => Math.floor((f.freshness10 ?? 1000) / 10),
+    freshnessLabel: (v) => (v >= 80 ? 'fresh' : v >= 60 ? 'ready' : v >= 40 ? 'tired' : 'spent'),
+    // Stand-in rating: no Freshness penalty on the displayed rating.
+    ratingAtFreshness: (f, freshness, content) => {
+      const r = rating(f, content);
+      return { freshness, severityBp: 0, rating: r, effectiveRating: r, delta: 0, deltaExact: 0, parts: { attackSpeed: 0, moveSpeed: 0, power: 0, support: 0, reaction: 0 } };
+    },
+    effectiveLevelUpMode,
+    autoPickChoice: autoPick,
+    offerContextOf: () => ({ captainOrVice: false, trainingEnabled: false }),
+    typicalRoundDrain10: () => 60,
+    freshnessAfterRound,
+    xpAfterRound,
+    injuriesAfterRound,
+    freshnessBetweenRounds: () => undefined,
+    matchEndProgression,
+    resolveLevelUp,
+    levelOptionLegal: (f, o) => o.kind !== 'stat' || (f.cap100[o.stat] ?? 0) < 2000,
+    levelEtaMatches: (f) => Math.max(1, Math.ceil((f.xpNeeded - f.xpIntoLevel) / 25)),
+  };
+}

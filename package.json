@@ -1,0 +1,47 @@
+{
+  "name": "arena-league",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arena League (working title): single-player fantasy-mercenary arena league manager.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "balance": "tsx scripts/balance.ts",
+    "soak": "tsx scripts/soak.ts",
+    "bench": "tsx scripts/bench-season.ts",
+    "validate-content": "tsx scripts/validate-content.ts",
+    "fixture:content": "tsx scripts/make-fixture-content.ts"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.3",
+    "modern-screenshot": "4.7.0",
+    "pixi.js": "^8.22.0",
+    "preact": "^10.29.8",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@eslint/js": "^10.0.1",
+    "@preact/preset-vite": "^2.10.6",
+    "@testing-library/preact": "^3.2.6",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "happy-dom": "^21.0.4",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

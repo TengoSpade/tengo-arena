@@ -1,0 +1,543 @@
+/**
+ * WP6 screen tests on the fixture content (05 §9.2): Home, Squad, Fighter,
+ * New game, Club select and Codex render the dev world and dispatch the
+ * right commands. Uses a real store on a fake platform (src/ui/debug).
+ */
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
+import { afterEach, describe, expect, it } from 'vitest';
+import { compactedResult } from '../../core/league';
+import type { ClubId, FighterId, GameState } from '../../core/model';
+import { installShortcuts } from '../app/shortcuts';
+import { readTip, resetToasts, toasts, undoLast } from '../components';
+import { TestProviders, createTestStore } from '../debug/test-store';
+import { formatMoney } from '../format';
+import { coreEngine } from '../store/engine';
+import { clubContext } from '../store/views';
+import ClubSelectScreen from './club-select';
+import CodexScreen from './codex';
+import FighterScreen from './fighter';
+import HomeScreen, { homeAdvice } from './home';
+import NewGameScreen from './new-game';
+import SquadScreen, { squadSelection } from './squad';
+
+let dispose: (() => void) | null = null;
+afterEach(() => {
+  cleanup();
+  resetToasts();
+  dispose?.();
+  dispose = null;
+  squadSelection.value = null;
+  try {
+    window.localStorage.clear();
+  } catch {
+    /* ignore */
+  }
+});
+
+function club(state: GameState) {
+  return state.clubs[state.playerClubId as ClubId]!;
+}
+
+function mount(node: preact.ComponentChild, store: ReturnType<typeof createTestStore>['store']) {
+  dispose = installShortcuts(() => ({}));
+  return render(<TestProviders store={store}>{node}</TestProviders>);
+}
+
+describe('Squad', () => {
+  it('renders the lineup board with five cards and the full roster', () => {
+    const { store } = createTestStore();
+    mount(<SquadScreen params={{}} />, store);
+    const c = club(store.game.value!);
+    const board = screen.getByTestId('lineup-board');
+    expect(board.querySelectorAll('.lineup-card:not(.lineup-card--empty)')).toHaveLength(5);
+    expect(within(board).getByText('Back row')).toBeTruthy();
+    expect(within(board).getByText('Front row')).toBeTruthy();
+    const roster = Object.values(store.game.value!.fighters).filter((f) => f.clubId === c.id);
+    const table = screen.getByTestId('roster-table');
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(roster.length);
+    expect(screen.getByText(/5 of 5 places filled|of 5 places filled/)).toBeTruthy();
+  });
+
+  it('says the five are not all fit when an injured fighter is in the lineup', () => {
+    const { store } = createTestStore();
+    const state = structuredClone(store.game.value!);
+    const c = club(state);
+    const hurt = state.fighters[c.lineup.fighters[0]!.fighterId]!;
+    hurt.injury = { severity: 'minor', weeksOut: 2, fixtureId: null, round: null, causeFighterId: null, damageBp: 0, since: { season: state.calendar.season, weekIndex: state.calendar.weekIndex } };
+    store.replaceWorld(state);
+    mount(<SquadScreen params={{}} />, store);
+    const check = document.querySelector('.lineup-check')!;
+    expect(check.textContent).toContain('All 5 places filled, but 1 fighter is unfit');
+    expect(check.textContent).not.toContain('5 of 5 places filled');
+    expect(check.textContent).toContain(`${hurt.name.full} is injured and cannot play`);
+    // One click brings in the best fit reserve in his place.
+    const button = check.querySelector<HTMLButtonElement>('[data-testid^="bring-in-"]')!;
+    expect(button.textContent).toMatch(/^Bring in /);
+    fireEvent.click(button);
+    const after = club(store.game.value!).lineup.fighters;
+    expect(after).toHaveLength(5);
+    expect(after.some((e) => e.fighterId === hurt.id)).toBe(false);
+    expect(after.some((e) => e.fighterId === button.dataset['testid']!.replace('bring-in-', ''))).toBe(true);
+  });
+
+  it('moves a reserve into the lineup with F and undoes it with Ctrl Z', async () => {
+    const { store } = createTestStore();
+    const c = club(store.game.value!);
+    const reserve = Object.values(store.game.value!.fighters).find(
+      (f) => f.clubId === c.id && !f.injury && !c.lineup.fighters.some((e) => e.fighterId === f.id),
+    )!;
+    mount(<SquadScreen params={{}} />, store);
+    await act(() => {
+      squadSelection.value = reserve.id;
+    });
+    await act(() => {
+      fireEvent.keyDown(document.body, { key: 'f' });
+    });
+    const after = club(store.game.value!);
+    expect(after.lineup.fighters.some((e) => e.fighterId === reserve.id && e.row === 'front')).toBe(true);
+    expect(after.lineup.fighters).toHaveLength(5);
+    expect(toasts.value[0]?.title).toMatch(/replaces|front row/);
+    await act(() => {
+      undoLast();
+    });
+    expect(club(store.game.value!).lineup.fighters.map((e) => e.fighterId)).toEqual(c.lineup.fighters.map((e) => e.fighterId));
+  });
+
+  it('sets the captain with C and changes a preset from the card', async () => {
+    const { store, content } = createTestStore();
+    const c = club(store.game.value!);
+    const target = c.lineup.fighters.find((e) => e.fighterId !== c.captainId)!.fighterId;
+    mount(<SquadScreen params={{}} />, store);
+    await act(() => {
+      squadSelection.value = target;
+    });
+    await act(() => {
+      fireEvent.keyDown(document.body, { key: 'c' });
+    });
+    expect(club(store.game.value!).captainId).toBe(target);
+
+    const f = store.game.value!.fighters[target]!;
+    const presets = content.classes.require(f.classId).presetIds;
+    const select = screen.getByLabelText(`Preset for ${f.name.full}`) as HTMLSelectElement;
+    const other = presets.find((p) => p !== select.value)!;
+    await act(() => {
+      fireEvent.change(select, { target: { value: other } });
+    });
+    const t = club(store.game.value!).lineup.tactics[target];
+    expect(t?.kind === 'preset' && t.presetId).toBe(other);
+  });
+
+  it('gives every number on the screen a tooltip (ux-004)', () => {
+    const { store } = createTestStore();
+    const { container } = mount(<SquadScreen params={{}} />, store);
+    expect(untippedNumbers(container)).toEqual([]);
+  });
+
+  it('filters the roster and switches to the attributes view', async () => {
+    const { store, content } = createTestStore();
+    mount(<SquadScreen params={{}} />, store);
+    await act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /^Injured/ }));
+    });
+    const rows = screen.getByTestId('roster-table').querySelectorAll('tbody tr');
+    expect(rows.length).toBe(1);
+    await act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Attributes' }));
+    });
+    const headers = [...screen.getByTestId('roster-table').querySelectorAll('thead th')].map((th) => th.textContent);
+    for (const s of content.stats.list) expect(headers).toContain(s.abbr);
+  });
+});
+
+describe('Home', () => {
+  it('shows the next fixture, the digest, the club panel and the wing table', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    mount(<HomeScreen params={{}} />, store);
+    const c = club(store.game.value!);
+    expect(within(screen.getByTestId('next-fixture')).getAllByText(c.name).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('digest')).toBeTruthy();
+    expect(screen.getByTestId('club-panel').textContent).toContain('Wage bill');
+    const wing = screen.getByTestId('wing-table');
+    const rows = wing.querySelectorAll('tbody tr');
+    expect(rows.length).toBe(8);
+    expect(wing.querySelectorAll('tbody tr.is-us')).toHaveLength(1);
+    expect(wing.querySelectorAll('tbody tr[data-zone="qualify"]')).toHaveLength(4);
+  });
+
+  it('lists Tired and Spent fighters in the availability panel with the compact Freshness meter', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const next = structuredClone(store.game.value!) as GameState;
+    const roster = Object.values(next.fighters).filter((f) => f.clubId === next.playerClubId && !(f.injury && f.injury.weeksOut > 0));
+    next.fighters[roster[0]!.id]!.freshness10 = 450; // Tired (40–59)
+    next.fighters[roster[1]!.id]!.freshness10 = 300; // Spent (below 40)
+    store.replaceWorld(next);
+    mount(<HomeScreen params={{}} />, store);
+    const panel = screen.getByTestId('availability');
+    expect(panel.textContent).toMatch(/2 tired/);
+    const rows = within(panel).getAllByRole('row');
+    const tired = rows.find((r) => r.textContent!.includes(roster[0]!.name.full))!;
+    const spent = rows.find((r) => r.textContent!.includes(roster[1]!.name.full))!;
+    expect(within(tired).getByLabelText('Freshness 45, Tired')).toBeTruthy();
+    expect(within(spent).getByLabelText('Freshness 30, Spent')).toBeTruthy();
+    expect(tired.querySelector('.fresh--compact')).toBeTruthy();
+    expect(tired.textContent).toContain('Tired');
+    // Every row in the panel shows his Freshness (injured fighters show a dash).
+    for (const r of rows) expect(r.querySelector('[data-testid="availability-fresh"]')).toBeTruthy();
+  });
+
+  it('does not tick the lineup with 4 of 5 places or an empty roster', () => {
+    const { store } = createTestStore({ weekIndex: 1 });
+    const state = structuredClone(store.game.value!);
+    const c = club(state);
+    c.lineup.fighters = c.lineup.fighters.slice(0, 4);
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const items = [...screen.getByTestId('preseason-checklist').querySelectorAll('li')];
+    const lineup = items.find((li) => li.textContent!.startsWith('Lineup'))!;
+    expect(lineup.textContent).toBe('Lineup: 4 of 5 places filled');
+    expect(lineup.getAttribute('data-state')).toBe('warn');
+    cleanup();
+    const empty = structuredClone(store.game.value!);
+    for (const f of Object.values(empty.fighters)) if (f.clubId === club(empty).id) f.clubId = null;
+    club(empty).lineup.fighters = [];
+    store.replaceWorld(empty);
+    mount(<HomeScreen params={{}} />, store);
+    const texts = [...screen.getByTestId('preseason-checklist').querySelectorAll('li')].map((li) => [li.textContent, li.getAttribute('data-state')]);
+    expect(texts).toContainEqual(['Roster 0 of ' + texts.find((x) => x[0]!.startsWith('Roster'))![0]!.split(' of ')[1]!.split(':')[0] + ': sign 5 more to field five', 'bad']);
+    expect(texts.find((x) => x[0]!.startsWith('Lineup'))![1]).toBe('warn');
+  });
+
+  it('says what Trials Day is on P1 and links to the rookies in the Market', () => {
+    const { store } = createTestStore({ weekIndex: 1 });
+    const state = structuredClone(store.game.value!);
+    const rookie = Object.values(state.fighters).find((f) => f.status === 'free-agent')!;
+    state.market.trialsRookies = { [club(state).id]: [rookie.id] };
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const line = screen.getByTestId('check-trials');
+    expect(line.getAttribute('data-state')).toBe('warn');
+    expect(line.querySelector('a')!.getAttribute('href')).toBe('#/market?view=rookies');
+    expect(line.textContent).toContain('Trials Day: your rookie is waiting in the Market');
+    expect(line.querySelector('.check-info')!.getAttribute('aria-label')).toContain('no signing fee');
+    cleanup();
+    const signed = structuredClone(store.game.value!);
+    signed.market.trialsRookies = {};
+    store.replaceWorld(signed);
+    mount(<HomeScreen params={{}} />, store);
+    expect(screen.getByTestId('check-trials').getAttribute('data-state')).toBeNull();
+  });
+
+  it('never shows an opponent lineup before their first match (D-R, KI-9)', () => {
+    const { store } = createTestStore({ weekIndex: 5 });
+    const state = store.game.value!;
+    expect(Object.values(state.results).filter((r) => r.season === state.calendar.season)).toHaveLength(0);
+    mount(<HomeScreen params={{}} />, store);
+    const theirs = screen.getByTestId('their-lineup');
+    expect(theirs.textContent).toContain('No matches played yet');
+    expect(theirs.querySelectorAll('.role-glyph, [data-role]')).toHaveLength(0);
+    cleanup();
+    mount(<SquadScreen params={{}} />, store);
+    expect(document.querySelector('.lineup-check')!.textContent).not.toContain('their last lineup');
+  });
+
+  it('shows the opponent as they last played once they have', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    // The dev world's results carry no sim input: give the opponent's latest one the five it fielded.
+    const state = structuredClone(store.game.value!) as GameState;
+    const us = club(state).id;
+    const fx = Object.values(state.fixtures).find((f) => f.weekIndex === state.calendar.weekIndex && (f.homeClubId === us || f.awayClubId === us))!;
+    const them = fx.homeClubId === us ? fx.awayClubId : fx.homeClubId;
+    const last = Object.values(state.results)
+      .filter((r) => r.season === state.calendar.season && (r.homeClubId === them || r.awayClubId === them))
+      .sort((a, b) => b.weekIndex - a.weekIndex)[0]!;
+    const five = Object.values(state.fighters).filter((f) => f.clubId === them).slice(0, 5);
+    const side = last.homeClubId === them ? last.input.home : last.input.away;
+    (side as { fighters: unknown[] }).fighters = five.map((f, i) => ({ fighterId: f.id, row: i < 2 ? 'front' : 'back', rating: 60 }));
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const theirs = screen.getByTestId('their-lineup');
+    expect(theirs.textContent).not.toContain('No matches played yet');
+    expect(theirs.textContent).toMatch(/mean rating 60/i);
+  });
+
+  it('shows the opponent as they last played even when that match is compacted (KI-2: nothing about the next opponent changes)', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const state = structuredClone(store.game.value!) as GameState;
+    const us = club(state).id;
+    const fx = Object.values(state.fixtures).find((f) => f.weekIndex === state.calendar.weekIndex && (f.homeClubId === us || f.awayClubId === us))!;
+    const them = fx.homeClubId === us ? fx.awayClubId : fx.homeClubId;
+    const last = Object.values(state.results)
+      .filter((r) => r.season === state.calendar.season && (r.homeClubId === them || r.awayClubId === them))
+      .sort((a, b) => b.weekIndex - a.weekIndex)[0]!;
+    const five = Object.values(state.fighters).filter((f) => f.clubId === them).slice(0, 5);
+    const side = last.homeClubId === them ? last.input.home : last.input.away;
+    (side as { fighters: unknown[] }).fighters = five.map((f, i) => ({ fighterId: f.id, row: i < 2 ? 'front' : 'back', rating: 60 }));
+    state.results[last.fixtureId] = compactedResult(last); // what the week-processing rule leaves of a match three weeks on
+    expect(state.results[last.fixtureId]!.input.home.fighters).toHaveLength(0);
+    expect(state.results[last.fixtureId]!.input.away.fighters).toHaveLength(0);
+    store.replaceWorld(state);
+    mount(<HomeScreen params={{}} />, store);
+    const theirs = screen.getByTestId('their-lineup');
+    expect(theirs.textContent).not.toContain('No matches played yet');
+    expect(theirs.textContent).toMatch(/mean rating 60/i);
+  });
+
+  it('warns when the opponent is much stronger and when places and wage room are free', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const state = structuredClone(store.game.value!) as GameState;
+    const us = club(state).id;
+    const fx = Object.values(state.fixtures).find((f) => f.weekIndex === state.calendar.weekIndex && (f.homeClubId === us || f.awayClubId === us))!;
+    const them = fx.homeClubId === us ? fx.awayClubId : fx.homeClubId;
+    const last = Object.values(state.results)
+      .filter((r) => r.season === state.calendar.season && (r.homeClubId === them || r.awayClubId === them))
+      .sort((a, b) => b.weekIndex - a.weekIndex)[0]!;
+    const side = last.homeClubId === them ? last.input.home : last.input.away;
+    const five = Object.values(state.fighters).filter((f) => f.clubId === them).slice(0, 5);
+    (side as { fighters: unknown[] }).fighters = five.map((f) => ({ fighterId: f.id, row: 'front', rating: 99 }));
+    store.replaceWorld(state);
+    const ctx = clubContext(store.game.value!, store.content.value!, coreEngine, us)!;
+    const advice = homeAdvice(ctx);
+    const outclassed = advice.find((d) => d.id === 'advice-outclassed');
+    expect(outclassed?.title).toMatch(/^Outclassed: your five average \d+, .+ last fielded 99$/);
+    const room = ctx.finance!.wageBudgetPerWeek - ctx.finance!.wageBill - ctx.finance!.pendingWages;
+    const places = ctx.rosterCap - ctx.roster.length;
+    expect(advice.some((d) => d.id === 'advice-room')).toBe(places > 0 && room >= store.content.value!.tierProfile(ctx.tier.level).tierMinWage);
+  });
+
+  it('shows the preseason checklist when there is no fixture', () => {
+    const { store } = createTestStore({ weekIndex: 1 });
+    mount(<HomeScreen params={{}} />, store);
+    expect(screen.getByTestId('preseason-checklist')).toBeTruthy();
+    expect(screen.queryByTestId('next-fixture')).toBeNull();
+  });
+
+  it('marks a digest item done through news.setRead and Undo makes it unread again', async () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    mount(<HomeScreen params={{}} />, store);
+    const done = within(screen.getByTestId('digest')).queryAllByRole('button', { name: 'Mark done' });
+    expect(done.length).toBeGreaterThan(0);
+    const unread = () => store.game.value!.news.filter((n) => !n.read).length;
+    const before = unread();
+    await act(() => {
+      fireEvent.click(done[0]!);
+    });
+    expect(unread()).toBeLessThan(before);
+    await act(() => {
+      undoLast();
+    });
+    expect(unread()).toBe(before);
+  });
+
+  it('gives every number on the screen a tooltip (ux-004)', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const { container } = mount(<HomeScreen params={{}} />, store);
+    expect(untippedNumbers(container)).toEqual([]);
+  });
+});
+
+describe('Fighter profile', () => {
+  it('renders the header, twelve attributes, traits and career', () => {
+    const { store, content } = createTestStore();
+    const c = club(store.game.value!);
+    const id = c.lineup.fighters[0]!.fighterId;
+    const { container } = mount(<FighterScreen params={{ id }} />, store);
+    const f = store.game.value!.fighters[id]!;
+    expect(untippedNumbers(container)).toEqual([]);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(f.name.full);
+    expect(screen.getByTestId('attributes').querySelectorAll('.stat-bar')).toHaveLength(content.stats.list.length);
+    expect(screen.getByTestId('career')).toBeTruthy();
+  });
+
+  it('cycles fighters with ] and opens the tactics tab with T', async () => {
+    const { store } = createTestStore();
+    const c = club(store.game.value!);
+    const roster = Object.values(store.game.value!.fighters).filter((f) => f.clubId === c.id);
+    const id = c.lineup.fighters[0]!.fighterId;
+    mount(<FighterScreen params={{ id }} />, store);
+    await act(() => {
+      fireEvent.keyDown(document.body, { key: ']' });
+    });
+    expect(location.hash).toMatch(/^#\/fighter\/f-\d+$/);
+    expect(location.hash).not.toBe(`#/fighter/${id}`);
+    expect(roster.some((f) => location.hash === `#/fighter/${f.id}`)).toBe(true);
+    await act(() => {
+      fireEvent.keyDown(document.body, { key: 't' });
+    });
+    expect(screen.getByTestId('preset-rules').querySelectorAll('.rule-list > li').length).toBeGreaterThan(1);
+  });
+
+  it('opens the release commit dialog with its consequences', async () => {
+    const { store } = createTestStore();
+    const id = club(store.game.value!).lineup.fighters[1]!.fighterId;
+    mount(<FighterScreen params={{ id }} />, store);
+    await act(() => {
+      fireEvent.click(screen.getByTestId('release'));
+    });
+    const dialog = screen.getByTestId('release-dialog');
+    expect(dialog.textContent).toContain('Roster after');
+    expect(dialog.textContent).toContain('A release cannot be undone.');
+    // The payout is stated in money before the player confirms, with the balance it leaves.
+    const state = store.game.value!;
+    const payout = coreEngine.releasePayout(state, club(state).id, id, store.content.value!);
+    expect(dialog.textContent).toContain(`Release payout${formatMoney(payout)}`);
+    expect(dialog.textContent).toContain(`Balance after${formatMoney(club(state).finance.balance - payout)}`);
+    expect(dialog.textContent).not.toContain('.json');
+  });
+
+  it('lists a compacted match in the match log with the kept totals and no damage taken (KI-2)', async () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const state = structuredClone(store.game.value!) as GameState;
+    const us = club(state).id;
+    const r = Object.values(state.results).find((x) => x.season === state.calendar.season && (x.homeClubId === us || x.awayClubId === us) && Object.values(x.fighterStats).some((st) => st.clubId === us))!;
+    const id = (Object.keys(r.fighterStats) as FighterId[]).find((f) => r.fighterStats[f]!.clubId === us)!;
+    const kept = r.fighterStats[id]!;
+    state.results[r.fixtureId] = compactedResult(r);
+    expect(state.results[r.fixtureId]!.fighterStats).toEqual({});
+    store.replaceWorld(state);
+    mount(<FighterScreen params={{ id }} />, store);
+    await act(() => {
+      fireEvent.click(screen.getByRole('tab', { name: /match log/i }));
+    });
+    const row = document.querySelector(`a[href="#/match/${encodeURIComponent(r.fixtureId)}"]`)?.closest('tr') as HTMLElement;
+    expect(row).toBeTruthy();
+    const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent ?? '');
+    expect(cells[3]).toBe(String(kept.downsInflicted));
+    expect(cells[4]!.replace(/[^0-9]/g, '')).toBe(String(kept.damageDealt));
+    expect(cells.some((c) => c === '–')).toBe(true); // damage taken is not kept for a compacted match
+  });
+
+  it('shows a not-found state for an unknown id', () => {
+    const { store } = createTestStore();
+    mount(<FighterScreen params={{ id: 'f-99999' as FighterId }} />, store);
+    expect(screen.getByText('Fighter not found')).toBeTruthy();
+  });
+});
+
+describe('New career and club select', () => {
+  it('generates a world from the title screen and opens the club select', async () => {
+    const { store } = createTestStore({ world: 'none' });
+    mount(<NewGameScreen params={{}} />, store);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('title-new'));
+      await new Promise((r) => setTimeout(r, 5));
+    });
+    expect(store.game.value).not.toBeNull();
+    expect(location.hash).toBe('#/club-select');
+  });
+
+  it('previews the focused club: role coverage, Trials Day rookie and every fighter, following the arrow keys', async () => {
+    const { store, content } = createTestStore({ playerClubId: null });
+    mount(<ClubSelectScreen params={{}} />, store);
+    const state = store.game.value!;
+    const preview = screen.getByTestId('club-preview');
+    const cards = [...document.querySelectorAll<HTMLButtonElement>('.club-card')];
+    await act(() => {
+      cards[0]!.focus();
+    });
+    const first = state.clubs[cards[0]!.dataset['testid']!.replace('club-card-', '') as ClubId]!;
+    expect(preview.textContent).toContain(first.name);
+    const roster = Object.values(state.fighters).filter((f) => f.clubId === first.id && f.status === 'active');
+    expect(screen.getByTestId('club-preview-roster').querySelectorAll('li')).toHaveLength(roster.length);
+    for (const f of roster) expect(preview.textContent).toContain(f.name.full);
+    if (first.captainId) expect(preview.textContent).toMatch(/C/);
+    expect(screen.getByTestId('club-preview-roles').textContent).toContain(content.vocabulary.roles[0]!.name);
+    const rookieId = state.market.trialsRookies[first.id]?.[0];
+    if (rookieId) expect(screen.getByTestId('club-preview-rookie').textContent).toContain(state.fighters[rookieId]!.name.full);
+    // Arrow keys move between the cards and the preview follows.
+    await act(() => {
+      fireEvent.keyDown(cards[0]!, { key: 'ArrowRight' });
+    });
+    const second = state.clubs[cards[1]!.dataset['testid']!.replace('club-card-', '') as ClubId]!;
+    expect(document.activeElement).toBe(cards[1]);
+    expect(preview.querySelector('.panel__subtitle')!.textContent).toContain(second.name);
+    expect(cards[1]!.getAttribute('data-previewed')).toBe('true');
+    // Pick the first club, then leave the cards: the preview shows the picked club again.
+    await act(() => {
+      fireEvent.click(cards[0]!);
+      cards[0]!.focus();
+    });
+    await act(() => {
+      fireEvent.blur(cards[0]!, { relatedTarget: screen.getByTestId('start-career') });
+    });
+    expect(preview.querySelector('.panel__subtitle')!.textContent).toContain(first.name);
+    await act(() => {
+      cards[2]!.focus();
+      fireEvent.blur(cards[2]!, { relatedTarget: null });
+    });
+    expect(preview.querySelector('.panel__subtitle')!.textContent).toContain(first.name);
+  });
+
+  it('picks a club and starts the career through the commit dialog', async () => {
+    const { store, content } = createTestStore({ playerClubId: null });
+    mount(<ClubSelectScreen params={{}} />, store);
+    const lowest = Math.max(...content.leagues.tiers.map((t) => t.level));
+    const target = content.clubs.list.find((c) => c.startTierLevel === lowest)!;
+    const start = screen.getByTestId('start-career');
+    expect(start.getAttribute('aria-disabled')).toBe('true');
+    await act(() => {
+      fireEvent.click(screen.getByTestId(`club-card-${target.id}`));
+    });
+    await act(() => {
+      fireEvent.click(screen.getByTestId('start-career'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('start-career-confirm'));
+    });
+    expect(store.playerClubId.value).toBe(target.id);
+  });
+});
+
+describe('Class codex', () => {
+  it('filters by role and search, and shows the empty state with reset', async () => {
+    const { store, content } = createTestStore();
+    mount(<CodexScreen params={{}} />, store);
+    expect(document.querySelectorAll('.codex-card')).toHaveLength(content.classes.list.length);
+    await act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Show Healer classes' }));
+    });
+    const healers = content.classes.list.filter((k) => k.archetypes.includes('healer'));
+    expect(document.querySelectorAll('.codex-card')).toHaveLength(healers.length);
+    await act(() => {
+      fireEvent.input(screen.getByLabelText('Search name, ability or role tag'), { target: { value: 'zzzz' } });
+    });
+    expect(screen.getByText('No class matches')).toBeTruthy();
+    await act(() => {
+      fireEvent.click(screen.getAllByText('Reset filters')[0]!);
+    });
+    expect(document.querySelectorAll('.codex-card')).toHaveLength(content.classes.list.length);
+  });
+
+  it('opens the detail pane with the kit and presets', async () => {
+    const { store, content } = createTestStore();
+    const k = content.classes.list[0]!;
+    mount(<CodexScreen params={{ class: k.id }} />, store);
+    const detail = await screen.findByTestId('class-detail');
+    expect(detail.textContent).toContain(content.classAbility(k.id, 'a1').name);
+    expect(detail.querySelectorAll('.codex-preset')).toHaveLength(k.presetIds.length);
+  });
+});
+
+/** Text nodes with digits that have no tooltip on themselves or an ancestor (ux-004 automated check). */
+export function untippedNumbers(root: Element): string[] {
+  const out: string[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const text = (n.textContent ?? '').trim();
+    // Numbers, not prose: short text with a digit (sentences carry their own context).
+    if (!/\d/.test(text) || text.length > 24) continue;
+    const el = n.parentElement;
+    if (!el) continue;
+    if (el.closest('kbd, h1, p, option, .page-header__eyebrow, .page-header__meta, .tab, .btn, .chip, .sidenav, svg, .digest__title, .digest__text, .tooltip, .fixture__kind, .empty, .checklist, .panel__footer, .entity__name, .u-sr-only, .trait-row__effect')) continue;
+    let p: Element | null = el;
+    let found = false;
+    while (p && p !== root.parentElement) {
+      if (readTip(p)) {
+        found = true;
+        break;
+      }
+      p = p.parentElement;
+    }
+    if (!found) out.push(`${text} @ ${el.tagName.toLowerCase()}.${el.className}`);
+  }
+  return out;
+}

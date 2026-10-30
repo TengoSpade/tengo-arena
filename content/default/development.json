@@ -1,0 +1,309 @@
+{
+  "_doc": "Fighter lifecycle constants: development, aging, retirement, injuries, captaincy, chemistry, statuses, generation. Spec: docs/design/_drafts/03-fighter-lifecycle.md. Units follow docs/design/03 section 1: stats are integers on the absolute 1-20 scale, rating and potential are integers 1-100, probabilities are basis points in code. Fractions and multipliers are decimals in this file; the loader converts every fractional value to integer basis points (x10000, round half away from zero) and lifecycle math runs on integers. Base stats are stored internally as hundredths of a point ('centipoints', 100-2000). Tables given as [key, value] pairs are step tables (use the entry with the largest key <= the lookup value) unless the block says interpolate.",
+  "version": 2,
+  "status": "M1.1 DRAFT 2026-10-26 (fighter-lifecycle designer). Season-end development replaced by in-season level-ups (levels.json, owner T005); bench XP (T004); Stamina and Freshness (T003). Owner-mandated parts cite owner IDs or tickets in the spec; everything else is PROPOSED and every number is TUNABLE.",
+
+  "scale": {
+    "statMin": 1,
+    "statMax": 20,
+    "capMin": 2,
+    "capMax": 20,
+    "internalUnitsPerPoint": 100,
+    "raceTendencyCapPerStat": 4,
+    "traitStatAddCapPerTrait": 3,
+    "_capsNote": "TUNABLE (combat cmb-q11): race tendencies |x| <= 4 per stat, trait stat adds |x| <= 3 per stat; fragility/durability is expressed mainly through injury chance and recovery multipliers. Validator-enforced.",
+    "ratingMin": 1,
+    "ratingMax": 100,
+    "_doc": "Display stat = floor(effective centipoints / 100), clamp 1..20; this integer is what combat receives (fight setup). Effective centipoints = base centipoints + 100 * (sum of whole-point trait, status and chemistry modifiers). Rating = clamp(round(5 * sum(w_i * stat_i)), 1, 100) on these integer stats (D-Q: one formula everywhere), with w_i = classes.json ratingWeights of the fighter's class. Potential = the same formula with every base stat at its cap, no wear, and only permanent modifiers (physique and scar traits); it therefore drops when a scar is gained (P-12 'injury' change)."
+  },
+
+  "time": {
+    "humanBaselineLifespan": 80,
+    "debutAgeFloor": 16,
+    "regularSeasonMatchweeks": 16,
+    "tournamentWeeks": 3,
+    "offseasonRecoveryWeeks": 8,
+    "_doc": "humanAge = age * 80 / race.lifespan, kept in tenths (floor(age * 800 / lifespan) / 10). Season rate scale k = 80 / race.lifespan. Decline (wear) of a season uses the age the fighter had during that season; the +1 increment follows (season-end step). XP per level (levels.json) reads the current humanAge."
+  },
+
+  "potential": {
+    "_doc": "Potential P (1-100) is rolled once at generation and is mostly fixed (P-12). Bands are generation weights only; the star display is potential / 20 in half-star steps (docs/design/03 section 1).",
+    "bands": [
+      { "id": "journeyman", "min": 30, "max": 44, "weight": 20 },
+      { "id": "solid", "min": 45, "max": 57, "weight": 34 },
+      { "id": "good", "min": 58, "max": 69, "weight": 28 },
+      { "id": "excellent", "min": 70, "max": 81, "weight": 13 },
+      { "id": "elite", "min": 82, "max": 91, "weight": 4.5 },
+      { "id": "generational", "min": 92, "max": 97, "weight": 0.5 }
+    ],
+    "clamp": { "min": 30, "max": 97 },
+    "capFromPotential": "cap100_i = clamp(round(P * 20 + classOffset100_i + 100 * race.statTendencies[tag_i] + jitter100_i), capMin*100, capMax*100)",
+    "capJitterPoints": 0.8,
+    "classOffsetFromEmphasis": {
+      "_doc": "classOffset_i (points) = clamp(perEmphasisPoint * (class.statEmphasis_i - 1), min, max), then recentred so that sum(ratingWeights_i * classOffset_i) = 0. Uses classes.json statEmphasis; if a class has none, fall back to fallbackByRatingWeightRank.",
+      "perEmphasisPoint": 2.0,
+      "min": -1.5,
+      "max": 2.5,
+      "fallbackByRatingWeightRank": { "top2": 1.2, "next2": 0.4, "rest": -1.2 }
+    },
+    "recenterClassOffsets": true,
+    "qualityShiftExamples": {
+      "_label": "EXAMPLE. The league/economy designer owns tier quality bands (docs/design/03 section 1) and sets these.",
+      "worldGenTier1": 8,
+      "worldGenTier2": 4,
+      "worldGenTier3": 0,
+      "rookieIntake": 0,
+      "generatedFreeAgent": -3,
+      "hiredBlade": -12
+    },
+    "_staminaNote": "M1.1: the stamina cap follows capFromPotential plus levels.json stamina.capOffsetPoints (2.5 points) with jitter +/- levels.json stamina.jitterPoints (3.0) instead of capJitterPoints; class offset from classes.json statEmphasis.stamina; race tendency from races.json statTendencies.stamina."
+  },
+
+  "pace": {
+    "_doc": "Hidden development pace (true value shown in M1; fog hook for M4). Multiplies the development clock.",
+    "levels": [
+      { "id": "slow", "label": "Slow", "mult": 0.75, "weight": 15 },
+      { "id": "measured", "label": "Measured", "mult": 0.9, "weight": 25 },
+      { "id": "steady", "label": "Steady", "mult": 1.0, "weight": 33 },
+      { "id": "brisk", "label": "Brisk", "mult": 1.15, "weight": 19 },
+      { "id": "rapid", "label": "Rapid", "mult": 1.3, "weight": 8 }
+    ]
+  },
+
+  "developmentClock": {
+    "_doc": "M1.1: used only when a fighter is created (world generation, intake, free agents, hired blades) and by the save migration. D_physical and D_mental are set from pre-career usage as in M1 (preCareerUsage, maxAheadOfHumanAge, bloomRangeHumanYears), then frozen: they are stored but never advanced. train100_i = cap100_i * M_g(D_g + bloom_i) at creation; after that a stat grows only through level-up picks (levels.json). The M1 season-end development step is removed.",
+    "startHumanAge": 16,
+    "bloomRangeHumanYears": 2,
+    "preCareerUsage": { "min": 0.65, "max": 1.0 },
+    "maxAheadOfHumanAge": 4
+  },
+
+  "maturityCurve": {
+    "_doc": "Used only at creation and save migration: train100_i = cap100_i * M_g(D_g + bloom_i), interpolated linearly, clamped below the first and above the last point. Stamina uses the physical curve.",
+    "interpolate": true,
+    "physical": [[14, 0.40], [16, 0.50], [17, 0.55], [18, 0.60], [19, 0.65], [20, 0.70], [21, 0.745], [22, 0.79], [23, 0.83], [24, 0.87], [25, 0.905], [26, 0.94], [27, 0.97], [28, 1.0]],
+    "mental": [[14, 0.42], [16, 0.50], [18, 0.57], [20, 0.64], [22, 0.70], [24, 0.75], [26, 0.80], [28, 0.84], [30, 0.88], [32, 0.91], [34, 0.94], [36, 0.96], [38, 0.98], [40, 1.0]]
+  },
+
+  "decline": {
+    "_doc": "Wear in stat points per human-year (step table on floor(humanAge during the season) - traitDeclineShift). Per season: wear100_i += 100 * d_g * k * race.declineMult[g] * traitDeclineMult for every stat of group g (stamina is physical, so it declines on the physical table like str, agi, pac, tgh and pre). base100_i = max(100, train100_i - wear100_i). Wear never heals; level-up picks raise train100, never lower wear. Training emphasis no longer changes wear.",
+    "physicalPerHumanYear": [[0, 0], [31, 0.2], [33, 0.3], [35, 0.4], [37, 0.5], [39, 0.6], [41, 0.7], [44, 0.85], [47, 1.0]],
+    "mentalPerHumanYear": [[0, 0], [60, 0.1], [65, 0.2], [70, 0.3]],
+    "mentalDeclineStartHumanAge": 60,
+    "mentalDeclineScalesWithLifespan": true,
+    "_mentalDeclineNote": "DELEGATED (D-B; open-025 pending owner confirmation): true. true: mental decline starts at humanAge 60 for every race (elf 90, dwarf 54, orc 48, ashkin 39), i.e. never during a playing career. false: it starts at absolute age 60 for every race (elf humanAge 40, the last seasons of an elf career)."
+  },
+
+  "xp": {
+    "_doc": "Round XP: each fighter earns these amounts for every round he starts (as a starter, an entering reserve or an emergency entrant), accumulated after each round (levels.json hooks.xpAfterRound) and committed with the match result. A fighter swapped out keeps the XP of every round he started. T004 bench XP: levels.json benchXp (a third of one lineup slot's match XP) for each fit roster fighter who starts no round, match-squad reserves who never enter included. Injured fighters, free agents and (M5, O3) called-up academy fighters who are not used earn 0.",
+    "perRoundStarted": 10,
+    "winBonus": 3,
+    "downCreditEach": 1,
+    "downCreditMax": 2,
+    "surviveBonus": 1,
+    "tournamentMult": 1.25,
+    "rounding": "floor after all multipliers",
+    "seasonTarget": 360,
+    "_seasonTargetNote": "TUNABLE. Used only for retirement usage (retirement._usageDoc) and as a reference: about 70% of the round XP a full-time starter earns over 16 best-of-3 league matches (16 * ~2.5 rounds * ~12.8 XP). Bench XP does not count toward it.",
+    "ruleSlots": {
+      "_label": "FUTURE (M3, P-07) hook",
+      "base": 4,
+      "plusOnePerCareerRounds": 100,
+      "maxFromExperience": 8,
+      "maxWithTraits": 12
+    }
+  },
+
+  "training": {
+    "_doc": "M1.1: a standing training emphasis per fighter (Balanced, Body, Mind; set once, persists). It no longer scales growth; it weights which stats appear in level-up offers (levels.json offers.emphasisWeight) and nudges the auto-pick (levels.json autoPick.emphasisPreference). Setting enabled=false makes everyone Balanced. Emphasis is not intensity, has no injury risk and no wear effect.",
+    "enabled": true,
+    "options": [
+      { "id": "balanced", "label": "Balanced" },
+      { "id": "body", "label": "Body" },
+      { "id": "mind", "label": "Mind" }
+    ],
+    "default": "balanced",
+    "formulas": { "a": "product of trainingEmphasis effect mults (human Adaptable 1.5, Regimented 1.5, Set in Their Ways 0); clamp a to [0, 2]", "offerWeight": "Body: physical stats x (1 + perStrength * a), mental stats / (1 + perStrength * a); Mind: the reverse; Balanced: x1 (levels.json offers.emphasisWeight.perStrength)" }
+  },
+
+  "retirement": {
+    "_doc": "D-T: p = 1 - (1 - hDrop)(1 - hAge)^k with hDrop at careerPeakRating - rating, hAge at human-age - physicalPeakHumanAge, k = 80 / lifespan; then the modifiers; 0 below minHumanAge, 1 from forcedHumanAge. Rolled at season-end step 7.",
+    "minHumanAge": 31,
+    "forcedHumanAge": 58,
+    "physicalPeakHumanAge": 30,
+    "hazardByRatingDrop": [[0, 0], [3, 0.01], [4, 0.025], [5, 0.045], [6, 0.075], [7, 0.12], [8, 0.18], [9, 0.25], [11, 0.35], [13, 0.47], [16, 0.63], [20, 0.82]],
+    "hazardPerHumanYearPastPeak": [[0, 0], [1, 0.002], [10, 0.008], [15, 0.015], [18, 0.03], [21, 0.06], [23, 0.1], [25, 0.18], [26, 0.3], [27, 0.5]],
+    "modifiers": {
+      "usageHighAtLeast": 0.75,
+      "usageHighMult": 0.8,
+      "usageLowAtMost": 0.3,
+      "usageLowMult": 1.5,
+      "noContractNextSeasonMult": 1.5,
+      "contractRemainingMult": 0.6,
+      "perScarAdd": 0.03,
+      "heavyWearAvgPhysicalPoints": 2.4,
+      "heavyWearAdd": 0
+    },
+    "modifierOrder": "multiply (usage, contract, trait mults), then add (scars, heavy wear), then clamp",
+    "finalSeasonAnnounceAtLeast": 0.6,
+    "_finalSeasonNote": "At preseason week P1, a fighter whose chance (computed with usage 1.0) is >= 60% announces a final season: status final_season, retirement certain at season end.",
+    "unsignedSeasonEndsBeforeLeaving": 3,
+    "_leavingNote": "A free agent unsigned at three consecutive season ends leaves the league (removed like a retirement but not counted as one for intake). M1.1 soak tuning: 2 -> 3 so the preseason pool stays inside the 100-300 band.",
+    "_usageDoc": "M1.1: usage for the retirement modifiers (usageHighAtLeast, usageLowAtMost) = min(1, season round XP / xp.seasonTarget). Round XP only: bench XP (levels.json benchXp) does not count, so a fighter who mostly sits out still reads as low usage."
+  },
+
+  "injury": {
+    "_doc": "Per-round chance p = (base + damagePerMaxHp * min(cap, damageTaken / maxHp) + downedAdd * [downed]) * durabilityMult * race.injury.chanceMult * ageMult * traitMults * statusMults * freshnessMult, capped. freshnessMult = min(levels.json freshness.injuryMultMax, 1 + injuryMultPerPointBelow * (threshold - F)) when F, the fighter's freshness at that round's start, is below the threshold (60), else 1. Rolled after each round for every fighter who started it, from the injury stream keyed by fixture, round and fighter (levels.json hooks.injuriesAfterRound); at most one new injury per fighter per match. M1.1: an injury takes effect immediately. The fighter plays no later round of that match; combat's between-round step replaces him (an unused reserve, using a swap; else an emergency entrant). weeksOut starts with the week after the match.",
+    "perRound": { "base": 0.004, "damagePerMaxHp": 0.014, "damageRatioCap": 2.0, "downedAdd": 0.013, "cap": 0.15 },
+    "durability": { "stat": "tgh", "pivot": 10, "multPerPointBelowPivot": 0.05, "min": 0.6, "max": 1.4 },
+    "ageMultByHumanAge": [[0, 1.0], [30, 1.1], [33, 1.25], [36, 1.4]],
+    "maxNewInjuriesPerMatch": 1,
+    "severity": {
+      "baseWeights": { "knock": 62, "minor": 24, "moderate": 10, "serious": 4 },
+      "heavyHit": { "requiresDowned": true, "damageRatioAtLeast": 1.0, "shift": { "knock": -6, "moderate": 4, "serious": 2 } },
+      "veteran": { "humanAgeAtLeast": 33, "shift": { "knock": -5, "moderate": 3, "serious": 2 } }
+    },
+    "severityLadder": [
+      { "id": "knock", "label": "Knock", "weeks": { "min": 1, "max": 1 }, "scaleWithRecovery": false, "scarChance": 0, "icon": "inj_knock", "text": "Misses the next match." },
+      { "id": "minor", "label": "Minor injury", "weeks": { "min": 2, "max": 3 }, "scaleWithRecovery": true, "scarChance": 0, "icon": "inj_minor" },
+      { "id": "moderate", "label": "Moderate injury", "weeks": { "min": 4, "max": 6 }, "scaleWithRecovery": true, "scarChance": 0.04, "icon": "inj_moderate" },
+      { "id": "serious", "label": "Serious injury", "weeks": { "min": 8, "max": 14 }, "scaleWithRecovery": true, "scarChance": 0.3, "icon": "inj_serious" }
+    ],
+    "weeksSemantics": "weeksOut counts matchweeks (and preseason weeks) the fighter is unavailable, starting with the week after the injury. It decreases by 1 at each week processing; the offseason removes offseasonRecoveryWeeks.",
+    "recoveryAgeMultByHumanAge": [[0, 1.0], [32, 1.15], [35, 1.3]],
+    "recoveryRounding": "round half up, minimum 1 week",
+    "scar": {
+      "veteranHumanAgeAtLeast": 33,
+      "veteranMult": 1.3,
+      "pool": ["rebuilt_knee", "stiff_shoulder", "crooked_ribs", "ringing_skull", "clouded_eye", "grim_visage"],
+      "poolWeights": { "rebuilt_knee": 25, "stiff_shoulder": 22, "crooked_ribs": 18, "ringing_skull": 15, "clouded_eye": 12, "grim_visage": 8 },
+      "painTemperedChance": 0.3
+    },
+    "careerEnding": {
+      "onlyOnSeverity": "serious",
+      "atRiskIf": { "scarsAtLeast": 2, "humanAgeAtLeast": 34 },
+      "chanceGivenSeriousAndAtRisk": 0.08,
+      "maxChancePerMatch": 0.005,
+      "_doc": "Impossible unless the fighter shows the At risk flag before the match. The lineup screen shows the per-match chance."
+    },
+    "pronenessIndex": "race.injury.chanceMult * durabilityMult * ageMult * traitMults (1.0 = average human of durability 10 aged under 30)",
+    "pronenessLabels": [
+      { "id": "low", "label": "Low", "maxIndex": 0.85 },
+      { "id": "average", "label": "Average", "maxIndex": 1.15 },
+      { "id": "high", "label": "High", "maxIndex": 1.45 },
+      { "id": "very_high", "label": "Very high", "maxIndex": 99 }
+    ]
+  },
+
+  "captaincy": {
+    "_doc": "Captain quality CQ (the 'captaincy' integer 1-100 that combat.json captain consumes) = round(sum(weight * component)) + youth penalty + trait and status captaincy adds, clamp 1..100. Components are 0-100: leadership = effective ldr (1-20) * 5; composure = effective cmp * 5; experience = min(100, careerRounds * 100 / experienceCareerRoundsFor100); seniority = min(100, matchweeksAtClub * 100 / seniorityMatchweeksFor100); standing = clamp(pivot + perRatingPointVsTopFiveAvg * (rating - mean rating of the club's five best fit fighters), 0, 100). CQ is recomputed at every lineup lock and at season end.",
+    "weights": { "leadership": 0.45, "composure": 0.25, "experience": 0.1, "seniority": 0.1, "standing": 0.1 },
+    "experienceCareerRoundsFor100": 500,
+    "seniorityMatchweeksFor100": 95,
+    "youthPenalty": { "humanAgeBelow": 22, "add": -10 },
+    "standing": { "pivot": 50, "perRatingPointVsTopFiveAvg": 3 },
+    "grades": [
+      { "id": "inspiring", "letter": "A", "label": "Inspiring", "minCq": 90, "auraComposure": 2, "rallyComposure": 3, "mentorDevMult": 1.08, "chemistry": 2 },
+      { "id": "steady", "letter": "B", "label": "Steady", "minCq": 70, "auraComposure": 1, "rallyComposure": 2, "mentorDevMult": 1.05, "chemistry": 1 },
+      { "id": "adequate", "letter": "C", "label": "Adequate", "minCq": 55, "auraComposure": 0, "rallyComposure": 1, "mentorDevMult": 1.02, "chemistry": 0 },
+      { "id": "shaky", "letter": "D", "label": "Shaky", "minCq": 40, "auraComposure": 0, "rallyComposure": 0, "mentorDevMult": 1.0, "chemistry": 0 },
+      { "id": "divisive", "letter": "E", "label": "Divisive", "minCq": 1, "auraComposure": -1, "rallyComposure": 0, "mentorDevMult": 0.97, "chemistry": -1 }
+    ],
+    "inFightProposal": {
+      "_doc": "ADOPTED by combat (combat.json captain, docs/design/_drafts/03-combat.md sys-fight-captain); applied by the SIM. Grades supply auraComposure and rallyComposure (in-fight composure points). Lifecycle supplies each fighter's CQ, the lineup captain and the vice-captain in the fight setup. Reliability, not damage (research D2/C8).",
+      "aura": "while the acting captain stands: every fielded ally (captain included) gets grade.auraComposure composure",
+      "rally": { "trigger": "first time per round an ally other than the acting captain is downed while the acting captain stands", "composure": "grade.rallyComposure", "seconds": 5, "suppressesAllyDownPenalties": true, "usesPerRound": 1, "carriesOverToSuccessor": true },
+      "captainDown": { "shakenComposure": -1, "seconds": 4, "auraEnds": true, "handover": "when Shaken ends: the vice-captain if fielded and standing, else the standing ally with the highest CQ (ties: lower slot); acting CQ = CQ - actingCaptainCqPenalty, grade recomputed" },
+      "effectCap": "captain-sourced modifiers may not change any combat quantity by more than 10%"
+    },
+    "actingCaptainCqPenalty": 10,
+    "lineupCaptain": "the club captain if fielded; else the vice-captain if fielded; else the highest-CQ fielded fighter (ties: seniority, rating, fighter id). That fighter is the lineup's captain for the match; combat receives their CQ, minus actingCaptainCqPenalty unless they are the club captain. If the lineup captain is downed, combat's handover passes the role to the vice-captain if fielded and up, else the highest-CQ fielded ally who is up, also at CQ - actingCaptainCqPenalty.",
+    "viceCaptain": { "optional": true, "aiPolicy": "second-highest CQ among the five projected starters" },
+    "mentoring": {
+      "youngHumanAgeAtMost": 23,
+      "source": "club captain's grade.mentorDevMult, pro-rated by the share of the season's matchweeks they held the role at this club",
+      "traitMentorsCounted": 2,
+      "totalMentorMultCap": 1.15
+    },
+    "captainTraitChemistryMult": 2,
+    "strip": {
+      "evaluatedAt": "lineup lock (so changing the club captain back and forth between matches is free)",
+      "penaltyStatus": "snubbed",
+      "appliesWhen": "the club captain at this lock differs from the one at the previous lock, and the previous captain is still at the club, fit, held the role >= 4 matchweeks, and no exemption applies",
+      "exemptIf": ["previous captain injured with >= 4 weeks remaining", "previous captain in final_season", "change made before matchweek 1 (preseason)", "previous captain is made vice-captain at the same lock"]
+    },
+    "passedOver": { "status": "passed_over", "evaluatedAt": "lineup lock after a captain change", "appliesTo": "each fit club-mate with humanAge >= 30 and CQ >= new club captain CQ + 15 who is not the vice-captain", "cqGap": 15, "minHumanAge": 30 },
+    "captainDeparted": { "clubStatus": "captain_departed", "appliesWhen": "a club captain who held the role >= 19 matchweeks leaves the club, or suffers a career-ending injury, before season end" },
+    "losingTheRoom": { "consecutiveMatchesNotFieldedWhileFit": 4, "status": "losing_the_room", "fieldedMeans": "started at least one round of the match, or was named a match-squad reserve", "freshnessRestExemptBelow": 60, "_doc": "A match in which the fit club captain is left out of the match squad while his freshness at the lineup lock is below freshnessRestExemptBelow (a rest) neither extends nor resets the count." },
+    "armbandTraitMatchweeks": 32,
+    "aiPolicy": "AI clubs name as club captain the highest CQ among their five projected starters at preseason week P1 and whenever the role falls vacant; ties: seniority, rating, fighter id. D-I (agreed lifecycle/economy timing): the choice is made in the season-end AI phase for the new season, and an incumbent is replaced there only if a challenger exceeds him by economy.json ai.captainHysteresis (5) CQ; mid-season the AI changes captain only on vacancy or when the captain is injured with >= 4 weeks remaining (an exempt change), so it never triggers Snubbed. Vacancy for the player: the game names an interim captain (same rule) and flags it in the digest."
+  },
+
+  "chemistry": {
+    "_doc": "DELEGATED (D-D): lineup modifiers only; no broader morale system. Structural and visible (P-17). Lineup chemistry for the five starters = sum of trait chemistry terms (captain's own terms x captainTraitChemistryMult) + club captain grade.chemistry + status terms, computed at lineup lock, clamped to [min, max] and kept for the whole match. M1.1: swaps do not recompute it; an entering reserve or emergency entrant gets the same composure modifier as the starters (unless chemistryImmune), and his own chemistry terms do not count. Every fielded fighter without chemistryImmune gets cmp + chemistry / 2 (rounded toward zero) in the fight-setup stats; this is a MANAGEMENT-side modifier (the sim only sees the resulting stat). Set composureDivisor to 0 to disable chemistry without touching other data.",
+    "min": -5,
+    "max": 5,
+    "composureDivisor": 2
+  },
+
+  "statuses": [
+    { "id": "final_season", "label": "Final season", "icon": "status_final_season", "scope": "fighter", "duration": "until season end", "effects": [ { "type": "stat", "stat": "cmp", "add": 1 } ], "text": "Announced this is their last season: retires at season end. +1 composure." },
+    { "id": "still_tender", "label": "Still tender", "icon": "status_still_tender", "scope": "fighter", "duration": "the next 2 matches in which the fighter starts a round", "effects": [ { "type": "injuryChance", "mult": 1.25 } ], "text": "Back from a moderate or serious injury. Injury chance x1.25 for 2 matches." },
+    { "id": "at_risk", "label": "At risk", "icon": "status_at_risk", "scope": "fighter", "duration": "while 2+ scars or humanAge >= 34", "effects": [], "text": "A serious injury could end this fighter's career. The lineup screen shows the chance." },
+    { "id": "snubbed", "label": "Snubbed", "icon": "status_snubbed", "scope": "fighter", "duration": "6 matchweeks", "effects": [ { "type": "chemistry", "add": -2 } ], "text": "Stripped of the captaincy. -2 lineup chemistry while fielded." },
+    { "id": "passed_over", "label": "Passed over", "icon": "status_passed_over", "scope": "fighter", "duration": "6 matchweeks, or until made vice-captain", "effects": [ { "type": "chemistry", "add": -1 } ], "text": "A senior fighter who expected the armband. -1 lineup chemistry while fielded." },
+    { "id": "losing_the_room", "label": "Losing the room", "icon": "status_losing_room", "scope": "fighter", "duration": "while the club captain has not been fielded in 4+ consecutive matches while fit; ends when fielded", "effects": [ { "type": "captaincy", "add": -10 } ], "text": "A captain who keeps sitting out. -10 captain quality until fielded again." },
+    { "id": "captain_departed", "label": "Captain departed", "icon": "status_captain_departed", "scope": "club", "duration": "4 matchweeks", "effects": [ { "type": "chemistry", "add": -1 } ], "text": "The dressing room lost its captain mid-season. -1 lineup chemistry." }
+  ],
+
+  "generation": {
+    "worldGen": {
+      "rosterFillOfCap": 0.9,
+      "freeAgentsPerClub": 2.5,
+      "humanAgeBands": [
+        { "min": 18, "max": 21, "weight": 22 },
+        { "min": 22, "max": 25, "weight": 26 },
+        { "min": 26, "max": 29, "weight": 24 },
+        { "min": 30, "max": 33, "weight": 18 },
+        { "min": 34, "max": 37, "weight": 10 }
+      ],
+      "_doc": "Sample a band, then a whole humanAge in it, then age = round(humanAge * lifespan / 80), clamped to [race.debutAge.min, age at humanAge 40]."
+    },
+    "intake": {
+      "_doc": "TUNABLE; coordinate with the league/economy designer (trials day, P-18). rookies = clamp(round(clubs * basePerClub) + retirementsThisSeason, round(clubs * minPerClub), round(clubs * maxPerClub)). retirementsThisSeason counts retirements and career-ending injuries, not unsigned fighters who left the league (that would feed back into itself). Race by race.intakeWeight; age uniform in race.debutAge.",
+      "basePerClub": 0.8,
+      "minPerClub": 0.5,
+      "maxPerClub": 1.6
+    },
+    "veteranHistory": {
+      "_doc": "Fighters generated older than their debut get an estimated history so captaincy, veteran traits and wear are consistent: proSeasons = age - sampled debut age; careerRounds = round(proSeasons * roundsPerSeasonPlayed * U); wear = the decline table summed over the human-years already lived past 31; each pro season rolls scarChancePerSeasonPlayed for a scar; acquired-trait thresholds are then checked once.",
+      "roundsPerSeasonPlayed": 40,
+      "scarChancePerSeasonPlayed": 0.016
+    },
+    "hiredBlade": {
+      "_doc": "Hook for open-006 (league/economy owns the rule). Generated like a free agent with qualityShiftExamples.hiredBlade, humanAge band 24-33, normal trait roll, on one-match terms; earns XP like anyone else.",
+      "humanAgeMin": 24,
+      "humanAgeMax": 33
+    }
+  },
+
+  "soakTargets": {
+    "_doc": "Pass bands for the 20-season headless soak test (spec section 8). Measured from season 3 so world-generation warm-up is excluded.",
+    "populationDriftMaxPct": 10,
+    "medianHumanAge": [26, 32],
+    "shareHumanAgeAtMost22": [0.12, 0.32],
+    "shareHumanAgeAtLeast31": [0.2, 0.55],
+    "_ageBandNote": "Widened for D-T (veterans play on): see core/fighters README.",
+    "allClubTopFiveRatingDriftMaxPoints": 4,
+    "leagueMeanRatingDriftMaxPoints": 3,
+    "maxRatingInLeague": 95,
+    "injuriesPer40RoundsByRace": { "human": [0.75, 1.15], "elf": [1.1, 1.65], "dwarf": [0.5, 0.85], "orc": [0.55, 0.9], "ashkin": [0.6, 1.05] },
+    "seriousShareOfInjuries": [0.04, 0.09],
+    "careerEndingPerLeagueSeason": [0.02, 1.0],
+    "starterPeakOverPotential": [0.85, 0.97],
+    "rolledTraitPositiveShare": [0.78, 0.82],
+    "aiCaptainMeanCq": [65, 88],
+    "aiCaptainsBelowGradeDMax": 0.05,
+    "_m11Note": "M1.1 adds the bands in levels.json soakTargets (levels per season by human-age, matches per level, bench share, tired and spent round-start shares, starter stamina). The bands above are unchanged; shareHumanAgeAtLeast31 is watched (the scratch model touched 0.57 in 1 of 3 seeds)."
+  }
+}

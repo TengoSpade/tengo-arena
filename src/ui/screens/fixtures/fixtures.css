@@ -1,0 +1,35 @@
+/* Fixtures screen layout glue (screen-scoped). */
+.fixtures-body {
+  margin-top: var(--sp-4);
+}
+
+.fixtures-opp {
+  --row-gap: var(--sp-2);
+  min-width: 0;
+}
+
+.fixtures-result {
+  --row-gap: var(--sp-2);
+}
+
+.fixtures-side {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fixtures-side--home {
+  justify-content: flex-end;
+}
+
+.fixtures-side--home .entity {
+  flex-direction: row-reverse;
+}
+
+.data-table .fixtures-score {
+  width: 7rem;
+}
+
+.fixtures-stepper {
+  --row-gap: var(--sp-1);
+}

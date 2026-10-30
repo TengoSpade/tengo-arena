@@ -1,0 +1,917 @@
+/**
+ * ui-home · Home, the matchweek hub (04 §6.3, mockup home.html): answers
+ * "what needs me this week?" and starts the week in one press.
+ * Main (8/12): the next fixture hero (or the preseason checklist) and the
+ * digest. Side (4/12): club money and roster, availability, the wing table.
+ * Keys: Space Continue (frame), L lineup, O opponent, 1-7 screens, Ctrl S.
+ */
+import { signal } from '@preact/signals';
+import type { ContentDB } from '../../../core/content';
+import type { Club, ClubId, Fighter, FighterId, Fixture, GameState, StandingRow } from '../../../core/model';
+import type { ScreenProps } from '../../app/routes';
+import { navigate } from '../../app/router';
+import { skipToKickOffRequest } from '../../app/intents';
+import { quickSaveOrAsk } from '../../app/save-intent';
+import { useShortcuts } from '../../app/shortcuts';
+import {
+  CapMeter,
+  Crest,
+  crestLetters,
+  DataTable,
+  Delta,
+  Empty,
+  FighterName,
+  FormStrip,
+  Icon,
+  Meter,
+  PageHeader,
+  Panel,
+  RoleGlyph,
+  RowMark,
+  Tabs,
+  Tag,
+  showToast,
+  tipAttrs,
+  type Column,
+  type IconName,
+} from '../../components';
+import { OUTCLASSED_GAP, formatInt, formatMoney, formatPercent, formatSigned, ordinal } from '../../format';
+import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
+import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
+import { TRIALS, trialsRookiesOf } from '../league/lib/trials';
+import { useStore, type AppStore } from '../../store';
+import { freshInfo } from '../../m11/model';
+import { FreshMeter, freshTip } from '../../m11/parts';
+import { settings } from '../../store/settings';
+import { buildDigest, needsActionCount, type DigestItem, type DigestKind } from '../../store/digest';
+import { safeView, useEngine, type GameEngine } from '../../store/engine';
+import { fighterViewOf, lastPlayedLineup, usePlayerClub, type ClubContext } from '../../store/views';
+import { format, t } from '../../text';
+import { T } from './text';
+import './home.css';
+
+type DigestTab = 'all' | 'action' | 'results' | 'squad' | 'market';
+const digestTab = signal<DigestTab>('all');
+
+export default function HomeScreen(_props: ScreenProps) {
+  const store = useStore() as AppStore;
+  const engine = useEngine();
+  const ctx = usePlayerClub();
+
+  useShortcuts({
+    l: () => navigate('#/squad'),
+    o: () => navigate('#/league'),
+  });
+
+  if (!ctx) {
+    return (
+      <section class="page" data-testid="screen-home">
+        <Empty icon="home" title={t('continue.newCareer')} actions={<a class="btn btn--primary" href="#/new-game">{t('continue.newCareer')}</a>} />
+      </section>
+    );
+  }
+  const { state, content, club, tier, standing } = ctx;
+  const cal = state.calendar;
+  const qualifiers = content.leagues.tournament.qualifiersPerWing;
+  const lastReport = latestResult(state, club.id);
+  const meta =
+    cal.phase === 'preseason'
+      ? [T.metaPreseason]
+      : [
+          standing && ctx.wing
+            ? format(T.metaStanding, { pos: ordinal(standing.position), size: ctx.wingRows.length, wing: ctx.wing.name, pts: standing.points, played: standing.played })
+            : null,
+          format(T.metaCut, { tournament: tier.tournamentName, n: qualifiers }),
+          cal.phase === 'regular' ? format(T.metaLeft, { n: matchweeksLeft(content, cal) }) : null,
+        ];
+
+  return (
+    <section class="page" data-testid="screen-home">
+      <PageHeader
+        eyebrow={format(T.eyebrow, { season: cal.season, tier: tier.name, wing: ctx.wing ? ` · ${ctx.wing.name}` : '' })}
+        title={weekName(content, cal.weekIndex, tier)}
+        meta={meta}
+        actions={
+          <>
+            {lastReport && (
+              <a class="btn btn--ghost" href={`#/match/${encodeURIComponent(lastReport.fixtureId)}`}>
+                <Icon name="scroll" />
+                {T.lastReport}
+              </a>
+            )}
+            <button
+              class="btn btn--ghost"
+              type="button"
+              onClick={() => void quickSaveOrAsk(store)}
+            >
+              <Icon name="save" />
+              {T.save} <kbd>Ctrl S</kbd>
+            </button>
+          </>
+        }
+      />
+      <div class="l-grid">
+        <div class="span-8 l-stack">
+          {ctx.fixture ? <FixtureHero ctx={ctx} fixture={ctx.fixture} engine={engine} /> : <PreseasonHero ctx={ctx} store={store} />}
+          <DigestPanel ctx={ctx} store={store} />
+        </div>
+        <div class="span-4 l-stack">
+          <ClubPanel ctx={ctx} />
+          <AvailabilityPanel ctx={ctx} />
+          <WingTable ctx={ctx} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---- Next fixture --------------------------------------------------------------------------------------------
+
+function latestResult(state: GameState, clubId: ClubId) {
+  return Object.values(state.results)
+    .filter((r) => r.season === state.calendar.season && (r.homeClubId === clubId || r.awayClubId === clubId))
+    .sort((a, b) => b.weekIndex - a.weekIndex)[0];
+}
+
+function lastFive(state: GameState, content: ContentDB, clubId: ClubId) {
+  return Object.values(state.results)
+    .filter((r) => r.season === state.calendar.season && (r.homeClubId === clubId || r.awayClubId === clubId))
+    .sort((a, b) => a.weekIndex - b.weekIndex)
+    .slice(-5)
+    .map((r) => {
+      const home = r.homeClubId === clubId;
+      const other = state.clubs[home ? r.awayClubId : r.homeClubId];
+      const won = r.winnerClubId === clubId;
+      const score = home ? `${r.score.home}–${r.score.away}` : `${r.score.away}–${r.score.home}`;
+      return {
+        r: (won ? 'W' : 'L') as 'W' | 'L',
+        tip: format(T.formTip, { week: weekCode(content, r.weekIndex), where: home ? T.vs : t('continue.at'), club: other?.name ?? '', result: won ? T.won : T.lost, score }),
+      };
+    });
+}
+
+function recordOf(row: StandingRow | null) {
+  if (!row) return { text: T.recordNone, tip: T.recordNone };
+  return {
+    text: format(T.record, { pos: ordinal(row.position), w: row.matchWins, l: row.matchLosses, pts: row.points }),
+    tip: format(T.recordTip, { p: row.played, w: row.matchWins, l: row.matchLosses, rw: row.roundsWon, rl: row.roundsLost }),
+  };
+}
+
+function rowFor(state: GameState, content: ContentDB, engine: GameEngine, club: Club): StandingRow | null {
+  const comp = safeView(() => engine.leagueCompetitionOf(state, state.calendar.season, club.tierId), null);
+  if (!comp || !club.wingId) return null;
+  return safeView(() => engine.standings(state, comp, club.wingId!, content), [] as StandingRow[]).find((r) => r.clubId === club.id) ?? null;
+}
+
+function FixtureHero({ ctx, fixture, engine }: { ctx: ClubContext; fixture: Fixture; engine: GameEngine }) {
+  const { state, content, club, tier } = ctx;
+  const home = fixture.homeClubId === club.id;
+  const other = state.clubs[home ? fixture.awayClubId : fixture.homeClubId]!;
+  const otherRow = rowFor(state, content, engine, other);
+  const ours = recordOf(ctx.standing);
+  const theirs = recordOf(otherRow);
+  const otherTemplate = content.clubs.get(other.id);
+  const venue = fixture.venueId
+    ? format(T.venueNeutral, { venue: content.venues.get(fixture.venueId)?.name ?? fixture.venueId })
+    : home
+      ? format(T.venueHome, { arena: content.clubs.get(club.id)?.arena ?? '', city: content.clubs.get(club.id)?.city ?? '' })
+      : format(T.venueAway, { arena: otherTemplate?.arena ?? '', city: otherTemplate?.city ?? '' });
+  const stage = fixture.stage === 'league' ? T.league : weekName(content, fixture.weekIndex, tier);
+  const upcoming = safeView(() => engine.clubSchedule(state, club.id), [] as Fixture[])
+    .filter((f) => f.weekIndex > fixture.weekIndex)
+    .slice(0, 3);
+
+  return (
+    <Panel
+      hero
+      title={T.nextFixture}
+      icon="swords"
+      subtitle={format(T.fixtureSub, { stage, n: fixture.bestOf })}
+      subtitleTip={format(T.fixtureSubTip, { n: fixture.bestOf, win: Math.ceil(fixture.bestOf / 2) })}
+      body="none"
+      testId="next-fixture"
+      actions={
+        <>
+          <a class="btn btn--sm" href="#/league">
+            <Icon name="eye" />
+            {T.opponent} <kbd>O</kbd>
+          </a>
+          <a class="btn btn--sm" href="#/squad">
+            <Icon name="squad" />
+            {T.lineup} <kbd>L</kbd>
+          </a>
+        </>
+      }
+      footer={
+        upcoming.length > 0 ? (
+          <>
+            <Icon name="fixtures" />
+            <span class="u-truncate">
+              {format(T.then, {
+                list: upcoming
+                  .map((f) => {
+                    const h = f.homeClubId === club.id;
+                    const o = state.clubs[h ? f.awayClubId : f.homeClubId];
+                    const pos = o ? rowFor(state, content, engine, o)?.position : undefined;
+                    return `${weekCode(content, f.weekIndex)} ${h ? T.vs : t('continue.at')} ${o?.name ?? ''}${pos ? ` (${ordinal(pos)})` : ''}`;
+                  })
+                  .join(' · '),
+              })}
+            </span>
+            <a class="l-push u-nowrap" href="#/fixtures">
+              {T.allFixtures}
+            </a>
+          </>
+        ) : undefined
+      }
+    >
+      <div class="fixture">
+        <div class="fixture__side">
+          <Crest primary={club.colors.primary} secondary={club.colors.secondary} code={crestLetters(club)} size="xl" />
+          <div class="fixture__club">
+            <span class="fixture__name">{club.name}</span>
+            <span class="fixture__record" tabIndex={0} {...tipAttrs(ours.tip)}>
+              {ours.text}
+            </span>
+            <FormStrip results={lastFive(state, content, club.id)} label={format(T.formLabel, { list: lastFive(state, content, club.id).map((x) => x.r).join(', ') })} />
+          </div>
+        </div>
+        <div class="fixture__center">
+          <span class="fixture__kind">{weekName(content, fixture.weekIndex, tier)}</span>
+          <span class="fixture__vs">{T.vs}</span>
+          <span class="fixture__venue">{venue}</span>
+        </div>
+        <div class="fixture__side fixture__side--away">
+          <Crest primary={other.colors.primary} secondary={other.colors.secondary} code={crestLetters(other)} size="xl" />
+          <div class="fixture__club">
+            <span class="fixture__name">{other.name}</span>
+            <span class="fixture__record" tabIndex={0} {...tipAttrs(theirs.tip)}>
+              {theirs.text}
+            </span>
+            <FormStrip results={lastFive(state, content, other.id)} label={format(T.formLabel, { list: lastFive(state, content, other.id).map((x) => x.r).join(', ') })} />
+          </div>
+        </div>
+      </div>
+      <div class="panel-section panel__body panel__body--tight">
+        <div class="tile-row home-tiles">
+          <LineupTile ctx={ctx} club={club} label={T.ourLineup} ours />
+          <LineupTile ctx={ctx} club={other} label={T.theirLineup} />
+          <StyleTile ctx={ctx} club={other} />
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+/** The opponent's last played five (D-R), or null before their first match: never their planned lineup. */
+function lineupFighters(state: GameState, club: Club): { f: Fighter; row: 'front' | 'back'; rating: number }[] | null {
+  const played = lastPlayedLineup(state, club.id);
+  if (!played) return null;
+  return played.map((x) => ({ f: state.fighters[x.fighterId]!, row: x.row, rating: x.rating })).filter((x) => !!x.f);
+}
+
+function LineupTile({ ctx, club, label, ours }: { ctx: ClubContext; club: Club; label: string; ours?: boolean }) {
+  const { state, content, engine } = ctx;
+  const played = ours ? null : lineupFighters(state, club);
+  if (!ours && !played) {
+    return (
+      <div class="stat-tile" data-testid="their-lineup">
+        <span class="stat-tile__label">{label}</span>
+        <span class="u-sm u-muted" {...tipAttrs(T.noMatchesYetTip)}>
+          {T.noMatchesYet}
+        </span>
+      </div>
+    );
+  }
+  const list = ours ? club.lineup.fighters.map((e) => ({ f: state.fighters[e.fighterId]!, row: e.row, rating: null as number | null })).filter((x) => !!x.f) : played!;
+  const front = list.filter((x) => x.row === 'front');
+  const back = list.filter((x) => x.row === 'back');
+  const glyph = (x: { f: Fighter }) => {
+    const k = content.classes.require(x.f.classId);
+    const v = fighterViewOf(engine, state, content, x.f.id);
+    const roleName = content.combat.archetypes.find((a) => a.id === k.archetypes[0])?.name ?? '';
+    const cap = club.captainId === x.f.id ? ` · ${t('fighter.captain')}` : '';
+    return <RoleGlyph key={x.f.id} role={rolesOf(k)[0]!} size="lg" tip={`${x.f.name.full} · ${k.name} (${roleName})${v ? ` · ${v.rating}` : ''}${cap}`} />;
+  };
+  // Theirs: the ratings they fielded at; ours: as of now.
+  const ratings = list.map((x) => x.rating ?? fighterViewOf(engine, state, content, x.f.id)?.rating).filter((v): v is number => v !== undefined && v !== null);
+  const mean = ratings.length ? Math.round(ratings.reduce((s, v) => s + v, 0) / ratings.length) : null;
+  const hasHealer = list.some((x) => content.classes.require(x.f.classId).archetypes.includes('healer'));
+  const blockers = ours ? safeView(() => engine.getBlockers(state, content), []).filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')) : [];
+  const injuredReserve = ours ? Object.values(state.fighters).find((f) => f.clubId === club.id && f.injury && f.injury.weeksOut > 0) : undefined;
+  return (
+    <div class="stat-tile" data-testid={ours ? 'our-lineup' : 'their-lineup'}>
+      <span class="stat-tile__label">{label}</span>
+      <span class="l-cluster l-cluster--xs l-cluster--nowrap" aria-label={`${T.front}: ${front.length}. ${T.back}: ${back.length}.`}>
+        <RowMark row="front" />
+        {front.map(glyph)}
+        <span class="home-row-gap" />
+        <RowMark row="back" />
+        {back.map(glyph)}
+      </span>
+      {ours ? (
+        <span class="stat-tile__sub">
+          {blockers.length === 0 ? <span class="u-good">{T.ready}</span> : <span class="u-warn">{T.notReady}</span>}
+          {injuredReserve
+            ? ` · ${format(T.outInjured, { name: injuredReserve.name.full, injury: injuryLabel(injuredReserve.injury!, content).toLowerCase(), weeks: weeksOutText(injuredReserve.injury!) })}`
+            : ''}
+        </span>
+      ) : (
+        <span class="stat-tile__sub" {...tipAttrs(T.theirLineupTip)}>
+          {[hasHealer ? null : T.noHealer, mean !== null ? format(T.meanRating, { n: mean }) : null].filter(Boolean).join(' · ')}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function StyleTile({ ctx, club }: { ctx: ClubContext; club: Club }) {
+  const { state, content, engine } = ctx;
+  const personality = content.aiPersonalities.get(club.aiPersonalityId);
+  // The threat comes from the five they last fielded; before their first match only the style shows.
+  const list = lineupFighters(state, club) ?? [];
+  const best = list
+    .map((x) => ({ x, v: fighterViewOf(engine, state, content, x.f.id) }))
+    .filter((y) => y.v)
+    .sort((a, b) => b.v!.rating - a.v!.rating)[0];
+  const styleWord = club.tacticsStyle.charAt(0).toUpperCase() + club.tacticsStyle.slice(1);
+  return (
+    <div class="stat-tile">
+      <span class="stat-tile__label">{T.theirStyle}</span>
+      <span class="l-cluster l-cluster--xs">
+        <Tag kind="info" tip={T.styleTip}>
+          {styleWord}
+        </Tag>
+        {personality && (
+          <Tag kind="outline" tip={format(T.personalityTip, { text: personality.description })}>
+            {personality.label}
+          </Tag>
+        )}
+      </span>
+      {best && (
+        <span class="stat-tile__sub" {...tipAttrs(T.threatTip)}>
+          {format(T.threat, { name: best.x.f.name.full, klass: content.classes.require(best.x.f.classId).name, rating: best.v!.rating })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ---- Preseason (no fixture this week) ---------------------------------------------------------------
+
+/** What keeps the lineup from being match-ready: places, fitness, captain, presets (null = ready). */
+function lineupReadiness(ctx: ClubContext): { problem: string | null } {
+  const { club, engine, state } = ctx;
+  const entries = club.lineup.fighters;
+  const fit = entries.filter((e) => {
+    const f = state.fighters[e.fighterId];
+    return f && f.clubId === club.id && safeView(() => engine.isFit(f), !(f.injury && f.injury.weeksOut > 0));
+  }).length;
+  if (entries.length < 5) return { problem: format(T.checkLineupPlaces, { n: entries.length }) };
+  if (fit < 5) return { problem: format(T.checkLineupUnfit, { n: 5 - fit }) };
+  if (!club.captainId) return { problem: T.checkLineupCaptain };
+  if (entries.some((e) => !club.lineup.tactics[e.fighterId])) return { problem: T.checkLineupPresets };
+  return { problem: null };
+}
+
+/** Trials Day line (P1): links to the rookies in the Market; the info mark explains the rule. */
+function TrialsCheck({ n }: { n: number }) {
+  return (
+    <li data-state={n > 0 ? 'warn' : undefined} data-testid="check-trials">
+      <span>
+        <a href="#/market?view=rookies">{n === 0 ? T.checkTrialsNone : n === 1 ? T.checkTrials : format(T.checkTrialsMany, { n })}</a>{' '}
+        <span class="check-info" tabIndex={0} role="img" aria-label={`${T.checkTrialsTip} ${TRIALS.explain}`} {...tipAttrs({ title: T.checkTrialsTip, body: TRIALS.explain })}>
+          <Icon name="info" size="sm" />
+        </span>
+      </span>
+    </li>
+  );
+}
+
+function PreseasonHero({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
+  const { state, content, tier, roster } = ctx;
+  // Integrator (WP5): during the season-end step weekIndex is W + 1 (core/model calendar), which has no week def.
+  const week = content.weeks.list.find((w) => w.index === state.calendar.weekIndex) ?? content.weekByIndex(content.weeks.list.length);
+  const over = roster.length - ctx.rosterCap;
+  const ending = roster.filter((f) => contractEnds(f.contract, state.calendar.season).final).length;
+  // Checked from the lineup itself: preseason weeks have no fixture, so there are no lineup blockers to read.
+  const lineup = lineupReadiness(ctx);
+  const lineupOk = lineup.problem === null && store.blockers.value.filter((b) => b.code.startsWith('lineup') || b.code.startsWith('captain')).length === 0;
+  const short = roster.length < 5;
+  // "Skip to Matchweek 1" on quiet preseason weeks before kick-off (not Trials Day, not under Thorough pacing).
+  const quiet =
+    state.calendar.phase === 'preseason' &&
+    week.index > 1 &&
+    week.commit !== 'kick_off' &&
+    settings.value.pacing !== 'thorough' &&
+    store.blockers.value.length === 0 &&
+    needsActionCount(buildDigest(state, content, ctx.club.id, store.blockers.value)) === 0;
+  const bill = ctx.finance?.wageBill ?? ctx.wageBill ?? 0;
+  const budget = ctx.finance?.wageBudgetPerWeek ?? 0;
+  return (
+    <Panel
+      hero
+      title={state.calendar.phase === 'preseason' ? T.preseasonTitle : T.weekChecklistTitle}
+      icon="calendar-check"
+      subtitle={state.calendar.phase === 'season-end' ? T.seasonEndSub : format(T.preseasonSub, { week: weekName(content, week.index, tier) })}
+      testId="preseason-checklist"
+      actions={
+        quiet ? (
+          <button class="btn btn--sm" type="button" data-testid="skip-to-mw1" onClick={() => (skipToKickOffRequest.value += 1)} {...tipAttrs(t('skip.tip'))}>
+            <Icon name="play" />
+            {t('skip.label')}
+          </button>
+        ) : undefined
+      }
+    >
+      <ul class="checklist" role="list">
+        <li data-state={budget > 0 && bill > budget ? 'bad' : undefined}>
+          {format(T.checkBudget, { bill: formatMoney(bill, { perWeek: true }), budget: formatMoney(budget, { perWeek: true }) })}
+        </li>
+        <li data-state={over > 0 || short ? 'bad' : undefined}>
+          {over > 0
+            ? format(T.checkRosterOver, { n: roster.length, cap: ctx.rosterCap, over })
+            : short
+              ? format(T.checkRosterShort, { n: roster.length, cap: ctx.rosterCap, need: 5 - roster.length })
+              : format(T.checkRoster, { n: roster.length, cap: ctx.rosterCap })}
+        </li>
+        {week.index === 1 && state.calendar.phase === 'preseason' && <TrialsCheck n={trialsRookiesOf(state, ctx.club.id).length} />}
+        <li data-state={ending > 0 ? 'warn' : undefined}>{format(T.checkContracts, { n: ending })}</li>
+        <li data-state={lineupOk ? undefined : 'warn'}>{lineupOk ? T.checkLineup : (lineup.problem ?? T.checkLineupMissing)}</li>
+      </ul>
+    </Panel>
+  );
+}
+
+// ---- Digest ------------------------------------------------------------------------------------------------------
+
+const KIND_ICON: Record<DigestKind, IconName> = {
+  medical: 'injury',
+  contract: 'contract',
+  result: 'swords',
+  market: 'market',
+  league: 'league',
+  development: 'level-up',
+};
+
+function inTab(d: DigestItem, tab: DigestTab): boolean {
+  switch (tab) {
+    case 'all':
+      return true;
+    case 'action':
+      return d.needsAction;
+    case 'results':
+      return d.kind === 'result';
+    case 'squad':
+      return d.kind === 'medical' || d.kind === 'contract' || d.kind === 'development';
+    case 'market':
+      return d.kind === 'market';
+  }
+}
+
+function DigestPanel({ ctx, store }: { ctx: ClubContext; store: AppStore }) {
+  const { state, content, club } = ctx;
+  // Advice ranks after what needs action and before routine news.
+  const base = buildDigest(state, content, club.id, store.blockers.value);
+  const items = withAwaySummary([...base.filter((d) => d.needsAction), ...homeAdvice(ctx), ...base.filter((d) => !d.needsAction)], ctx, store);
+  const tab = digestTab.value;
+  const shown = items.filter((d) => inTab(d, tab));
+  const action = needsActionCount(items);
+  const isDone = (d: DigestItem) => d.newsIds.length > 0 && !d.unread;
+  // The read flag is game state (news.setRead), so Undo is a real command and survives a save.
+  const setRead = (newsIds: DigestItem['newsIds'], title: string, sub?: string) => {
+    if (newsIds.length === 0) return;
+    const res = store.dispatch({ type: 'news.setRead', newsIds: [...newsIds], read: true });
+    if (!res.ok) return;
+    showToast({ title, sub, kind: 'good', undo: () => void store.dispatch({ type: 'news.setRead', newsIds: [...newsIds], read: false }) });
+  };
+  const markDone = (d: DigestItem) => setRead(d.newsIds, T.markedDone, d.title);
+  const unreadIds = items.filter((d) => d.unread).flatMap((d) => d.newsIds);
+  return (
+    <Panel
+      title={T.digest}
+      icon="mail"
+      subtitle={format(T.digestSub, { n: items.length, a: action })}
+      subtitleTip={T.digestBudgetTip}
+      body="none"
+      testId="digest"
+      actions={
+        <button
+          class="btn btn--sm btn--ghost"
+          type="button"
+          aria-disabled={unreadIds.length === 0 ? 'true' : undefined}
+          onClick={() => setRead(unreadIds, format(T.markedAll, { n: items.filter((d) => d.unread).length }))}
+        >
+          {T.markAllRead}
+        </button>
+      }
+    >
+      <Tabs<DigestTab>
+        idPrefix="digest"
+        label={T.digestFilter}
+        inset
+        selected={tab}
+        onSelect={(id) => (digestTab.value = id)}
+        tabs={[
+          { id: 'all', label: T.tabAll, count: items.length },
+          { id: 'action', label: T.tabAction, count: action },
+          { id: 'results', label: T.tabResults },
+          { id: 'squad', label: T.tabSquad },
+          { id: 'market', label: T.tabMarket },
+        ]}
+      />
+      <div id={`digest-panel-${tab}`} role="tabpanel" aria-labelledby={`digest-tab-${tab}`}>
+        {shown.length === 0 ? (
+          <Empty compact icon="check" title={items.length === 0 ? T.emptyDigest : T.emptyFilter} text={items.length === 0 ? T.emptyDigestText : undefined} />
+        ) : (
+          <ul class="digest" role="list">
+            {shown.map((d) => (
+              <li key={d.id} class={`digest__item${isDone(d) ? ' is-done' : ''}`} data-kind={d.kind} data-unread={d.unread && !isDone(d) ? '' : undefined}>
+                <span class="digest__icon">
+                  <Icon name={KIND_ICON[d.kind]} />
+                </span>
+                <div class="digest__main">
+                  <div class="digest__title">
+                    <span {...tipAttrs(d.title)}>{d.title}</span>
+                    {d.needsAction && <Tag kind={d.kind === 'medical' ? 'bad' : 'warn'}>{T.needsAction}</Tag>}
+                  </div>
+                  {d.text && (
+                    <div class="digest__text" {...tipAttrs(d.text)}>
+                      {d.text}
+                    </div>
+                  )}
+                </div>
+                <div class="digest__actions">
+                  {d.action && (
+                    <a class={`btn btn--sm${d.needsAction ? '' : ' btn--ghost'}`} href={d.action.href}>
+                      {d.action.label}
+                    </a>
+                  )}
+                  {!d.needsAction && d.newsIds.length > 0 && !isDone(d) && (
+                    <button class="btn btn--sm btn--ghost btn--icon" type="button" aria-label={T.markDone} {...tipAttrs(T.markDone)} onClick={() => markDone(d)}>
+                      <Icon name="check" />
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/** 02 §7 "since you were away": after a load, the first item summarises the last results, standing, decisions and money. */
+/**
+ * Advice the digest adds on top of core news (it never blocks Continue): a much stronger opponent this
+ * week, and free roster places with wage room to fill them. "Nothing needs you" must not hide either.
+ */
+export function homeAdvice(ctx: ClubContext): DigestItem[] {
+  const { state, content, engine, club } = ctx;
+  if (state.calendar.phase === 'season-end') return [];
+  const out: DigestItem[] = [];
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const ratingOf = (id: FighterId) => fighterViewOf(engine, state, content, id)?.rating;
+  if (ctx.fixture) {
+    const themId = ctx.fixture.homeClubId === club.id ? ctx.fixture.awayClubId : ctx.fixture.homeClubId;
+    const them = state.clubs[themId];
+    const ours = mean(club.lineup.fighters.map((e) => ratingOf(e.fighterId)).filter((v): v is number => v !== undefined));
+    // Their last played five (D-R); before their first match, their best five by rating (club strength is public).
+    const played = lastPlayedLineup(state, themId);
+    const theirs = played
+      ? mean(played.map((x) => x.rating))
+      : mean(
+          Object.values(state.fighters)
+            .filter((f) => f.clubId === themId && f.status === 'active')
+            .map((f) => ratingOf(f.id))
+            .filter((v): v is number => v !== undefined)
+            .sort((a, b) => b - a)
+            .slice(0, 5),
+        );
+    if (them && ours !== null && theirs !== null && theirs - ours > OUTCLASSED_GAP) {
+      out.push({
+        id: 'advice-outclassed',
+        kind: 'development',
+        title: format(played ? T.outclassedTitle : T.outclassedTitleBest, {
+          us: ours.toFixed(0),
+          club: them.shortName,
+          // English possessive: "Netcasters’", "Kindler’s".
+          clubs: /s$/i.test(them.shortName) ? `${them.shortName}’` : `${them.shortName}’s`,
+          them: theirs.toFixed(0),
+        }),
+        text: T.outclassedText,
+        needsAction: false,
+        unread: true,
+        action: { label: T.market, href: '#/market' },
+        newsIds: [],
+      });
+    }
+  }
+  const room = ctx.finance ? ctx.finance.wageBudgetPerWeek - ctx.finance.wageBill - ctx.finance.pendingWages : 0;
+  const pendingOffers = state.market.offers.filter((o) => o.clubId === club.id).length;
+  const places = ctx.rosterCap - ctx.roster.length - pendingOffers;
+  const minWage = content.tierProfile(ctx.tier.level).tierMinWage;
+  if (places > 0 && room >= minWage) {
+    out.push({
+      id: 'advice-room',
+      kind: 'market',
+      title: format(T.roomTitle, { room: formatMoney(room, { perWeek: true }), n: places }),
+      text: T.roomText,
+      needsAction: false,
+      unread: true,
+      action: { label: T.market, href: '#/market' },
+      newsIds: [],
+    });
+  }
+  return out;
+}
+
+function withAwaySummary(items: DigestItem[], ctx: ClubContext, store: AppStore): DigestItem[] {
+  const justLoaded = store.dirty?.value === false && store.lastWeekReport.value === null && ctx.state.calendar.weekIndex > 1;
+  if (!justLoaded) return items;
+  const results = lastFive(ctx.state, ctx.content, ctx.club.id).slice(-3).map((x) => x.r).join(' ');
+  const summary: DigestItem = {
+    id: 'away-summary',
+    kind: 'league',
+    title: T.awayTitle,
+    text: format(T.awayText, {
+      results: results || '—',
+      standing: ctx.standing && ctx.wing ? `${ordinal(ctx.standing.position)} in the ${ctx.wing.name}` : '—',
+      pending: items.filter((d) => d.needsAction).length,
+      balance: ctx.finance ? formatMoney(ctx.finance.balance) : '—',
+    }),
+    needsAction: false,
+    unread: true,
+    newsIds: [],
+  };
+  return [summary, ...items].slice(0, 6);
+}
+
+// ---- Side column -------------------------------------------------------------------------------------------------
+
+function ClubPanel({ ctx }: { ctx: ClubContext }) {
+  const { state, finance, roster, tier } = ctx;
+  const lastWeek = state.calendar.weekIndex - 1;
+  const lastWeekNet = state.ledger.entries.filter((e) => e.clubId === ctx.club.id && e.weekIndex === lastWeek).reduce((s, e) => s + e.amount, 0);
+  const bill = finance?.wageBill ?? ctx.wageBill ?? 0;
+  const budget = finance?.wageBudgetPerWeek ?? 0;
+  const pending = finance?.pendingWages ?? 0;
+  const room = budget - bill - pending;
+  const share = budget > 0 ? bill / budget : 0;
+  const free = ctx.rosterCap - roster.length;
+  const thisWeek = finance?.weeklyProjection?.[0] ?? null;
+  return (
+    <Panel
+      title={T.club}
+      icon="coins"
+      testId="club-panel"
+      actions={
+        <a class="btn btn--sm btn--ghost" href="#/finances">
+          {T.finances} <kbd>6</kbd>
+        </a>
+      }
+      bodyClass="l-stack"
+    >
+      <div class="tile-row" style={{ '--tiles': 2 }}>
+        <div class="stat-tile" tabIndex={0} {...tipAttrs({ kicker: T.balance, title: finance ? formatMoney(finance.balance) : '—', body: t('topbar.balanceTip'), meta: t('topbar.balanceMeta') })}>
+          <span class="stat-tile__label">{T.balance}</span>
+          <span class="stat-tile__value">
+            {finance ? formatInt(finance.balance) : '—'} <small>{currencyUnit()}</small>
+          </span>
+          <span class="stat-tile__sub">
+            {lastWeekNet !== 0 ? (
+              <>
+                <Delta value={lastWeekNet} format={(n) => formatMoney(n)} /> {T.lastWeek}
+              </>
+            ) : (
+              `${formatMoney(0)} ${T.lastWeek}`
+            )}
+          </span>
+        </div>
+        {thisWeek ? (
+          // The mockup's "This week": what this week's processing is expected to book (core weeklyProjection).
+          <div
+            class="stat-tile"
+            tabIndex={0}
+            {...tipAttrs({
+              kicker: T.thisWeek,
+              title: formatMoney(thisWeek.net, { signed: true }),
+              rows: [
+                { label: T.thisWeekIncome, value: formatMoney(thisWeek.income) },
+                { label: T.thisWeekCosts, value: formatMoney(-thisWeek.costs) },
+                { label: T.thisWeekAfter, value: formatMoney(thisWeek.balance), total: true },
+              ],
+              meta: format(T.thisWeekSeasonEnd, { balance: formatMoney(finance!.projectedSeasonEndBalance) }),
+            })}
+          >
+            <span class="stat-tile__label">{T.thisWeek}</span>
+            <span class={thisWeek.net < 0 ? 'stat-tile__value u-bad' : 'stat-tile__value'}>
+              {formatSigned(thisWeek.net)} <small>{currencyUnit()}</small>
+            </span>
+            <span class="stat-tile__sub">{format(T.thisWeekSub, { balance: formatInt(finance!.projectedSeasonEndBalance) })}</span>
+          </div>
+        ) : (
+          <div class="stat-tile" tabIndex={0} {...tipAttrs(T.projectedTip)}>
+            <span class="stat-tile__label">{T.projected}</span>
+            <span class="stat-tile__value">
+              {finance ? formatInt(finance.projectedSeasonEndBalance) : '—'} <small>{currencyUnit()}</small>
+            </span>
+            <span class="stat-tile__sub">{T.projectedSub}</span>
+          </div>
+        )}
+      </div>
+      <div class="l-stack l-stack--xs" tabIndex={0} {...tipAttrs(T.wageRoomTip)}>
+        <div class="l-row u-sm">
+          <span class="u-muted">{T.wageBill}</span>
+          <span class="l-push u-num">
+            <strong>{formatInt(bill)}</strong> <span class="u-muted">/ {formatMoney(budget)} {T.perWeek}</span>
+          </span>
+        </div>
+        <Meter value={share} mark={1} state={share > 1 ? 'bad' : share > 0.9 ? 'warn' : 'good'} />
+        <div class="u-xs u-faint">{format(T.wageRoom, { pct: formatPercent(share), room: formatMoney(room, { perWeek: true }) })}</div>
+      </div>
+      <div class="l-row u-sm" tabIndex={0} {...tipAttrs(format(T.rosterTip, { n: roster.length, cap: ctx.rosterCap, tier: tier.name }))}>
+        <span class="u-muted">{T.roster}</span>
+        <CapMeter used={roster.length} cap={ctx.rosterCap} />
+        <span class="l-push u-num">
+          <strong>{roster.length}</strong> <span class="u-muted">/ {ctx.rosterCap} · {format(T.rosterFree, { n: Math.max(0, free) })}</span>
+        </span>
+      </div>
+    </Panel>
+  );
+}
+
+function currencyUnit(): string {
+  return formatMoney(0).replace(/^0\s*/, '');
+}
+
+function AvailabilityPanel({ ctx }: { ctx: ClubContext }) {
+  const { state, content, roster, engine } = ctx;
+  const out = (f: Fighter) => !!f.injury && f.injury.weeksOut > 0;
+  const injured = roster.filter(out);
+  // M1.1: who is fit and fresh. Tired and Spent fighters start rounds with the Freshness penalty, so they are listed too.
+  const freshOf = new Map(roster.map((f) => [f.id, freshInfo(engine, state, content, f)] as const));
+  const worn = (f: Fighter) => !out(f) && (freshOf.get(f.id)?.label === 'tired' || freshOf.get(f.id)?.label === 'spent');
+  const tired = roster.filter(worn);
+  const ending = roster.filter((f) => !out(f) && !worn(f) && contractEnds(f.contract, state.calendar.season).final);
+  const list = [...injured, ...tired, ...ending];
+  const role = (f: Fighter) => rolesOf(content.classes.require(f.classId))[0];
+  return (
+    <Panel
+      title={T.availability}
+      icon="injury"
+      subtitle={format(tired.length ? T.availabilitySubTired : T.availabilitySub, { fit: roster.length - injured.length, inj: injured.length, tired: tired.length })}
+      subtitleTip={T.availabilityTip}
+      body="flush"
+      testId="availability"
+    >
+      {list.length === 0 ? (
+        roster.length === 0 ? <Empty compact icon="squad" title={T.noRoster} /> : <Empty compact icon="check" title={T.allFit} />
+      ) : (
+        <table class="data-table data-table--compact" aria-label={T.availability}>
+          <tbody>
+            {list.map((f) => (
+              <tr key={f.id}>
+                <td class="cell-fill">
+                  {/* The status sits under the name so the side column never truncates both. */}
+                  <FighterName
+                    name={f.name.full}
+                    href={`#/fighter/${f.id}`}
+                    role={role(f)}
+                    race={f.raceId}
+                    injured={out(f)}
+                    sub={
+                      f.injury && out(f) ? (
+                        <span class="u-bad" {...tipAttrs(injuryTip(f.injury, content))}>
+                          <Icon name="injury" size="sm" /> {injuryLabel(f.injury, content)}
+                        </span>
+                      ) : (
+                        <>
+                          {worn(f) && (
+                            <span class={freshOf.get(f.id)?.label === 'spent' ? 'u-bad' : 'u-warn'} {...tipAttrs(freshTip(freshOf.get(f.id)!, content))}>
+                              <Icon name="warning" size="sm" /> {format(T.tiredSub, { label: freshOf.get(f.id)!.labelText })}
+                            </span>
+                          )}
+                          {worn(f) && contractEnds(f.contract, state.calendar.season).final && ' · '}
+                          {contractEnds(f.contract, state.calendar.season).final && (
+                            <span class="u-warn" {...tipAttrs(T.expiresTip)}>
+                              <Icon name="contract" size="sm" /> {format(T.expires, { season: f.contract?.endSeason ?? state.calendar.season })}
+                            </span>
+                          )}
+                        </>
+                      )
+                    }
+                  />
+                </td>
+                <td class="home-fresh" data-testid="availability-fresh">
+                  {out(f) ? <span class="u-faint">—</span> : <FreshMeter info={freshOf.get(f.id)!} content={content} compact />}
+                </td>
+                <td class={`cell-num${out(f) ? '' : ' u-muted'}`}>
+                  {f.injury && out(f) ? (
+                    <span {...tipAttrs(isCareerEnding(f.injury) ? injuryTip(f.injury, content) : format(T.backFor, { weeks: weeksOutText(f.injury) }))}>{weeksOutText(f.injury)}</span>
+                  ) : (
+                    <span {...tipAttrs(fighterViewOf(engine, state, content, f.id) ? `Wage ${formatMoney(f.contract?.wagePerWeek ?? 0, { perWeek: true })}` : null)}>
+                      {formatMoney(f.contract?.wagePerWeek ?? 0)}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Panel>
+  );
+}
+
+function WingTable({ ctx }: { ctx: ClubContext }) {
+  const { state, content, club, tier, wingRows, wing } = ctx;
+  const qualifiers = content.leagues.tournament.qualifiersPerWing;
+  const relegate = content.leagues.promotionRelegation.relegatePerWing;
+  const size = wingRows.length;
+  const nextId = ctx.fixture ? (ctx.fixture.homeClubId === club.id ? ctx.fixture.awayClubId : ctx.fixture.homeClubId) : null;
+  const points = content.leagues.standings.pointsByResult as Record<string, number>;
+  const ptsTip = `Points: ${Object.entries(points)
+    .map(([k, v]) => `${v} for ${k.replace('-', '–')}`)
+    .join(', ')}`;
+  const columns: Column<StandingRow>[] = [
+    { id: 'pos', header: '#', headerLabel: T.colPos, class: 'cell-tight', cell: (r) => <span {...tipAttrs(format(T.posTip, { pos: ordinal(r.position), wing: wing?.name ?? tier.name }))}>{r.position}</span> },
+    {
+      id: 'club',
+      header: T.colClub,
+      fill: true,
+      cell: (r) => {
+        const c = state.clubs[r.clubId];
+        return (
+          <span class="entity">
+            {c && <Crest primary={c.colors.primary} secondary={c.colors.secondary} />}
+            <span class="entity__name" {...tipAttrs(c?.name ?? r.clubId)}>
+              {c?.name ?? r.clubId}
+            </span>
+            {r.clubId === nextId && <Tag kind="accent">{T.next}</Tag>}
+          </span>
+        );
+      },
+    },
+    { id: 'p', header: T.colP, headerTip: T.colPTip, align: 'num', cell: (r) => <span {...tipAttrs(format(T.recordTip, { p: r.played, w: r.matchWins, l: r.matchLosses, rw: r.roundsWon, rl: r.roundsLost }))}>{r.played}</span> },
+    {
+      id: 'rd',
+      header: T.colRD,
+      headerTip: T.colRDTip,
+      align: 'num',
+      cell: (r) => <span {...tipAttrs(`Rounds ${r.roundsWon} won, ${r.roundsLost} lost`)}>{formatSigned(r.roundsWon - r.roundsLost)}</span>,
+    },
+    { id: 'pts', header: T.colPts, headerTip: ptsTip, align: 'num', class: 'cell-strong', cell: (r) => <span {...tipAttrs(ptsTip)}>{r.points}</span> },
+  ];
+  return (
+    <Panel
+      title={wing?.name ?? tier.name}
+      icon="league"
+      body="flush"
+      testId="wing-table"
+      actions={
+        <a class="btn btn--sm btn--ghost" href="#/league">
+          {T.fullTable} <kbd>4</kbd>
+        </a>
+      }
+      footer={
+        size > 0 ? (
+          <>
+            <span class="legend__item">
+              <span class="legend__swatch" style={{ '--swatch': 'var(--c-accent)' }} />
+              {format(T.tableTop, { n: qualifiers, tournament: tier.tournamentName })}
+            </span>
+            {tier.level < content.leagues.tiers.length && (
+              <span class="legend__item">
+                <span class="legend__swatch legend__swatch--hatch" />
+                {format(T.tableRelegated, { n: size })}
+              </span>
+            )}
+          </>
+        ) : undefined
+      }
+    >
+      {size === 0 ? (
+        <Empty compact icon="league" title={T.noTable} />
+      ) : (
+        <DataTable<StandingRow>
+          label={wing?.name ?? tier.name}
+          variant={['compact']}
+          columns={columns}
+          rows={wingRows}
+          rowKey={(r) => r.clubId}
+          rowClass={(r) =>
+            [r.clubId === club.id ? 'is-us' : '', r.position === qualifiers ? 'is-cut' : '', r.position === size - relegate && tier.level < content.leagues.tiers.length ? 'is-cut--bad' : '']
+              .filter(Boolean)
+              .join(' ') || undefined
+          }
+          rowAttrs={(r) => (r.position <= qualifiers ? { 'data-zone': 'qualify' } : r.position > size - relegate && tier.level < content.leagues.tiers.length ? { 'data-zone': 'relegate' } : {})}
+          onOpen={() => navigate('#/league')}
+        />
+      )}
+    </Panel>
+  );
+}
+

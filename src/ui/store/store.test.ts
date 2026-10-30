@@ -1,0 +1,542 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import type { ClubId, GameState, SaveError } from '../../core/model';
+import { NotImplementedError, engineError, err } from '../../core/util';
+import { createDevEngine } from '../debug/dev-engine';
+import { createTestStore } from '../debug/test-store';
+import { coreEngine, type GameEngine } from './engine';
+import { blockerText, distinctBlockers, errorText } from './messages';
+import { resetToasts, toasts } from '../components/Toast';
+import { AUTOSAVE_ROUND_SLOT, AUTOSAVE_SLOTS, MATCH_PAUSED, MAX_IMPORT_BYTES, isAutosaveSlot, slotName } from './create-store';
+import { buildDigest, newsToDigest } from './digest';
+import { DEFAULT_SETTINGS, updateSettings } from './settings';
+import { needsActionNow } from './digest-flags';
+import type { NewsItem } from '../../core/model';
+
+function playerClub(state: GameState) {
+  return state.clubs[state.playerClubId as ClubId]!;
+}
+
+describe('store: content and new game', () => {
+  it('loads content and starts a career whose club is chosen by command', async () => {
+    const { store } = createTestStore({ world: 'none' });
+    expect(store.content.value?.ref.id).toBe('fixture');
+    expect(store.game.value).toBeNull();
+    const busySeen: boolean[] = [];
+    const pending = store.newGame({ seed: 'abc' });
+    busySeen.push(store.busy.value);
+    const result = await pending;
+    expect(result.ok).toBe(true);
+    expect(busySeen).toEqual([true]);
+    expect(store.busy.value).toBe(false);
+    expect(store.game.value?.rng.root).toBe('abc');
+    expect(store.playerClubId.value).toBeNull();
+    expect(store.blockers.value.map((b) => b.code)).toContain('club.not-chosen');
+    const clubId = store.game.value!.clubs[Object.keys(store.game.value!.clubs)[0] as ClubId]!.id;
+    expect(store.dispatch({ type: 'club.choose', clubId }).ok).toBe(true);
+    expect(store.playerClubId.value).toBe(clubId);
+  });
+
+  it('reports content problems instead of throwing', () => {
+    const { store } = createTestStore({ world: 'none' });
+    const res = store.initContent('nope-theme');
+    expect(res.ok).toBe(false);
+    expect(store.contentIssues.value.length).toBeGreaterThan(0);
+  });
+
+  it('rejects an invalid custom seed', async () => {
+    const { store } = createTestStore({ world: 'none' });
+    const res = await store.newGame({ seed: 'a\u001fb' });
+    expect(res.ok).toBe(false);
+    expect(store.lastError.value?.code).toBe('seed.invalid');
+  });
+});
+
+describe('store: dispatch', () => {
+  it('commits a valid command, logs it and freezes the state in dev', () => {
+    const { store } = createTestStore();
+    const before = store.game.value!;
+    const club = playerClub(before);
+    const fighterId = club.lineup.fighters[0]!.fighterId;
+    const res = store.dispatch({ type: 'training.set', clubId: club.id, fighterId, emphasis: 'body' });
+    expect(res.ok).toBe(true);
+    expect(store.game.value).not.toBe(before);
+    expect(store.game.value!.fighters[fighterId]!.trainingEmphasis).toBe('body');
+    expect(before.fighters[fighterId]!.trainingEmphasis).toBe('balanced');
+    expect(Object.isFrozen(store.game.value)).toBe(true);
+    expect(store.commandLog.value).toHaveLength(1);
+    expect(store.recentCommands.value[0]!.command.type).toBe('training.set');
+    expect(store.dirty.value).toBe(true);
+  });
+
+  it('keeps the state and sets lastError when a command fails', () => {
+    const { store } = createTestStore();
+    const before = store.game.value!;
+    const club = playerClub(before);
+    const id = club.lineup.fighters[0]!.fighterId;
+    const res = store.dispatch({ type: 'captaincy.set', clubId: club.id, captainId: id, viceCaptainId: id });
+    expect(res.ok).toBe(false);
+    expect(store.game.value).toBe(before);
+    expect(store.lastError.value?.code).toBe('captaincy.same');
+  });
+
+  it('maps a core stub to engine.not-implemented with readable text', () => {
+    const engine: GameEngine = {
+      ...createDevEngine(),
+      applyCommand: () => {
+        throw new NotImplementedError('game.applyCommand');
+      },
+    };
+    const { store } = createTestStore({ engine });
+    const club = playerClub(store.game.value!);
+    const res = store.dispatch({ type: 'shortlist.toggle', clubId: club.id, fighterId: club.lineup.fighters[0]!.fighterId });
+    expect(res.ok).toBe(false);
+    expect(store.lastError.value?.code).toBe('engine.not-implemented');
+    expect(errorText(store.lastError.value!)).toContain('game.applyCommand');
+  });
+
+  it('turns an unexpected crash into engine.crash', () => {
+    const engine: GameEngine = {
+      ...createDevEngine(),
+      applyCommand: () => {
+        throw new Error('boom');
+      },
+    };
+    const { store } = createTestStore({ engine });
+    const club = playerClub(store.game.value!);
+    store.dispatch({ type: 'shortlist.toggle', clubId: club.id, fighterId: club.lineup.fighters[0]!.fighterId });
+    expect(store.lastError.value).toMatchObject({ code: 'engine.crash', message: 'boom' });
+  });
+});
+
+describe('store: advance', () => {
+  it('guards against a double advance', async () => {
+    const { store } = createTestStore();
+    const a = store.advance();
+    const b = await store.advance();
+    expect(b.ok).toBe(false);
+    if (!b.ok) expect(b.error.code).toBe('engine.busy');
+    const ra = await a;
+    expect(ra.ok).toBe(true);
+    expect(store.lastWeekReport.value?.weekIndex).toBe(11);
+    expect(store.game.value!.calendar.weekIndex).toBe(12);
+  });
+
+  it('does not commit when the engine refuses, and maps the error', async () => {
+    const engine: GameEngine = { ...createDevEngine(), advanceWeek: () => err(engineError('lineup.incomplete', 'no')), advance: () => err(engineError('lineup.incomplete', 'no')) };
+    const { store } = createTestStore({ engine });
+    const before = store.game.value;
+    const res = await store.advance();
+    expect(res.ok).toBe(false);
+    expect(store.game.value).toBe(before);
+    expect(store.busy.value).toBe(false);
+    expect(store.lastError.value?.code).toBe('lineup.incomplete');
+  });
+
+  it('autosaves after every advance, rotating over three slots (oldest overwritten)', async () => {
+    const { store, saves, clock } = createTestStore();
+    for (let i = 0; i < 4; i++) {
+      clock.advance(60_000);
+      // Integrator (WP5): with the real lifecycle an injury can block Continue; auto-pick like a player would.
+      if (store.blockers.value.length > 0) store.dispatch(coreEngine.suggestLineup(store.game.value!, store.playerClubId.value!, store.content.value!));
+      const r = await store.advance();
+      expect(r.ok).toBe(true);
+    }
+    const metas = await saves.list();
+    expect(metas.map((m) => m.slotId).sort()).toEqual([...AUTOSAVE_SLOTS]);
+    expect(metas.every((m) => m.kind === 'auto')).toBe(true);
+    // The 4th advance overwrote auto-1 (the oldest): it now holds the newest week.
+    const auto1 = metas.find((m) => m.slotId === 'auto-1')!;
+    expect(auto1.weekIndex).toBe(15);
+    expect(Math.max(...metas.map((m) => m.weekIndex))).toBe(15);
+    // Four real week processings: ~2 s alone, slower while the core suites run in parallel.
+  }, 20_000);
+});
+
+describe('store: mid-match autosave (auto-round) and the weekly rotation', () => {
+  /** Advance until the match week is done; every pause on the way is returned (state after each round). */
+  async function playMatchWeek(store: ReturnType<typeof createTestStore>['store'], clock: ReturnType<typeof createTestStore>['clock']) {
+    const pauses: GameState[] = [];
+    for (let i = 0; i < 6; i++) {
+      clock.advance(1000);
+      const r = await store.advance();
+      if (r.ok) return pauses;
+      expect(r.error.code).toBe(MATCH_PAUSED);
+      pauses.push(store.game.value!);
+    }
+    throw new Error('the match never finished');
+  }
+
+  it('a paused match writes only auto-round, overwritten after every round; auto-1..3 rotate when the week is done', async () => {
+    const { store, saves, clock } = createTestStore({ world: 'dev', weekIndex: 11, pauseBetweenRounds: 'always' });
+    clock.advance(1000);
+    const first = await store.advance();
+    expect(first.ok).toBe(false);
+    if (first.ok) return;
+    expect(first.error.code).toBe(MATCH_PAUSED);
+    let metas = await saves.list();
+    // One round played: only the mid-match slot exists, and no weekly slot was used up.
+    expect(metas.map((m) => m.slotId)).toEqual([AUTOSAVE_ROUND_SLOT]);
+    expect(metas[0]).toMatchObject({ kind: 'auto' });
+    expect(metas[0]!.label).toMatch(/after round 1$/);
+    const savedAtRound1 = metas[0]!.savedAt;
+    // The rest of the match: the weekly slots stay out of it until the week is processed.
+    const more = await playMatchWeek(store, clock);
+    metas = await saves.list();
+    const slots = metas.map((m) => m.slotId).sort();
+    expect(slots).toEqual(['auto-1', AUTOSAVE_ROUND_SLOT]);
+    // A second pause overwrote the round slot (its time moved on); the weekly slot holds the finished week.
+    if (more.length > 0) expect(metas.find((m) => m.slotId === AUTOSAVE_ROUND_SLOT)!.savedAt > savedAtRound1).toBe(true);
+    expect(metas.find((m) => m.slotId === 'auto-1')!.weekIndex).toBe(12);
+    expect(store.game.value!.liveMatch).toBeNull();
+  }, 30_000);
+
+  it('three more matches keep the previous three weeks in auto-1..3 (a bad week can be rolled back)', async () => {
+    const { store, saves, clock } = createTestStore({ world: 'dev', weekIndex: 11, pauseBetweenRounds: 'always' });
+    const weeks: number[] = [];
+    for (let w = 0; w < 4; w++) {
+      if (store.blockers.value.length > 0) store.dispatch(coreEngine.suggestLineup(store.game.value!, store.playerClubId.value!, store.content.value!));
+      await playMatchWeek(store, clock);
+      weeks.push(store.game.value!.calendar.weekIndex);
+    }
+    const metas = await saves.list();
+    const weekly = metas.filter((m) => (AUTOSAVE_SLOTS as readonly string[]).includes(m.slotId));
+    expect(weekly).toHaveLength(3);
+    // Newest three week boundaries; the first one was overwritten, not a round of the last match.
+    expect(weekly.map((m) => m.weekIndex).sort((a, b) => a - b)).toEqual(weeks.slice(-3));
+    expect(metas.some((m) => m.slotId === AUTOSAVE_ROUND_SLOT)).toBe(true);
+    expect(metas.filter((m) => isAutosaveSlot(m.slotId))).toHaveLength(4);
+  }, 60_000);
+
+  it('quitting mid-match and loading the round slot resumes the same match without rerolling a round', async () => {
+    const { store, saves, clock } = createTestStore({ world: 'dev', weekIndex: 11, pauseBetweenRounds: 'always' });
+    clock.advance(1000);
+    const first = await store.advance();
+    expect(first.ok).toBe(false);
+    const paused = store.game.value!;
+    const live = structuredClone(paused.liveMatch)!;
+    expect(live.rounds.length).toBe(1);
+    // The newest save is the one Continue loads from the title screen.
+    const newest = (await store.listSaves())[0]!;
+    expect(newest.slotId).toBe(AUTOSAVE_ROUND_SLOT);
+    // The player continues: the match is played out.
+    const continued = await playMatchWeek(store, clock);
+    void continued;
+    const fixtureId = live.fixtureId;
+    const result = structuredClone(store.game.value!.results[fixtureId]!);
+    // Quit and come back: load the round slot, play on. The same rounds, the same result.
+    const loaded = await store.load(newest.slotId);
+    expect(loaded.ok).toBe(true);
+    expect(store.game.value!.liveMatch).toEqual(live);
+    expect(store.game.value!.results[fixtureId]).toBeUndefined();
+    await playMatchWeek(store, clock);
+    expect(store.game.value!.results[fixtureId]).toEqual(result);
+    void saves;
+  }, 60_000);
+
+  it('names the slots for players and treats auto-round as an autosave, not a manual slot', () => {
+    expect(slotName(AUTOSAVE_ROUND_SLOT)).toBe('mid-match autosave');
+    expect(slotName('auto-2')).toBe('autosave 2');
+    expect(isAutosaveSlot(AUTOSAVE_ROUND_SLOT)).toBe(true);
+    expect(isAutosaveSlot('manual-1')).toBe(false);
+    expect((AUTOSAVE_SLOTS as readonly string[]).includes(AUTOSAVE_ROUND_SLOT)).toBe(false);
+  });
+});
+
+describe('store: the Autosave setting', () => {
+  afterEach(() => updateSettings({ autosave: DEFAULT_SETTINGS.autosave }));
+
+  it('off: a finished week writes no weekly slot; on again: it rotates as before', async () => {
+    const { store, saves, clock } = createTestStore({ world: 'dev', weekIndex: 11 });
+    updateSettings({ autosave: false });
+    clock.advance(1000);
+    expect((await store.advance()).ok).toBe(true);
+    expect(await saves.list()).toEqual([]);
+    updateSettings({ autosave: true });
+    if (store.blockers.value.length > 0) store.dispatch(coreEngine.suggestLineup(store.game.value!, store.playerClubId.value!, store.content.value!));
+    clock.advance(1000);
+    expect((await store.advance()).ok).toBe(true);
+    expect((await saves.list()).map((m) => m.slotId)).toEqual(['auto-1']);
+  }, 30_000);
+
+  it('off: the mid-match safety save (auto-round) still runs after every round, so a quit cannot replay a result', async () => {
+    const { store, saves, clock } = createTestStore({ world: 'dev', weekIndex: 11, pauseBetweenRounds: 'always' });
+    updateSettings({ autosave: false });
+    clock.advance(1000);
+    const first = await store.advance();
+    expect(first.ok).toBe(false);
+    if (first.ok) return;
+    expect(first.error.code).toBe(MATCH_PAUSED);
+    const live = structuredClone(store.game.value!.liveMatch)!;
+    let metas = await saves.list();
+    expect(metas.map((m) => m.slotId)).toEqual([AUTOSAVE_ROUND_SLOT]);
+    expect(metas[0]!.label).toMatch(/after round 1$/);
+    // The rest of the match, then the week: still no weekly slot, and the round slot holds the last pause.
+    for (let i = 0; i < 6; i++) {
+      clock.advance(1000);
+      const r = await store.advance();
+      if (r.ok) break;
+      expect(r.error.code).toBe(MATCH_PAUSED);
+      metas = await saves.list();
+      expect(metas.map((m) => m.slotId)).toEqual([AUTOSAVE_ROUND_SLOT]);
+    }
+    expect(store.game.value!.liveMatch).toBeNull();
+    expect((await saves.list()).filter((m) => (AUTOSAVE_SLOTS as readonly string[]).includes(m.slotId))).toEqual([]);
+    // The round slot resumes the match where it waited (the same rounds already played).
+    const loaded = await store.load(AUTOSAVE_ROUND_SLOT);
+    expect(loaded.ok).toBe(true);
+    expect(store.game.value!.liveMatch).not.toBeNull();
+    expect(store.game.value!.liveMatch!.fixtureId).toBe(live.fixtureId);
+    expect(store.game.value!.liveMatch!.rounds.slice(0, live.rounds.length)).toEqual(live.rounds);
+  }, 60_000);
+});
+
+describe('store: saves', () => {
+  it('saves, loads back the exact state and restores play time', async () => {
+    const { store, clock } = createTestStore();
+    clock.advance(90_000);
+    const saved = await store.save('manual-1', 'Test slot');
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.value).toMatchObject({ slotId: 'manual-1', kind: 'manual', label: 'Test slot', playtimeSec: 90 });
+    const snapshot = JSON.stringify(store.game.value);
+    await store.advance();
+    expect(JSON.stringify(store.game.value)).not.toBe(snapshot);
+    const loaded = await store.load('manual-1');
+    expect(loaded.ok).toBe(true);
+    expect(JSON.stringify(store.game.value)).toBe(snapshot);
+    expect(store.currentSlot.value).toBe('manual-1');
+    expect(store.dirty.value).toBe(false);
+  });
+
+  it('reports each load failure with a SaveError code and never half-loads', async () => {
+    const { store, saves } = createTestStore();
+    const before = store.game.value;
+    const empty = await store.load('manual-9');
+    expect(empty.ok).toBe(false);
+    if (!empty.ok) expect(errorText(empty.error)).toBe('That save slot is empty.');
+
+    await saves.write('manual-2', '{not json', { ...(await metaOf(store)), slotId: 'manual-2' });
+    const bad = await store.load('manual-2');
+    expect(!bad.ok && bad.error.code).toBe('save.json');
+
+    await store.save('manual-3');
+    const rec = saves.records.get('manual-3')!;
+    const tampered = JSON.parse(rec.json) as { state: GameState };
+    tampered.state.calendar.season = 99;
+    await saves.write('manual-3', JSON.stringify(tampered), rec.meta);
+    const sum = await store.load('manual-3');
+    expect(!sum.ok && sum.error.code).toBe('save.checksum');
+    expect(store.game.value!.calendar.season).toBe(before!.calendar.season);
+  });
+
+  it('keeps the previous file when a write fails', async () => {
+    const { store, saves } = createTestStore();
+    await store.save('manual-1', 'first');
+    saves.failNextWrite();
+    const res = await store.save('manual-1', 'second');
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe('save.storage');
+    expect(saves.records.get('manual-1')!.meta.label).toBe('first');
+  });
+
+  it('exports, imports into a free manual slot and deletes', async () => {
+    const { store, downloads } = createTestStore();
+    await store.save('manual-1', 'Export me');
+    expect((await store.exportSave('manual-1')).ok).toBe(true);
+    expect(downloads[0]!.fileName).toBe('export-me.json');
+    const imported = await store.importSave(new Blob([downloads[0]!.text]));
+    expect(imported.ok).toBe(true);
+    if (imported.ok) expect(imported.value.slotId).toBe('manual-2');
+    expect((await store.deleteSave('manual-1')).ok).toBe(true);
+    expect((await store.listSaves()).map((m) => m.slotId)).toEqual(['manual-2']);
+    const junk = await store.importSave(new Blob(['[]']));
+    expect(!junk.ok && junk.error.code).toBe('save.format');
+  });
+
+  it('quick save uses the current manual slot and asks for one when there is none', async () => {
+    const { store } = createTestStore();
+    const none = await store.quickSave();
+    expect(!none.ok && none.error.details?.['noSlot']).toBe(true);
+    expect((await store.save('manual-2')).ok).toBe(true);
+    const b = await store.quickSave();
+    expect(b.ok && b.value.slotId).toBe('manual-2');
+  });
+
+  it("never quick-saves career B into career A's manual slot after loading an autosave", async () => {
+    const { store, saves } = createTestStore();
+    expect((await store.save('manual-1', 'Career A')).ok).toBe(true);
+    const rootA = store.game.value!.rng.root;
+    // Career B, autosaved by a week processing, then career A loaded, then B's autosave loaded.
+    await store.newGame({ seed: 'career-b' });
+    const b = store.game.value!;
+    store.dispatch({ type: 'club.choose', clubId: Object.keys(b.clubs)[0] as ClubId });
+    if (store.blockers.value.length > 0) store.dispatch(coreEngine.suggestLineup(store.game.value!, store.playerClubId.value!, store.content.value!));
+    expect((await store.advance()).ok).toBe(true);
+    const auto = (await saves.list()).find((m) => m.kind === 'auto')!;
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(store.currentSlot.value).toBe('manual-1');
+    expect((await store.load(auto.slotId)).ok).toBe(true);
+    expect(store.currentSlot.value).toBeNull();
+    const q = await store.quickSave();
+    expect(q.ok).toBe(false);
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(store.game.value!.rng.root).toBe(rootA);
+  }, 20_000);
+
+  it('refuses to import a file far larger than any save', async () => {
+    const { store } = createTestStore();
+    const big = { size: MAX_IMPORT_BYTES + 1, text: async () => '{}' } as unknown as File;
+    const r = await store.importSave(big);
+    expect(!r.ok && r.error.details?.['tooLarge']).toBe(true);
+    expect(errorText((r as { error: SaveError }).error)).toMatch(/far larger than any save/);
+  });
+
+  it('dumps the state with the command log and build info', () => {
+    const { store, downloads } = createTestStore();
+    const club = playerClub(store.game.value!);
+    store.dispatch({ type: 'training.set', clubId: club.id, fighterId: club.lineup.fighters[0]!.fighterId, emphasis: 'mind' });
+    store.dumpState();
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0]!.fileName).toMatch(/^.+-s1w11\.state-dump\.json$/);
+    const dump = JSON.parse(downloads[0]!.text) as { commandLog: unknown[]; build: { gameVersion: string } };
+    expect(dump.commandLog).toHaveLength(1);
+    expect(dump.build.gameVersion).toBe('0.0.0-test');
+  });
+});
+
+describe('store: with core stubs', () => {
+  it('turns stubs into errors, never exceptions', async () => {
+    const engine: GameEngine = {
+      ...coreEngine,
+      createWorld: () => {
+        throw new NotImplementedError('game.createWorld');
+      },
+    };
+    const { store } = createTestStore({ world: 'none', engine });
+    const res = await store.newGame();
+    expect(res.ok).toBe(false);
+    expect(store.lastError.value?.code).toBe('engine.not-implemented');
+  });
+});
+
+async function metaOf(store: ReturnType<typeof createTestStore>['store']) {
+  const res = await store.save('manual-10');
+  if (!res.ok) throw new Error('save failed');
+  await store.deleteSave('manual-10');
+  return res.value;
+}
+
+describe('digest copy from core news', () => {
+  const news = (key: string, params: Record<string, string | number>, refs: NewsItem['refs'] = {}): NewsItem =>
+    ({ id: 'n-1', at: { season: 1, weekIndex: 3 }, key, params, clubId: null, refs, importance: 'notable', read: false }) as NewsItem;
+
+  it('names the fighter and fills every slot for the keys core writes', () => {
+    const { store } = createTestStore();
+    const state = store.game.value!;
+    const content = store.content.value!;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const starter = club.lineup.fighters[0]!.fighterId;
+    const trait = content.traits.list[0]!.id;
+    const cases: [string, Record<string, string | number>][] = [
+      ['fighter.injured', { severity: content.development.injury.severityLadder[0]!.id, weeksOut: 3, round: 2 }],
+      ['fighter.career_ended', {}],
+      ['fighter.scarred', { traitId: trait }],
+      ['fighter.trait_gained', { traitId: trait }],
+      ['fighter.trait_lost', { traitId: trait }],
+      ['fighter.trait_skipped', { traitId: trait }],
+      ['fighter.final_season', { age: 34 }],
+      ['fighter.retired', { age: 35, cause: 'age' }],
+      ['captaincy.snubbed', {}],
+      ['captaincy.passed_over', {}],
+      ['captaincy.losing_the_room', {}],
+      ['captaincy.interim', {}],
+      ['offer.accepted', { wage: 450, seasons: 2 }],
+      ['offer.countered', { counterWage: 480, validUntilWeek: 5 }],
+      ['offer.refused', { patienceLeft: 1 }],
+      ['offer.void', { reason: 'fighter.unavailable' }],
+      ['finance.registry-advance', { amount: 5000, registryDebt: 5000 }],
+      ['contract.expiring', { count: 3, season: 1, weeksLeft: 4 }],
+      ['contract.minimum_raise', { from: 60, to: 120 }],
+    ];
+    const name = state.fighters[starter]!.name.full;
+    for (const [key, params] of cases) {
+      const d = newsToDigest(news(key, params, { fighterId: starter }), { state, content });
+      expect(`${d.title} ${d.text}`, key).not.toMatch(/[{}]/);
+      if (key.startsWith('fighter.') || key.startsWith('offer.') || key.startsWith('contract.') || key === 'captaincy.interim') expect(d.title, key).toContain(name);
+      if (key === 'contract.expiring') expect(d.action?.href).toBe(`#/market?renew=${starter}`);
+      if (key === 'contract.minimum_raise') expect(d.text).toContain('60 ts/wk → 120 ts/wk');
+    }
+    const lost = newsToDigest(news('offer.lost', {}, { fighterId: starter, otherClubId: Object.keys(state.clubs).find((id) => id !== club.id) as ClubId }), { state, content });
+    expect(lost.title).not.toMatch(/[{}]|another club/);
+    expect(newsToDigest(news('offer.accepted', { wage: 450, seasons: 1 }, { fighterId: starter }), { state, content }).text).toBe('450 ts/wk for 1 season.');
+  });
+
+  it('flags an injury as needing action only while the fighter is an unfit starter', () => {
+    const { store } = createTestStore();
+    const state = structuredClone(store.game.value!) as GameState;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const starter = club.lineup.fighters[0]!.fighterId;
+    const item = news('fighter.injured', { severity: 'minor', weeksOut: 2, round: 1 }, { fighterId: starter });
+    state.fighters[starter]!.injury = { severity: 'minor', weeksOut: 2, fixtureId: null, round: 1, causeFighterId: null, damageBp: 0, since: { season: 1, weekIndex: 1 } };
+    expect(newsToDigest(item, { state }).needsAction).toBe(true);
+    club.lineup.fighters = club.lineup.fighters.slice(1);
+    expect(newsToDigest(item, { state }).needsAction).toBe(false);
+  });
+});
+
+describe('load warnings', () => {
+  it('says so when a save was made with different game data, and still loads it', async () => {
+    const base = createDevEngine();
+    const engine: GameEngine = {
+      ...base,
+      parseSave: (json, c) => {
+        const r = base.parseSave(json, c);
+        return r.ok ? { ...r, value: { ...r.value, warnings: ['Save was made with different content'] } } : r;
+      },
+    };
+    const { store } = createTestStore({ engine });
+    expect((await store.save('manual-1')).ok).toBe(true);
+    resetToasts();
+    expect((await store.load('manual-1')).ok).toBe(true);
+    expect(toasts.value.map((x) => x.title)).toContain('This save was made with different game data');
+  });
+});
+
+describe('blocker copy', () => {
+  it('reads the over-cap count from core details.release', () => {
+    expect(blockerText({ code: 'roster.over-cap', details: { roster: 13, cap: 12, release: 1 } })).toBe('Release 1 fighter');
+    expect(blockerText({ code: 'roster.over-cap', details: { roster: 14, cap: 12, release: 2 } })).toBe('Release 2 fighters');
+  });
+
+  it('names the unfit starter and lists the cause once', () => {
+    const { store } = createTestStore();
+    const state = store.game.value!;
+    const club = state.clubs[state.playerClubId as ClubId]!;
+    const id = club.lineup.fighters[0]!.fighterId;
+    const unfit = { code: 'lineup.unavailable', fighterId: id };
+    expect(blockerText(unfit, state)).toBe(`${state.fighters[id]!.name.full} is unfit to play`);
+    expect(blockerText(unfit)).toBe('A lineup fighter is unavailable');
+    const both = [unfit, { code: 'lineup.incomplete', details: { have: 4, need: 5 } }];
+    expect(distinctBlockers(both).map((b) => b.code)).toEqual(['lineup.unavailable']);
+    expect(distinctBlockers([both[1]!]).map((b) => b.code)).toEqual(['lineup.incomplete']);
+  });
+});
+
+describe('digest grouping', () => {
+  it('shows several expiring contracts as one item, and the badge agrees', () => {
+    const { store } = createTestStore({ weekIndex: 11 });
+    const state = structuredClone(store.game.value!) as GameState;
+    const clubId = state.playerClubId as ClubId;
+    state.news = [];
+    const mine = Object.values(state.fighters).filter((f) => f.clubId === clubId).slice(0, 3);
+    mine.forEach((f, i) =>
+      state.news.push({ id: `n-x${i}`, at: { season: state.calendar.season, weekIndex: state.calendar.weekIndex - 1 }, key: 'contract.expiring', params: { count: 3, season: 1, weeksLeft: 4 }, clubId, refs: { fighterId: f.id }, importance: 'urgent', read: false } as unknown as NewsItem),
+    );
+    const items = buildDigest(state, store.content.value!, clubId, []);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('3 contracts end this season');
+    expect(items[0]!.text).toContain(mine[0]!.name.full);
+    expect(items[0]!.action?.href).toBe('#/market?view=renewals');
+    expect(items[0]!.newsIds).toHaveLength(3);
+    expect(needsActionNow(state, clubId, [])).toBe(1);
+  });
+});

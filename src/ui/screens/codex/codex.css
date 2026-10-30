@@ -1,0 +1,137 @@
+/* Class codex layout glue only. */
+.codex-grid {
+  --autogrid-min: 15rem;
+}
+
+/* Choice cards (components.css) with the role stripe on top in every state. */
+.codex-card,
+.codex-card:hover,
+.codex-card[aria-pressed="true"] {
+  border-top: 3px solid var(--role-c, var(--c-border-strong));
+}
+
+.codex-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* The "Starter" tag sits at the right edge of the name line. */
+.codex-card__starter {
+  margin-left: auto;
+}
+
+.codex-card__glyphs {
+  display: inline-flex;
+}
+
+.codex-card__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+}
+
+/* Roles, starting row and complexity on one line; complexity sits at the right edge. */
+.codex-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.codex-card__meta > .pips {
+  margin-left: auto;
+}
+
+.codex-card__desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.codex-detail {
+  position: sticky;
+  top: var(--sp-4);
+  max-height: calc(100vh - var(--topbar-h) - var(--sp-8));
+  overflow: auto;
+}
+
+.codex-flavor {
+  margin-top: 0;
+}
+
+.codex-ability + .codex-ability {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px dashed var(--c-divider);
+}
+
+.codex-weight {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.codex-preset {
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--c-divider);
+}
+
+.codex-preset summary {
+  cursor: pointer;
+}
+
+.codex-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+/* M1.1: rank effects under each ability, the perk catalog. */
+.codex-ranks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  color: var(--c-text-muted);
+}
+
+.codex-ranks__n {
+  display: inline-block;
+  min-width: 1.6rem;
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  color: var(--c-accent-text);
+}
+
+.codex-perks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.codex-perks__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+}
+
+.codex-perk {
+  display: grid;
+  grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.15rem var(--sp-3);
+}
+
+.codex-perk > .u-xs {
+  grid-column: 2;
+}
+
+.codex-perks-wrap > summary {
+  cursor: pointer;
+}

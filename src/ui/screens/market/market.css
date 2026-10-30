@@ -1,0 +1,211 @@
+/* Market layout glue (screen-scoped). */
+.market-banner {
+  margin-bottom: var(--sp-4);
+}
+
+.market-split {
+  --split-side: 16.5rem;
+}
+
+.market-results {
+  min-width: 0;
+}
+
+/* The rail stays in view while the results scroll, and scrolls on its own when the window is
+   shorter than the rail (1280 × 720). */
+.market-filters {
+  position: sticky;
+  top: var(--sp-4);
+  max-height: calc(100vh - var(--topbar-h) - 2 * var(--sp-4));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Trials Day (P1): the player's own rookie(s), above every view. */
+.market-trials__explain {
+  max-width: 70rem;
+}
+
+.market-trials__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+}
+
+.market-trials__item {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(9rem, 1fr) auto minmax(14rem, 1.2fr) auto;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-accent-line);
+  border-radius: var(--r-sm);
+  background: var(--c-accent-soft);
+}
+
+.market-trials__terms {
+  color: var(--c-text-muted);
+}
+
+.market-age {
+  width: 4rem;
+}
+
+.market-ask {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.market-asks {
+  white-space: nowrap;
+}
+
+.market-actions {
+  --row-gap: var(--sp-1);
+  justify-content: flex-end;
+}
+
+.market-pin {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+.market-pin[aria-pressed="true"] {
+  color: var(--c-accent-text);
+}
+
+.market-check {
+  accent-color: var(--c-accent);
+}
+
+.offer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.offer-grid {
+  --grid-gap: var(--sp-6);
+}
+
+.offer-wage {
+  width: 7rem;
+  text-align: right;
+}
+
+@media (max-width: 1399px) {
+  .market-split {
+    --split-side: 13.5rem;
+  }
+
+}
+
+/* Up to 1919 px the filter rail is a little narrower (the table takes the 2 rem: with Freshness in it
+   needs them from 1440 px, with the wide columns from 1800 px). It is back to 16.5 rem at 1920. */
+@media (min-width: 1400px) and (max-width: 1919px) {
+  .market-split {
+    --split-side: 14rem;
+  }
+}
+
+/* Freshness of a free agent (they rest every week: nearly always Fresh) is the first column to go when the
+   table is tight: from 1500 px. */
+@media (max-width: 1499px) {
+  .market-col-fresh {
+    display: none;
+  }
+}
+
+/* Over the wage room: the ask in amber (its tip gives the amount over). */
+.market-ask--over {
+  color: var(--c-warn);
+}
+
+/* The agents table carries the most columns of any screen: a slightly lower name floor
+   keeps every column in view from 1440 px; the Offer column is sticky (cell-sticky). */
+.market-results .data-table {
+  --cell-fill-min: 10rem;
+}
+
+/* From 1800 px the wide columns (start, traits, asks by length, rivals) join: fourteen columns. A slightly
+   lower floor still leaves the names whole. */
+@media (min-width: 1800px) {
+  .market-results .data-table {
+    --cell-fill-min: 9rem;
+  }
+}
+
+/* With Freshness in (1400 px and up) the cells between the first and the last give back a little padding,
+   so the whole table, willingness included, fits at 1440, 1920 and the widths between without a sideways
+   scroll (the Offer cell is sticky: whatever scrolled under it would be hidden). */
+@media (min-width: 1400px) {
+  .market-results .data-table--dense th:not(:first-child):not(:last-child),
+  .market-results .data-table--dense td:not(:first-child):not(:last-child) {
+    padding-left: 0.375rem;
+    padding-right: 0.375rem;
+  }
+}
+
+/* In the narrow rail the label's hint takes its own line instead of squeezing beside the label. */
+@media (max-width: 1399px) {
+  .market-filters .filter-group__label {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+}
+
+/* Renewals: next season's wage room (AL-R002-T006). */
+.room {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1.1fr) minmax(16rem, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .room {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.room__total dt,
+.room__total dd {
+  font-weight: var(--fw-bold);
+}
+
+.room__total {
+  border-top: 1px solid var(--c-border-strong);
+}
+
+.room__h {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+.room__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-2);
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+
+.room__list > li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  max-width: 22rem;
+}
+
+.offer-next__verdict {
+  font-weight: var(--fw-semibold);
+}

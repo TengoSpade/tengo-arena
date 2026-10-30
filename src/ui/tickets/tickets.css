@@ -1,0 +1,35 @@
+/* Playtest ticket dialog (lazy with the tool). */
+.ticket {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.ticket__shot {
+  width: 100%;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: var(--c-surface-0);
+}
+
+.ticket__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.ticket__text {
+  width: 100%;
+  min-height: 7.5rem;
+  height: auto;
+  padding: var(--sp-2) var(--sp-3);
+  resize: vertical;
+  line-height: var(--lh-snug);
+  font: inherit;
+}
+
+.ticket__warn {
+  color: var(--c-warn);
+}

@@ -1,0 +1,22 @@
+/* Home layout glue only. */
+.home-tiles {
+  grid-template-columns: 1.1fr 1.1fr 0.9fr;
+}
+
+.home-row-gap {
+  width: 0.4rem;
+  flex: none;
+}
+
+/* Checklist "what is this?" mark (Trials Day): inline with the text, keyboard focusable for its tip. */
+.check-info {
+  display: inline-flex;
+  vertical-align: -0.15em;
+  color: var(--c-text-faint);
+  cursor: help;
+}
+
+.check-info:hover,
+.check-info:focus-visible {
+  color: var(--c-accent-text);
+}

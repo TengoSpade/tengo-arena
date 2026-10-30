@@ -1,0 +1,357 @@
+/* ==========================================================================
+   Arena League: base
+   Reset, root sizing, element defaults, focus, scrollbars, layout primitives
+   (.l-*) and utilities (.u-*). Requires tokens.css.
+   ========================================================================== */
+
+/* ---- Reset ------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+/* Root size: 15 px at 1280-1440 wide, growing to 18 px at 2560 wide, times
+   the player's interface scale. Every rem in the system follows this. */
+html {
+  font-size: calc(var(--ui-scale) * clamp(15px, 0.25vw + 11.4px, 18px));
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--c-bg);
+}
+
+body {
+  min-height: 100vh;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  color: var(--c-text);
+  background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+svg {
+  overflow: visible;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+ul[role="list"],
+ol[role="list"],
+menu {
+  list-style: none;
+  padding: 0;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  overflow-wrap: break-word;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---- Typography --------------------------------------------------------- */
+h1,
+h2,
+h3,
+h4 {
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-display);
+}
+
+h2 {
+  font-size: var(--fs-xl);
+}
+
+h3 {
+  font-size: var(--fs-lg);
+}
+
+h4 {
+  font-size: var(--fs-md);
+}
+
+small {
+  font-size: var(--fs-xs);
+}
+
+strong,
+b {
+  font-weight: var(--fw-semibold);
+}
+
+a {
+  color: var(--c-accent-text);
+  text-decoration: none;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  padding: 0 0.4em;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  color: var(--c-text-muted);
+  background: var(--c-surface-3);
+  border: 1px solid var(--c-border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--c-divider);
+}
+
+::selection {
+  background: var(--c-accent-soft);
+  color: var(--c-text);
+}
+
+/* ---- Focus: one ring everywhere, keyboard only ---------------------------- */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ---- Scrollbars (thin, themed; still wide enough to grab) ------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- Layout primitives (.l-*) ----------------------------------------------- */
+
+/* Vertical rhythm */
+.l-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap, var(--sp-4));
+}
+
+.l-stack--sm { --stack-gap: var(--sp-2); }
+.l-stack--xs { --stack-gap: var(--sp-1); }
+.l-stack--lg { --stack-gap: var(--sp-6); }
+
+/* Horizontal row, wraps */
+.l-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cluster-gap, var(--sp-2));
+}
+
+.l-cluster--lg { --cluster-gap: var(--sp-4); }
+.l-cluster--nowrap { flex-wrap: nowrap; }
+.l-cluster--xs { --cluster-gap: var(--sp-1); }
+
+/* Horizontal row, no wrap, push last child right with .l-push */
+.l-row {
+  display: flex;
+  align-items: center;
+  gap: var(--row-gap, var(--sp-3));
+  min-width: 0;
+}
+
+.l-push {
+  margin-left: auto;
+}
+
+/* 12-column page grid. Children use .span-N (and .span-N@wide for >= 1800 px). */
+.l-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--grid-gap);
+  align-items: start;
+}
+
+.l-grid--stretch {
+  align-items: stretch;
+}
+
+.span-2 { grid-column: span 2; }
+.span-3 { grid-column: span 3; }
+.span-4 { grid-column: span 4; }
+.span-5 { grid-column: span 5; }
+.span-6 { grid-column: span 6; }
+.span-7 { grid-column: span 7; }
+.span-8 { grid-column: span 8; }
+.span-9 { grid-column: span 9; }
+.span-12 { grid-column: 1 / -1; }
+
+@media (min-width: 1800px) {
+  .span-3\@wide { grid-column: span 3; }
+  .span-4\@wide { grid-column: span 4; }
+  .span-5\@wide { grid-column: span 5; }
+  .span-6\@wide { grid-column: span 6; }
+  .span-7\@wide { grid-column: span 7; }
+  .span-8\@wide { grid-column: span 8; }
+  .span-9\@wide { grid-column: span 9; }
+  .span-12\@wide { grid-column: 1 / -1; }
+}
+
+/* Auto-fit card grid */
+.l-autogrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--autogrid-min, 16rem), 1fr));
+  gap: var(--grid-gap);
+}
+
+/* Two-column split with a fixed sidebar */
+.l-split {
+  display: grid;
+  grid-template-columns: var(--split-side, 17rem) minmax(0, 1fr);
+  gap: var(--grid-gap);
+  align-items: start;
+}
+
+.l-split--right {
+  grid-template-columns: minmax(0, 1fr) var(--split-side, 22rem);
+}
+
+/* ---- Utilities (.u-*) --------------------------------------------------------- */
+.u-num {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+.u-right { text-align: right; }
+.u-center { text-align: center; }
+.u-nowrap { white-space: nowrap; }
+.u-muted { color: var(--c-text-muted); }
+.u-faint { color: var(--c-text-faint); }
+.u-accent { color: var(--c-accent-text); }
+.u-good { color: var(--c-good); }
+.u-bad { color: var(--c-bad); }
+.u-warn { color: var(--c-warn); }
+.u-strong { font-weight: var(--fw-semibold); color: var(--c-text); }
+.u-display { font-family: var(--font-display); letter-spacing: var(--tracking-display); }
+.u-mono { font-family: var(--font-mono); }
+.u-xs { font-size: var(--fs-xs); }
+.u-sm { font-size: var(--fs-sm); }
+.u-lg { font-size: var(--fs-lg); }
+.u-xl { font-size: var(--fs-xl); }
+
+.u-caps {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+.u-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.u-grow { flex: 1 1 auto; min-width: 0; }
+.u-mt-2 { margin-top: var(--sp-2); }
+.u-mt-4 { margin-top: var(--sp-4); }
+.u-mb-2 { margin-bottom: var(--sp-2); }
+.u-gap-0 { gap: 0; }
+
+.u-sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

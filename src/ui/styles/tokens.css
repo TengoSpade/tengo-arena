@@ -1,0 +1,491 @@
+/* ==========================================================================
+   Arena League: design tokens
+   --------------------------------------------------------------------------
+   Single source of truth for color, type, spacing, radii, shadows, z-index
+   and motion. Components read ONLY these custom properties, never raw values.
+
+   Themes:   <html data-theme="dark">  (default, also used when unset)
+             <html data-theme="light">
+   Scale:    <html style="--ui-scale: 1.15">  (Settings > Interface scale)
+   Motion:   <html data-motion="reduced">     (Settings > Reduce motion; the
+             OS prefers-reduced-motion setting applies automatically)
+
+   Spec: docs/design/_drafts/04-presentation.md section 3 and Notes for implementers.
+   Arena (M2): the --c-arena-*, --c-fx-*, --c-pip-*, --glyph-pip-* and
+   --arena-* groups are consumed by the DOM HUD and by the PixiJS viewer. The
+   canvas never parses this file: the host reads the computed values once per
+   theme or motion change and passes a palette object. Guide and the token
+   table: docs/design/mockups/arena-notes.md; mock: mockups/arena.html.
+   ========================================================================== */
+
+:root {
+  /* ---- Typography ------------------------------------------------------
+     Offline-safe system stacks. Nothing is fetched from a CDN.
+     OPEN: self-host an open-licensed pair later (candidates: Alegreya +
+     Alegreya Sans, SIL OFL). Swap only these three tokens to adopt it. */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+  --font-display: "Palatino Linotype", Palatino, "Book Antiqua",
+    "Iowan Old Style", "URW Palladio L", "P052", Georgia, serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono",
+    ui-monospace, Menlo, monospace;
+
+  /* The root size is set in base.css from --ui-scale and the viewport, so
+     every rem below scales together (text, spacing, control sizes). */
+  --ui-scale: 1;
+
+  /* Type scale (rem). At 1440 px wide 1rem = 15 px; at 1920 px 1rem ~ 16 px. */
+  --fs-xs: 0.8rem;      /* 12 px  captions, column headers, kbd hints */
+  --fs-sm: 0.8667rem;   /* 13 px  table cells, secondary text          */
+  --fs-md: 0.9333rem;   /* 14 px  body                                  */
+  --fs-lg: 1.0667rem;   /* 16 px  panel titles, emphasized values      */
+  --fs-xl: 1.3333rem;   /* 20 px  section titles                        */
+  --fs-2xl: 1.7333rem;  /* 26 px  page titles                           */
+  --fs-3xl: 2.4rem;     /* 36 px  hero numbers                          */
+  --fs-4xl: 3.2rem;     /* 48 px  scoreboard                            */
+
+  --lh-tight: 1.15;
+  --lh-snug: 1.3;
+  --lh-body: 1.5;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --tracking-caps: 0.08em;   /* uppercase labels */
+  --tracking-display: 0.01em;
+
+  /* ---- Spacing (4 px base, in rem so it follows --ui-scale) ------------ */
+  --sp-0: 0;
+  --sp-px: 1px;
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.25rem;
+  --sp-6: 1.5rem;
+  --sp-8: 2rem;
+  --sp-10: 2.5rem;
+  --sp-12: 3rem;
+  --sp-16: 4rem;
+
+  /* ---- Layout ---------------------------------------------------------- */
+  --topbar-h: 3.5rem;
+  --nav-w: 13.5rem;
+  --nav-w-collapsed: 3.75rem;
+  --page-gutter: var(--sp-6);
+  --page-max: 118rem;          /* content stops growing on very wide screens */
+  --grid-gap: var(--sp-4);
+  --row-h: 2.4rem;             /* data-table row, default density */
+  --row-h-compact: 2rem;
+  --control-h: 2.25rem;
+  --control-h-sm: 1.75rem;
+
+  /* ---- Radii: squared, "forged plate" corners --------------------------- */
+  --r-xs: 2px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-pill: 999px;
+
+  /* ---- Z-index ladder --------------------------------------------------- */
+  --z-base: 0;
+  --z-raised: 1;
+  --z-sticky: 10;
+  --z-nav: 20;
+  --z-dropdown: 30;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-tooltip: 70;
+
+  /* ---- Motion ----------------------------------------------------------- */
+  --dur-instant: 80ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+  --dur-tooltip-delay: 280ms;  /* hover intent before a tooltip opens */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.6, 0, 0.3, 1);
+  --ease-spring: cubic-bezier(0.3, 1.4, 0.5, 1);
+
+  /* ---- Role glyphs (shape is the primary cue; color is secondary) --
+     Tank = shield, Melee = diamond, Ranged = triangle, Controller =
+     hourglass, Healer = circle with a cross. Filled silhouettes so they stay
+     distinct at 12 px. Used as CSS masks by .role-glyph. */
+  --glyph-tank: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5 21 5v6.2c0 5.4-3.8 9.6-9 11.3-5.2-1.7-9-5.9-9-11.3V5z'/%3E%3C/svg%3E");
+  --glyph-melee: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1 22.5 12 12 23 1.5 12z'/%3E%3C/svg%3E");
+  --glyph-ranged: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 23 21.5H1z'/%3E%3C/svg%3E");
+  --glyph-controller: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 2h18l-7 10 7 10H3l7-10z'/%3E%3C/svg%3E");
+  --glyph-healer: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 1.5a10.5 10.5 0 1 1 0 21 10.5 10.5 0 0 1 0-21zM10.3 6.3v4H6.3v3.4h4v4h3.4v-4h4v-3.4h-4v-4z'/%3E%3C/svg%3E");
+
+  /* Crest and portrait silhouettes (placeholders until M2 art). */
+  --shape-crest: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 46'%3E%3Cpath d='M20 0 40 6v15c0 12-8.4 21-20 25C8.4 42 0 33 0 21V6z'/%3E%3C/svg%3E");
+  --bust-human: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='23' r='11.5'/%3E%3Cpath d='M8 64c0-14 10.7-22.5 24-22.5S56 50 56 64z'/%3E%3C/svg%3E");
+  --bust-elf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 10.5c6.3 0 11.3 5 11.3 11.3l7.7-6.8-6.2 11.6C43.4 32.4 38.4 36 32 36s-11.4-3.6-12.8-9.4L13 15l7.7 6.8c0-6.3 5-11.3 11.3-11.3z'/%3E%3Cpath d='M12 64c0-13 9-21.5 20-21.5S52 51 52 64z'/%3E%3C/svg%3E");
+  --bust-dwarf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='24' r='11'/%3E%3Cpath d='M20.5 26h23c0 10-5 18.5-11.5 18.5S20.5 36 20.5 26z'/%3E%3Cpath d='M3 64c0-12 12.5-19.5 29-19.5S61 52 61 64z'/%3E%3C/svg%3E");
+  --bust-orc: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M19 21c0-7.5 5.8-12.5 13-12.5S45 13.5 45 21v7c0 6.5-5.8 11-13 11s-13-4.5-13-11z'/%3E%3Cpath d='M5 64c0-14.5 12-23.5 27-23.5S59 49.5 59 64z'/%3E%3C/svg%3E");
+
+  /* ---- Arena (M2): status pip glyphs and motion/geometry, same in both themes
+     Filled 24 px silhouettes like the role glyphs, drawn on a small chip, so a
+     pip is told from a role glyph by chip, silhouette and place. Control is an
+     octagon (hard = filled with a bar, soft = ring), buff and debuff are
+     opposed double chevrons, damage-over-time a drop, heal-over-time a heart,
+     special a spark. The data-pip mapping is at the end of this file. */
+  --glyph-pip-buff: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 10.2 12 1.6l9 8.6-2.6 2.6L12 6.8l-6.4 6zM3 19.2l9-8.6 9 8.6-2.6 2.6-6.4-6-6.4 6z'/%3E%3C/svg%3E");
+  --glyph-pip-debuff: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 13.8l9 8.6 9-8.6-2.6-2.6-6.4 6-6.4-6zM3 4.8l9 8.6 9-8.6-2.6-2.6-6.4 6-6.4-6z'/%3E%3C/svg%3E");
+  --glyph-pip-control-hard: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M8.2 2h7.6L22 8.2v7.6L15.8 22H8.2L2 15.8V8.2zM6.5 10.2v3.6h11v-3.6z'/%3E%3C/svg%3E");
+  --glyph-pip-control-soft: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M8.2 2h7.6L22 8.2v7.6L15.8 22H8.2L2 15.8V8.2zM9 5.6 5.6 9v6L9 18.4h6l3.4-3.4V9L15 5.6z'/%3E%3C/svg%3E");
+  --glyph-pip-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.8c3.9 4.9 6.6 8.3 6.6 11.9a6.6 6.6 0 0 1-13.2 0c0-3.6 2.7-7 6.6-11.9z'/%3E%3C/svg%3E");
+  --glyph-pip-hot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21.5C5.2 15.8 2.5 12.4 2.5 8.7A5.1 5.1 0 0 1 12 6.3a5.1 5.1 0 0 1 9.5 2.4c0 3.7-2.7 7.1-9.5 12.8z'/%3E%3C/svg%3E");
+  --glyph-pip-special: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5l2.5 8 8 2.5-8 2.5-2.5 8-2.5-8-8-2.5 8-2.5z'/%3E%3C/svg%3E");
+
+  /* Arena geometry, effects and motion. The canvas converts: px and ms are read
+     as numbers, rem sizes are measured once by the host (a probe element) so
+     --ui-scale reaches the canvas labels, bars and pips (04 section 9). */
+  --arena-ring-w: 3.5px;          /* the player's side ring (solid), in CSS px at any zoom, so it stays legible at 35 px/m */
+  --arena-ring-line: 2px;         /* each line of the opponent's double ring (the gap between them is --arena-ring-gap) */
+  --arena-ring-gap: 1.5px;        /* plate-coloured keyline between ring and body and outside the ring */
+  --arena-down-opacity: 0.4;      /* downed body (asset-006) */
+  --arena-zone-alpha: 0.22;       /* zone floor disc in the owner's ring colour */
+  --arena-telegraph-fill: 0.16;   /* telegraph area, alpha of the caster's ring colour */
+  --arena-telegraph-edge: 0.9;    /* telegraph outline alpha */
+  --arena-telegraph-progress: 0.3;/* growing inner fill; stays under reduced motion, it is information */
+  --arena-hit-flash-alpha: 0.7;
+  --arena-hit-flash-ms: 90ms;
+  --arena-flash-limit: 3;         /* flashes per second per fighter, always (04 section 9; no full-screen flashes) */
+  --arena-fx-fade-ms: 400ms;      /* an effect is gone within this at 1x (05-technical-m2 A5; the UI designer owns it) */
+  --arena-number-merge-ms: 100ms; /* at most one floating number per fighter per window; hits inside it merge */
+  --arena-number-rise: 0.9rem;    /* floating number drift; 0 under reduced motion (numbers fade in place) */
+  --arena-pulse-ms: 220ms;        /* rule badge pulse on a new decision (04 section 7) */
+  --arena-ease-ms: 220ms;         /* camera zoom ease (04 section 4) */
+  --arena-motion: 1;              /* 1 = animate, 0 = reduced motion (set below) */
+  --arena-label-size: var(--fs-xs);
+  --arena-pip-size: 1rem;         /* pip chip, square; 4 at most above the HP bar */
+  --arena-bar-h: 0.4rem;          /* HP bar height; shield rides on it, the focus bar is 60% of it */
+}
+
+/* ==========================================================================
+   Dark theme (default)
+   Warm charcoal "slate" surfaces, parchment text, one brass accent.
+   All text pairs meet WCAG AA (4.5:1) on --c-surface-1 and --c-surface-2;
+   graphic marks (glyphs, bars) meet 3:1.
+   ========================================================================== */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces, from back to front */
+  --c-bg: #0e1013;
+  --c-surface-0: #121519;        /* sunken: nav rail, wells */
+  --c-surface-1: #171b20;        /* panels */
+  --c-surface-2: #1d2228;        /* panel headers, raised rows */
+  --c-surface-3: #262c34;        /* hover, inputs */
+  --c-surface-4: #303742;        /* pressed, selected fill */
+  --c-overlay: rgba(6, 8, 10, 0.72);
+
+  --c-border: #2a3039;
+  --c-border-strong: #3b4451;
+  --c-divider: rgba(232, 228, 218, 0.07);
+
+  /* Text */
+  --c-text: #ebe6da;             /* parchment */
+  --c-text-muted: #aaa69c;
+  --c-text-faint: #868892;       /* hints only; 4.6:1 on surface-1 */
+  --c-text-inverse: #15130f;
+
+  /* Brand accent: brass. Primary action, focus, selection. */
+  --c-accent: #d9a54c;
+  --c-accent-hover: #e7b862;
+  --c-accent-press: #c28f3a;
+  --c-on-accent: #1b1408;
+  --c-accent-text: #e6b866;      /* accent-colored text on surfaces */
+  --c-accent-soft: rgba(217, 165, 76, 0.14);
+  --c-accent-line: rgba(217, 165, 76, 0.45);
+  --c-focus: #f2c46d;
+
+  /* Status (always paired with an icon, sign or word, never color alone) */
+  --c-good: #5fcb92;
+  --c-good-soft: rgba(95, 203, 146, 0.13);
+  --c-bad: #f27a69;
+  --c-bad-soft: rgba(242, 122, 105, 0.13);
+  --c-warn: #eebf52;
+  --c-warn-soft: rgba(238, 191, 82, 0.13);
+  --c-info: #79b8f0;
+  --c-info-soft: rgba(121, 184, 240, 0.13);
+
+  /* Roles: Okabe-Ito derived, color-blind safe, ALWAYS with a glyph. */
+  --c-role-tank: #56b4e9;        /* sky blue      + shield    */
+  --c-role-melee: #ee7a3c;       /* vermillion    + diamond   */
+  --c-role-ranged: #f0e442;      /* yellow        + triangle  */
+  --c-role-controller: #d88bb6;     /* reddish purple+ hourglass */
+  --c-role-healer: #1fb88a;      /* bluish green  + cross     */
+
+  /* Rating bands on the absolute 1-20 scale (TUNABLE thresholds).
+     A lightness ramp from dim to bright, with brass for elite: readable in
+     grayscale and independent of the role hues. */
+  --c-band-1: #8a8c95;           /* 1-5   poor  */
+  --c-band-2: #b6b2a8;           /* 6-10  fair  */
+  --c-band-3: #f1ede3;           /* 11-15 good  */
+  --c-band-4: #f2c75c;           /* 16-20 elite */
+  --c-band-1-bg: #2a2f37;
+  --c-band-2-bg: #39404a;
+  --c-band-3-bg: #545c68;
+  --c-band-4-bg: #d9a54c;
+  --c-band-4-on: #1b1408;
+
+  /* Traits (CK-style badges). Shape also differs: see components.css. */
+  --c-trait-pos: #7fcdb1;
+  --c-trait-pos-bg: rgba(127, 205, 177, 0.1);
+  --c-trait-neg: #f08a7a;
+  --c-trait-neg-bg: rgba(240, 138, 122, 0.1);
+  --c-trait-rare: #f2c75c;
+  --c-trait-rare-bg: linear-gradient(135deg, rgba(242, 199, 92, 0.22), rgba(150, 110, 210, 0.16));
+
+  /* Charts */
+  --c-chart-grid: rgba(232, 228, 218, 0.08);
+  --c-chart-axis: #6f737c;
+  --c-chart-line: #ebe6da;
+  --c-chart-zone-grow: rgba(95, 203, 146, 0.12);
+  --c-chart-zone-peak: rgba(217, 165, 76, 0.16);
+  --c-chart-zone-decline: rgba(242, 122, 105, 0.1);
+
+  /* Team sides in match views (us vs them), not tied to roles */
+  --c-side-us: #e6b866;
+  --c-side-them: #a7b4c6;
+
+  /* Arena (M2). Canvas overlays sit on a near-black plate with parchment ink in
+     this theme, so every mark has a known background whatever the floor and
+     the club colours do. Pairs checked in mockups/arena-notes.md. */
+  --c-arena-floor: #3e3a32;      /* warm stone, flat; every ring and body colour reaches 3:1 on it */
+  --c-arena-wall: #716857;       /* boundary band; 3.3:1 against the page background */
+  --c-arena-line: #5a5448;       /* centre line, row markers; faint on purpose (1.5:1) */
+  --c-arena-plate: #14161a;      /* glyph plate, bar track, pip chip, label chip, keyline */
+  --c-arena-ink: #ebe6da;        /* text and HP fill on the plate */
+  --c-arena-edge: #8d897f;       /* hairline around bar tracks; 3:1 on the floor */
+  --c-arena-hp: #ebe6da;         /* neutral parchment, no red or green meaning */
+  --c-arena-track: var(--c-arena-plate);
+  --c-arena-shield: #8fd6ee;     /* drawn hatched, beyond the HP fill */
+  --c-arena-focus: #b8a8f7;      /* the thin bar under the HP bar */
+  --c-arena-select: var(--c-focus);
+  --c-arena-telegraph: #fff0cf;  /* progress fill and cast bar; the area itself takes the caster's ring colour */
+  --c-arena-hit-flash: #ffffff;
+  --c-fx-physical: #f2e6c8;      /* hit tone: swing, spark, number */
+  --c-fx-arcane: #a98bff;
+  --c-fx-true: #ffffff;
+  --c-fx-heal: var(--c-good);
+  --c-fx-shield: var(--c-arena-shield);
+  --c-pip-buff: #96eddc;
+  --c-pip-debuff: #b6c24a;
+  --c-pip-control: #c58ef7;
+
+  /* Shadows */
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.42), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --shadow-3: 0 22px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-focus: 0 0 0 2px var(--c-bg), 0 0 0 4px var(--c-focus);
+
+  /* Subtle material texture for headers (no images) */
+  --tex-header: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0));
+  --tex-hero: radial-gradient(120% 140% at 0% 0%, rgba(217, 165, 76, 0.1), transparent 55%),
+    radial-gradient(120% 140% at 100% 100%, rgba(121, 184, 240, 0.06), transparent 60%);
+}
+
+/* ==========================================================================
+   Light theme: warm vellum
+   ========================================================================== */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --c-bg: #e9e5dc;
+  --c-surface-0: #e1dcd1;
+  --c-surface-1: #fbfaf6;
+  --c-surface-2: #f3f0e8;
+  --c-surface-3: #e9e4d9;
+  --c-surface-4: #ddd6c8;
+  --c-overlay: rgba(40, 34, 24, 0.45);
+
+  --c-border: #d8d1c3;
+  --c-border-strong: #b9b09e;
+  --c-divider: rgba(30, 29, 26, 0.08);
+
+  --c-text: #1d1c19;
+  --c-text-muted: #54514a;
+  --c-text-faint: #65615a;
+  --c-text-inverse: #fbfaf6;
+
+  --c-accent: #c88e31;
+  --c-accent-hover: #d59c3e;
+  --c-accent-press: #b37d26;
+  --c-on-accent: #1b1408;
+  --c-accent-text: #8a5a12;
+  --c-accent-soft: rgba(200, 142, 49, 0.15);
+  --c-accent-line: rgba(160, 108, 28, 0.5);
+  --c-focus: #9a6514;
+
+  --c-good: #166d3f;
+  --c-good-soft: rgba(26, 122, 72, 0.1);
+  --c-bad: #b43626;
+  --c-bad-soft: rgba(180, 54, 38, 0.09);
+  --c-warn: #8a6100;
+  --c-warn-soft: rgba(176, 125, 0, 0.12);
+  --c-info: #1d5f9f;
+  --c-info-soft: rgba(29, 95, 159, 0.09);
+
+  --c-role-tank: #0b6fae;
+  --c-role-melee: #c1500c;
+  --c-role-ranged: #957b00;
+  --c-role-controller: #a8457e;
+  --c-role-healer: #007f5c;
+
+  --c-band-1: #6a665d;
+  --c-band-2: #55524a;
+  --c-band-3: #1d1c19;
+  --c-band-4: #8a5a12;
+  --c-band-1-bg: #e4dfd4;
+  --c-band-2-bg: #d3ccbe;
+  --c-band-3-bg: #b5ac99;
+  --c-band-4-bg: #c88e31;
+  --c-band-4-on: #1b1408;
+
+  --c-trait-pos: #17704f;
+  --c-trait-pos-bg: rgba(23, 112, 79, 0.08);
+  --c-trait-neg: #a8392a;
+  --c-trait-neg-bg: rgba(168, 57, 42, 0.07);
+  --c-trait-rare: #8a5a12;
+  --c-trait-rare-bg: linear-gradient(135deg, rgba(200, 142, 49, 0.22), rgba(120, 80, 190, 0.1));
+
+  --c-chart-grid: rgba(30, 29, 26, 0.08);
+  --c-chart-axis: #8a857a;
+  --c-chart-line: #1d1c19;
+  --c-chart-zone-grow: rgba(26, 122, 72, 0.1);
+  --c-chart-zone-peak: rgba(200, 142, 49, 0.18);
+  --c-chart-zone-decline: rgba(180, 54, 38, 0.08);
+
+  --c-side-us: #8a5a12;
+  --c-side-them: #4a5a70;
+
+  /* Arena (M2), light theme: a vellum floor, cream plates and dark ink. */
+  --c-arena-floor: #eee7d6;
+  --c-arena-wall: #857a64;
+  --c-arena-line: #cfc4a8;
+  --c-arena-plate: #fbf8ee;
+  --c-arena-ink: #1d1c19;
+  --c-arena-edge: #5b5445;
+  --c-arena-hp: #1d1c19;
+  --c-arena-track: var(--c-arena-plate);
+  --c-arena-shield: #0f6b86;
+  --c-arena-focus: #5b3fc4;
+  --c-arena-select: var(--c-focus);
+  --c-arena-telegraph: #2b2418;
+  --c-arena-hit-flash: #ffffff;
+  --c-fx-physical: #4a3b22;
+  --c-fx-arcane: #5a2fd0;
+  --c-fx-true: #15130f;
+  --c-fx-heal: var(--c-good);
+  --c-fx-shield: var(--c-arena-shield);
+  --c-pip-buff: #087a6b;
+  --c-pip-debuff: #76680a;
+  --c-pip-control: #7437d0;
+
+  --shadow-1: 0 1px 2px rgba(60, 48, 30, 0.08);
+  --shadow-2: 0 6px 18px rgba(60, 48, 30, 0.14);
+  --shadow-3: 0 24px 60px rgba(40, 30, 15, 0.25), 0 0 0 1px rgba(40, 30, 15, 0.06);
+  --shadow-focus: 0 0 0 2px var(--c-surface-1), 0 0 0 4px var(--c-focus);
+
+  --tex-header: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0));
+  --tex-hero: radial-gradient(120% 140% at 0% 0%, rgba(200, 142, 49, 0.14), transparent 55%),
+    radial-gradient(120% 140% at 100% 100%, rgba(29, 95, 159, 0.06), transparent 60%);
+}
+
+/* ==========================================================================
+   Domain mappings: data attributes set variables, components consume them.
+   <span class="role-badge" data-role="tank">   data-role: tank | melee |
+   ranged | controller | healer (role ids). Hybrids put two glyphs side by side.
+   ========================================================================== */
+[data-role="tank"]    { --role-c: var(--c-role-tank);    --role-glyph: var(--glyph-tank); }
+[data-role="melee"]   { --role-c: var(--c-role-melee);   --role-glyph: var(--glyph-melee); }
+[data-role="ranged"]  { --role-c: var(--c-role-ranged);  --role-glyph: var(--glyph-ranged); }
+[data-role="controller"] { --role-c: var(--c-role-controller); --role-glyph: var(--glyph-controller); }
+[data-role="healer"]  { --role-c: var(--c-role-healer);  --role-glyph: var(--glyph-healer); }
+
+/* Arena status pip: data-pip on a .apip chip. Category -> pip (all 34 statuses):
+   cc_hard control-hard, cc_soft control-soft, buff buff, debuff debuff, dot dot,
+   hot hot, special special. The shield category has no pip (the bar segment). */
+[data-pip="buff"]         { --pip-c: var(--c-pip-buff);    --pip-glyph: var(--glyph-pip-buff); }
+[data-pip="debuff"]       { --pip-c: var(--c-pip-debuff);  --pip-glyph: var(--glyph-pip-debuff); }
+[data-pip="control-hard"] { --pip-c: var(--c-pip-control); --pip-glyph: var(--glyph-pip-control-hard); }
+[data-pip="control-soft"] { --pip-c: var(--c-pip-control); --pip-glyph: var(--glyph-pip-control-soft); }
+[data-pip="dot"]          { --pip-c: var(--c-pip-debuff);  --pip-glyph: var(--glyph-pip-dot); }
+[data-pip="hot"]          { --pip-c: var(--c-pip-buff);    --pip-glyph: var(--glyph-pip-hot); }
+[data-pip="special"]      { --pip-c: var(--c-arena-ink);   --pip-glyph: var(--glyph-pip-special); }
+
+/* Arena damage tone: data-tone on a number or impact. Shape also differs
+   (physical = angular spark, arcane = round burst, true = diamond). */
+[data-tone="physical"] { --tone-c: var(--c-fx-physical); }
+[data-tone="arcane"]   { --tone-c: var(--c-fx-arcane); }
+[data-tone="true"]     { --tone-c: var(--c-fx-true); }
+[data-tone="heal"]     { --tone-c: var(--c-fx-heal); }
+[data-tone="shield"]   { --tone-c: var(--c-fx-shield); }
+
+/* Rating band: data-band="1..4" (computed in code from the TUNABLE thresholds) */
+[data-band="1"] { --band: var(--c-band-1); --band-bg: var(--c-band-1-bg); --band-on: var(--c-text); }
+[data-band="2"] { --band: var(--c-band-2); --band-bg: var(--c-band-2-bg); --band-on: var(--c-text); }
+[data-band="3"] { --band: var(--c-band-3); --band-bg: var(--c-band-3-bg); --band-on: var(--c-text); }
+[data-band="4"] { --band: var(--c-band-4); --band-bg: var(--c-band-4-bg); --band-on: var(--c-band-4-on); }
+:root[data-theme="light"] [data-band="3"] { --band-on: #15130f; }
+
+/* Reduced motion: OS setting or in-game setting */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+    --arena-hit-flash-ms: 0ms;
+    --arena-pulse-ms: 0ms;
+    --arena-ease-ms: 0ms;
+    --arena-number-rise: 0px;
+    --arena-motion: 0;
+  }
+}
+:root[data-motion="reduced"] {
+  --dur-instant: 0ms;
+  --dur-fast: 0ms;
+  --dur-base: 0ms;
+  --dur-slow: 0ms;
+  --arena-hit-flash-ms: 0ms;
+  --arena-pulse-ms: 0ms;
+  --arena-ease-ms: 0ms;
+  --arena-number-rise: 0px;
+  --arena-motion: 0;
+}
+/* Arena under reduced motion (04 section 9, 05-technical-m2 A9): no pulses, no
+   trails, no hit flashes, no floating numbers (a number appears and fades in
+   place over --arena-fx-fade-ms), no camera ease, effects at their end state.
+   Telegraph progress stays, it is information. Flashing never exceeds
+   --arena-flash-limit a second and nothing shakes. The viewer receives
+   reducedMotion as a boolean (OS setting OR the in-game setting); these tokens
+   mirror it for the DOM parts and for hosts that read them. */
+
+/* Density: data-density="compact" on <html> or any container */
+[data-density="compact"] {
+  --row-h: var(--row-h-compact);
+  --control-h: 2rem;
+}
+
+/* Settings > Accessibility > Status colors: "Blue / orange" (TUNABLE option).
+   Swaps good/bad away from the red-green axis. Arrows, signs and letters stay. */
+:root[data-status-palette="blue-orange"] {
+  --c-good: #66b6ee;
+  --c-good-soft: rgba(102, 182, 238, 0.14);
+  --c-bad: #f2a24a;
+  --c-bad-soft: rgba(242, 162, 74, 0.14);
+}
+:root[data-theme="light"][data-status-palette="blue-orange"] {
+  --c-good: #1c5f9f;
+  --c-good-soft: rgba(28, 95, 159, 0.1);
+  --c-bad: #a65400;
+  --c-bad-soft: rgba(166, 84, 0, 0.1);
+}

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arena League · UI mockups</title>
+<link rel="stylesheet" href="../../../src/ui/styles/tokens.css">
+<link rel="stylesheet" href="../../../src/ui/styles/base.css">
+<link rel="stylesheet" href="../../../src/ui/styles/components.css">
+<style>
+  /* Index-only layout. Everything else comes from the design system. */
+  .cover { max-width: 76rem; margin: 0 auto; padding: var(--sp-10) var(--page-gutter) var(--sp-16); }
+  .cover__head { display: flex; align-items: center; gap: var(--sp-5); margin-bottom: var(--sp-8); }
+  .cover__title { font-family: var(--font-display); font-size: var(--fs-3xl); font-weight: var(--fw-bold); line-height: 1.05; }
+  .cover__lede { max-width: 46rem; color: var(--c-text-muted); font-size: var(--fs-lg); margin-top: var(--sp-2); }
+  .screen-card__top { display: flex; align-items: center; gap: var(--sp-3); }
+  .screen-card__icon { display: grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: var(--r-md); background: var(--c-accent-soft); color: var(--c-accent-text); }
+  .screen-card__title { font-family: var(--font-display); font-size: var(--fs-xl); font-weight: var(--fw-bold); }
+  .screen-card p { color: var(--c-text-muted); font-size: var(--fs-sm); }
+  .section-title { margin: var(--sp-10) 0 var(--sp-4); }
+</style>
+</head>
+<body>
+  <div class="cover">
+    <header class="cover__head">
+      <span class="crest crest--xl" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true">AL</span>
+      <div style="flex:1">
+        <div class="page-header__eyebrow">Design draft · M1 "Season MVP" · not approved</div>
+        <h1 class="cover__title">Arena League · UI mockups</h1>
+        <p class="cover__lede">Static, framework-agnostic screens built only from the shared design system in <code>src/ui/styles/</code>. All names, clubs and numbers are invented EXAMPLE data. Spec: <code>docs/design/_drafts/04-presentation.md</code>.</p>
+      </div>
+      <button class="btn" type="button" data-action="theme"><span class="icon" data-icon="sun" aria-hidden="true"></span>Theme</button>
+    </header>
+
+    <div class="callout" style="margin-bottom:var(--sp-6)">
+      <span class="icon" data-icon="keyboard" aria-hidden="true"></span>
+      <div><div class="callout__title">Try it like the game</div>
+      <div class="callout__text">Number keys <kbd>1</kbd>–<kbd>7</kbd> switch screens, <kbd>Space</kbd> is Continue, <kbd>?</kbd> lists shortcuts, hover any number for its tooltip, <kbd>Shift</kbd> pins it, click table headers to sort. Add <code>?theme=light</code> or <code>?scale=1.25</code> to a URL to review themes and interface scale.</div></div>
+    </div>
+
+    <div class="l-autogrid" style="--autogrid-min:20rem">
+      <a class="card screen-card" href="home.html">
+        <div class="screen-card__top"><span class="screen-card__icon"><span class="icon icon--lg" data-icon="home" aria-hidden="true"></span></span><span class="screen-card__title">Home</span><kbd class="l-push">1</kbd></div>
+        <p>The matchweek hub: next fixture with both lineups, a six-item digest, club money, availability and the table around the cut. One primary action: Continue.</p>
+      </a>
+      <a class="card screen-card" href="squad.html">
+        <div class="screen-card__top"><span class="screen-card__icon"><span class="icon icon--lg" data-icon="squad" aria-hidden="true"></span></span><span class="screen-card__title">Squad</span><kbd class="l-push">2</kbd></div>
+        <p>Lineup board by starting row with captain and per-fighter presets, inline validation, and a sortable roster with the cap meter and contract status.</p>
+      </a>
+      <a class="card screen-card" href="fighter.html">
+        <div class="screen-card__top"><span class="screen-card__icon"><span class="icon icon--lg" data-icon="fighter" aria-hidden="true"></span></span><span class="screen-card__title">Fighter profile</span></div>
+        <p>Physical and mental attributes, the race age curve with "you are here", trait badges with rich tooltips, contract, injuries, development and career.</p>
+      </a>
+      <a class="card screen-card" href="match-report.html">
+        <div class="screen-card__top"><span class="screen-card__icon"><span class="icon icon--lg" data-icon="swords" aria-hidden="true"></span></span><span class="screen-card__title">Match report</span></div>
+        <p>Scoreboard with rounds, MVP, a "what decided it" rule trace, box score, key-moments timeline, injuries and XP.</p>
+      </a>
+      <a class="card screen-card" href="arena.html">
+        <div class="screen-card__top"><span class="screen-card__icon"><span class="icon icon--lg" data-icon="eye" aria-hidden="true"></span></span><span class="screen-card__title">Arena screen (M2)</span></div>
+        <p>The match viewer: HUD, placeholder tokens with rings, glyphs, bars and status pips, fighter strip, key-moment feed, pause inspector, round-end card, replay scrubber, and Watch or Simulate. Notes in <code>arena-notes.md</code>.</p>
+      </a>
+      <a class="card screen-card" href="league.html">
+        <div class="screen-card__top"><span class="screen-card__icon"><span class="icon icon--lg" data-icon="league" aria-hidden="true"></span></span><span class="screen-card__title">League</span><kbd class="l-push">4</kbd></div>
+        <p>17-club standings with promotion, tournament and relegation zones, plus the 8-club bracket: projected today, or last season's result.</p>
+      </a>
+      <a class="card screen-card" href="market.html">
+        <div class="screen-card__top"><span class="screen-card__icon"><span class="icon icon--lg" data-icon="market" aria-hidden="true"></span></span><span class="screen-card__title">Market</span><kbd class="l-push">5</kbd></div>
+        <p>Free agents with role filters, wage headroom, willingness, a compare tray and the offer dialog with its budget impact.</p>
+      </a>
+      <a class="card screen-card" href="components.html">
+        <div class="screen-card__top"><span class="screen-card__icon"><span class="icon icon--lg" data-icon="codex" aria-hidden="true"></span></span><span class="screen-card__title">Component sheet</span></div>
+        <p>Tokens, type, role glyphs, traits, ratings, tables, feedback and overlays in one page, with a color-vision simulator for review.</p>
+      </a>
+    </div>
+
+    <h2 class="section-title" id="specified">Specified in the draft, not mocked yet</h2>
+    <div class="panel">
+      <table class="data-table">
+        <thead><tr><th>Screen</th><th>Where it is specified</th><th>Main components</th></tr></thead>
+        <tbody>
+          <tr><td>New career / club select</td><td>04 draft §6, view ui-new</td><td>card grid, crest, segmented, stat tiles</td></tr>
+          <tr><td>Fixtures and results <kbd>3</kbd></td><td>04 draft §6, view ui-fixtures</td><td>data table, form strip, tabs</td></tr>
+          <tr><td>Finances <kbd>6</kbd></td><td>04 draft §6, view ui-finances</td><td>stat tiles, meters, ledger table, bar chart</td></tr>
+          <tr><td>Class codex <kbd>7</kbd></td><td>04 draft §6, view ui-codex</td><td>role toggles, card grid, rule sentences</td></tr>
+          <tr><td>Season-end review</td><td>04 draft §6, view ui-season-end</td><td>stepper tabs, standings, deltas, empty states</td></tr>
+          <tr><td>Save / Load, Settings</td><td>04 draft §6, views ui-save and ui-settings</td><td>table, modal, segmented, switch, range</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+<script src="mockups.js"></script>
+</body>
+</html>

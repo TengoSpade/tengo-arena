@@ -1,0 +1,48 @@
+/* Finances layout glue (screen-scoped). */
+.finance-tiles .stat-tile {
+  gap: 0.25rem;
+}
+
+.finance-tiles .meter {
+  margin: 0.15rem 0;
+}
+
+.kv > div.finance-total {
+  border-top: 1px solid var(--c-border);
+  border-bottom: 0;
+  font-weight: var(--fw-semibold);
+}
+
+.kv > div.finance-total dt {
+  color: var(--c-text);
+}
+
+.finance-share {
+  display: inline-grid;
+  grid-template-columns: 4.5rem 2.5rem;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.finance-chart__hit {
+  fill: transparent;
+}
+
+.finance-chart__col:hover .finance-chart__hit {
+  fill: var(--c-surface-2);
+}
+
+.finance-swatch--dashed {
+  background: repeating-linear-gradient(90deg, var(--c-chart-line) 0 3px, transparent 3px 5px);
+}
+
+/* Hover targets on the projected weeks of the balance chart (one tooltip per week). */
+.finance-chart .chart__hit {
+  fill: transparent;
+  cursor: help;
+}
+
+.finance-chart .chart__hit:hover {
+  fill: var(--c-chart-line);
+  fill-opacity: 0.35;
+}

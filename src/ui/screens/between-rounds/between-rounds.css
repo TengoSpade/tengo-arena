@@ -1,0 +1,165 @@
+/* Between-round screen (M1.1 WP-D). */
+.br-result {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--c-border);
+  border-left-width: 4px;
+  border-radius: var(--r-md, var(--r-sm));
+  background: var(--c-surface-1);
+}
+
+.br-result.is-won {
+  border-left-color: var(--c-good);
+}
+
+.br-result.is-lost {
+  border-left-color: var(--c-bad);
+}
+
+.br-result__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.br-result__score {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+}
+
+.br-error {
+  margin-bottom: var(--sp-4);
+}
+
+.br-table tbody tr.is-out td {
+  background: var(--c-accent-soft);
+}
+
+.br-swap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.br-swap__select {
+  min-width: 9.5rem;
+}
+
+.br-keys {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--c-divider);
+}
+
+.br-reserve {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+}
+
+.br-reserve.is-in {
+  border-color: var(--c-accent-line);
+  background: var(--c-accent-soft);
+}
+
+.br-reserve__stats {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.br-reserve__for {
+  flex-basis: 100%;
+  color: var(--c-accent-text);
+}
+
+.br-them {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+}
+
+.br-them > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+/* Below 2000 px the five take the full width (twelve columns of numbers and the swap controls need it) and the side
+   panels sit in a row underneath; from 2000 px they stand beside it. */
+.br-main,
+.br-side {
+  grid-column: 1 / -1;
+}
+
+.br-side {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--grid-gap);
+  align-items: start;
+}
+
+@media (min-width: 2000px) {
+  .br-main {
+    grid-column: span 8;
+  }
+
+  .br-side {
+    grid-column: span 4;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.br-nameline {
+  display: flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  align-items: center;
+  gap: 0 var(--sp-2);
+}
+
+.br-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.br-fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+
+/* The five's stat block: quiet numbers beside the scan path (name, rating, Freshness, swap). */
+.br-table .br-stat {
+  color: var(--c-text-muted);
+}
+
+.br-table .br-group {
+  text-align: center;
+  border-bottom: 1px solid var(--c-divider);
+}
+
+.br-table .br-subhead th {
+  font-weight: var(--fw-medium, 500);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--c-text-faint);
+}
+
+.br-rating {
+  white-space: nowrap;
+}

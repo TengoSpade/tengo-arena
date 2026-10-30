@@ -1,0 +1,268 @@
+/**
+ * The weekly digest ("This week" on Home, the top-bar bell, the Home nav
+ * badge). Notification budget (04 §6.2, OC-7, PROPOSED · TUNABLE): at most
+ * 6 items, at most 2 "Needs action", ordered blockers, needs action, our
+ * result, squad changes, market, league; routine items are grouped.
+ * Sources: getBlockers() and the core news items (NewsItem.key + params;
+ * core stores no prose, the UI text table renders it).
+ */
+import type { ContentDB } from '../../core/content';
+import { personName, type Blocker, type ClubId, type GameState, type NewsId, type NewsItem } from '../../core/model';
+import { formatMoney } from '../format';
+import { format } from '../text';
+import { blockerTarget } from './digest-targets';
+import { GROUPED_KEYS, NEEDS_ACTION_LIMIT, digestBlockers, digestNews, newsNeedsAction } from './digest-flags';
+import { blockerText } from './messages';
+
+export type DigestKind = 'medical' | 'contract' | 'result' | 'market' | 'league' | 'development';
+
+export interface DigestItem {
+  id: string;
+  kind: DigestKind;
+  title: string;
+  text: string;
+  needsAction: boolean;
+  unread: boolean;
+  /** Primary action of the item. */
+  action?: { label: string; href: string };
+  newsIds: NewsId[];
+  /** Deadline line ("answer at week processing"), when the item has one. */
+  deadline?: string;
+}
+
+export const DIGEST_LIMIT = 6;
+export { NEEDS_ACTION_LIMIT };
+
+/**
+ * News key -> how the digest shows it (whether it needs action: digest-flags.ts NEEDS_ACTION_KEYS). Keys and params follow core (core/fighters/news.ts,
+ * core/economy offers and finance); names are resolved from refs in paramsOf. Unknown keys get a
+ * readable fallback.
+ */
+const TEMPLATES: Record<string, { kind: DigestKind; title: string; text?: string; action?: [string, string]}> = {
+  'fighter.injured': { kind: 'medical', title: '{fighter} is out for {weeks} wk', text: '{severity} in round {round}.', action: ['Review lineup', '#/squad'] },
+  'fighter.career_ended': { kind: 'medical', title: '{fighter}’s career is over', text: 'A career-ending injury. He leaves the roster.', action: ['Squad', '#/squad'] },
+  'fighter.scarred': { kind: 'medical', title: '{fighter} is scarred: {trait}', action: ['Profile', '#/fighter/{fighterId}'] },
+  'fighter.trait_gained': { kind: 'development', title: '{fighter} gained {trait}', action: ['Profile', '#/fighter/{fighterId}'] },
+  'fighter.trait_lost': { kind: 'development', title: '{fighter} lost {trait}', action: ['Profile', '#/fighter/{fighterId}'] },
+  'fighter.trait_skipped': { kind: 'development', title: '{fighter} could not gain {trait}', text: 'He already has the most traits a fighter can hold.', action: ['Profile', '#/fighter/{fighterId}'] },
+  'fighter.final_season': { kind: 'contract', title: '{fighter} announced his final season', text: 'He retires at season end, at {age}.', action: ['Profile', '#/fighter/{fighterId}'] },
+  'fighter.retired': { kind: 'contract', title: '{fighter} retired at {age}', action: ['Profile', '#/fighter/{fighterId}'] },
+  'captaincy.snubbed': { kind: 'development', title: '{fighter} feels snubbed', text: 'The former captain: −2 chemistry when fielded, for 6 matchweeks.', action: ['Squad', '#/squad'] },
+  'captaincy.passed_over': { kind: 'development', title: '{fighter} feels passed over', text: '−1 chemistry for 6 matchweeks, or until he is made vice-captain.', action: ['Squad', '#/squad'] },
+  'captaincy.losing_the_room': { kind: 'development', title: 'Captain {fighter} is losing the room', text: 'Not fielded for 4 matches: −10 captaincy until he plays again.', action: ['Squad', '#/squad'] },
+  'captaincy.departed': { kind: 'development', title: 'Your long-serving captain has left', text: '−1 chemistry for 4 matchweeks.', action: ['Squad', '#/squad'] },
+  'captaincy.interim': { kind: 'development', title: '{fighter} is interim captain', text: 'Named by the club; choose a captain on the squad screen.', action: ['Squad', '#/squad'] },
+  // core/game (D-S): named at kickoff when the captain is missing (params.reason vice | starter) or after the captain left.
+  'captain.interim': { kind: 'development', title: '{fighter} is interim captain', text: '{interimReason} Choose a captain on the squad screen to change it.', action: ['Squad', '#/squad'] },
+  'offer.lost': { kind: 'market', title: '{fighter} signed for {otherClub}', action: ['Market', '#/market'] },
+  'offer.void': { kind: 'market', title: 'Your offer to {fighter} lapsed', text: 'It no longer met the rules at week processing.', action: ['Market', '#/market'] },
+  'finance.embargo-lifted': { kind: 'contract', title: 'Spending embargo lifted', action: ['Finances', '#/finances'] },
+  'finance.registry-advance': { kind: 'contract', title: 'Registry advance of {amount}', text: 'Repaid from future grants (debt {registryDebt}).', action: ['Finances', '#/finances'] },
+  'fighter.recovered': { kind: 'medical', title: '{fighter} is fit again', action: ['Squad', '#/squad'] },
+  'contract.expiring': {
+    kind: 'contract',
+    title: '{fighter}’s contract ends this season',
+    text: '{weeksLeft} {weeksLeft?week|weeks} to the season end; unrenewed fighters leave then. {count} {count?contract ends|contracts end} in all.',
+    action: ['Renew', '#/market?renew={fighterId}'],
+  },
+  'contract.minimum_raise': {
+    kind: 'contract',
+    title: '{fighter}’s wage rises to {to}',
+    text: 'The new tier’s minimum wage applies from this season: {from} → {to}.',
+    action: ['Profile', '#/fighter/{fighterId}'],
+  },
+  'match.result': { kind: 'result', title: '{result} {score} against {opponent}', action: ['Report', '#/match/{fixtureId}'] },
+  'offer.accepted': { kind: 'market', title: '{fighter} accepted your offer', text: '{wage} for {seasons} {seasons?season|seasons}.', action: ['Squad', '#/squad'] },
+  'offer.refused': { kind: 'market', title: '{fighter} refused your offer', text: 'Patience left with your club: {patienceLeft}.', action: ['Market', '#/market'] },
+  'offer.countered': { kind: 'market', title: '{fighter} countered at {counterWage}', text: 'Offer that wage to sign him; the counter lapses after the next week processing.', action: ['Market', '#/market'] },
+  'market.new-free-agent': { kind: 'market', title: 'New free agent: {fighter}', action: ['View', '#/market'] },
+  'finance.watch': { kind: 'contract', title: 'Finances on watch', action: ['Finances', '#/finances'] },
+  'finance.embargo': { kind: 'contract', title: 'Spending embargo', action: ['Finances', '#/finances'] },
+  'fighter.developed': { kind: 'development', title: '{fighter} improved', action: ['Profile', '#/fighter/{fighterId}'] },
+  'league.standing': { kind: 'league', title: 'Now {position} in the {wing}', action: ['Standings', '#/league'] },
+};
+
+function kindOfKey(key: string): DigestKind {
+  if (key.startsWith('fighter.injur')) return 'medical';
+  if (key.startsWith('contract.') || key.startsWith('finance.')) return 'contract';
+  if (key.startsWith('match.')) return 'result';
+  if (key.startsWith('offer.') || key.startsWith('market.') || key.startsWith('trials.')) return 'market';
+  if (key.startsWith('fighter.')) return 'development';
+  return 'league';
+}
+
+function humanize(key: string): string {
+  const s = key.replace(/[._-]+/g, ' ').trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** What a template can name beyond the item's own params (names, money). */
+export interface DigestNames {
+  state?: GameState;
+  content?: ContentDB;
+}
+
+function paramsOf(item: NewsItem, names: DigestNames = {}): Record<string, string | number> {
+  const p: Record<string, string | number> = { ...item.params };
+  if (item.refs.fixtureId) p['fixtureId'] = item.refs.fixtureId;
+  if (item.refs.fighterId) {
+    p['fighterId'] = item.refs.fighterId;
+    p['fighter'] = (names.state && personName(names.state, item.refs.fighterId)?.full) ?? 'A fighter';
+  }
+  if (item.refs.otherClubId) p['otherClub'] = names.state?.clubs[item.refs.otherClubId]?.name ?? 'another club';
+  if (p['weeksOut'] !== undefined) p['weeks'] = p['weeksOut'];
+  if (typeof p['severity'] === 'string') {
+    const id = p['severity'];
+    p['severity'] = names.content?.development.injury.severityLadder.find((x) => x.id === id)?.label ?? `${capitalize(id)} injury`;
+  }
+  if (item.key === 'captain.interim') p['interimReason'] = interimReasonText(p['reason']);
+  if (typeof p['traitId'] === 'string') p['trait'] = names.content?.traits.get(p['traitId'])?.name ?? String(p['traitId']);
+  for (const k of ['wage', 'counterWage', 'amount', 'registryDebt'] as const) if (typeof p[k] === 'number') p[k] = formatMoney(p[k], k === 'wage' || k === 'counterWage' ? { perWeek: true } : {});
+  // A wage raise (contract.minimum_raise) carries its wages as from / to.
+  if (item.key === 'contract.minimum_raise') for (const k of ['from', 'to'] as const) if (typeof p[k] === 'number') p[k] = formatMoney(p[k], { perWeek: true });
+  if (p['won'] !== undefined && p['result'] === undefined) p['result'] = Number(p['won']) ? 'Won' : 'Lost';
+  // Score from our side ("2–1"), from explicit for/against or home/away params.
+  if (p['score'] === undefined && p['for'] !== undefined && p['against'] !== undefined) p['score'] = `${p['for']}–${p['against']}`;
+  if (p['score'] === undefined && p['home'] !== undefined && p['away'] !== undefined) p['score'] = `${p['home']}–${p['away']}`;
+  return p;
+}
+
+/** Why core/game named an interim captain (GAME_NEWS_KEYS.captainInterim params.reason). */
+function interimReasonText(reason: string | number | undefined): string {
+  if (reason === 'vice') return 'Your club had no captain at kickoff, so the vice-captain took the armband.';
+  if (reason === 'starter') return 'Your club had no captain at kickoff, so the fit starter with the best captaincy took the armband.';
+  return 'Your captain left the club, so the club named a stand-in.';
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+
+export function newsToDigest(item: NewsItem, names: DigestNames = {}): DigestItem {
+  const tpl = TEMPLATES[item.key];
+  const p = paramsOf(item, names);
+  // One rule for the badge and the list (digest-flags.ts), so they never disagree.
+  const needsAction = newsNeedsAction(item, names.state);
+  return {
+    id: item.id,
+    kind: tpl?.kind ?? kindOfKey(item.key),
+    title: tpl ? format(tpl.title, p) : humanize(item.key),
+    text: tpl?.text ? format(tpl.text, p) : '',
+    needsAction,
+    unread: !item.read,
+    action: tpl?.action ? { label: tpl.action[0], href: format(tpl.action[1], p) } : undefined,
+    newsIds: [item.id],
+  };
+}
+
+function blockerToDigest(b: Blocker, i: number, state: GameState): DigestItem {
+  return {
+    id: `blocker-${i}-${b.code}`,
+    kind: b.code.startsWith('roster.') ? 'contract' : 'medical',
+    title: blockerText(b, state),
+    text: 'Continue is blocked until this is decided.',
+    needsAction: true,
+    unread: true,
+    action: { label: 'Decide', href: blockerTarget(b.code) },
+    newsIds: [],
+  };
+}
+
+const ORDER: Record<DigestKind, number> = { medical: 2, contract: 2, result: 3, development: 4, market: 5, league: 6 };
+
+/** This week's digest for a club: blockers first, then news of the last processed week and this week. */
+/** Several news of a grouped key (one per fighter) become one item naming them all. */
+function groupNews(news: readonly NewsItem[], state: GameState, content: ContentDB): DigestItem[] {
+  const out: DigestItem[] = [];
+  const groups = new Map<string, NewsItem[]>();
+  for (const n of news) {
+    if (!GROUPED_KEYS.has(n.key)) {
+      out.push(newsToDigest(n, { state, content }));
+      continue;
+    }
+    const g = groups.get(n.key);
+    if (g) g.push(n);
+    else {
+      groups.set(n.key, [n]);
+      out.push({ id: `group-${n.key}`, kind: 'contract', title: '', text: '', needsAction: false, unread: false, newsIds: [] });
+    }
+  }
+  return out.map((d) => {
+    if (!d.id.startsWith('group-')) return d;
+    const list = groups.get(d.id.slice('group-'.length))!;
+    if (list.length === 1) return newsToDigest(list[0]!, { state, content });
+    const one = newsToDigest(list[0]!, { state, content });
+    const names = list.map((n) => (n.refs.fighterId ? (personName(state, n.refs.fighterId)?.full ?? '') : '')).filter(Boolean).join(', ');
+    const tpl = GROUP_TEMPLATES[list[0]!.key]!;
+    return {
+      ...one,
+      id: `group-${list[0]!.key}-${list[0]!.id}`,
+      title: format(tpl.title, { n: list.length }),
+      text: format(tpl.text, { names }),
+      action: { label: tpl.action[0], href: tpl.action[1] },
+      unread: list.some((n) => !n.read),
+      needsAction: list.some((n) => newsNeedsAction(n, state)),
+      newsIds: list.map((n) => n.id),
+    };
+  });
+}
+
+const GROUP_TEMPLATES: Record<string, { title: string; text: string; action: [string, string] }> = {
+  'contract.expiring': { title: '{n} contracts end this season', text: '{names}. Unrenewed fighters leave at season end.', action: ['Renewals', '#/market?view=renewals'] },
+  'contract.minimum_raise': { title: '{n} wages rise to the new tier minimum', text: '{names}.', action: ['Finances', '#/finances'] },
+};
+
+/** M1.1: level-ups waiting for a choice (never block Continue; up to 3 per fighter, a 4th resolves the oldest). */
+export function levelUpDigest(state: GameState, clubId: ClubId): DigestItem | null {
+  const waiting = Object.values(state.fighters)
+    .filter((f) => f.clubId === clubId && f.status === 'active' && (f.pendingLevelUps?.length ?? 0) > 0)
+    .sort((a, b) => b.pendingLevelUps.length - a.pendingLevelUps.length || (a.id < b.id ? -1 : 1));
+  if (waiting.length === 0) return null;
+  const n = waiting.reduce((s, f) => s + f.pendingLevelUps.length, 0);
+  const first = waiting[0]!;
+  return {
+    id: 'level-ups',
+    kind: 'development',
+    title: n === 1 ? `${first.name.full} levelled up: choose a level-up` : `${n} level-ups to choose`,
+    text: waiting.map((f) => `${f.name.full} ${f.pendingLevelUps.length > 1 ? `(${f.pendingLevelUps.length})` : ''}`.trim()).join(' · ') + ' · each offers 3 options; up to 3 wait, a 4th resolves the oldest by his auto-pick policy.',
+    needsAction: false,
+    unread: true,
+    action: { label: 'Choose', href: `#/fighter/${first.id}?levelup=1` },
+    newsIds: [],
+  };
+}
+
+export function buildDigest(state: GameState, content: ContentDB, clubId: ClubId, blockers: readonly Blocker[]): DigestItem[] {
+  const levelUps = levelUpDigest(state, clubId);
+  const items = [...digestBlockers(blockers).map((b, i) => blockerToDigest(b, i, state)), ...(levelUps ? [levelUps] : []), ...groupNews(digestNews(state, clubId), state, content)];
+  const rank = (d: DigestItem, i: number) => (d.id.startsWith('blocker-') ? 0 : d.needsAction ? 1 : ORDER[d.kind]) * 1000 + i;
+  const sorted = items.map((d, i) => ({ d, r: rank(d, i) })).sort((a, b) => a.r - b.r).map((x) => x.d);
+  // Notification budget: at most 2 "Needs action" (extra ones stay listed without the tag), at most 6 items.
+  let flagged = 0;
+  const capped = sorted.map((d) => {
+    if (d.needsAction && flagged < NEEDS_ACTION_LIMIT) {
+      flagged += 1;
+      return d;
+    }
+    return d.needsAction ? { ...d, needsAction: false } : d;
+  });
+  if (capped.length <= DIGEST_LIMIT) return capped;
+  // Group the overflow into one routine item.
+  const head = capped.slice(0, DIGEST_LIMIT - 1);
+  const rest = capped.slice(DIGEST_LIMIT - 1);
+  head.push({
+    id: 'grouped',
+    kind: 'league',
+    title: `${rest.length} more updates this week`,
+    text: rest.map((d) => d.title).join(' · '),
+    needsAction: false,
+    unread: rest.some((d) => d.unread),
+    newsIds: rest.flatMap((d) => d.newsIds),
+  });
+  return head;
+}
+
+export function needsActionCount(items: readonly DigestItem[]): number {
+  return items.filter((d) => d.needsAction).length;
+}

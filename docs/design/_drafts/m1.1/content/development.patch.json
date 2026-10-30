@@ -1,0 +1,50 @@
+{
+  "_doc": "M1.1 PATCH for content/default/development.json (fighter-lifecycle designer; spec docs/design/_drafts/m1.1/progression.md). RFC 6902 operations with JSON Pointer paths, applied in order to development.json version 1; every key not named stays as it is. New M1.1 constants live in the proposed new file levels.json (same folder). Every number is PROPOSED · TUNABLE.",
+  "status": "DRAFT 2026-10-26 (fighter-lifecycle designer), M1.1 playtest round 1 (owner tickets T003, T004, T005).",
+  "appliesTo": "content/default/development.json version 1",
+  "operations": [
+    { "op": "replace", "path": "/version", "value": 2 },
+    { "op": "replace", "path": "/status", "value": "M1.1 DRAFT 2026-10-26 (fighter-lifecycle designer). Season-end development replaced by in-season level-ups (levels.json, owner T005); bench XP (T004); Stamina and Freshness (T003). Owner-mandated parts cite owner IDs or tickets in the spec; everything else is PROPOSED and every number is TUNABLE." },
+
+    { "op": "replace", "path": "/time/_doc", "value": "humanAge = age * 80 / race.lifespan, kept in tenths (floor(age * 800 / lifespan) / 10). Season rate scale k = 80 / race.lifespan. Decline (wear) of a season uses the age the fighter had during that season; the +1 increment follows (season-end step). XP per level (levels.json) reads the current humanAge." },
+
+    { "op": "replace", "path": "/developmentClock/_doc", "value": "M1.1: used only when a fighter is created (world generation, intake, free agents, hired blades) and by the save migration. D_physical and D_mental are set from pre-career usage as in M1 (preCareerUsage, maxAheadOfHumanAge, bloomRangeHumanYears), then frozen: they are stored but never advanced. train100_i = cap100_i * M_g(D_g + bloom_i) at creation; after that a stat grows only through level-up picks (levels.json). The M1 season-end development step is removed." },
+    { "op": "remove", "path": "/developmentClock/usageFloor" },
+    { "op": "remove", "path": "/developmentClock/maxDeltaPerSeason" },
+
+    { "op": "replace", "path": "/maturityCurve/_doc", "value": "Used only at creation and save migration: train100_i = cap100_i * M_g(D_g + bloom_i), interpolated linearly, clamped below the first and above the last point. Stamina uses the physical curve." },
+
+    { "op": "replace", "path": "/decline/_doc", "value": "Wear in stat points per human-year (step table on floor(humanAge during the season) - traitDeclineShift). Per season: wear100_i += 100 * d_g * k * race.declineMult[g] * traitDeclineMult for every stat of group g (stamina is physical, so it declines on the physical table like str, agi, pac, tgh and pre). base100_i = max(100, train100_i - wear100_i). Wear never heals; level-up picks raise train100, never lower wear. Training emphasis no longer changes wear." },
+
+    { "op": "replace", "path": "/xp/_doc", "value": "Round XP: each fighter earns these amounts for every round he starts (as a starter, an entering reserve or an emergency entrant), accumulated after each round (levels.json hooks.xpAfterRound) and committed with the match result. A fighter swapped out keeps the XP of every round he started. T004 bench XP: levels.json benchXp (a third of one lineup slot's match XP) for each fit roster fighter who starts no round, match-squad reserves who never enter included. Injured fighters, free agents and (M5, O3) called-up academy fighters who are not used earn 0." },
+    { "op": "replace", "path": "/xp/_seasonTargetNote", "value": "TUNABLE. Used only for retirement usage (retirement._usageDoc) and as a reference: about 70% of the round XP a full-time starter earns over 16 best-of-3 league matches (16 * ~2.5 rounds * ~12.8 XP). Bench XP does not count toward it." },
+
+    { "op": "replace", "path": "/training/_doc", "value": "M1.1: a standing training emphasis per fighter (Balanced, Body, Mind; set once, persists). It no longer scales growth; it weights which stats appear in level-up offers (levels.json offers.emphasisWeight) and nudges the auto-pick (levels.json autoPick.emphasisPreference). Setting enabled=false makes everyone Balanced. Emphasis is not intensity, has no injury risk and no wear effect." },
+    { "op": "remove", "path": "/training/emphasisBonus" },
+    { "op": "remove", "path": "/training/offEmphasisPenalty" },
+    { "op": "remove", "path": "/training/bodyWearReduction" },
+    { "op": "replace", "path": "/training/formulas", "value": {
+      "a": "product of trainingEmphasis effect mults (human Adaptable 1.5, Regimented 1.5, Set in Their Ways 0); clamp a to [0, 2]",
+      "offerWeight": "Body: physical stats x (1 + perStrength * a), mental stats / (1 + perStrength * a); Mind: the reverse; Balanced: x1 (levels.json offers.emphasisWeight.perStrength)"
+    } },
+
+    { "op": "remove", "path": "/trend" },
+
+    { "op": "add", "path": "/retirement/_usageDoc", "value": "M1.1: usage for the retirement modifiers (usageHighAtLeast, usageLowAtMost) = min(1, season round XP / xp.seasonTarget). Round XP only: bench XP (levels.json benchXp) does not count, so a fighter who mostly sits out still reads as low usage." },
+
+    { "op": "replace", "path": "/injury/_doc", "value": "Per-round chance p = (base + damagePerMaxHp * min(cap, damageTaken / maxHp) + downedAdd * [downed]) * durabilityMult * race.injury.chanceMult * ageMult * traitMults * statusMults * freshnessMult, capped. freshnessMult = min(levels.json freshness.injuryMultMax, 1 + injuryMultPerPointBelow * (threshold - F)) when F, the fighter's freshness at that round's start, is below the threshold (60), else 1. Rolled after each round for every fighter who started it, from the injury stream keyed by fixture, round and fighter (levels.json hooks.injuriesAfterRound); at most one new injury per fighter per match. M1.1: an injury takes effect immediately. The fighter plays no later round of that match; combat's between-round step replaces him (an unused reserve, using a swap; else an emergency entrant). weeksOut starts with the week after the match." },
+
+    { "op": "add", "path": "/captaincy/losingTheRoom/fieldedMeans", "value": "started at least one round of the match, or was named a match-squad reserve" },
+    { "op": "add", "path": "/captaincy/losingTheRoom/freshnessRestExemptBelow", "value": 60 },
+    { "op": "add", "path": "/captaincy/losingTheRoom/_doc", "value": "A match in which the fit club captain is left out of the match squad while his freshness at the lineup lock is below freshnessRestExemptBelow (a rest) neither extends nor resets the count." },
+
+    { "op": "replace", "path": "/chemistry/_doc", "value": "DELEGATED (D-D): lineup modifiers only; no broader morale system. Structural and visible (P-17). Lineup chemistry for the five starters = sum of trait chemistry terms (captain's own terms x captainTraitChemistryMult) + club captain grade.chemistry + status terms, computed at lineup lock, clamped to [min, max] and kept for the whole match. M1.1: swaps do not recompute it; an entering reserve or emergency entrant gets the same composure modifier as the starters (unless chemistryImmune), and his own chemistry terms do not count. Every fielded fighter without chemistryImmune gets cmp + chemistry / 2 (rounded toward zero) in the fight-setup stats; this is a MANAGEMENT-side modifier (the sim only sees the resulting stat). Set composureDivisor to 0 to disable chemistry without touching other data." },
+
+    { "op": "test", "path": "/statuses/1/id", "value": "still_tender" },
+    { "op": "replace", "path": "/statuses/1/duration", "value": "the next 2 matches in which the fighter starts a round" },
+
+    { "op": "add", "path": "/potential/_staminaNote", "value": "M1.1: the stamina cap follows capFromPotential plus levels.json stamina.capOffsetPoints (2.5 points) with jitter +/- levels.json stamina.jitterPoints (3.0) instead of capJitterPoints; class offset from classes.json statEmphasis.stamina; race tendency from races.json statTendencies.stamina." },
+
+    { "op": "add", "path": "/soakTargets/_m11Note", "value": "M1.1 adds the bands in levels.json soakTargets (levels per season by human-age, matches per level, bench share, tired and spent round-start shares, starter stamina). The bands above are unchanged; shareHumanAgeAtLeast31 is watched (the scratch model touched 0.57 in 1 of 3 seeds)." }
+  ]
+}

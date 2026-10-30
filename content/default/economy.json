@@ -1,0 +1,407 @@
+{
+  "_doc": "Economy tunables: money, wages, contracts, free-agent market, finance rules, prestige, M1-light patron goal, AI club personalities and soak-test targets. Spec: docs/design/_drafts/03-league-economy.md (sys-finance, sys-contracts, sys-transfers, sys-ai-manager, sys-patron). All money is integer gold (display name from 'currency'). Ratios and modifiers are integer basis points (bp, 10000 = 100%). Step tables are [key, value] pairs: use the entry with the largest key <= the lookup value. Each formula rounds once at its end (toward zero) unless it says otherwise (03 §1).",
+  "schemaVersion": 1,
+  "status": "PROPOSED · TUNABLE — every number is a starting value for soak-test tuning (league-economy designer, 2026-10-25). Not approved.",
+
+  "currency": {
+    "_doc": "Mechanical term is 'gold' (01 §7). The default theme displays it as tessels: arena tokens struck by the Charter Registry. Owner confirmation needed (league-economy draft, Owner confirmations).",
+    "concept": "gold",
+    "displayName": "tessel",
+    "displayNamePlural": "tessels",
+    "abbreviation": "ts",
+    "format": "{amount} ts",
+    "thousandsSeparator": ","
+  },
+
+  "season": {
+    "_doc": "Wages, ops costs and sponsor retainers are charged/paid at every week processing of the season calendar (leagues.json calendar). Must equal the calendar's week count.",
+    "wageWeeksPerSeason": 23,
+    "homeFixturesPerClub": 8
+  },
+
+  "tierProfiles": [
+    {
+      "tierLevel": 1,
+      "centralGrant": 82000,
+      "sponsorRetainerBase": 46000,
+      "gateBase": 9250,
+      "wageRatioBp": 8000,
+      "opsCostPerWeek": 1300,
+      "tierMinWage": 260,
+      "startingBalanceBase": 50000,
+      "sponsorWinBonus": 1200,
+      "sponsorTournamentBonus": 6000,
+      "tablePrizeTop": 25000,
+      "tournamentPrize": { "quarterfinal": 4750, "semifinal": 9500, "finalist": 19000, "champion": 38000 },
+      "patronBonus": 12000,
+      "promotionGrantOnArrival": 20500
+    },
+    {
+      "tierLevel": 2,
+      "centralGrant": 34000,
+      "sponsorRetainerBase": 18800,
+      "gateBase": 3700,
+      "wageRatioBp": 7800,
+      "opsCostPerWeek": 530,
+      "tierMinWage": 150,
+      "startingBalanceBase": 20000,
+      "sponsorWinBonus": 500,
+      "sponsorTournamentBonus": 2500,
+      "tablePrizeTop": 10000,
+      "tournamentPrize": { "quarterfinal": 1875, "semifinal": 3750, "finalist": 7500, "champion": 15000 },
+      "patronBonus": 5000,
+      "promotionGrantOnArrival": 8500
+    },
+    {
+      "tierLevel": 3,
+      "centralGrant": 14000,
+      "sponsorRetainerBase": 7200,
+      "gateBase": 1400,
+      "wageRatioBp": 7600,
+      "opsCostPerWeek": 210,
+      "tierMinWage": 60,
+      "startingBalanceBase": 8000,
+      "sponsorWinBonus": 200,
+      "sponsorTournamentBonus": 1000,
+      "tablePrizeTop": 4000,
+      "tournamentPrize": { "quarterfinal": 750, "semifinal": 1500, "finalist": 3000, "champion": 6000 },
+      "patronBonus": 2000,
+      "promotionGrantOnArrival": 0
+    }
+  ],
+
+  "income": {
+    "grantInstallments": [
+      { "atWeek": "P1", "shareBp": 5000, "_doc": "credited in next-season setup, before P1 opens" },
+      { "atWeek": "MW9", "shareBp": 5000, "_doc": "credited in the week processing that ends MW8" }
+    ],
+    "sponsorRetainer": {
+      "_doc": "retainer = sponsorRetainerBase * (10000 + clamp(prestigeBpPerPoint * (prestige - tierBasePrestige), minAdjBp, maxAdjBp)) / 10000. Paid in equal weekly parts (floor(retainer / 23)); the remainder is paid with the last week.",
+      "prestigeBpPerPoint": 60,
+      "minAdjBp": -1500,
+      "maxAdjBp": 1500
+    },
+    "gate": {
+      "_doc": "gate = gateBase * (10000 + prestigeAdj + formAdj + fanAppealAdj) * stageBp / 100000000. prestigeAdj = clamp(prestigeBpPerPoint * (prestige - tierBasePrestige)). formAdj = formMinBp + formSpanBp * winsSoFar / matchesSoFar, counting this season's league and tournament matches before this fixture (0 before the first match). fanAppealAdj = fanAppealBpPerPoint * sum of fanAppeal trait points of the home lineup, capped. The tournament final is played at the neutral venue and its gate is split evenly (odd unit to the higher seed).",
+      "prestigeBpPerPoint": 50,
+      "prestigeMinAdjBp": -1500,
+      "prestigeMaxAdjBp": 1500,
+      "formMinBp": -1000,
+      "formSpanBp": 2000,
+      "fanAppealBpPerPoint": 200,
+      "fanAppealMaxBp": 1000,
+      "stageBp": { "regular": 10000, "quarterfinal": 15000, "semifinal": 15000, "final": 20000 },
+      "finalGateSplit": "even"
+    },
+    "tablePrize": {
+      "_doc": "prize(rank) = floor10(tablePrizeTop * (clubCount + 1 - rank) / clubCount), by final tier-table rank 1..16. Paid at season end.",
+      "roundDownTo": 10
+    },
+    "parachuteBpOfGrantGap": {
+      "_doc": "A relegated club receives (old tier centralGrant - new tier centralGrant) * bp / 10000 in each of the next seasons listed, credited at next-season setup. Stops early if the club is promoted again.",
+      "bySeasonAfterRelegation": [5000, 2500]
+    },
+    "startingBalance": {
+      "_doc": "New career only: startingBalanceBase * (10000 + clamp(bpPerPrestigePoint * (startPrestige - tierBasePrestige))) / 10000, floor10.",
+      "bpPerPrestigePoint": 100,
+      "minAdjBp": -3000,
+      "maxAdjBp": 3000
+    }
+  },
+
+  "budget": {
+    "_doc": "Season budget SB = central grant installments due this season (after any Registry deduction) + parachute + promotion grant + sponsor retainer + projected gate (homeFixturesPerClub * regular-season gate at formAdj 0, fanAppealAdj 0). Wage budget per week WB = floor((SB * (wageRatioBp + ascensionBp) / 10000 + reserveContribution) / wageWeeksPerSeason). reserveContribution = min(SB * reserveCapBp / 10000, max(0, balanceAtSetup - SB * reserveFloorBp / 10000) * reserveSpendRateBp / 10000). Both are fixed for the season at next-season setup.",
+    "reserveFloorBp": 1500,
+    "reserveSpendRateBp": 5000,
+    "reserveCapBp": 1000,
+    "ascensionWageRatioBonusBp": 800,
+    "ascensionSeasons": 1,
+    "worldGenBillBandBp": { "_doc": "New career (D-P): opening bills are rescaled into this share of WB, leaving room for the trials rookie and a tier-minimum signing.", "minBp": 8000, "maxBp": 8700 }
+  },
+
+  "wage": {
+    "_doc": "marketWage = curve(EQ) * (10000 + ageAdj + traitAdj + roleDemandAdj + fanAppealAdj) / 10000, floor to a multiple of 5. EQ = clamp(rating + (min(potential - rating, potentialGapCap) * potentialWeightBp(humanAge)) / 10000, 1, 100), toward zero. humanAge = floor(age * 80 / race.lifespan) (lifecycle). curve: integer linear interpolation between anchors [rating, weekly gold], toward zero. Anchors follow 160 * 2^((r - 50) / 12) (tuning pass 2026-10: 0.8x the draft curve so rosters near the cap fit the wage budget).",
+    "curveAnchors": [[0, 10], [5, 10], [10, 15], [15, 20], [20, 30], [25, 35], [30, 50], [35, 70], [40, 90], [45, 120], [50, 160], [55, 210], [60, 285], [65, 380], [70, 510], [75, 680], [80, 905], [85, 1210], [90, 1610], [95, 2150], [100, 2870]],
+    "maxWeeklyWage": 4000,
+    "roundDownToMultiple": 5,
+    "potentialGapCap": 25,
+    "potentialWeightBpByHumanAge": [[0, 4000], [24, 3000], [25, 2000], [26, 1000], [28, 0]],
+    "ageAdjBpByHumanAge": [[0, 0], [32, -600], [33, -1200], [34, -1800], [35, -2400], [36, -3000], [37, -3600], [38, -4200], [39, -5000]],
+    "traitAdj": {
+      "_doc": "Each trait adds positiveBp or negativeBp by polarity unless overridden by id. Economy-hook traits (traits.json effect type 'economy'): fanAppeal adds fanAppealBpPerPoint per point to the market wage and to home gate; wageDemandMult adds (mult - 1) * 10000 bp to the ask; loyalty subtracts loyaltyBpPerPoint per point from renewal asks with the current club.",
+      "positiveBp": 150,
+      "negativeBp": -150,
+      "overridesBp": {},
+      "totalMinBp": -1500,
+      "totalMaxBp": 1500,
+      "fanAppealBpPerPoint": 300,
+      "loyaltyBpPerPoint": 200
+    },
+    "roleDemandBp": {
+      "_doc": "Static class-demand premium per combat role (P-09 'class demand'). A hybrid uses the larger of its two roles. All 0 until soak tests show a scarce role.",
+      "tank": 0,
+      "melee_dps": 0,
+      "ranged_dps": 0,
+      "controller": 0,
+      "healer": 0
+    }
+  },
+
+  "ask": {
+    "_doc": "ask(f, club, L) = marketWage * (10000 + clamp(tierGapAdj + prestigeAdj + lengthAdj + greedBp + wageDemandAdj + situationAdj, totalMinBp, totalMaxBp)) / 10000, floor to a multiple of 5, then clamp to [club tierMinWage, maxWeeklyWage]. calibre(f) = the first tier whose minRating <= rating, else the lowest tier.",
+    "calibreMinRating": [{ "tierLevel": 1, "minRating": 62 }, { "tierLevel": 2, "minRating": 47 }, { "tierLevel": 3, "minRating": 0 }],
+    "tierGap": { "premiumBpPerTierBelowCalibre": 1500, "discountBpPerTierAboveCalibre": -500 },
+    "prestige": { "bpPerPointAboveTierBase": -20, "minAdjBp": -400, "maxAdjBp": 400 },
+    "length": {
+      "_doc": "preferredLength: 1 if humanAge <= youngMaxHumanAge and potential - rating >= youngMinPotentialGap; 3 if humanAge >= veteranMinHumanAge; otherwise 2. lengthAdj = mismatchBpPerSeason * |L - preferredLength|.",
+      "youngMaxHumanAge": 24,
+      "youngMinPotentialGap": 8,
+      "veteranMinHumanAge": 32,
+      "mismatchBpPerSeason": 500
+    },
+    "greed": {
+      "_doc": "Contract temperament, rolled once at fighter generation from the 'market' stream: uniform over [minBp, maxBp] in steps of stepBp. Visible in M1 as its label (and exact in M1 debug views).",
+      "minBp": -1000,
+      "maxBp": 1500,
+      "stepBp": 100,
+      "labels": [
+        { "id": "modest", "label": "Modest", "maxBp": -400, "flexBp": 1500 },
+        { "id": "fair", "label": "Fair", "maxBp": 700, "flexBp": 1000 },
+        { "id": "grasping", "label": "Grasping", "maxBp": 1500, "flexBp": 500 }
+      ]
+    },
+    "renewalSituation": {
+      "_doc": "Renewals only. startedShareBp = matches this fighter started for the club this season * 10000 / club matches played this season (0 matches played -> no adjustment).",
+      "lowStartShareBelowBp": 2500,
+      "lowStartAdjBp": 1000,
+      "highStartShareAtLeastBp": 6000,
+      "highStartAdjBp": -500,
+      "loyalSeasonsAtClub": 3,
+      "loyalAdjBp": -300
+    },
+    "totalMinBp": -4000,
+    "totalMaxBp": 6000
+  },
+
+  "negotiation": {
+    "_doc": "ratio = offer * 10000 / ask (or / the club's valid counter price). ratio >= 10000: acceptable. 10000 - flexBp <= ratio < 10000: the fighter counters at floor5((offer + ask) / 2). Lower: refused. Renewals answer at once; free-agent offers are answered at week processing.",
+    "counterValidWeekProcessings": 1,
+    "renewalOffersPerSeason": 3,
+    "freeAgentRefusalsPerClubPerSeason": 3,
+    "offerCapBpOfAsk": 15000
+  },
+
+  "contracts": {
+    "lengthsSeasons": [1, 2, 3],
+    "signingCostBp": 1000,
+    "renewalSigningCostBp": 1000,
+    "trialsRookieSigningCostBp": 0,
+    "signingCostRoundDownTo": 10,
+    "releasePayoutBp": 5000,
+    "releasePayoutRoundDownTo": 10,
+    "dropClauseBp": 2000,
+    "raiseToTierMinimumAtSetup": true,
+    "capRelief": {
+      "_doc": "After relegation, a club over its new cap may release up to (roster - cap) fighters during P1-P4 with no payout. AI clubs and the player use the same allowance.",
+      "enabled": true,
+      "payoutBp": 0
+    },
+    "hiredBlade": { "_doc": "Short-handed rule (open-006): paid the tier minimum wage for the one week of the match; not on the roster.", "weeklyWage": "tierMinWage" },
+    "marketWorthWeeks": 46,
+    "expiryReminderWeeksBeforeEnd": 4
+  },
+
+  "market": {
+    "_doc": "Free-agent market rules (sys-transfers). Every free-agent offer is answered at week processing; trials-day rookies and renewals are exclusive and answer at once.",
+    "openAllSeason": true,
+    "maxPendingOffersPerClub": 6,
+    "pendingOffersCountAgainstCapAndWageBudget": true,
+    "starterBonusBp": 1000,
+    "starterRankAtMost": 5,
+    "tieBreakers": ["higherPrestige", "higherTier", "lot"],
+    "decisionOrder": "marketWage desc, then fighter id asc",
+    "trialsDay": {
+      "_doc": "Rookie count per season comes from development.json generation.intake. Each club receives floor(rookies / clubs); the remainder goes one each to clubs drawn by lot (stream rookies). Exclusive to that club during P1; unsigned rookies enter the free-agent pool at P1 week processing, before the AI action phase.",
+      "exclusiveWeeks": 1,
+      "maxAskBpOfTierMinWage": 12500,
+      "_maxAskNote": "Rookie scale (D-P): on Trials Day a rookie asks his club at most this share of the tier minimum."
+    },
+    "pool": {
+      "inSeasonFloor": 60,
+      "roleFloor": 5,
+      "topUpGenerator": "journeyman",
+      "_unsignedRetirement": "development.json retirement.unsignedSeasonEndsBeforeLeaving (3)"
+    },
+    "releasedFighterBlockedFromSameClubThisSeason": true
+  },
+
+  "finance": {
+    "watchHorizonWeeks": 4,
+    "embargo": {
+      "_doc": "Entered when balance < 0 after week processing; lifted at the first week processing that ends with balance >= 0. While embargoed: no free-agent offer or renewal above the tier minimum wage; a free-agent offer is allowed only at the tier minimum, length 1, no signing cost, and only while the club has fewer than 5 fit roster fighters; trials rookies are blocked.",
+      "triggerBalanceBelow": 0
+    },
+    "registryAdvance": {
+      "_doc": "After this many consecutive week processings with balance < 0, the Charter Registry pays the debt (balance := 0). The advance is deducted from future central grants, at most deductionCapBpOfGrant of each season's grant, interest-free, until repaid.",
+      "consecutiveWeeksInDebt": 8,
+      "deductionCapBpOfGrant": 3000,
+      "prestigePenalty": 5
+    }
+  },
+
+  "prestige": {
+    "_doc": "Club prestige 0-100. Tier base values are leagues.json tiers[].basePrestige. Season-end update: delta = tableTerm + tournamentTerm + movementTerm - advancePenalty; tableTerm = (clubCount + 1 - 2 * rank) * tableNumerator / tableDenominator (toward zero); new = clamp(old + delta - (old + delta - newTierBase) * reversionBp / 10000, 0, 100).",
+    "tableNumerator": 3,
+    "tableDenominator": 8,
+    "tournament": { "quarterfinal": 1, "semifinal": 2, "finalist": 3, "champion": 5 },
+    "promoted": 8,
+    "relegated": -8,
+    "reversionBp": 2500,
+    "min": 0,
+    "max": 100
+  },
+
+  "patron": {
+    "_doc": "M1-light patron goal: REJECTED for M1 by D-C (no patron goal or patron bonus in M1; patron arrives in M6). Kept disabled as a hook. One goal per club per season, shown at P1; meeting it pays tierProfiles.patronBonus at season end; missing it costs nothing. The M6 patron (patience, dismissal) is separate.",
+    "enabledByDefault": false,
+    "expectedRankSlack": 3,
+    "goals": {
+      "default": "finish the tier table at or above (prestige rank within the tier + expectedRankSlack), capped at clubCount",
+      "promotedLastSeason": "avoid relegation",
+      "relegatedLastSeason": "finish in the top 4 of its wing"
+    }
+  },
+
+  "aiPersonalities": [
+    {
+      "id": "balanced",
+      "label": "Steady hands",
+      "description": "Spends most of the budget, signs for need, two-season deals.",
+      "wageUseBp": 9300,
+      "reserveFloorBp": 1500,
+      "richThresholdBp": 10000,
+      "overbidBp": 300,
+      "starOverbidBp": 500,
+      "maxNewOffersPerWeek": 3,
+      "rosterSlack": 1,
+      "potentialWeightBp": 10000,
+      "veteranPenaltyBp": 10000,
+      "preferredLength": "fighter",
+      "renewalHaggleBp": 0,
+      "maxVoluntaryReleasesPerSeason": 2,
+      "youthMinutes": false
+    },
+    {
+      "id": "thrifty",
+      "label": "Ledger-keepers",
+      "description": "Keeps a fat reserve, haggles, short deals, value over stars.",
+      "wageUseBp": 8800,
+      "reserveFloorBp": 2500,
+      "richThresholdBp": 10000,
+      "overbidBp": 0,
+      "starOverbidBp": 0,
+      "maxNewOffersPerWeek": 2,
+      "rosterSlack": 2,
+      "potentialWeightBp": 10000,
+      "veteranPenaltyBp": 10000,
+      "preferredLength": 1,
+      "renewalHaggleBp": 600,
+      "maxVoluntaryReleasesPerSeason": 2,
+      "youthMinutes": false
+    },
+    {
+      "id": "star_chasing",
+      "label": "Glory-hunters",
+      "description": "Spends everything on the five who start, overbids for the best free agents.",
+      "wageUseBp": 10000,
+      "reserveFloorBp": 800,
+      "richThresholdBp": 10000,
+      "overbidBp": 500,
+      "starOverbidBp": 1500,
+      "maxNewOffersPerWeek": 3,
+      "rosterSlack": 1,
+      "potentialWeightBp": 5000,
+      "veteranPenaltyBp": 8000,
+      "preferredLength": "fighter",
+      "renewalHaggleBp": 0,
+      "maxVoluntaryReleasesPerSeason": 2,
+      "youthMinutes": false
+    },
+    {
+      "id": "youth_focused",
+      "label": "Seedbed",
+      "description": "Signs young fighters with upside on long deals and gives them starts.",
+      "wageUseBp": 9500,
+      "reserveFloorBp": 1500,
+      "richThresholdBp": 10000,
+      "overbidBp": 300,
+      "starOverbidBp": 500,
+      "maxNewOffersPerWeek": 3,
+      "rosterSlack": 0,
+      "potentialWeightBp": 18000,
+      "veteranPenaltyBp": 15000,
+      "preferredLength": "young3_else1",
+      "renewalHaggleBp": 300,
+      "maxVoluntaryReleasesPerSeason": 2,
+      "youthMinutes": true
+    },
+    {
+      "id": "veteran",
+      "label": "Old hands",
+      "description": "Wants proven fighters now, on one-season deals.",
+      "wageUseBp": 9500,
+      "reserveFloorBp": 1200,
+      "richThresholdBp": 10000,
+      "overbidBp": 500,
+      "starOverbidBp": 800,
+      "maxNewOffersPerWeek": 3,
+      "rosterSlack": 1,
+      "potentialWeightBp": 3000,
+      "veteranPenaltyBp": 4000,
+      "preferredLength": 1,
+      "renewalHaggleBp": 0,
+      "maxVoluntaryReleasesPerSeason": 2,
+      "youthMinutes": false
+    }
+  ],
+
+  "ai": {
+    "_doc": "Shared AI-manager constants (sys-ai-manager). replacementRating: rating of a free agent always available near the tier minimum wage.",
+    "replacementRatingByTier": { "1": 60, "2": 46, "3": 32 },
+    "needBonus": 8,
+    "starterBonus": 10,
+    "veteranPenaltyPerHumanYearOver": { "humanAge": 31, "points": 3 },
+    "rosterMinimum": 8,
+    "roleTargets": { "_doc": "Minimum roster counts per role family (hybrids count for both).", "tank": 2, "healer": 2, "dps": 3, "controller": 1 },
+    "renewalWeeksFrom": "MW4",
+    "captainHysteresis": 5,
+    "starFreeAgentTopShareBp": 2000,
+    "youthMinutes": { "maxHumanAge": 23, "minPotentialGap": 10, "maxRatingBelowFifthStarter": 4 }
+  },
+
+  "balanceTargets": {
+    "_doc": "Soak-test acceptance bands (league-economy draft §8). Runs: 10 seeds x 25 seasons, every club AI-managed (the player club as 'balanced').",
+    "seeds": 10,
+    "seasons": 25,
+    "solventClubShareAtSeasonEndMinBp": 9000,
+    "registryAdvanceClubSeasonShareMaxBp": 200,
+    "maxEmbargoWeeksPerClubSeason": 16,
+    "medianBalanceToSbBp": [1000, 10000],
+    "hoardingBalanceToSbBp": 20000,
+    "hoardingClubShareMaxBp": 500,
+    "wageToIncomeTierMeanBp": [5500, 8000],
+    "wageToIncomeClubSeasonBp": [4000, 9500],
+    "wageToIncomeClubSeasonInBandMinBp": 9000,
+    "moneySupplyGrowthMaxBpOfTotalSb": 500,
+    "dynasty": { "titlesFlag": 4, "windowSeasons": 8, "shieldsFlag": 6, "shieldWindowSeasons": 10, "minDistinctTier1ChampionsIn25": 8 },
+    "promotedSurvivalBp": [5000, 8000],
+    "tanking": { "pairs": 200, "tankRunWorseShareMinBp": 9500 },
+    "freeAgentPoolAtP1": [100, 300],
+    "freeAgentPoolInSeasonMin": 60,
+    "freeAgentPerRoleMin": 5,
+    "tierStarterRatingDriftMax": 5,
+    "tierStarterRatingGapMin": 6,
+    "hiredBladeSlotShareMaxBp": 100,
+    "aiStarterRenewalShareMinBp": 7000
+  }
+}

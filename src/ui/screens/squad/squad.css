@@ -1,0 +1,196 @@
+/* Squad layout glue only (designer classes do the styling). */
+.squad-chips {
+  margin-left: var(--sp-4);
+}
+
+.squad-filter {
+  width: 10rem;
+}
+
+.lineup__row.is-drop-target {
+  border-color: var(--c-accent-line);
+}
+
+/* Risk, Freshness, projection and level wrap onto a second line instead of spilling out of the card
+   (a "Still tender" word and a 3-digit level do not fit beside the meter at 1280 px). Each item stays whole. */
+.lineup-card__meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: var(--sp-1) var(--sp-2);
+  white-space: nowrap;
+}
+
+.lineup-card__meta .lineup-card__lvl {
+  margin-left: auto;
+}
+
+/* The card is the container: the "→ 62 after" projection is for wider cards; it stays in the Freshness tooltip. */
+.lineup__slots > .lineup-card {
+  container-type: inline-size;
+}
+
+@container (max-width: 15rem) {
+  .lineup-card__proj {
+    display: none;
+  }
+
+  /* Narrow card (1280 px): a shorter Freshness bar, and the risk word under the meter line, whole. */
+  .lineup-card__meta .fresh {
+    grid-template-columns: 2.2rem 1.5rem;
+    gap: var(--sp-1);
+  }
+
+  .lineup-card__risk--notable {
+    order: 5;
+    flex: 1 0 100%;
+  }
+}
+
+.lineup-card__xp {
+  flex: 1 1 auto;
+  min-width: 2rem;
+}
+
+.lineup-card__risk {
+  flex: none;
+}
+
+/* The trend word gives way before the card overflows; the arrow and number always show. */
+.lineup-card__trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.lineup-card__trend-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lineup-card--empty {
+  min-height: 7.5rem;
+  gap: var(--sp-1);
+}
+
+.squad-training .select--inline {
+  min-width: 5.75rem;
+}
+
+/* Thirteen columns at 1400-1799 px: a slightly lower name floor keeps them all in view. */
+[data-testid="roster-table"] {
+  --cell-fill-min: 8rem;
+}
+
+/* ---- M1.1: Freshness on the cards, match reserves, rotation ---------------------------------- */
+.lineup-card__meta .fresh {
+  flex: none;
+}
+
+.lineup-card__proj {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lineup-card__lvl {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.lineup-card__warn {
+  grid-column: 1 / -1;
+}
+
+.lineup__reserves {
+  margin-top: var(--sp-3);
+  flex: none;
+}
+
+.reserves {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--sp-2);
+}
+
+.reserve-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 13rem;
+  padding: var(--sp-2) var(--sp-6) var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  background: var(--c-surface-1);
+  cursor: pointer;
+}
+
+.reserve-card[aria-selected="true"] {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px var(--c-accent) inset;
+}
+
+.reserve-card__name {
+  font-weight: var(--fw-semibold);
+}
+
+.reserve-card__drop {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+}
+
+.reserve-card--empty {
+  justify-content: center;
+  border-style: dashed;
+  background: transparent;
+  color: var(--c-text-faint);
+  cursor: default;
+}
+
+.reserves__cover {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  align-self: center;
+  margin-left: var(--sp-2);
+}
+
+.rotation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-warn-soft, var(--c-border));
+  border-radius: var(--r-sm);
+  background: var(--c-warn-soft, transparent);
+}
+
+.rotation__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* "R1" / "R2" in the # column: the two match reserves, set apart from the five's 1-5. */
+.squad-slot-r {
+  color: var(--c-accent-text);
+  font-weight: var(--fw-semibold, 600);
+  letter-spacing: 0.02em;
+}

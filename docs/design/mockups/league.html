@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>League · Arena League mockup</title>
+<link rel="stylesheet" href="../../../src/ui/styles/tokens.css">
+<link rel="stylesheet" href="../../../src/ui/styles/base.css">
+<link rel="stylesheet" href="../../../src/ui/styles/components.css">
+</head>
+<body>
+<div class="app">
+  <!-- ===== Top bar: club, calendar, money, Continue (shared by every hub screen) ===== -->
+  <header class="topbar">
+    <a class="topbar__club" href="home.html">
+      <span class="crest crest--md" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true">TW</span>
+      <span class="topbar__club-text"><span class="topbar__club-name">Thornwick Wardens</span><span class="topbar__club-tier">Banner Circuit · Tier 2</span></span>
+    </a>
+    <div class="topbar__group">
+      <div class="topbar__stat" tabindex="0" data-tip="Season 3, matchweek 7 of 16. The Reckoning (8-club tournament) follows matchweek 16."><span class="topbar__stat-label">Season 3</span><span class="topbar__stat-value">Matchweek 7</span></div>
+      <div class="topbar__divider"></div>
+      <div class="topbar__stat" tabindex="0" data-tip-ref="tip-balance"><span class="topbar__stat-label">Balance</span><span class="topbar__stat-value">11,840 ts</span></div>
+      <div class="topbar__stat topbar__stat--optional" tabindex="0" data-tip-ref="tip-wages"><span class="topbar__stat-label">Wages / week</span><span class="topbar__stat-value">2,685 ts</span></div>
+      <div class="topbar__stat topbar__stat--optional" tabindex="0" data-tip="Roster 11 of 12, the Tier 2 cap. Academy fighters (from M5) and hired blades do not count."><span class="topbar__stat-label">Roster</span><span class="topbar__stat-value">11 / 12</span></div>
+      <div class="topbar__stat" tabindex="0" data-tip="2nd of 8 in the Dawn Wing, 3rd in the tier table. The top 4 of each wing reach the Reckoning."><span class="topbar__stat-label">Standing</span><span class="topbar__stat-value">2nd · 11 pts</span></div>
+    </div>
+    <div class="topbar__actions">
+      <button class="search-trigger" type="button" data-toast="Search (Ctrl K)" data-toast-sub="Mockup: a quick-jump palette for fighters, clubs, classes and screens." data-toast-kind="info"><span class="icon" data-icon="search" aria-hidden="true"></span><span class="search-trigger__label">Search fighters, clubs, classes</span><kbd>Ctrl K</kbd></button>
+      <button class="icon-btn" type="button" aria-label="Digest: 2 items need action" data-tip="2 digest items need action"><span class="icon" data-icon="bell" aria-hidden="true"></span><span class="icon-btn__badge">2</span></button>
+      <button class="icon-btn" type="button" data-action="theme" aria-label="Switch light or dark theme" data-tip="Theme: dark or light"><span class="icon" data-icon="sun" aria-hidden="true"></span></button>
+      <button class="icon-btn" type="button" data-open-modal="shortcuts" aria-label="Keyboard shortcuts" data-tip="Keyboard shortcuts (?)"><span class="icon" data-icon="keyboard" aria-hidden="true"></span></button>
+      <a class="continue" href="squad.html" data-tip="Opens the lineup for this week's match. Nothing is committed until you press Play match.">
+        <span class="continue__text"><span class="continue__main">Continue</span><span class="continue__sub">Lineup at Mireford Leechguard</span></span>
+        <kbd>Space</kbd>
+      </a>
+    </div>
+  </header>
+
+  <!-- ===== Side navigation (number keys 1-7) ===== -->
+  <nav class="sidenav" aria-label="Main">
+    <a class="sidenav__item" href="home.html" data-key="1"><span class="icon" data-icon="home" aria-hidden="true"></span><span class="sidenav__label">Home</span><span class="sidenav__badge" aria-label="2 need action">2</span></a>
+    <a class="sidenav__item" href="squad.html" data-key="2"><span class="icon" data-icon="squad" aria-hidden="true"></span><span class="sidenav__label">Squad</span><span class="sidenav__key">2</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="3"><span class="icon" data-icon="fixtures" aria-hidden="true"></span><span class="sidenav__label">Fixtures</span><span class="sidenav__key">3</span></a>
+    <a class="sidenav__item" href="league.html" data-key="4" aria-current="page"><span class="icon" data-icon="league" aria-hidden="true"></span><span class="sidenav__label">League</span><span class="sidenav__key">4</span></a>
+    <a class="sidenav__item" href="market.html" data-key="5"><span class="icon" data-icon="market" aria-hidden="true"></span><span class="sidenav__label">Market</span><span class="sidenav__key">5</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="6"><span class="icon" data-icon="finances" aria-hidden="true"></span><span class="sidenav__label">Finances</span><span class="sidenav__key">6</span></a>
+    <a class="sidenav__item" href="index.html#specified" data-key="7"><span class="icon" data-icon="codex" aria-hidden="true"></span><span class="sidenav__label">Class codex</span><span class="sidenav__key">7</span></a>
+    <div class="sidenav__footer">
+      <a class="sidenav__item" href="index.html#specified"><span class="icon" data-icon="save" aria-hidden="true"></span><span class="sidenav__label">Save / Load</span><span class="sidenav__key" title="Ctrl S">S</span></a>
+      <a class="sidenav__item" href="index.html#specified"><span class="icon" data-icon="settings" aria-hidden="true"></span><span class="sidenav__label">Settings</span></a>
+    </div>
+  </nav>
+
+  <main class="main" id="main">
+    <div class="page">
+      <header class="page-header">
+        <div class="page-header__text">
+          <span class="page-header__eyebrow">Season 3 · after matchweek 6 of 16</span>
+          <h1 class="page-header__title">Banner Circuit</h1>
+          <div class="page-header__meta"><span>Tier 2 of 3 · 16 clubs in two wings · 16 matches each, no byes</span><span class="sep-dot"></span><span data-tip="2–0 = 3, 2–1 = 2, 1–2 = 1, 0–2 = 0. Tiebreaks: points, round difference, rounds won, head-to-head, downs difference.">Points 3 / 2 / 1 / 0</span></div>
+        </div>
+        <div class="page-header__actions">
+          <div class="segmented" role="group" aria-label="Tier">
+            <button type="button" aria-pressed="false">Tier 1 · Crown</button>
+            <button type="button" aria-pressed="true">Tier 2 · Banner</button>
+            <button type="button" aria-pressed="false">Tier 3 · Muster</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="l-grid">
+        <section class="panel span-12 span-6@wide" aria-labelledby="h-standings">
+          <header class="panel__header">
+            <h2 class="panel__title" id="h-standings"><span class="icon" data-icon="league" aria-hidden="true"></span>Standings</h2>
+            <span class="panel__subtitle">Click a header to sort</span>
+            <div class="panel__actions">
+              <div class="segmented" role="group" aria-label="Standings view" data-group="standings">
+                <button type="button" aria-pressed="true" data-show="pane-wings">Wings</button>
+                <button type="button" aria-pressed="false" data-show="pane-tier">Tier table</button>
+              </div>
+            </div>
+          </header>
+          <div class="panel__body">
+            <div id="pane-wings" data-pane="standings" class="l-grid" style="--grid-gap:var(--sp-3)">
+              <div class="span-6 span-12@wide" style="min-width:0">
+                <div class="panel-section__title" style="padding:0 var(--sp-1)">Dawn Wing</div>
+                <div class="table-wrap" style="border:1px solid var(--c-divider);border-radius:var(--r-md)">
+                <table class="data-table data-table--compact data-table--dense" data-sortable>
+                  <thead>
+                    <tr>
+                      <th class="cell-tight" aria-sort="ascending"><button class="th-sort" type="button">#</button></th>
+                      <th><button class="th-sort" type="button">Club</button></th>
+                      <th class="cell-num"><button class="th-sort" type="button">W–L</button></th>
+                      <th class="cell-num"><button class="th-sort" type="button" data-tip="Rounds won–lost">Rounds</button></th>
+                      <th class="cell-num"><button class="th-sort" type="button" data-tip="Round difference: the first tiebreak after points">RD</button></th>
+                      <th class="cell-num"><button class="th-sort" type="button">Pts</button></th>
+                      <th>Last 5</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr data-zone="qualify">
+                      <td data-sort="1"><span class="l-row" style="--row-gap:.3rem">1<span class="zone-mark zone-mark--up" data-tip="Leads the tier table: the Shield winner is promoted to the Crown Circuit"><span class="u-sr-only">Shield leader</span></span></span></td>
+                      <td class="cell-fill" data-sort="Wickwardens"><span class="entity" data-tip="Lanternmouth Wickwardens"><span class="crest" style="--crest-a:#E8A521;--crest-b:#4A1020" aria-hidden="true"></span><span class="entity__name">Wickwardens</span></span></td>
+                      <td class="cell-num" data-sort="5">5–1</td>
+                      <td class="cell-num" data-sort="11">11–3</td>
+                      <td class="cell-num" data-sort="8">+8</td>
+                      <td class="cell-num cell-strong" data-sort="15">15</td>
+                      <td><span class="form" aria-label="Last five: win, win, win, win, win"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i></span></td>
+                    </tr>
+                    <tr data-zone="qualify" class="is-us">
+                      <td data-sort="2"><span class="l-row" style="--row-gap:.3rem">2</span></td>
+                      <td class="cell-fill" data-sort="Thornwick"><span class="entity" data-tip="Thornwick Wardens"><span class="crest" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true"></span><span class="entity__name">Thornwick</span></span></td>
+                      <td class="cell-num" data-sort="4">4–2</td>
+                      <td class="cell-num" data-sort="9">9–6</td>
+                      <td class="cell-num" data-sort="3">+3</td>
+                      <td class="cell-num cell-strong" data-sort="11">11</td>
+                      <td><span class="form" aria-label="Last five: loss, win, loss, win, win"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i></span></td>
+                    </tr>
+                    <tr data-zone="qualify">
+                      <td data-sort="3"><span class="l-row" style="--row-gap:.3rem">3</span></td>
+                      <td class="cell-fill" data-sort="Cinderjacks"><span class="entity" data-tip="Cinderpan Cinderjacks"><span class="crest" style="--crest-a:#A3420F;--crest-b:#E4E7EA" aria-hidden="true"></span><span class="entity__name">Cinderjacks</span></span></td>
+                      <td class="cell-num" data-sort="4">4–2</td>
+                      <td class="cell-num" data-sort="9">9–7</td>
+                      <td class="cell-num" data-sort="2">+2</td>
+                      <td class="cell-num cell-strong" data-sort="10">10</td>
+                      <td><span class="form" aria-label="Last five: win, win, win, loss, loss"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i></span></td>
+                    </tr>
+                    <tr data-zone="qualify" class="is-cut">
+                      <td data-sort="4"><span class="l-row" style="--row-gap:.3rem">4</span></td>
+                      <td class="cell-fill" data-sort="Nightrowers"><span class="entity" data-tip="Sealsfoot Nightrowers"><span class="crest" style="--crest-a:#B9BEF2;--crest-b:#2A123F" aria-hidden="true"></span><span class="entity__name">Nightrowers</span></span></td>
+                      <td class="cell-num" data-sort="3">3–3</td>
+                      <td class="cell-num" data-sort="8">8–7</td>
+                      <td class="cell-num" data-sort="1">+1</td>
+                      <td class="cell-num cell-strong" data-sort="10">10</td>
+                      <td><span class="form" aria-label="Last five: loss, win, loss, loss, win"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i></span></td>
+                    </tr>
+                    <tr>
+                      <td data-sort="5"><span class="l-row" style="--row-gap:.3rem">5</span></td>
+                      <td class="cell-fill" data-sort="Tarhands"><span class="entity" data-tip="Keelwick Tarhands"><span class="crest" style="--crest-a:#D63A2E;--crest-b:#121212" aria-hidden="true"></span><span class="entity__name">Tarhands</span></span></td>
+                      <td class="cell-num" data-sort="3">3–3</td>
+                      <td class="cell-num" data-sort="8">8–7</td>
+                      <td class="cell-num" data-sort="1">+1</td>
+                      <td class="cell-num cell-strong" data-sort="10">10</td>
+                      <td><span class="form" aria-label="Last five: win, loss, win, win, loss"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i></span></td>
+                    </tr>
+                    <tr>
+                      <td data-sort="6"><span class="l-row" style="--row-gap:.3rem">6</span></td>
+                      <td class="cell-fill" data-sort="Anchorfists"><span class="entity" data-tip="Ropesend Anchorfists"><span class="crest" style="--crest-a:#8494A3;--crest-b:#4A1414" aria-hidden="true"></span><span class="entity__name">Anchorfists</span></span></td>
+                      <td class="cell-num" data-sort="4">4–2</td>
+                      <td class="cell-num" data-sort="8">8–7</td>
+                      <td class="cell-num" data-sort="1">+1</td>
+                      <td class="cell-num cell-strong" data-sort="9">9</td>
+                      <td><span class="form" aria-label="Last five: win, loss, loss, win, win"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i></span></td>
+                    </tr>
+                    <tr class="is-cut--bad">
+                      <td data-sort="7"><span class="l-row" style="--row-gap:.3rem">7</span></td>
+                      <td class="cell-fill" data-sort="Leechguard"><span class="entity" data-tip="Mireford Leechguard"><span class="crest" style="--crest-a:#4A1F6E;--crest-b:#EADCF2" aria-hidden="true"></span><span class="entity__name">Leechguard</span> <span class="tag tag--accent">Next</span></span></td>
+                      <td class="cell-num" data-sort="2">2–4</td>
+                      <td class="cell-num" data-sort="5">5–8</td>
+                      <td class="cell-num" data-sort="-3">−3</td>
+                      <td class="cell-num cell-strong" data-sort="7">7</td>
+                      <td><span class="form" aria-label="Last five: loss, loss, win, win, loss"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i></span></td>
+                    </tr>
+                    <tr data-zone="relegate">
+                      <td data-sort="8"><span class="l-row" style="--row-gap:.3rem">8<span class="zone-mark zone-mark--down" data-tip="8th in the wing is relegated to the Muster Circuit"><span class="u-sr-only">Relegation place</span></span></span></td>
+                      <td class="cell-fill" data-sort="Peatcutters"><span class="entity" data-tip="Fenhollow Peatcutters"><span class="crest" style="--crest-a:#B8378A;--crest-b:#D7F0C2" aria-hidden="true"></span><span class="entity__name">Peatcutters</span></span></td>
+                      <td class="cell-num" data-sort="1">1–5</td>
+                      <td class="cell-num" data-sort="4">4–10</td>
+                      <td class="cell-num" data-sort="-6">−6</td>
+                      <td class="cell-num cell-strong" data-sort="5">5</td>
+                      <td><span class="form" aria-label="Last five: loss, loss, loss, win, loss"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i></span></td>
+                    </tr>
+                  </tbody>
+                </table>
+                </div>
+              </div>
+              <div class="span-6 span-12@wide" style="min-width:0">
+                <div class="panel-section__title" style="padding:0 var(--sp-1)">Dusk Wing</div>
+                <div class="table-wrap" style="border:1px solid var(--c-divider);border-radius:var(--r-md)">
+                <table class="data-table data-table--compact data-table--dense" data-sortable>
+                  <thead>
+                    <tr>
+                      <th class="cell-tight" aria-sort="ascending"><button class="th-sort" type="button">#</button></th>
+                      <th><button class="th-sort" type="button">Club</button></th>
+                      <th class="cell-num"><button class="th-sort" type="button">W–L</button></th>
+                      <th class="cell-num"><button class="th-sort" type="button" data-tip="Rounds won–lost">Rounds</button></th>
+                      <th class="cell-num"><button class="th-sort" type="button" data-tip="Round difference: the first tiebreak after points">RD</button></th>
+                      <th class="cell-num"><button class="th-sort" type="button">Pts</button></th>
+                      <th>Last 5</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr data-zone="qualify">
+                      <td data-sort="1"><span class="l-row" style="--row-gap:.3rem">1</span></td>
+                      <td class="cell-fill" data-sort="Ropebinders"><span class="entity" data-tip="Gullhaven Ropebinders"><span class="crest" style="--crest-a:#5C4128;--crest-b:#E2C08D" aria-hidden="true"></span><span class="entity__name">Ropebinders</span></span></td>
+                      <td class="cell-num" data-sort="4">4–2</td>
+                      <td class="cell-num" data-sort="10">10–5</td>
+                      <td class="cell-num" data-sort="5">+5</td>
+                      <td class="cell-num cell-strong" data-sort="13">13</td>
+                      <td><span class="form" aria-label="Last five: win, win, loss, loss, win"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i></span></td>
+                    </tr>
+                    <tr data-zone="qualify">
+                      <td data-sort="2"><span class="l-row" style="--row-gap:.3rem">2</span></td>
+                      <td class="cell-fill" data-sort="Shellguard"><span class="entity" data-tip="Brightskerry Shellguard"><span class="crest" style="--crest-a:#9EE0D4;--crest-b:#5A1A3A" aria-hidden="true"></span><span class="entity__name">Shellguard</span></span></td>
+                      <td class="cell-num" data-sort="4">4–2</td>
+                      <td class="cell-num" data-sort="8">8–5</td>
+                      <td class="cell-num" data-sort="3">+3</td>
+                      <td class="cell-num cell-strong" data-sort="11">11</td>
+                      <td><span class="form" aria-label="Last five: win, win, win, win, loss"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i></span></td>
+                    </tr>
+                    <tr data-zone="qualify">
+                      <td data-sort="3"><span class="l-row" style="--row-gap:.3rem">3</span></td>
+                      <td class="cell-fill" data-sort="Salt Lancers"><span class="entity" data-tip="Whitepan Salt Lancers"><span class="crest" style="--crest-a:#F7A58E;--crest-b:#7A0E1C" aria-hidden="true"></span><span class="entity__name">Salt Lancers</span></span></td>
+                      <td class="cell-num" data-sort="4">4–2</td>
+                      <td class="cell-num" data-sort="8">8–5</td>
+                      <td class="cell-num" data-sort="3">+3</td>
+                      <td class="cell-num cell-strong" data-sort="11">11</td>
+                      <td><span class="form" aria-label="Last five: win, win, win, loss, loss"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i></span></td>
+                    </tr>
+                    <tr data-zone="qualify" class="is-cut">
+                      <td data-sort="4"><span class="l-row" style="--row-gap:.3rem">4</span></td>
+                      <td class="cell-fill" data-sort="Heronguard"><span class="entity" data-tip="Stiltwater Heronguard"><span class="crest" style="--crest-a:#3577D6;--crest-b:#F7F7F2" aria-hidden="true"></span><span class="entity__name">Heronguard</span></span></td>
+                      <td class="cell-num" data-sort="3">3–3</td>
+                      <td class="cell-num" data-sort="8">8–8</td>
+                      <td class="cell-num" data-sort="0">0</td>
+                      <td class="cell-num cell-strong" data-sort="9">9</td>
+                      <td><span class="form" aria-label="Last five: win, loss, win, loss, win"><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i></span></td>
+                    </tr>
+                    <tr>
+                      <td data-sort="5"><span class="l-row" style="--row-gap:.3rem">5</span></td>
+                      <td class="cell-fill" data-sort="Pearlhooks"><span class="entity" data-tip="Shellwick Pearlhooks"><span class="crest" style="--crest-a:#0F4C6E;--crest-b:#F5C6A5" aria-hidden="true"></span><span class="entity__name">Pearlhooks</span></span></td>
+                      <td class="cell-num" data-sort="2">2–4</td>
+                      <td class="cell-num" data-sort="6">6–9</td>
+                      <td class="cell-num" data-sort="-3">−3</td>
+                      <td class="cell-num cell-strong" data-sort="7">7</td>
+                      <td><span class="form" aria-label="Last five: loss, loss, loss, win, loss"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i></span></td>
+                    </tr>
+                    <tr>
+                      <td data-sort="6"><span class="l-row" style="--row-gap:.3rem">6</span></td>
+                      <td class="cell-fill" data-sort="Bonepickers"><span class="entity" data-tip="Marrowby Bonepickers"><span class="crest" style="--crest-a:#D98F95;--crest-b:#2B1A1A" aria-hidden="true"></span><span class="entity__name">Bonepickers</span></span></td>
+                      <td class="cell-num" data-sort="2">2–4</td>
+                      <td class="cell-num" data-sort="6">6–10</td>
+                      <td class="cell-num" data-sort="-4">−4</td>
+                      <td class="cell-num cell-strong" data-sort="6">6</td>
+                      <td><span class="form" aria-label="Last five: loss, loss, loss, loss, win"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i></span></td>
+                    </tr>
+                    <tr class="is-cut--bad">
+                      <td data-sort="7"><span class="l-row" style="--row-gap:.3rem">7</span></td>
+                      <td class="cell-fill" data-sort="Dunecats"><span class="entity" data-tip="Dunsalt Dunecats"><span class="crest" style="--crest-a:#F4E88C;--crest-b:#6B3A12" aria-hidden="true"></span><span class="entity__name">Dunecats</span></span></td>
+                      <td class="cell-num" data-sort="2">2–4</td>
+                      <td class="cell-num" data-sort="5">5–9</td>
+                      <td class="cell-num" data-sort="-4">−4</td>
+                      <td class="cell-num cell-strong" data-sort="6">6</td>
+                      <td><span class="form" aria-label="Last five: loss, win, loss, loss, win"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i></span></td>
+                    </tr>
+                    <tr data-zone="relegate">
+                      <td data-sort="8"><span class="l-row" style="--row-gap:.3rem">8<span class="zone-mark zone-mark--down" data-tip="8th in the wing is relegated to the Muster Circuit"><span class="u-sr-only">Relegation place</span></span></span></td>
+                      <td class="cell-fill" data-sort="Frogspears"><span class="entity" data-tip="Reedmere Frogspears"><span class="crest" style="--crest-a:#4E6A19;--crest-b:#FFB04D" aria-hidden="true"></span><span class="entity__name">Frogspears</span></span></td>
+                      <td class="cell-num" data-sort="1">1–5</td>
+                      <td class="cell-num" data-sort="4">4–11</td>
+                      <td class="cell-num" data-sort="-7">−7</td>
+                      <td class="cell-num cell-strong" data-sort="4">4</td>
+                      <td><span class="form" aria-label="Last five: loss, loss, win, loss, loss"><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="W">W</i><i class="form__r" data-r="L">L</i><i class="form__r" data-r="L">L</i></span></td>
+                    </tr>
+                  </tbody>
+                </table>
+                </div>
+              </div>
+            </div>
+            <div id="pane-tier" data-pane="standings" hidden>
+              <div class="table-wrap" style="border:1px solid var(--c-divider);border-radius:var(--r-md)">
+                <table class="data-table data-table--compact">
+                  <thead><tr><th class="cell-tight">#</th><th>Club</th><th>Wing</th><th class="cell-num">W–L</th><th class="cell-num">Rounds</th><th class="cell-num">RD</th><th class="cell-num">Pts</th><th class="cell-num">Seed</th></tr></thead>
+                  <tbody>
+                    <tr><td>1 <span class="tag tag--accent" data-tip="Shield: best regular-season record in the tier. Promoted with the Reckoning champion.">Shield</span></td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#E8A521;--crest-b:#4A1020" aria-hidden="true"></span><span class="entity__name">Lanternmouth Wickwardens</span></span></td><td>Dawn</td><td class="cell-num">5–1</td><td class="cell-num">11–3</td><td class="cell-num">+8</td><td class="cell-num cell-strong">15</td><td class="cell-num"><span class="badge" data-tip="Projected Reckoning seed">1</span></td></tr>
+                    <tr><td>2</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#5C4128;--crest-b:#E2C08D" aria-hidden="true"></span><span class="entity__name">Gullhaven Ropebinders</span></span></td><td>Dusk</td><td class="cell-num">4–2</td><td class="cell-num">10–5</td><td class="cell-num">+5</td><td class="cell-num cell-strong">13</td><td class="cell-num"><span class="badge" data-tip="Projected Reckoning seed">2</span></td></tr>
+                    <tr class="is-us"><td>3</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true"></span><span class="entity__name">Thornwick Wardens</span></span></td><td>Dawn</td><td class="cell-num">4–2</td><td class="cell-num">9–6</td><td class="cell-num">+3</td><td class="cell-num cell-strong">11</td><td class="cell-num"><span class="badge" data-tip="Projected Reckoning seed">3</span></td></tr>
+                    <tr><td>4</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#9EE0D4;--crest-b:#5A1A3A" aria-hidden="true"></span><span class="entity__name">Brightskerry Shellguard</span></span></td><td>Dusk</td><td class="cell-num">4–2</td><td class="cell-num">8–5</td><td class="cell-num">+3</td><td class="cell-num cell-strong">11</td><td class="cell-num"><span class="badge" data-tip="Projected Reckoning seed">4</span></td></tr>
+                    <tr><td>5</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#F7A58E;--crest-b:#7A0E1C" aria-hidden="true"></span><span class="entity__name">Whitepan Salt Lancers</span></span></td><td>Dusk</td><td class="cell-num">4–2</td><td class="cell-num">8–5</td><td class="cell-num">+3</td><td class="cell-num cell-strong">11</td><td class="cell-num"><span class="badge" data-tip="Projected Reckoning seed">5</span></td></tr>
+                    <tr><td>6</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#A3420F;--crest-b:#E4E7EA" aria-hidden="true"></span><span class="entity__name">Cinderpan Cinderjacks</span></span></td><td>Dawn</td><td class="cell-num">4–2</td><td class="cell-num">9–7</td><td class="cell-num">+2</td><td class="cell-num cell-strong">10</td><td class="cell-num"><span class="badge" data-tip="Projected Reckoning seed">6</span></td></tr>
+                    <tr><td>7</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#B9BEF2;--crest-b:#2A123F" aria-hidden="true"></span><span class="entity__name">Sealsfoot Nightrowers</span></span></td><td>Dawn</td><td class="cell-num">3–3</td><td class="cell-num">8–7</td><td class="cell-num">+1</td><td class="cell-num cell-strong">10</td><td class="cell-num"><span class="badge" data-tip="Projected Reckoning seed">7</span></td></tr>
+                    <tr><td>8</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#D63A2E;--crest-b:#121212" aria-hidden="true"></span><span class="entity__name">Keelwick Tarhands</span></span></td><td>Dawn</td><td class="cell-num">3–3</td><td class="cell-num">8–7</td><td class="cell-num">+1</td><td class="cell-num cell-strong">10</td><td class="cell-num"><span class="u-faint">—</span></td></tr>
+                    <tr><td>9</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#8494A3;--crest-b:#4A1414" aria-hidden="true"></span><span class="entity__name">Ropesend Anchorfists</span></span></td><td>Dawn</td><td class="cell-num">4–2</td><td class="cell-num">8–7</td><td class="cell-num">+1</td><td class="cell-num cell-strong">9</td><td class="cell-num"><span class="u-faint">—</span></td></tr>
+                    <tr><td>10</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#3577D6;--crest-b:#F7F7F2" aria-hidden="true"></span><span class="entity__name">Stiltwater Heronguard</span></span></td><td>Dusk</td><td class="cell-num">3–3</td><td class="cell-num">8–8</td><td class="cell-num">0</td><td class="cell-num cell-strong">9</td><td class="cell-num"><span class="badge" data-tip="Projected Reckoning seed">8</span></td></tr>
+                    <tr><td>11</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#0F4C6E;--crest-b:#F5C6A5" aria-hidden="true"></span><span class="entity__name">Shellwick Pearlhooks</span></span></td><td>Dusk</td><td class="cell-num">2–4</td><td class="cell-num">6–9</td><td class="cell-num">−3</td><td class="cell-num cell-strong">7</td><td class="cell-num"><span class="u-faint">—</span></td></tr>
+                    <tr><td>12</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#4A1F6E;--crest-b:#EADCF2" aria-hidden="true"></span><span class="entity__name">Mireford Leechguard</span></span></td><td>Dawn</td><td class="cell-num">2–4</td><td class="cell-num">5–8</td><td class="cell-num">−3</td><td class="cell-num cell-strong">7</td><td class="cell-num"><span class="u-faint">—</span></td></tr>
+                    <tr><td>13</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#D98F95;--crest-b:#2B1A1A" aria-hidden="true"></span><span class="entity__name">Marrowby Bonepickers</span></span></td><td>Dusk</td><td class="cell-num">2–4</td><td class="cell-num">6–10</td><td class="cell-num">−4</td><td class="cell-num cell-strong">6</td><td class="cell-num"><span class="u-faint">—</span></td></tr>
+                    <tr><td>14</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#F4E88C;--crest-b:#6B3A12" aria-hidden="true"></span><span class="entity__name">Dunsalt Dunecats</span></span></td><td>Dusk</td><td class="cell-num">2–4</td><td class="cell-num">5–9</td><td class="cell-num">−4</td><td class="cell-num cell-strong">6</td><td class="cell-num"><span class="u-faint">—</span></td></tr>
+                    <tr><td>15</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#B8378A;--crest-b:#D7F0C2" aria-hidden="true"></span><span class="entity__name">Fenhollow Peatcutters</span></span></td><td>Dawn</td><td class="cell-num">1–5</td><td class="cell-num">4–10</td><td class="cell-num">−6</td><td class="cell-num cell-strong">5</td><td class="cell-num"><span class="u-faint">—</span></td></tr>
+                    <tr><td>16</td><td class="cell-fill"><span class="entity"><span class="crest" style="--crest-a:#4E6A19;--crest-b:#FFB04D" aria-hidden="true"></span><span class="entity__name">Reedmere Frogspears</span></span></td><td>Dusk</td><td class="cell-num">1–5</td><td class="cell-num">4–11</td><td class="cell-num">−7</td><td class="cell-num cell-strong">4</td><td class="cell-num"><span class="u-faint">—</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <footer class="panel__footer">
+            <span class="legend__item"><span class="legend__swatch" style="--swatch:var(--c-accent)"></span>Top 4 of each wing: Reckoning</span>
+            <span class="legend__item"><span class="zone-mark zone-mark--up" aria-hidden="true"></span>Shield leader: promotion place</span>
+            <span class="legend__item"><span class="legend__swatch legend__swatch--hatch"></span><span class="zone-mark zone-mark--down" aria-hidden="true"></span>8th: relegated</span>
+          </footer>
+        </section>
+
+        <section class="panel span-12 span-6@wide" aria-labelledby="h-bracket">
+          <header class="panel__header">
+            <h2 class="panel__title" id="h-bracket"><span class="icon" data-icon="swords" aria-hidden="true"></span>The Reckoning</h2>
+            <span class="panel__subtitle">8 clubs · quarterfinal, semifinal, final</span>
+            <div class="panel__actions">
+              <div class="segmented" role="group" aria-label="Bracket" data-group="bracket">
+                <button type="button" aria-pressed="true" data-show="bracket-projected">If the season ended today</button>
+                <button type="button" aria-pressed="false" data-show="bracket-s2">Season 2 result</button>
+              </div>
+            </div>
+          </header>
+          <div class="panel__body">
+            <div id="bracket-projected" data-pane="bracket">
+              <div class="callout" style="margin-bottom:var(--sp-4)"><span class="icon" data-icon="info" aria-hidden="true"></span><div><div class="callout__title">Projection from today's standings, not a forecast</div><div class="callout__text">Wing winners are seeds 1–2; the rest seed by the tier table. You would host Cinderpan Cinderjacks.</div></div></div>
+              <div class="bracket" style="--bracket-cols:4">
+                <div class="bracket__round"><div class="bracket__label"><span>Quarterfinals</span><span>Best of 3 · higher seed hosts</span></div><div class="bracket__body">
+                  <div class="bracket__pair"><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team" data-tip="Lanternmouth Wickwardens"><span class="bracket__seed">1</span><span class="crest crest--sm" style="--crest-a:#E8A521;--crest-b:#4A1020" aria-hidden="true"></span><span class="bracket__name">Wickwardens</span><span class="bracket__score"></span></div><div class="bracket__team" data-tip="Stiltwater Heronguard"><span class="bracket__seed">8</span><span class="crest crest--sm" style="--crest-a:#3577D6;--crest-b:#F7F7F2" aria-hidden="true"></span><span class="bracket__name">Heronguard</span><span class="bracket__score"></span></div><div class="bracket__meta"><span>at Lanternmouth</span><span>TW1</span></div></div></div><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team" data-tip="Brightskerry Shellguard"><span class="bracket__seed">4</span><span class="crest crest--sm" style="--crest-a:#9EE0D4;--crest-b:#5A1A3A" aria-hidden="true"></span><span class="bracket__name">Shellguard</span><span class="bracket__score"></span></div><div class="bracket__team" data-tip="Whitepan Salt Lancers"><span class="bracket__seed">5</span><span class="crest crest--sm" style="--crest-a:#F7A58E;--crest-b:#7A0E1C" aria-hidden="true"></span><span class="bracket__name">Salt Lancers</span><span class="bracket__score"></span></div><div class="bracket__meta"><span>at Brightskerry</span><span>TW1</span></div></div></div></div>
+                  <div class="bracket__pair"><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team" data-tip="Gullhaven Ropebinders"><span class="bracket__seed">2</span><span class="crest crest--sm" style="--crest-a:#5C4128;--crest-b:#E2C08D" aria-hidden="true"></span><span class="bracket__name">Ropebinders</span><span class="bracket__score"></span></div><div class="bracket__team" data-tip="Sealsfoot Nightrowers"><span class="bracket__seed">7</span><span class="crest crest--sm" style="--crest-a:#B9BEF2;--crest-b:#2A123F" aria-hidden="true"></span><span class="bracket__name">Nightrowers</span><span class="bracket__score"></span></div><div class="bracket__meta"><span>at Gullhaven</span><span>TW1</span></div></div></div><div class="bracket__slot is-path"><div class="bracket__match"><div class="bracket__team bracket__team--us" data-tip="Thornwick Wardens"><span class="bracket__seed">3</span><span class="crest crest--sm" style="--crest-a:#2f5d46;--crest-b:#b8893a" aria-hidden="true"></span><span class="bracket__name">Thornwick</span><span class="bracket__score"></span></div><div class="bracket__team" data-tip="Cinderpan Cinderjacks"><span class="bracket__seed">6</span><span class="crest crest--sm" style="--crest-a:#A3420F;--crest-b:#E4E7EA" aria-hidden="true"></span><span class="bracket__name">Cinderjacks</span><span class="bracket__score"></span></div><div class="bracket__meta"><span>at Thornwick</span><span>TW1</span></div></div></div></div>
+                </div></div>
+                <div class="bracket__round"><div class="bracket__label"><span>Semifinals</span><span>Best of 3</span></div><div class="bracket__body">
+                  <div class="bracket__pair"><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team bracket__team--tbd"><span class="bracket__seed"></span><span></span><span class="bracket__name">Winner QF1</span><span class="bracket__score"></span></div><div class="bracket__team bracket__team--tbd"><span class="bracket__seed"></span><span></span><span class="bracket__name">Winner QF2</span><span class="bracket__score"></span></div></div></div><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team bracket__team--tbd"><span class="bracket__seed"></span><span></span><span class="bracket__name">Winner QF3</span><span class="bracket__score"></span></div><div class="bracket__team bracket__team--tbd"><span class="bracket__seed"></span><span></span><span class="bracket__name">Winner QF4</span><span class="bracket__score"></span></div></div></div></div>
+                </div></div>
+                <div class="bracket__round"><div class="bracket__label"><span>Final</span><span>Best of 5 · the Charterhall</span></div><div class="bracket__body">
+                  <div class="bracket__slot"><div class="bracket__match"><div class="bracket__team bracket__team--tbd"><span class="bracket__seed"></span><span></span><span class="bracket__name">Winner SF1</span><span class="bracket__score"></span></div><div class="bracket__team bracket__team--tbd"><span class="bracket__seed"></span><span></span><span class="bracket__name">Winner SF2</span><span class="bracket__score"></span></div><div class="bracket__meta"><span>Neutral venue</span><span>TW3</span></div></div></div>
+                </div></div>
+                <div class="bracket__round"><div class="bracket__label"><span>Champion</span><span>Promoted to Crown</span></div><div class="bracket__body">
+                  <div class="bracket__slot"><div class="bracket__champion"><span class="icon" data-icon="league" aria-hidden="true"></span><span class="bracket__champion-name u-muted">To be decided</span><span class="u-xs u-faint">15,000 ts and promotion</span></div></div>
+                </div></div>
+              </div>
+            </div>
+            <div id="bracket-s2" data-pane="bracket" hidden>
+              <div class="bracket" style="--bracket-cols:4">
+                <div class="bracket__round"><div class="bracket__label"><span>Quarterfinals</span><span>Best of 3</span></div><div class="bracket__body">
+                  <div class="bracket__pair"><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team bracket__team--winner" data-tip="Fenhollow Reedstalkers (now Crown Circuit)"><span class="bracket__seed">1</span><span class="crest crest--sm" style="--crest-a:#1F4D2C;--crest-b:#E7D7A0" aria-hidden="true"></span><span class="bracket__name">Reedstalkers</span><span class="bracket__score">2</span></div><div class="bracket__team bracket__team--loser" data-tip="Shellwick Pearlhooks"><span class="bracket__seed">8</span><span class="crest crest--sm" style="--crest-a:#0F4C6E;--crest-b:#F5C6A5" aria-hidden="true"></span><span class="bracket__name">Pearlhooks</span><span class="bracket__score">0</span></div></div></div><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team bracket__team--winner" data-tip="Gullhaven Ropebinders"><span class="bracket__seed">4</span><span class="crest crest--sm" style="--crest-a:#5C4128;--crest-b:#E2C08D" aria-hidden="true"></span><span class="bracket__name">Ropebinders</span><span class="bracket__score">2</span></div><div class="bracket__team bracket__team--loser" data-tip="Stiltwater Heronguard"><span class="bracket__seed">5</span><span class="crest crest--sm" style="--crest-a:#3577D6;--crest-b:#F7F7F2" aria-hidden="true"></span><span class="bracket__name">Heronguard</span><span class="bracket__score">1</span></div></div></div></div>
+                  <div class="bracket__pair"><div class="bracket__slot is-path"><div class="bracket__match"><div class="bracket__team bracket__team--winner" data-tip="Glassdune Mirages (now Crown Circuit)"><span class="bracket__seed">2</span><span class="crest crest--sm" style="--crest-a:#C8577A;--crest-b:#F7E6D2" aria-hidden="true"></span><span class="bracket__name">Mirages</span><span class="bracket__score">2</span></div><div class="bracket__team bracket__team--loser" data-tip="Brightskerry Shellguard"><span class="bracket__seed">7</span><span class="crest crest--sm" style="--crest-a:#9EE0D4;--crest-b:#5A1A3A" aria-hidden="true"></span><span class="bracket__name">Shellguard</span><span class="bracket__score">1</span></div></div></div><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team bracket__team--loser" data-tip="Keelwick Tarhands"><span class="bracket__seed">3</span><span class="crest crest--sm" style="--crest-a:#D63A2E;--crest-b:#121212" aria-hidden="true"></span><span class="bracket__name">Tarhands</span><span class="bracket__score">1</span></div><div class="bracket__team bracket__team--winner" data-tip="Lanternmouth Wickwardens"><span class="bracket__seed">6</span><span class="crest crest--sm" style="--crest-a:#E8A521;--crest-b:#4A1020" aria-hidden="true"></span><span class="bracket__name">Wickwardens</span><span class="bracket__score">2</span></div></div></div></div>
+                </div></div>
+                <div class="bracket__round"><div class="bracket__label"><span>Semifinals</span><span>Best of 3</span></div><div class="bracket__body">
+                  <div class="bracket__pair"><div class="bracket__slot"><div class="bracket__match"><div class="bracket__team bracket__team--loser" data-tip="Fenhollow Reedstalkers (now Crown Circuit)"><span class="bracket__seed">1</span><span class="crest crest--sm" style="--crest-a:#1F4D2C;--crest-b:#E7D7A0" aria-hidden="true"></span><span class="bracket__name">Reedstalkers</span><span class="bracket__score">1</span></div><div class="bracket__team bracket__team--winner" data-tip="Gullhaven Ropebinders"><span class="bracket__seed">4</span><span class="crest crest--sm" style="--crest-a:#5C4128;--crest-b:#E2C08D" aria-hidden="true"></span><span class="bracket__name">Ropebinders</span><span class="bracket__score">2</span></div></div></div><div class="bracket__slot is-path"><div class="bracket__match"><div class="bracket__team bracket__team--winner" data-tip="Glassdune Mirages (now Crown Circuit)"><span class="bracket__seed">2</span><span class="crest crest--sm" style="--crest-a:#C8577A;--crest-b:#F7E6D2" aria-hidden="true"></span><span class="bracket__name">Mirages</span><span class="bracket__score">2</span></div><div class="bracket__team bracket__team--loser" data-tip="Lanternmouth Wickwardens"><span class="bracket__seed">6</span><span class="crest crest--sm" style="--crest-a:#E8A521;--crest-b:#4A1020" aria-hidden="true"></span><span class="bracket__name">Wickwardens</span><span class="bracket__score">0</span></div></div></div></div>
+                </div></div>
+                <div class="bracket__round"><div class="bracket__label"><span>Final</span><span>Best of 5 · the Charterhall</span></div><div class="bracket__body">
+                  <div class="bracket__slot is-path"><div class="bracket__match"><div class="bracket__team bracket__team--winner" data-tip="Glassdune Mirages (now Crown Circuit)"><span class="bracket__seed">2</span><span class="crest crest--sm" style="--crest-a:#C8577A;--crest-b:#F7E6D2" aria-hidden="true"></span><span class="bracket__name">Mirages</span><span class="bracket__score">3</span></div><div class="bracket__team bracket__team--loser" data-tip="Gullhaven Ropebinders"><span class="bracket__seed">4</span><span class="crest crest--sm" style="--crest-a:#5C4128;--crest-b:#E2C08D" aria-hidden="true"></span><span class="bracket__name">Ropebinders</span><span class="bracket__score">1</span></div><div class="bracket__meta"><span>Neutral venue</span><span>4 rounds</span></div></div></div>
+                </div></div>
+                <div class="bracket__round"><div class="bracket__label"><span>Champion</span><span>Promoted to Crown</span></div><div class="bracket__body">
+                  <div class="bracket__slot is-path"><div class="bracket__champion"><span class="crest crest--lg" style="--crest-a:#C8577A;--crest-b:#F7E6D2" aria-hidden="true"></span><span class="bracket__champion-name">Glassdune Mirages</span><span class="u-xs u-muted">Season 2 champions, promoted with the Shield winner (Reedstalkers)</span></div></div>
+                </div></div>
+              </div>
+            </div>
+          </div>
+          <footer class="panel__footer"><span>Prize money per round reached · weeks TW1–TW3 follow matchweek 16</span><a class="l-push" href="index.html#specified">Prize table</a></footer>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ===== Tooltip templates and dialogs (shell first, then page) ===== -->
+<template id="tip-balance">
+  <div class="tooltip__kicker">Balance</div>
+  <div class="tooltip__title">11,840 ts</div>
+  <dl class="tooltip__rows">
+    <dt>Carried from season 2</dt><dd>6,150</dd>
+    <dt>Central grant, first half (P1)</dt><dd>+17,000</dd>
+    <dt>Sponsor retainer, 10 weeks</dt><dd>+8,170</dd>
+    <dt>Home gates (4)</dt><dd>+15,400</dd>
+    <dt>Wages, 10 weeks</dt><dd>−26,850</dd>
+    <dt>Operating costs, 10 weeks</dt><dd>−5,300</dd>
+    <dt>Signing costs (2)</dt><dd>−2,730</dd>
+    <dt class="is-total">Now</dt><dd class="is-total">11,840</dd>
+  </dl>
+  <div class="tooltip__meta">Second grant half (+17,000) arrives after MW8 · projected at season end before prizes: about 13,100 ts · Source: club ledger</div>
+</template>
+<template id="tip-wages">
+  <div class="tooltip__kicker">Wage bill</div>
+  <div class="tooltip__title">2,685 ts per week</div>
+  <div class="tooltip__body">11 contracts. The Banner Circuit wage budget this season is <strong>2,960 ts</strong> a week. An offer above the headroom is refused.</div>
+  <dl class="tooltip__rows">
+    <dt>Top earner: Brannoc Hale</dt><dd>360</dd>
+    <dt>Lineup (5)</dt><dd>1,580</dd>
+    <dt>Reserves (6)</dt><dd>1,105</dd>
+  </dl>
+  <div class="tooltip__meta">Paid at every week processing, preseason and tournament weeks included</div>
+</template>
+
+
+<!-- ===== Shortcut sheet (? key) ===== -->
+<dialog class="modal" id="shortcuts" aria-labelledby="sc-title">
+  <header class="modal__header">
+    <span class="icon icon--lg" data-icon="keyboard" aria-hidden="true"></span>
+    <h2 class="modal__title" id="sc-title">Keyboard shortcuts</h2>
+    <button class="icon-btn modal__close" type="button" data-close aria-label="Close"><span class="icon" data-icon="close" aria-hidden="true"></span></button>
+  </header>
+  <div class="modal__body">
+    <dl class="shortcut-list">
+      <div><dt>Continue / Play match</dt><dd><kbd>Space</kbd></dd></div>
+      <div><dt>Home · Squad · Fixtures</dt><dd><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dd></div>
+      <div><dt>League · Market · Finances · Codex</dt><dd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd></dd></div>
+      <div><dt>Search anything</dt><dd><kbd>Ctrl</kbd><kbd>K</kbd></dd></div>
+      <div><dt>Back / close</dt><dd><kbd>Esc</kbd></dd></div>
+      <div><dt>Save</dt><dd><kbd>Ctrl</kbd><kbd>S</kbd></dd></div>
+      <div><dt>Undo last change</dt><dd><kbd>Ctrl</kbd><kbd>Z</kbd></dd></div>
+      <div><dt>Pin a tooltip</dt><dd><kbd>Shift</kbd></dd></div>
+      <div><dt>Move in a table</dt><dd><kbd>↑</kbd><kbd>↓</kbd></dd></div>
+      <div><dt>Open the selected row</dt><dd><kbd>Enter</kbd></dd></div>
+      <div><dt>Previous / next fighter</dt><dd><kbd>[</kbd><kbd>]</kbd></dd></div>
+      <div><dt>This sheet</dt><dd><kbd>?</kbd></dd></div>
+    </dl>
+  </div>
+  <footer class="modal__footer"><span class="modal__footer-note">Every shortcut can be rebound in Settings · Controls.</span><button class="btn" type="button" data-close>Close <kbd>Esc</kbd></button></footer>
+</dialog>
+
+<script src="mockups.js"></script>
+</body>
+</html>

@@ -1,0 +1,361 @@
+/* Match report layout glue (screen-scoped). Components come from styles/components.css. */
+.report-top {
+  margin-bottom: var(--sp-3);
+}
+
+.report-pips {
+  padding-bottom: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.report-mvp-stats {
+  margin-left: var(--sp-5);
+}
+
+/* Losses are explained, not punished: a neutral result line (04 §1). */
+.scoreboard__result.report-result--lost {
+  color: var(--c-text-muted);
+}
+
+.report-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.report-tabs > .tabs {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.report-tabs__hint {
+  padding-bottom: var(--sp-2);
+  white-space: nowrap;
+}
+
+.report-grid {
+  margin-top: var(--sp-4);
+}
+
+.report-why {
+  margin: var(--sp-3) var(--sp-4) 0;
+}
+
+.report-empty-line {
+  padding: var(--sp-3) var(--sp-4);
+}
+
+/* A moment, row, card or down picked from the timeline. */
+.trace__item.is-focus,
+.timeline__item.is-focus,
+.report-down.is-focus {
+  background: var(--c-accent-soft);
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+.recap-card.is-focus {
+  border-color: var(--c-accent-line);
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+.data-table tbody tr.is-focus {
+  cursor: pointer;
+}
+
+.data-table tbody tr {
+  cursor: default;
+}
+
+/* Rule recaps */
+.recap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr));
+  gap: var(--sp-3);
+}
+
+.recap-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.recap-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.recap-card__meta {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.recap-rules > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.recap-rule__text {
+  min-width: 0;
+}
+
+.recap-rule__warn {
+  margin-left: var(--sp-2);
+}
+
+.recap-rule.is-never .rule__v {
+  color: var(--c-text-muted);
+}
+
+.recap-rule__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.recap-rule__bar > .meter {
+  flex: 1;
+}
+
+.recap-rule__bar > .rule-list__fires {
+  margin-left: 0;
+  min-width: 2.2rem;
+  text-align: right;
+}
+
+/* Downs (death summaries) */
+.report-downs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-down {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: var(--sp-2) var(--sp-2);
+  margin: 0 calc(var(--sp-2) * -1);
+  border-bottom: 1px dashed var(--c-divider);
+  border-radius: var(--r-sm);
+}
+
+.report-down:last-child {
+  border-bottom: 0;
+}
+
+.report-down__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem var(--sp-2);
+}
+
+.report-down__name {
+  font-weight: var(--fw-semibold);
+  color: var(--c-text);
+}
+
+.report-down.is-them .report-down__name {
+  color: var(--c-text-muted);
+}
+
+.report-down__meter {
+  margin-top: 0.15rem;
+}
+
+.report-xp-title {
+  margin: var(--sp-2) 0 0;
+}
+
+.report-legend {
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+}
+
+/* A long match keeps the side column in view: the timeline scrolls inside its panel. */
+.report-moments {
+  max-height: 46rem;
+  overflow-y: auto;
+}
+
+/* M1.1: squads and swaps. */
+.md-five {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  padding: var(--sp-1) 0;
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+}
+
+.md-five.is-us {
+  color: var(--c-text);
+}
+
+.md-fighter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.md-in {
+  color: var(--c-good);
+  font-weight: var(--fw-bold);
+}
+
+.md-swaps,
+.md-xp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+
+.md-swaps > li.is-us {
+  font-weight: var(--fw-semibold);
+}
+
+.md-xp__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+
+.md-xp__fate {
+  flex-basis: 100%;
+  order: 9;
+  margin-top: calc(-1 * var(--sp-1));
+}
+
+/* Reserves who came in ("sub R2") and the bench XP rows (⅓ of a lineup slot). */
+.report-sub,
+.report-bench {
+  flex: none;
+  margin-left: var(--sp-1);
+  white-space: nowrap;
+}
+
+td > .report-bench {
+  margin-left: 0;
+  margin-right: var(--sp-2);
+}
+
+tr.is-bench td {
+  color: var(--c-text-muted);
+}
+
+.report-xp-bench dt,
+.report-xp-bench dd {
+  color: var(--c-text-muted);
+}
+
+/* Smaller than a tag elsewhere: it sits beside a name in a crowded row. */
+.report-sub {
+  padding: 0 0.3rem;
+  font-size: 0.68rem;
+}
+
+/* The box score now carries Freshness, so its two least-needed columns wait for more room (the Rule recaps below
+   hold every rule's fires): Control seconds from 2000 px, Rules fired from 2100 px. The names stay readable. */
+@media (max-width: 1999px) {
+  .report-col-2000 {
+    display: none;
+  }
+}
+
+@media (max-width: 2099px) {
+  .report-col-2100 {
+    display: none;
+  }
+}
+
+/* Class from 1900 px and Row from 1440 px: the box score table is 681 px wide at 1280 and widens column by column. */
+@media (max-width: 1899px) {
+  .report-col-1900 {
+    display: none;
+  }
+}
+
+@media (max-width: 1439px) {
+  .report-col-1440 {
+    display: none;
+  }
+}
+
+/* Box score (AL-R002-T001): grouped columns (Offense / Defense / Support), a team total row per side. */
+.report-box thead .box-group {
+  text-align: center;
+  border-bottom: 1px solid var(--c-divider);
+  color: var(--c-text-muted);
+}
+
+.report-box thead .box-subhead th {
+  white-space: normal;
+}
+
+/* "Damage received" and "Healing received" take two lines instead of a wide column. */
+.report-box thead .th-sort {
+  white-space: normal;
+  line-height: 1.15;
+  text-align: inherit;
+}
+
+.report-box thead th.cell-num {
+  min-width: 3.2rem;
+  vertical-align: bottom;
+}
+
+.report-box tr.row-total th,
+.report-box tr.row-total td {
+  border-top: 1px solid var(--c-border-strong);
+  background: var(--c-surface-2);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-box tr.row-total th {
+  text-align: left;
+  color: var(--c-text-muted);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.report-box .panel__actions .segmented {
+  flex: none;
+}
+
+/* The subtitle gives way to the Match / R1 / R2 toggle on a narrow panel. */
+@media (max-width: 1439px) {
+  .report-box .panel__subtitle {
+    display: none;
+  }
+}
+
+/* Below 1800 px (the design system's wide breakpoint) the box score needs the whole width (grouped columns, Freshness,
+   a team total row): the report stacks, with the key moments, downs and aftermath under the recaps. */
+@media (max-width: 1799px) {
+  .report-grid > .span-8,
+  .report-grid > .span-4 {
+    grid-column: 1 / -1;
+  }
+}
+
+.report-box__note {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--c-divider);
+}
