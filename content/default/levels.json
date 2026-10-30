@@ -156,8 +156,6 @@
     "intensityMax": 1.5,
     "youngHumanAgeBelow": 21,
     "youngDrainMult": 1.1,
-    "olderHumanAgeFrom": 31,
-    "olderDrainMult": 1.25,
     "tiredDrainShare": 0.5,
     "restAt0": 30,
     "restPerStaminaPoint": 1.0,
@@ -198,7 +196,9 @@
     "tournamentMaxRatingGap": 3,
     "maxRestsPerMatch": 3,
     "spentFloorAtLock": 15,
-    "spentFloorAltMin": 25
+    "spentFloorAltMin": 25,
+    "reserveCoverRounds": 2,
+    "reserveCoverFreshMin": 50
   },
 
   "aiSubstitution": {

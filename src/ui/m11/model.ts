@@ -86,7 +86,6 @@ export function typicalDrain(engine: GameEngine, state: GameState, content: Cont
   const sta = effectiveStats(engine, state, content, fighter)['stamina'] ?? 10;
   let d = clamp(fr.drainAt0 + fr.drainPerStaminaPoint * sta, fr.drainMin, fr.drainMax);
   if (humanAgeOf(fighter, content) < fr.youngHumanAgeBelow) d *= fr.youngDrainMult;
-  if (humanAgeOf(fighter, content) >= fr.olderHumanAgeFrom) d *= fr.olderDrainMult;
   for (const id of fighter.perkIds ?? []) {
     for (const e of content.perks.get(id)?.lifecycleEffects ?? []) if (e.type === 'freshnessDrainMult') d *= e.mult;
   }

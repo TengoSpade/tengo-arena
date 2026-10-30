@@ -296,6 +296,24 @@ describe('M1.1 squads: rotation at the lock and reserves (progression.md §5, le
     expect(ids(choice).has(fid(15))).toBe(true);
   });
 
+  it('reserve cover (KI-21, O36): with a starter likely to tire, a rested fighter who could replace him under the auto-swap rules is named first', () => {
+    // f-10 (44) at F 55 plays (55 >= 50 + 4.2) but is likely to tire: 55 - 2 x 4.2 = 46.6 < the club's swap threshold 50.
+    // f-15 (45) at F 65 is not 15 fresher than him; f-16, raised to 40 and fresh, is (100 >= 70) and within 6 rating (40 >= 38).
+    const cover: ContentDB = { ...content, levels: { ...content.levels, aiRotation: { ...content.levels.aiRotation, reserveCoverRounds: 2, reserveCoverFreshMin: 50 } } };
+    const r = new Map(ratings).set('f-16', 40);
+    const state = leagueWorld({ 10: 55, 15: 65 });
+    const before = createAi(fakePorts({ ratings: r, drain10: 42 })).chooseLineup(state, NINTH_OAR, content);
+    expect(ids(before).has(fid(10))).toBe(true);
+    expect(before.reserves).toEqual([fid(15), fid(11)]); // without the rule: one front-line and one back-line by rating
+    const after = createAi(fakePorts({ ratings: r, drain10: 42 })).chooseLineup(state, NINTH_OAR, cover);
+    expect(ids(after)).toEqual(ids(before)); // the five are unchanged
+    expect(after.reserves).toContain(fid(16));
+    expect(after.reserves).toHaveLength(2);
+    // Nobody likely to tire: the rule changes nothing.
+    const rested = leagueWorld({ 15: 65 });
+    expect(createAi(fakePorts({ ratings: r, drain10: 42 })).chooseLineup(rested, NINTH_OAR, cover).reserves).toEqual(createAi(fakePorts({ ratings: r, drain10: 42 })).chooseLineup(rested, NINTH_OAR, content).reserves);
+  });
+
   it('reserves: one front-line and one back-line fit fighter at F >= 50, then by rating; squad.set when the squad changes', () => {
     const ai = createAi(fakePorts({ ratings }));
     const state = leagueWorld();
