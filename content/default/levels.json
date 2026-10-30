@@ -190,13 +190,13 @@
   "aiRotation": {
     "_doc": "Lifecycle-side rules the AI applies when it picks its match squad each week (sys-ai-manager owns the lineup; it applies these after choosing its five by rating and role). 1) Rest: each starter whose freshness at the coming lock is < threshold + his typical round drain (Reckoning: < tournamentRestBelow) is replaced by the best fit fighter with freshness >= threshold in the same role family whose rating >= starter rating - (leagueMaxRatingGap + extraGapPerPointBelow x max(0, threshold - starter freshness)); most tired first; at most maxRestsPerMatch. 2) Spent floor: a starter below spentFloorAtLock is replaced by any fit fighter with freshness >= spentFloorAltMin even without a rating match. 3) Reserves: the 2 match-squad reserves are the best remaining fit fighters with freshness >= threshold, one front-line (tank or melee family) and one back-line (ranged, controller or healer family) when available, then by rating.",
     "leagueMaxRatingGap": 6,
-    "extraGapPerPointBelow": 0.45,
+    "extraGapPerPointBelow": 1.0,
     "projectOneRound": true,
     "tournamentRestBelow": 25,
     "tournamentMaxRatingGap": 3,
     "maxRestsPerMatch": 3,
-    "spentFloorAtLock": 15,
-    "spentFloorAltMin": 25,
+    "spentFloorAtLock": 40,
+    "spentFloorAltMin": 50,
     "reserveCoverRounds": 2,
     "reserveCoverFreshMin": 50
   },
