@@ -48,15 +48,25 @@ export interface SquadMatchReport {
   flags: string[];
 }
 
-/** combat-skills.md §8 squad-match targets (PROPOSED · TUNABLE). */
+/**
+ * Squad-match targets (03 §8.6; PROPOSED · TUNABLE under O36). The comeback band, the 56% cap and the time cap are
+ * combat-skills.md §8's. The `threshold50`, `reserves2v0` and swaps-per-match bands were lowered to the measured values by
+ * the owner's answer of 2026-10-30 (KI-21 closed): measured on the stepped tiers (seed `balance-1`, 4,986 matches)
+ * `threshold50` 50.6% (CI 47.7-53.6%), `reserves2v0` 49.9% (CI 47.0-52.8%), 0.43 swaps a match for the two threshold
+ * policies; each band is about the 95% CI around its value, so a change that makes swaps or reserves matter less (or a
+ * lot more) flags. They were 51-55%, 52-58% and 0.6-1.4.
+ */
 export const SQUAD_MATCH_TARGETS = {
   policyVsOffMax: 0.56,
-  threshold50VsOff: { min: 0.51, max: 0.55 },
+  threshold50VsOff: { min: 0.48, max: 0.54 },
   comebackDeltaPts: { min: -3, max: 5 },
-  reserveValue: { min: 0.52, max: 0.58 },
-  swapsPerMatch: { min: 0.6, max: 1.4 },
+  reserveValue: { min: 0.47, max: 0.53 },
+  swapsPerMatch: { min: 0.3, max: 0.6 },
   timeCapMax: 0.02,
 } as const;
+
+/** A band's bound as a percentage for flags ("51" or "52.5", never "55.00000000000001"). */
+const pctBound = (x: number): string => String(Math.round(x * 1000) / 10);
 
 /**
  * Scenario: each fighter's starting Freshness is drawn uniformly from this range, in tenths (0-1000). Drawn from 0-100 (it was
@@ -244,7 +254,7 @@ export function runSquadMatch(options: { seed: Seed; fights: number; content: Co
     const comebackRate = t.lostR1 ? t.comebacks / t.lostR1 : null;
     const offComebackRate = o.lostR1 ? o.comebacks / o.lostR1 : null;
     const inTarget = target === null || (winRate >= target.min && winRate <= target.max);
-    if (!inTarget) flags.push(`${id}: wins ${(winRate * 100).toFixed(1)}% (target ${target!.min * 100}-${target!.max * 100}%)`);
+    if (!inTarget) flags.push(`${id}: wins ${(winRate * 100).toFixed(1)}% (target ${pctBound(target!.min)}-${pctBound(target!.max)}%)`);
     if (id !== 'off' && id !== 'reserves2v0' && comebackRate !== null && offComebackRate !== null) {
       const d = (comebackRate - offComebackRate) * 100;
       if (d < T.comebackDeltaPts.min || d > T.comebackDeltaPts.max) flags.push(`${id}: comeback ${d.toFixed(1)} points against off (target ${T.comebackDeltaPts.min} to +${T.comebackDeltaPts.max})`);
@@ -255,7 +265,7 @@ export function runSquadMatch(options: { seed: Seed; fights: number; content: Co
   const meanSwaps = thresholdSwaps.reduce((n, r) => n + r.swapsPerMatch, 0) / Math.max(1, thresholdSwaps.length);
   if (meanSwaps < T.swapsPerMatch.min || meanSwaps > T.swapsPerMatch.max) flags.push(`swaps per match (threshold policies) ${meanSwaps.toFixed(2)} (target ${T.swapsPerMatch.min}-${T.swapsPerMatch.max})`);
   const timeCapShare = all.rounds ? all.capped / all.rounds : 0;
-  if (timeCapShare > T.timeCapMax) flags.push(`time-capped rounds ${(timeCapShare * 100).toFixed(1)}% (max ${T.timeCapMax * 100}%)`);
+  if (timeCapShare > T.timeCapMax) flags.push(`time-capped rounds ${(timeCapShare * 100).toFixed(1)}% (max ${pctBound(T.timeCapMax)}%)`);
   return {
     matchups,
     matches: all.matches,
