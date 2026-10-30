@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { chooseLineup } from '../ai';
+import { loadContent, type ContentDB, type ContentFileName, type RawContentFiles } from '../content';
 import { freshnessOf } from '../fighters';
 import { asId, type ClubId, type Command, type Fighter, type FighterId, type Fixture, type GameState } from '../model';
 import { buildFixtureWorld, fixtureContent, withFreshness } from '../testkit';
@@ -157,5 +158,47 @@ describe('Auto-pick and Freshness (suggestLineup)', () => {
     expect(next.reserves).toContain(second!);
     for (const id of next.reserves) expect(freshnessOf(draft.fighters[id]!)).toBeGreaterThanOrEqual(threshold);
     expect(next.starters).toEqual(base.starters);
+  });
+});
+
+// ---- spent-drift (m1.1/spent-drift): the shipped rotation thresholds ------------------------------------------------------
+
+/** The shipping content (content/default, via import.meta.glob: core tests may not read files). */
+const rawFiles = import.meta.glob('../../../content/default/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
+function shippedContent(): ContentDB {
+  const raw: RawContentFiles = {};
+  for (const [path, json] of Object.entries(rawFiles)) raw[path.split('/').pop()!.replace(/\.json$/, '') as ContentFileName] = json;
+  const r = loadContent('default', raw);
+  if (!r.ok) throw new Error(`content/default invalid: ${r.error.map((e) => e.message).join('; ')}`);
+  return r.value;
+}
+
+describe('Shipped AI rotation (spent-drift)', () => {
+  const shipped = shippedContent();
+  const shippedRot = shipped.levels.aiRotation;
+  // The frozen fixture content keeps the old thresholds for the tests above; this runs the fixture world on the shipped ones.
+  const live: ContentDB = { ...content, levels: { ...content.levels, aiRotation: shippedRot } };
+
+  it('the shipped thresholds: floor 40 (the soak Spent cut-off), replacement from 50, steep rating-gap widening', () => {
+    expect([shippedRot.spentFloorAtLock, shippedRot.spentFloorAltMin, shippedRot.extraGapPerPointBelow]).toEqual([40, 50, 1.0]);
+    expect(shippedRot.spentFloorAltMin).toBeGreaterThanOrEqual(shipped.levels.freshness.threshold);
+  });
+
+  it('a starter at Freshness 35 (below the floor, above the fixture floor of 15) is rotated out for a rested fighter, whatever the rating gap', () => {
+    const s = world();
+    const club = s.playerClubId!;
+    const pick = (state: GameState, c: ContentDB): FighterId[] => {
+      const cmd = engine.suggestLineup(state, club, c);
+      if (cmd.type !== 'squad.set') throw new Error(cmd.type);
+      return cmd.fighters.map((e) => e.fighterId);
+    };
+    const base = pick(s, live);
+    for (const id of base) {
+      const draft = structuredClone(s);
+      setFreshness(draft, id, 35);
+      const next = pick(draft, live);
+      expect(next, `${id} stays a starter`).not.toContain(id);
+      for (const inId of next.filter((x) => !base.includes(x))) expect(freshnessOf(draft.fighters[inId]!)).toBeGreaterThanOrEqual(shippedRot.spentFloorAltMin);
+    }
   });
 });

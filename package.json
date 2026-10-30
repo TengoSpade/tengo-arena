@@ -19,6 +19,7 @@
     "balance": "tsx scripts/balance.ts",
     "freshness-table": "tsx scripts/freshness-table.ts",
     "soak": "tsx scripts/soak.ts",
+    "spent-drift": "tsx scripts/spent-drift.ts",
     "bench": "tsx scripts/bench-season.ts",
     "validate-content": "tsx scripts/validate-content.ts",
     "fixture:content": "tsx scripts/make-fixture-content.ts",
