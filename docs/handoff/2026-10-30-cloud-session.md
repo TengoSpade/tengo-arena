@@ -52,14 +52,24 @@ For the local (PC) orchestrator agent. This records what a cloud Claude Code ses
 - Save peak is 9.0 MB against the ~10 MB budget.
 - Replays recorded before this balance change end at it (Q56 `other-build`).
 
-## In progress when this was written
+### Spent drift (KI-32), merged on `main` after the KI-21 commits
 
-- **`m1.1/spent-drift` (KI-32).**
-  - The cause: the AI rotation's rating-gap tolerance is fixed while the gap between top-5 and bench grows, because starters earn the XP. So tired starters keep being fielded even though a rested alternative exists about 97% of the time.
-  - The first fix commit was `fdd29aa`: `aiRotation` `extraGapPerPointBelow` 0.45→1.0, `spentFloorAtLock` 15→40, `spentFloorAltMin` 25→50.
-  - **The soak still counted Spent as <40 (pre-O36).** The owner chose to **align the soak to the O36 tiers, then retune with the gentlest values that keep Spent flat** on soak-1..4. An agent was doing this, rebased on `f5fa0f4`.
-  - If the branch is unfinished, finish exactly that, then review, test and merge.
-- **Observation, not yet a ticket:** the league ages over long careers. Mean roster human-age goes 26→30 over 20 seasons, and mean Stamina 12.5→10.3.
+- **Cause.** The AI rotation's rating-gap tolerance is fixed while the gap between top-5 and bench grows, because starters earn the XP. So tired starters kept being fielded even though a rested alternative existed.
+- **The soak now counts the O36 tiers from content:** Spent <25, Tired 25–49.
+  - Caps: Spent 6% (was 12%), Tired 30% (was 36%).
+  - `spent-share` rise limit: 0.5 points (was 1.5).
+- **Gentle retune** of `levels.json` `aiRotation`: `spentFloorAtLock` 15→30 and `spentFloorAltMin` 25→45; `extraGapPerPointBelow` stays 0.45. The player's Auto-pick follows the same rotation; manual choices stay free.
+- **Result.** Spent is 0.0–1.1% per season and flat on soak-1..5 (10 seasons).
+- **Diagnostic:** `npm run spent-drift`.
+- **Branch history.**
+  - The rebased, reviewed branch is `m1.1/spent-drift-review`; `m1.1/spent-drift-v2` is the pre-review copy.
+  - `m1.1/spent-drift` on origin holds the superseded first attempt (`fdd29aa`, values 1.0/40/50). Do not merge it.
+- **Open (KI-32).** With the new rotation values the competitive-balance (dynasty) WARN fires on soak-3/4/5 against soak-1 only before. It is warning-level and not monotone in the values. Re-check on more seeds in M7.
+
+## Observations, not yet tickets
+
+- **The league ages over long careers.** Mean roster human-age goes 26→30 over 20 seasons, mean Stamina 12.5→10.2, and starters aged 31+ 23%→55%.
+- **Two harness bands are now regression detectors, not design targets.** The KI-21 squad-match bands were set to the measured values, at the owner's choice.
 
 ## Left for the owner / local machine
 
