@@ -7,7 +7,7 @@ import type { ContentDB } from '../../core/content';
 import type { FreshnessLabel, PerkId } from '../../core/model';
 import { Meter, Pips, Progress, Rating, Tag, tipAttrs, type Tip, type TipContent } from '../components';
 import { formatInt } from '../format';
-import { labelFor, penaltyText, tierRoman, type FreshInfo, type LevelInfo, type RatingNow } from './model';
+import { labelFor, penaltyFrom, penaltyText, tierRoman, type FreshInfo, type LevelInfo, type RatingNow } from './model';
 import './m11.css';
 
 const METER_STATE: Record<FreshnessLabel, 'good' | 'warn' | 'bad' | undefined> = { fresh: 'good', ready: undefined, tired: 'warn', spent: 'bad' };
@@ -20,12 +20,12 @@ export function freshTip(info: FreshInfo, content: ContentDB): TipContent {
     rows: [
       { label: 'Drains a typical round', value: `−${info.drain.toFixed(1)}` },
       { label: 'Recovers a week of rest', value: `+${info.rest.toFixed(0)}` },
-      { label: `Ready for (≥ ${info.threshold})`, value: info.readyRounds >= 99 ? 'many rounds' : `≈ ${info.readyRounds} round${info.readyRounds === 1 ? '' : 's'}` },
+      { label: `Not Tired for (≥ ${info.threshold})`, value: info.readyRounds >= 99 ? 'many rounds' : `≈ ${info.readyRounds} round${info.readyRounds === 1 ? '' : 's'}` },
       { label: 'After a typical match', value: String(info.afterMatch) },
     ],
     body: penalty
-      ? `Below ${info.threshold} he starts rounds with a penalty: ${penalty}. Injury chance ×${info.injuryMult.toFixed(2)}.`
-      : `No penalty at ${info.threshold} or more. Rest needed to be Fresh (80): ${info.value >= 80 ? 'none' : `≈ ${Math.max(1, Math.ceil((80 - info.value) / Math.max(1, info.rest)))} week${Math.ceil((80 - info.value) / Math.max(1, info.rest)) === 1 ? '' : 's'}`}.`,
+      ? `Below ${info.penaltyFrom} he starts rounds with a penalty: ${penalty}. Injury chance ×${info.injuryMult.toFixed(2)}.`
+      : `No penalty at ${info.penaltyFrom} or more.`,
     meta: 'Drains per round played, recovers in weeks he starts no round; 100 again at season end.',
   };
 }
@@ -34,7 +34,7 @@ export function freshTip(info: FreshInfo, content: ContentDB): TipContent {
 export function FreshMeter({ info, content, label, testId, compact }: { info: FreshInfo; content: ContentDB; label?: boolean; testId?: string; compact?: boolean }) {
   return (
     <span class={`fresh condition${compact ? ' fresh--compact' : ''}`} data-label={info.label} tabIndex={0} aria-label={`Freshness ${info.value}, ${info.labelText}`} data-testid={testId} {...tipAttrs(freshTip(info, content))}>
-      <Meter value={info.value / 100} mark={info.threshold / 100} state={METER_STATE[info.label]} thin />
+      <Meter value={info.value / 100} mark={info.penaltyFrom / 100} state={METER_STATE[info.label]} thin />
       <span class="fresh__value">{info.value}</span>
       {label && <span class="fresh__label">{info.labelText}</span>}
     </span>
@@ -44,7 +44,7 @@ export function FreshMeter({ info, content, label, testId, compact }: { info: Fr
 /** What the Freshness penalty does to a rating, in words: the tooltip of "45 → 41". */
 export function ratingNowTip(now: RatingNow, content: ContentDB): TipContent {
   const penalty = penaltyText(now.freshness, content);
-  const threshold = content.combat.freshness.thresholdBelow;
+  const threshold = penaltyFrom(content);
   return {
     kicker: 'Rating · Freshness penalty',
     title: now.drop > 0 ? `${now.rating} → ${now.effective}` : `${now.rating}`,
@@ -58,7 +58,7 @@ export function ratingNowTip(now: RatingNow, content: ContentDB): TipContent {
       ...now.parts.map((p) => ({ label: p.label, value: `−${Math.abs(p.points).toFixed(1)}` })),
       { label: 'Effective rating now', value: String(now.effective), total: true },
     ],
-    meta: `Below ${threshold} Freshness the penalty grows; rest or a fresher fighter brings the rating back.`,
+    meta: `Below ${threshold} Freshness the penalty steps up (Winded, Tired, Spent); rest or a fresher fighter brings the rating back.`,
   };
 }
 
@@ -77,11 +77,11 @@ export function RatingEff({ now, content, tip, testId }: { now: RatingNow; conte
   );
 }
 
-/** "Tired 52" / "Spent 31" tag (reports, between-round screen); nothing when Fresh or Ready. */
+/** "Winded 62" / "Tired 41" / "Spent 19" tag (reports, between-round screen); nothing when Fresh (no penalty). */
 export function FreshTag({ value, label, text }: { value: number; label: FreshnessLabel; text: string }) {
-  if (label !== 'tired' && label !== 'spent') return null;
+  if (label === 'fresh') return null;
   return (
-    <Tag kind={label === 'spent' ? 'bad' : 'warn'} tip={`Started the round at ${value}: ${label === 'spent' ? 'below 40' : '40–59'}, with the Freshness penalty`}>
+    <Tag kind={label === 'spent' ? 'bad' : 'warn'} tip={`Started the round at ${value}: ${label === 'spent' ? 'below 25' : label === 'tired' ? '25–49' : '50–74'}, with the Freshness penalty`}>
       {text} {value}
     </Tag>
   );
@@ -160,7 +160,7 @@ export function PerkBadge({ content, perkId, muted }: { content: ContentDB; perk
 export function FreshChange({ before, after, content, testId }: { before: number; after: number | null; content: ContentDB; testId?: string }) {
   const end = after ?? before;
   const label = labelFor(end, content);
-  const threshold = content.levels.freshness.threshold;
+  const threshold = penaltyFrom(content);
   const drop = after === null ? 0 : before - after;
   const tip: TipContent = {
     kicker: 'Freshness · this match',

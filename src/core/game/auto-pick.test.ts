@@ -52,7 +52,7 @@ function setFreshness(state: GameState, id: FighterId, value: number): void {
 
 describe('Auto-pick and Freshness (suggestLineup)', () => {
   it('the content thresholds the tests below are written against', () => {
-    expect([rot.spentFloorAtLock, rot.spentFloorAltMin, threshold]).toEqual([30, 40, 60]);
+    expect([rot.spentFloorAtLock, rot.spentFloorAltMin, threshold]).toEqual([15, 25, 50]);
   });
 
   it('a rested club keeps its best five and names two rested reserves', () => {
@@ -64,13 +64,13 @@ describe('Auto-pick and Freshness (suggestLineup)', () => {
     for (const id of [...starters, ...reserves]) expect(freshnessOf(s.fighters[id]!)).toBe(100);
   });
 
-  it('rotates a Spent starter out (Freshness 15) and names someone rested in his place; he is not a reserve either', () => {
+  it('rotates a Spent starter out (Freshness 10) and names someone rested in his place; he is not a reserve either', () => {
     const s = world();
     const club = s.playerClubId!;
     const base = squadOf(s, club);
     for (const spentId of base.starters) {
       const draft = structuredClone(s);
-      setFreshness(draft, spentId, 15);
+      setFreshness(draft, spentId, 10);
       expect(freshnessOf(draft.fighters[spentId]!)).toBeLessThan(rot.spentFloorAtLock);
       const next = squadOf(draft, club);
       expect(next.starters, `${spentId} stays a starter`).not.toContain(spentId);
@@ -121,26 +121,26 @@ describe('Auto-pick and Freshness (suggestLineup)', () => {
     expect(squadOf(tankTired, club).starters).toContain(tank.id);
     // With the whole club Tired nobody is rested: the best five stay and no reserve is named below the threshold.
     const allTired = structuredClone(s);
-    for (const f of roster) setFreshness(allTired, f.id, 50);
+    for (const f of roster) setFreshness(allTired, f.id, 45);
     const stuck = squadOf(allTired, club);
     expect(stuck.starters).toEqual(base.starters);
     expect(stuck.reserves).toEqual([]);
   });
 
-  it('in a Reckoning week the rest threshold is lower (Tired 45 stays, 35 goes), as in the AI rule', () => {
+  it('in a Reckoning week the rest threshold is lower (Tired 30 stays, 20 goes), as in the AI rule', () => {
     const s = world('quarterfinal');
     const club = s.playerClubId!;
     const base = squadOf(s, club);
     const roster = Object.values(s.fighters).filter((f) => f.clubId === club);
     const healer = roster.find((f) => f.classId === 'chirurgeon' && base.starters.includes(f.id))!;
     const spareHealer = roster.find((f) => f.classId === 'chirurgeon' && !base.starters.includes(f.id))!;
-    expect(rot.tournamentRestBelow).toBe(40);
-    const at45 = structuredClone(s);
-    setFreshness(at45, healer.id, 45);
-    expect(squadOf(at45, club).starters).toContain(healer.id);
-    const at35 = structuredClone(s);
-    setFreshness(at35, healer.id, 35);
-    const rotated = squadOf(at35, club);
+    expect(rot.tournamentRestBelow).toBe(25);
+    const at30 = structuredClone(s);
+    setFreshness(at30, healer.id, 30);
+    expect(squadOf(at30, club).starters).toContain(healer.id);
+    const at20 = structuredClone(s);
+    setFreshness(at20, healer.id, 20);
+    const rotated = squadOf(at20, club);
     expect(rotated.starters).not.toContain(healer.id);
     expect(rotated.starters).toContain(spareHealer.id);
   });

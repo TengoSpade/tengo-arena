@@ -49,12 +49,15 @@ describe('Freshness tiers come from content', () => {
       expect(freshnessTier(l.min, c)?.label).toBe(l.label);
     }
     expect(freshnessTier(null, c)).toBeNull();
-    // A content set with other thresholds and names (the pending 75/50/25 and "Winded"): the tier follows it.
-    const moved = { levels: { freshness: { labels: [{ id: 'fresh', label: 'Fresh', min: 75 }, { id: 'ready', label: 'Winded', min: 50 }, { id: 'tired', label: 'Tired', min: 25 }, { id: 'spent', label: 'Spent', min: 0 }] } } } as unknown as ContentDB;
-    expect(freshnessTier(70, moved)).toEqual({ id: 'ready', label: 'Winded' });
-    expect(freshnessTier(70, c)?.id).toBe('ready'); // the same value in the shipped thresholds
-    expect(freshnessTier(55, moved)?.id).toBe('ready');
-    expect(freshnessTier(55, c)?.id).toBe('tired');
+    // The shipped tiers are the owner's 75/50/25 with "Winded" (O36, KI-21), picked up from content with no code change.
+    expect(freshnessTier(70, c)).toEqual({ id: 'ready', label: 'Winded' });
+    expect(freshnessTier(55, c)?.id).toBe('ready');
+    expect(freshnessTier(30, c)?.id).toBe('tired');
+    // A content set with other thresholds and names (the earlier 80/60/40 and "Ready"): the tier follows it.
+    const moved = { levels: { freshness: { labels: [{ id: 'fresh', label: 'Fresh', min: 80 }, { id: 'ready', label: 'Ready', min: 60 }, { id: 'tired', label: 'Tired', min: 40 }, { id: 'spent', label: 'Spent', min: 0 }] } } } as unknown as ContentDB;
+    expect(freshnessTier(70, moved)).toEqual({ id: 'ready', label: 'Ready' });
+    expect(freshnessTier(55, moved)?.id).toBe('tired');
+    expect(freshnessTier(30, moved)?.id).toBe('spent');
     expect(freshnessTier(10, moved)?.id).toBe('spent');
   });
 
@@ -99,7 +102,7 @@ describe('the token body', () => {
   it('fills the Freshness ring by the value and colours it by the tier read from content', async () => {
     const c = defaultContent();
     const p = defaultArenaPalette('dark');
-    for (const [value, id] of [[100, 'fresh'], [90, 'fresh'], [70, 'ready'], [52, 'tired'], [28, 'spent'], [0, 'spent']] as const) {
+    for (const [value, id] of [[100, 'fresh'], [75, 'fresh'], [70, 'ready'], [52, 'ready'], [42, 'tired'], [28, 'tired'], [18, 'spent'], [0, 'spent']] as const) {
       const { shown } = await bodyOf({ freshness: value });
       expect(shown().arc).toBeCloseTo(value / 100, 5);
       expect(shown().tier).toBe(id);
@@ -158,7 +161,7 @@ describe('the token body', () => {
   });
 
   it('redraws for a new theme and re-bakes the text once (palette change, not per frame)', async () => {
-    const { skin, body, text } = await bodyOf({ roles: ['healer'], freshness: 52 });
+    const { skin, body, text } = await bodyOf({ roles: ['healer'], freshness: 42 });
     const dark = body.shown();
     skin.setPalette(defaultArenaPalette('light'));
     expect(text.configured).toBeGreaterThanOrEqual(2);

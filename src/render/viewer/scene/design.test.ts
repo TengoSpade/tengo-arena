@@ -93,8 +93,8 @@ describe('the token follows the palette and its metrics', () => {
     expect(y.row).toBeGreaterThan(y.cast);
     expect(y.cast).toBeGreaterThan(y.name);
     h.core.seek(20);
-    const t = h.scene.tokenOf(2)!.shown(); // Tired (52): tag and name
-    expect(t.tag).toBe('Tired (52)');
+    const t = h.scene.tokenOf(2)!.shown(); // Tired (42): tag and name
+    expect(t.tag).toBe('Tired (42)');
     expect(t.stackY.row).toBeGreaterThan(t.stackY.tag);
     expect(t.stackY.tag).toBeGreaterThan(t.stackY.name);
   });

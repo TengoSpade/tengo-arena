@@ -78,7 +78,7 @@ describe('settings commands', () => {
   it('the player club gets the player defaults; AI clubs the AI defaults (levels.json, combat.json)', () => {
     const s = world();
     const c = s.clubs[player(s)]!;
-    expect([c.levelUpDefault, c.levelUpPacing, c.pauseBetweenRounds, c.autoSwap.freshnessBelow, c.autoSwap.lostRoundBonus]).toEqual(['manual', 'detailed', 'always', 40, 10]);
+    expect([c.levelUpDefault, c.levelUpPacing, c.pauseBetweenRounds, c.autoSwap.freshnessBelow, c.autoSwap.lostRoundBonus]).toEqual(['manual', 'detailed', 'always', 50, 10]);
     for (const k of Object.values(s.clubs)) if (k.id !== c.id) expect(k.levelUpDefault).toBe('auto');
   });
 });

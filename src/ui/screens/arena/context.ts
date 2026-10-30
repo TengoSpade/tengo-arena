@@ -8,7 +8,7 @@ import type { MatchPlayback, RoundPlayback } from '../../../core/game';
 import type { FightFighterInput, GameState, Side, TacticsAssignment } from '../../../core/model';
 import { colorsForMatch, type ArenaPalette, type ArenaRoundContext, type ArenaSideInfo, type ArenaUnitInfo, type RoleId, type TeamColors } from '../../../render';
 import { safeView } from '../../store/engine';
-import { labelFor } from '../../m11/model';
+import { labelFor, tierAt } from '../../m11/model';
 import type { HudInfo, HudSide } from './Hud';
 import { cssColorToNumber } from './palette';
 
@@ -95,7 +95,10 @@ export function buildRoundContext(input: ContextInput): ArenaRoundContext {
     const lu = lineups ? (u.side === 0 ? lineups.home : lineups.away) : null;
     const slot = lu ? lu.fighterIds.indexOf(u.fighterId) : -1;
     const freshness = slot >= 0 && lu ? (lu.freshness[slot] ?? null) : null;
-    const label = freshness === null ? null : labelFor(freshness, content).id;
+    // The tag marks a round started with a Freshness penalty (combat.json freshness.tiers below the first tier); its id
+    // and text are the content label (the label ids equal the tier ids, core/content validate).
+    const label = freshness === null ? null : labelFor(freshness, content);
+    const tag = freshness !== null && label !== null && label.id !== 'fresh' && tierAt(freshness, content).rank > 0 ? label : null;
     const input = fightInputOf(state, playback.fixtureId, u.fighterId);
     const tactics = input?.tactics;
     return {
@@ -111,7 +114,8 @@ export function buildRoundContext(input: ContextInput): ArenaRoundContext {
       entered: slot >= 0 && lu ? Boolean(lu.entered[slot]) : false,
       overall: input?.rating ?? null,
       freshness,
-      fatigueTag: label === 'tired' || label === 'spent' ? label : null,
+      fatigueTag: tag ? (tag.id as 'ready' | 'tired' | 'spent') : null,
+      fatigueLabel: tag ? tag.text : null,
       ruleCount: presetOfTactics(content, tactics)?.rules.length ?? 0,
     };
   });

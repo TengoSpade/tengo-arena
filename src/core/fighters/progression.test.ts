@@ -482,31 +482,31 @@ describe('Freshness', () => {
   });
 
   it('frs-002 / frs-003 / frs-008: 10.9 (STA 6, 34, brutal round); 7.8 (elf 30, STA 10); 3.6 (Campaign Legs)', () => {
-    expect(roundDrain10(plain({ stamina: 6 }, { age: 34 }), load(38, 1100, true), content)).toBe(109);
+    expect(roundDrain10(plain({ stamina: 6 }, { age: 34 }), load(38, 1100, true), content)).toBe(136); // 10.9 x 1.25 (older drain, human-age 31+, KI-21)
     expect(roundDrain10(plain({ stamina: 10 }, { raceId: 'elf' as RaceId, age: 30 }), load(30, 600, false), content)).toBe(Math.round(7.08 * (0.55 + 0.25 + 0.12) * 1.1 * 10));
     expect(typicalRoundDrain10(plain({ stamina: 10 }, { raceId: 'elf' as RaceId, age: 30 }), content)).toBe(78);
     expect(typicalRoundDrain10(plain({ stamina: 16 }, { perkIds: ['g_campaign_legs' as PerkId] }), content)).toBe(36);
   });
 
-  it('frs-004 (T003 calibration): Stamina 16 starts 10 straight typical rounds at >= 60 (4 matches), Stamina 6 five (2 matches)', () => {
-    const roundsAtOrAbove60 = (f: Fighter) => {
+  it('frs-004 (T003 calibration, re-aligned to the Tired boundary 50 in KI-21): Stamina 16 starts 12 straight typical rounds at >= 50 (about 5 matches), Stamina 6 six (about 2.4)', () => {
+    const roundsAtOrAbove50 = (f: Fighter) => {
       let v = 1000;
       let n = 0;
       const d = typicalRoundDrain10(f, content);
-      while (Math.floor(v / 10) >= 60) {
+      while (Math.floor(v / 10) >= 50) {
         n++;
         v -= d;
       }
       return { n, next: v / 10 };
     };
-    const hi = roundsAtOrAbove60(sixteen());
-    expect(hi.n).toBe(10);
-    expect(hi.next).toBeCloseTo(58, 5);
-    const lo = roundsAtOrAbove60(plain({ stamina: 6 }));
-    expect(lo.n).toBe(5);
-    expect(lo.next).toBeCloseTo(55, 5);
-    expect(hi.n / 2.5).toBeCloseTo(4, 5);
-    expect(lo.n / 2.5).toBeCloseTo(2, 5);
+    const hi = roundsAtOrAbove50(sixteen());
+    expect(hi.n).toBe(12);
+    expect(hi.next).toBeCloseTo(49.6, 5);
+    const lo = roundsAtOrAbove50(plain({ stamina: 6 }));
+    expect(lo.n).toBe(6);
+    expect(lo.next).toBeCloseTo(46, 5);
+    expect(hi.n / 2.5).toBeCloseTo(4.8, 5);
+    expect(lo.n / 2.5).toBeCloseTo(2.4, 5);
   });
 
   // M1.1 tuning (content/default levels.json freshness.tiredDrainShare 0.5): a Tired fighter pays half a round's drain.
@@ -514,19 +514,19 @@ describe('Freshness', () => {
     const tiredContent: ContentDB = { ...content, levels: { ...content.levels, freshness: { ...content.levels.freshness, tiredDrainShare: 0.5 } } };
     const typical = load(30, 1000, false); // intensity 0.55 + 0.25 + 0.2 = 1.0
 
-    it('the share applies to rounds that START below the threshold (599 tenths), not at it (600); absent it is 1', () => {
+    it('the share applies to rounds that START below the Tired boundary (499 tenths), not at it (500); absent it is 1', () => {
       const f = plain({ stamina: 11 }); // base 11.88 - 0.48 × 11 = 6.6; this load: 0.55 + 0.25 + 0.2 × 0.6 = 0.92
       const full = Math.round(6.6 * 0.92 * 10); // 60.72 -> 61
       const half = Math.round(6.6 * 0.92 * 0.5 * 10); // 30.36 -> 30
-      expect(roundDrain10({ ...f, freshness10: 600 }, load(30, 600, false), tiredContent)).toBe(full);
-      expect(roundDrain10({ ...f, freshness10: 599 }, load(30, 600, false), tiredContent)).toBe(half);
+      expect(roundDrain10({ ...f, freshness10: 500 }, load(30, 600, false), tiredContent)).toBe(full);
+      expect(roundDrain10({ ...f, freshness10: 499 }, load(30, 600, false), tiredContent)).toBe(half);
       expect(roundDrain10({ ...f, freshness10: 1000 }, load(30, 600, false), tiredContent)).toBe(full);
       // Without the constant (the frozen fixture content) nothing is tapered.
       expect(roundDrain10({ ...f, freshness10: 100 }, load(30, 600, false), content)).toBe(full);
     });
 
-    // An unrotated starter plays typical rounds back to back. Stamina 6: 9.0 a round (5 starts at >= 60: 100, 91, 82, 73, 64),
-    // so round 6 starts at 55 (Tired, as in the T003 calibration); then 4.5 a round instead of 9.0.
+    // An unrotated starter plays typical rounds back to back. Stamina 6: 9.0 a round (6 starts at >= 50: 100, 91, 82, 73, 64, 55),
+    // so round 7 starts at 46 (Tired, below 50); then 4.5 a round instead of 9.0.
     const unrotated = (stamina: number, contentUsed: ContentDB, rounds: number): number[] => {
       let f: Fighter = { ...plain({ stamina }), freshness10: 1000 };
       const starts: number[] = [];
@@ -537,28 +537,29 @@ describe('Freshness', () => {
       return starts;
     };
 
-    it('the onset is untouched: the first round started below 60 is the same round, and every earlier start is identical', () => {
-      for (const [sta, firstTired] of [[6, 6], [11, 8], [16, 11]] as const) {
+    it('the onset is untouched: the first round started below 50 is the same round, and every earlier start is identical', () => {
+      for (const [sta, firstTired] of [[6, 7], [11, 9], [16, 13]] as const) {
         const old = unrotated(sta, content, 30);
         const now = unrotated(sta, tiredContent, 30);
-        expect(old.findIndex((v) => v < 60) + 1, `STA ${sta} without`).toBe(firstTired);
-        expect(now.findIndex((v) => v < 60) + 1, `STA ${sta} with`).toBe(firstTired);
+        expect(old.findIndex((v) => v < 50) + 1, `STA ${sta} without`).toBe(firstTired);
+        expect(now.findIndex((v) => v < 50) + 1, `STA ${sta} with`).toBe(firstTired);
         expect(now.slice(0, firstTired)).toEqual(old.slice(0, firstTired));
       }
     });
 
-    it('after the threshold an unrotated Stamina 6 declines at half the pace: first Spent start in round 10 (was 8), still above 0 in round 18 (was 0 from round 13)', () => {
-      const old = unrotated(6, content, 18);
-      const now = unrotated(6, tiredContent, 18);
-      // Old: 9.0 a round -> 100 - 9r: round 8 starts at 37 (Spent), round 12 at 1.0, round 13 at 0.
+    it('after the threshold an unrotated Stamina 6 declines at half the pace: first Spent start (< 25) in round 12 (was 10), reaches 0 in round 18 (was 13)', () => {
+      const old = unrotated(6, content, 20);
+      const now = unrotated(6, tiredContent, 20);
+      // Old: 9.0 a round -> 100 - 9r: round 10 starts at 19 (Spent), round 12 at 1.0, round 13 at 0.
       expect(old.findIndex((v) => v === 0) + 1).toBe(13);
-      expect(old.findIndex((v) => v < 40) + 1).toBe(8);
-      // New: 100, 91, 82, 73, 64, 55, then 4.5 a round: 50.5, 46, 41.5, 37 (round 10 starts Spent), ... 0 at 55 / 4.5 = 12.2 rounds after round 6.
+      expect(old.findIndex((v) => v < 25) + 1).toBe(10);
+      // New: 100, 91, 82, 73, 64, 55, 46 (round 7, Tired), then 4.5 a round: 41.5, 37, 32.5, 28, 23.5 (round 12 starts Spent), ... 1.0 at round 17, 0 at round 18.
       expect(now[5]).toBe(55);
-      expect(now[9]).toBeCloseTo(37, 5);
-      expect(now.findIndex((v) => v < 40) + 1).toBe(10);
-      expect(now.findIndex((v) => v === 0)).toBe(-1);
-      expect(now[17]).toBeCloseTo(55 - 4.5 * 12, 5); // 1.0
+      expect(now[6]).toBe(46);
+      expect(now[11]).toBeCloseTo(23.5, 5);
+      expect(now.findIndex((v) => v < 25) + 1).toBe(12);
+      expect(now.findIndex((v) => v === 0) + 1).toBe(18);
+      expect(now[16]).toBeCloseTo(46 - 4.5 * 10, 5); // 1.0
     });
   });
 
@@ -568,11 +569,11 @@ describe('Freshness', () => {
     expect(weeklyRest10(plain({ stamina: 6 }, { age: 34 }), content, true)).toBe(245);
   });
 
-  it('frs-012 (KI-21, O36): a week with a round started still recovers: 20% / 10% / 3% of the weekly rest for young (< 25) / middle (25-30) / older (31+) human-age', () => {
+  it('frs-012 (KI-21, O36): a week with a round started still recovers: 10% / 5% / 2% of the weekly rest for young (< 25) / middle (25-30) / older (31+) human-age', () => {
     // Weekly rest base at STA 13 = 30 + 13 = 43 points.
-    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 22 }), content)).toBe(Math.round(43 * 0.2 * 10));
-    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 28 }), content)).toBe(Math.round(43 * 0.1 * 10));
-    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 34 }), content)).toBe(Math.round(43 * 0.03 * 10));
+    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 22 }), content)).toBe(Math.round(43 * 0.1 * 10));
+    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 28 }), content)).toBe(Math.round(43 * 0.05 * 10));
+    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 34 }), content)).toBe(Math.round(43 * 0.02 * 10));
     // Always positive, never more than a rested week.
     for (const age of [19, 24, 25, 30, 31, 40]) {
       const played = playedWeekRest10(plain({ stamina: 13 }, { age }), content);
@@ -581,16 +582,48 @@ describe('Freshness', () => {
     }
   });
 
-  it('frs-013 (KI-21, O36): starting fresh and playing a full 3-round match every week, a Stamina-13 fighter plays 4 (young), 3 (middle) and 2 (older) matches before a round starts Tired', () => {
-    const typicalLoad = { durationS: 36, damageTaken: 600, maxHp: 1000, downed: false };
+  // "Needing a full rest" = the first round that would start in the Tired tier (Freshness below 50, levels.json freshness.threshold).
+  const typicalLoad = { durationS: 36, damageTaken: 600, maxHp: 1000, downed: false };
+  const TIRED10 = content.levels.freshness.threshold * 10;
+
+  it('frs-013 (KI-21, O36): starting fresh and playing a full 3-round match every week, a Stamina-13 fighter plays 4 (young), 3 (middle) and 2 (older) matches before a round starts Tired (< 50)', () => {
     const matchesBeforeTired = (age: number): number => {
       let f: Fighter = { ...plain({ stamina: 13 }, { age }), freshness10: 1000 };
       for (let match = 0; match < 12; match++) {
         for (let r = 0; r < 3; r++) {
-          if (f.freshness10! < 600) return match;
+          if (f.freshness10! < TIRED10) return match;
           f = { ...f, freshness10: Math.max(0, f.freshness10! - roundDrain10(f, typicalLoad, content)) };
         }
         f = { ...f, freshness10: Math.min(1000, f.freshness10! + playedWeekRest10(f, content)) };
+      }
+      return 12;
+    };
+    expect(matchesBeforeTired(22)).toBe(4);
+    expect(matchesBeforeTired(28)).toBe(3);
+    expect(matchesBeforeTired(34)).toBe(2);
+  });
+
+  it('frs-013 through the real week path: weeklyLifecycle applies the played-week recovery to a starter over several weeks, 4 / 3 / 2 matches', () => {
+    const matchesBeforeTired = (age: number): number => {
+      const { s, a, b } = world();
+      const id = s.clubs[a]!.lineup.fighters[0]!.fighterId;
+      const f = s.fighters[id]!;
+      f.age = age;
+      f.raceId = 'human' as typeof f.raceId;
+      f.perkIds = [];
+      f.train100[STA] = 1300;
+      f.wear100[STA] = 0;
+      f.freshness10 = 1000;
+      for (let match = 0; match < 12; match++) {
+        for (let r = 0; r < 3; r++) {
+          if (s.fighters[id]!.freshness10! < TIRED10) return match;
+          s.fighters[id]!.freshness10 = Math.max(0, s.fighters[id]!.freshness10! - roundDrain10(s.fighters[id]!, typicalLoad, content));
+        }
+        s.results = {};
+        const home = s.clubs[a]!.lineup.fighters.map((e) => e.fighterId);
+        const away = s.clubs[b]!.lineup.fighters.map((e) => e.fighterId);
+        putResult(s, makeResult(s, content, { homeClubId: a, awayClubId: b, home, away, rounds: [{ winner: 'away' }, { winner: 'home' }, { winner: 'home' }] }));
+        weeklyLifecycle(s, content);
       }
       return 12;
     };
@@ -616,23 +649,23 @@ describe('Freshness', () => {
     expect(s.fighters[withdrawn]!.freshness10).toBe(531);
   });
 
-  it('Tired and Spent round starts are counted at the round start', () => {
+  it('Tired (25-49) and Spent (< 25) round starts are counted at the round start', () => {
     const { s, a, b } = world();
     const ms = fixtureMatchState(s, a, b, content);
     const [x, y] = ms.home.active as [FighterId, FighterId];
-    s.fighters[x] = withFreshness(s.fighters[x]!, 55);
-    s.fighters[y] = withFreshness(s.fighters[y]!, 35);
+    s.fighters[x] = withFreshness(s.fighters[x]!, 45);
+    s.fighters[y] = withFreshness(s.fighters[y]!, 15);
     freshnessAfterRound(s, ms, outcome(1, 'home', [after(x, 'home'), after(y, 'home')]), content);
     expect(s.fighters[x]!.season.tiredRoundStarts).toBe(1);
     expect(s.fighters[y]!.season.spentRoundStarts).toBe(1);
   });
 
-  it('frs-009: a round started at F 45 multiplies the injury chance by 1.09; at 60 by 1', () => {
+  it('frs-009: a round started at F 45 multiplies the injury chance by 1.03; at 50 by 1', () => {
     const f = plain();
-    const p60 = roundInjuryChanceBp(f, content, { damageRatioBp: 11_000, downed: true, freshness: 60 });
+    const p50 = roundInjuryChanceBp(f, content, { damageRatioBp: 11_000, downed: true, freshness: 50 });
     const p45 = roundInjuryChanceBp(f, content, { damageRatioBp: 11_000, downed: true, freshness: 45 });
-    expect(p60).toBe(324);
-    expect(p45).toBe(Math.trunc(324 * 1.09));
+    expect(p50).toBe(324);
+    expect(p45).toBe(Math.trunc(324 * 1.03));
   });
 
   it('frs-010: the off-season resets Freshness to 100', () => {

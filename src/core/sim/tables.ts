@@ -376,13 +376,8 @@ export interface SimTables {
   perks: Map<string, CPerk>;
   /** M1.1 Freshness penalty (combat.json freshness), bp. */
   freshness: {
-    thresholdBelow: number;
-    fullAtOrBelow: number;
-    attackSpeedBp: number;
-    moveSpeedBp: number;
-    powerBp: number;
-    supportBp: number;
-    reactionDelayBp: number;
+    /** Penalty tiers, descending minFreshness; `severityBp` = the tier's rank among the penalty tiers (0 for the top, 10,000 for the last). */
+    tiers: { id: string; min: number; attackSpeedBp: number; moveSpeedBp: number; powerBp: number; supportBp: number; reactionDelayBp: number; severityBp: number }[];
     resistMinBp: number;
     resistMaxBp: number;
     default: number;
@@ -490,13 +485,18 @@ function build(content: ContentDB): SimTables {
   for (const p of content.perks.list) perks.set(p.id, compilePerk(p, ctx, content));
   const fr = c.freshness;
   const freshness = {
-    thresholdBelow: fr.thresholdBelow,
-    fullAtOrBelow: fr.fullPenaltyAtOrBelow,
-    attackSpeedBp: toBp(fr.penaltyAtFull.attackSpeed),
-    moveSpeedBp: toBp(fr.penaltyAtFull.moveSpeed),
-    powerBp: toBp(fr.penaltyAtFull.power),
-    supportBp: toBp(fr.penaltyAtFull.support),
-    reactionDelayBp: toBp(fr.penaltyAtFull.reactionDelay),
+    tiers: [...fr.tiers]
+      .sort((a, b) => b.minFreshness - a.minFreshness)
+      .map((t, i, all) => ({
+        id: t.id,
+        min: t.minFreshness,
+        attackSpeedBp: toBp(t.attackSpeed),
+        moveSpeedBp: toBp(t.moveSpeed),
+        powerBp: toBp(t.power),
+        supportBp: toBp(t.support),
+        reactionDelayBp: toBp(t.reactionDelay),
+        severityBp: Math.trunc((i * BP) / Math.max(1, all.length - 1)),
+      })),
     resistMinBp: toBp(fr.resistClamp[0]),
     resistMaxBp: toBp(fr.resistClamp[1]),
     default: fr.default,

@@ -27,6 +27,11 @@ const ROUNDS = 40;
 const corpus = Array.from({ length: ROUNDS }, (_, i) => corpusRound(content, i));
 const fullRuns = corpus.map(({ input, seed }) => simulateRound(input, seed, content, { record: 'full' }));
 
+/** Passives whose trigger grants focus (they also apply a status, which is how the log shows they fired). */
+const FOCUS_PASSIVES: ReadonlySet<string> = new Set(
+  content.abilities.list.filter((a) => a.kind === 'passive' && (a.passive?.triggers ?? []).some((tr) => tr.effects.some((ef) => ef.type === 'focus'))).map((a) => a.id),
+);
+
 type Frame = Extract<FightEvent, { type: 'frame' }>;
 const framesOf = (log: FightLog): Frame[] => log.events.filter((e): e is Frame => e.type === 'frame');
 
@@ -182,6 +187,10 @@ describe('log format 2: frames match the sim state', () => {
         if (!before || !after || after.tick - before.tick > 2) continue;
         // Regeneration over two ticks is about a point; the cost is at least 15.
         const u = e.unit!;
+        // A passive trigger that grants focus in the same window (Collect the Bounty: +25 focus when a marked enemy
+        // goes down; its Empowered status marks it in the log) refills the bar; such a window says nothing here.
+        // KI-21's tiers changed the shipped corpus's rounds enough to land one release in such a window.
+        if (events.some((x) => x.unit === u && x.tick > before.tick && x.tick <= after.tick && x.type === 'status.apply' && FOCUS_PASSIVES.has(String(x.data!.ability)))) continue;
         expect(after.data!.u[u]![5]! + e.data!.focusSpent).toBeLessThanOrEqual(before.data!.u[u]![5]! + 3);
         releases++;
       }
@@ -228,11 +237,11 @@ describe('log format 2 changes no outcome and nothing but frames and the header'
     // streams intact; a change the fight reads still moves the events and fails it.
     const FIXTURE_HASH_AT_CAPTURE = 'd459725e48114003772d826fdd11d15b';
 
-    function legacyHash(log: FightLog, dropFrames: boolean): string {
+    function legacyHash(log: FightLog, dropFrames: boolean, captureHash: string = FIXTURE_HASH_AT_CAPTURE): string {
       const h = new StreamHasher();
       const { logFormat, ...header } = log.header;
       expect(logFormat).toBe(2);
-      h.update(stableStringify({ ...header, contentHash: FIXTURE_HASH_AT_CAPTURE }));
+      h.update(stableStringify({ ...header, contentHash: captureHash }));
       for (const e of log.events) {
         if (dropFrames) {
           if (e.type === 'frame') continue;
@@ -266,9 +275,14 @@ describe('log format 2 changes no outcome and nothing but frames and the header'
       expect(simulateMatch(matchInput, fx, { record: 'full' }).logs!.map((l) => legacyHash(l, true))).toEqual(['2c8d5eb1201d3555b39bc70bd6734177', 'd33c02036a4600734997c62d9c7f84ba']);
     });
 
+    // Re-captured for KI-21 (O36): this round has fighters at Freshness 45, 70 and 30, so the stepped tiers change its
+    // fight on purpose (home, 943 ticks, checksum 4ab39e99...). The format-1 hashes were captured on the pre-M2 KI-21
+    // build (m1.1/ki-21 @ 5a7763c, same fixtures and function, its fixture content hash below): the format-2 stream of
+    // the rebased build is still that stream apart from the header field and the frames.
     it('the fixture M1.1 round (ranks, perks, Freshness)', () => {
-      expect(legacyHash(simulateRound(m11Round(), 'r-golden', fx, { record: 'summary' }).log!, false)).toBe('4b6242ea586fcb680c58d20da0cfbbfe');
-      expect(legacyHash(simulateRound(m11Round(), 'r-golden', fx, { record: 'full' }).log!, true)).toBe('d6efc3eb48dfd0d9dbfde0191fdf9eed');
+      const KI21_FIXTURE_HASH = '48dabadaec76182dd154c6ca26c4156f';
+      expect(legacyHash(simulateRound(m11Round(), 'r-golden', fx, { record: 'summary' }).log!, false, KI21_FIXTURE_HASH)).toBe('03d2f37e05e34ca6ac1a9256b58aa0eb');
+      expect(legacyHash(simulateRound(m11Round(), 'r-golden', fx, { record: 'full' }).log!, true, KI21_FIXTURE_HASH)).toBe('5efdaae5d325b9b64b759fd6870e9fad');
     });
   });
 });

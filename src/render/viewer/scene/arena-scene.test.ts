@@ -192,8 +192,8 @@ describe('what a token shows (asset-006, D-J)', () => {
 
   it('shows the Freshness tag for the first 3 s only, as words and the number', async () => {
     const h = await shown();
-    expect(h.scene.tokenOf(2)!.shown().tag).toBe('Tired (52)');
-    expect(h.scene.tokenOf(7)!.shown().tag).toBe('Spent (28)');
+    expect(h.scene.tokenOf(2)!.shown().tag).toBe('Tired (42)');
+    expect(h.scene.tokenOf(7)!.shown().tag).toBe('Spent (18)');
     expect(h.scene.tokenOf(3)!.shown().tag).toBe('');
     h.core.seek(61);
     expect(h.scene.tokenOf(2)!.shown().tag).toBe('');

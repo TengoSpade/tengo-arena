@@ -15,7 +15,7 @@ import type { ContentDB, RuleDef } from '../../../core/content';
 import type { FightFighterInput, RuleTraceEntry } from '../../../core/model';
 import type { UnitProbe } from '../../../core/sim';
 import type { ArenaRoundContext, ArenaUnitInfo, DecisionSnapshot, PipKind, UnitRenderState } from '../../../render';
-import { penaltyText } from '../../m11/model';
+import { labelFor, penaltyText } from '../../m11/model';
 import { ruleParts } from '../match-report/rule-sentence';
 import { presetOfTactics } from './context';
 import { nameOfUnit } from './feed';
@@ -287,7 +287,7 @@ export function inspectorModel(args: {
     unit,
     isCaptain: state?.isCaptain ?? false,
     vitals: state ? { hp: state.hp, maxHp: state.maxHp, shield: state.shield, focus: state.focus, standing: state.standing } : null,
-    freshness: fresh === null ? null : t('inspectFresh', { n: fresh, label: unit.fatigueTag ?? 'ready' }),
+    freshness: fresh === null ? null : t('inspectFresh', { n: fresh, label: labelFor(fresh, content).text }),
     freshnessPenalty: fresh === null ? null : penaltyText(fresh, content),
     decision: decisionModel,
     now,

@@ -195,29 +195,29 @@ describe('ability ranks (rk-001 to rk-005)', () => {
 });
 
 describe('Freshness penalty (fr-001 to fr-004)', () => {
-  it('fr-001: worked-example Knight at F 45 (s = 4,285 bp): interval 1.401 s, Power 73, move 158 mm/tick, reaction 6 ticks, Tired (45)', () => {
-    expect(fatigueSeverityBp(tb, 45, 0)).toBe(4285);
+  it('fr-001: worked-example Knight at F 45 (Tired tier, 2 of 3): interval 1.486 s, Power 68, move 146 mm/tick, reaction 7 ticks, Tired (45)', () => {
+    expect(fatigueSeverityBp(tb, 45, 0)).toBe(6666);
     const f = arena([{ classId: 'oathguard', stats: KNIGHT, freshness: 45 }], ['bloodhowler']);
     prep(f);
     const u = f.units[0]!;
-    // Penalty at full (KI-21, O36: x1.375 of the M1.1 values, full at F 25): attack speed -11%, move -6.6%, Power -8.8%, reaction +28%; x 0.4285 at F 45.
-    // Attack speed 0.975 - 0.11 x 0.4285 = 0.9279; interval 1.3 / 0.9279 = 1.401 s; Power trunc(76.03 x (1 - 0.088 x 0.4285)) = trunc(73.16) = 73;
-    // move trunc(163.2 x (1 - 0.066 x 0.4285)) = trunc(158.6) = 158; reaction 305 ms x 1.12 = 342 ms = 6.8 ticks -> 6.
-    expect(f.attackSpeedBp(u)).toBe(9279);
-    expect(Math.round(((u.intervalTicks * BP) / f.attackSpeedBp(u)) * 50)).toBe(1401);
-    expect(f.power(u)).toBe(73);
-    expect(f.speedMm(u)).toBe(158);
-    expect(f.reactionTicks(u).ticks).toBe(6);
+    // Stepped tiers (KI-21, O36): F 25-49 is the Tired tier, -10% attack speed, move, Power and Support and +20% reaction delay, whatever the value inside it.
+    // Attack speed 0.975 - 0.10 = 0.875; interval 1.3 / 0.875 = 1.486 s; Power trunc(76.03 x 0.90) = trunc(68.4) = 68;
+    // move trunc(163.2 x 0.90) = trunc(146.9) = 146; reaction 305 ms x 1.2 = 366 ms = 7.3 ticks -> 7.
+    expect(f.attackSpeedBp(u)).toBe(8750);
+    expect(Math.round(((u.intervalTicks * BP) / f.attackSpeedBp(u)) * 50)).toBe(1486);
+    expect(f.power(u)).toBe(68);
+    expect(f.speedMm(u)).toBe(146);
+    expect(f.reactionTicks(u).ticks).toBe(7);
     const p = profileOf({ classId: 'oathguard', stats: KNIGHT, freshness: 45 });
-    expect([p.power, p.moveSpeedMmPerTick, p.reactionTicks]).toEqual([73, 158, 6]);
+    expect([p.power, p.moveSpeedMmPerTick, p.reactionTicks]).toEqual([68, 146, 7]);
     const out = simulateRound({ round: 1, home: side('h', [{ classId: 'oathguard', stats: KNIGHT, freshness: 45 }]), away: side('a', []) }, 'fr', content, { record: 'summary' });
     const recap = out.log!.events.find((e) => e.type === 'round.summary')!.data!.units[0] as RoundRecapM11;
-    expect([recap.freshness, recap.fatigueTag, recap.fatigueBp]).toEqual([45, 'tired', 4285]);
+    expect([recap.freshness, recap.fatigueTag, recap.fatigueBp]).toEqual([45, 'tired', 6666]);
     const spawn = out.log!.events.find((e) => e.type === 'fight.start')!.data!.units[0] as unknown as Record<string, unknown>;
-    expect(spawn).toMatchObject({ freshness: 45, fatigueBp: 4285, abilityRanks: { a1: 1, a2: 1, passive: 1 }, perkIds: [], enteredThisRound: false });
+    expect(spawn).toMatchObject({ freshness: 45, fatigueBp: 6666, abilityRanks: { a1: 1, a2: 1, passive: 1 }, perkIds: [], enteredThisRound: false });
   });
 
-  it('fr-001 in the engine: the swing accumulator keeps its sub-tick overshoot, so F 45 swings every 1.401 s on average', () => {
+  it('fr-001 in the engine: the swing accumulator keeps its sub-tick overshoot, so F 45 swings every 1.486 s on average', () => {
     const swingsOver = (freshness: number, ticks: number): number => {
       const f = arena([{ classId: 'oathguard', stats: KNIGHT, freshness }], ['bloodhowler']);
       prep(f);
@@ -233,8 +233,8 @@ describe('Freshness penalty (fr-001 to fr-004)', () => {
       }
       return swings;
     };
-    // 2750 ticks x 9279 / 260000 = 98.14 swings (engine 1 quantized every swing to 28 ticks: 98).
-    expect(swingsOver(45, 2750)).toBe(98);
+    // 2750 ticks x 8750 / 260000 = 92.55 swings (engine 1 quantized every swing to 28 ticks: 98).
+    expect(swingsOver(45, 2750)).toBe(92);
     // Fresh (Agility 9: attack speed 9750): 2600 x 9750 / 260000 = 97.5 (engine 1: every 27 ticks, 96).
     expect(swingsOver(100, 2600)).toBe(97);
   });
@@ -251,44 +251,50 @@ describe('Freshness penalty (fr-001 to fr-004)', () => {
     expect(f.power(u)).toBe(Math.trunc((raw * (BP - 10)) / BP));
   });
 
-  it('fr-002: F 10: interval 1.503 s, Power 69, move 152, reaction 7 ticks, Spent (10)', () => {
+  it('fr-002: F 10 (Spent tier): interval 1.576 s, Power 64, move 138, reaction 7 ticks, Spent (10)', () => {
     const f = arena([{ classId: 'oathguard', stats: KNIGHT, freshness: 10 }], ['bloodhowler']);
     prep(f);
     const u = f.units[0]!;
-    // Full penalty (s = 1): attack speed 0.975 - 0.11 = 0.865; interval 1.3 / 0.865 = 1.503 s -> 1503; Power trunc(76.03 x 0.912) = 69;
-    // move trunc(163.2 x 0.934) = 152; reaction 305 ms x 1.28 = 390 ms = 7.8 ticks -> 7.
-    expect(f.attackSpeedBp(u)).toBe(8650);
-    expect(Math.round(((u.intervalTicks * BP) / f.attackSpeedBp(u)) * 50)).toBe(1503);
-    expect([f.power(u), f.speedMm(u), f.reactionTicks(u).ticks]).toEqual([69, 152, 7]);
+    // Spent tier (F below 25): attack speed 0.975 - 0.15 = 0.825; interval 1.3 / 0.825 = 1.576 s -> 1576; Power trunc(76.03 x 0.85) = 64;
+    // move trunc(163.2 x 0.85) = 138; reaction 305 ms x 1.3 = 396 ms = 7.9 ticks -> 7.
+    expect(f.attackSpeedBp(u)).toBe(8250);
+    expect(Math.round(((u.intervalTicks * BP) / f.attackSpeedBp(u)) * 50)).toBe(1576);
+    expect([f.power(u), f.speedMm(u), f.reactionTicks(u).ticks]).toEqual([64, 138, 7]);
     const out = simulateRound({ round: 1, home: side('h', [{ classId: 'oathguard', stats: KNIGHT, freshness: 10 }]), away: side('a', []) }, 'fr', content, { record: 'summary' });
     const recap = out.log!.events.find((e) => e.type === 'round.summary')!.data!.units[0] as RoundRecapM11;
     expect([recap.fatigueTag, recap.freshnessLabel]).toEqual(['spent', 'spent']);
   });
 
-  it('fr-003: F 60 and above: no penalty, no tag; missing freshness is 100', () => {
-    expect(fatigueSeverityBp(tb, 60, 0)).toBe(0);
+  it('fr-003: F 75 and above: no penalty, no tag; missing freshness is 100', () => {
+    expect(fatigueSeverityBp(tb, 75, 0)).toBe(0);
+    expect(fatigueSeverityBp(tb, 74, 0)).toBe(3333);
     const base = profileOf({ classId: 'oathguard', stats: KNIGHT });
-    expect(profileOf({ classId: 'oathguard', stats: KNIGHT, freshness: 60 })).toEqual(base);
+    expect(profileOf({ classId: 'oathguard', stats: KNIGHT, freshness: 75 })).toEqual(base);
     expect(profileOf({ classId: 'oathguard', stats: KNIGHT, freshness: 100 })).toEqual(base);
-    expect(statics({ classId: 'oathguard', freshness: 60 }).fatigueBp).toBe(0);
+    expect(statics({ classId: 'oathguard', freshness: 75 }).fatigueBp).toBe(0);
   });
 
-  it('fr-004: a round at F 64 has no penalty; the next at F 56 has s = 1,142 bp, constant for the round', () => {
-    expect(statics({ classId: 'oathguard', freshness: 64 }).fatigueBp).toBe(0);
-    const s = statics({ classId: 'oathguard', freshness: 56 });
-    expect(s.fatigueBp).toBe(1142);
-    const m = s.staticMods;
-    // s = 0.1142 of the full penalty (KI-21): -0.11, -0.066, -0.088, -0.088, +0.28 -> -125.6 (trunc -125), -75.4 (-75), -100.5 (-100), -100, +319.8 (319) bp.
-    expect([m[ST.attackSpeed], m[ST.moveSpeed], m[ST.power], m[ST.support], m[ST.reactionDelay]]).toEqual([-125, -75, -100, -100, 319]);
+  it('fr-004: the tier is read at the round start and constant for the round: F 80 none, F 70 Winded (-5%), F 49 Tired (-10%), F 24 Spent (-15%)', () => {
+    const mods = (freshness: number) => {
+      const s = statics({ classId: 'oathguard', freshness });
+      const m = s.staticMods;
+      return [s.fatigueBp, m[ST.attackSpeed], m[ST.moveSpeed], m[ST.power], m[ST.support], m[ST.reactionDelay]];
+    };
+    expect(mods(80)).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(mods(70)).toEqual([3333, -500, -500, -500, -500, 1000]);
+    expect(mods(50)).toEqual(mods(70)); // the same tier: no sliding scale inside it
+    expect(mods(49)).toEqual([6666, -1000, -1000, -1000, -1000, 2000]);
+    expect(mods(25)).toEqual(mods(49));
+    expect(mods(24)).toEqual([10000, -1500, -1500, -1500, -1500, 3000]);
   });
 });
 
 describe('perks (pk-001 to pk-005)', () => {
-  it('pk-001: F 28 with Long Wind: severity 5,485 bp: -6.0% attack speed, -3.6% move, -4.8% Power and Support, +15.4% reaction', () => {
+  it('pk-001: F 28 with Long Wind: Tired tier x 0.6: -6% attack speed, move, Power and Support, +12% reaction', () => {
     const s = statics({ classId: 'oathguard', freshness: 28, perkIds: perks('g_long_wind') });
-    expect(s.fatigueBp).toBe(5485);
+    expect(s.fatigueBp).toBe(3999);
     const m = s.staticMods;
-    expect([m[ST.attackSpeed], m[ST.moveSpeed], m[ST.power], m[ST.support], m[ST.reactionDelay]]).toEqual([-603, -362, -482, -482, 1535]);
+    expect([m[ST.attackSpeed], m[ST.moveSpeed], m[ST.power], m[ST.support], m[ST.reactionDelay]]).toEqual([-600, -600, -600, -600, 1200]);
   });
 
   it('pk-002: Second Breath fires once per round on first dropping below 35%: heals trunc(0.10 x 1475) = 147', () => {
@@ -499,7 +505,7 @@ describe('new predicates, triggers and extensions', () => {
   it('fatigueResist is clamped 0-1 and only scales the Freshness penalty', () => {
     expect(fatigueSeverityBp(tb, 10, 20_000)).toBe(0);
     expect(fatigueSeverityBp(tb, 10, -5000)).toBe(10_000);
-    expect(fatigueSeverityBp(tb, 35, 5000)).toBe(3571);
+    expect(fatigueSeverityBp(tb, 35, 5000)).toBe(3333);
   });
 });
 

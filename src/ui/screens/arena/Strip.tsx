@@ -11,6 +11,8 @@ import { RoleGlyph, tipAttrs } from '../../components';
 import type { HudInfo } from './Hud';
 import { t } from './text';
 
+const FRESH_TAG_FALLBACK = { ready: 'freshWinded', tired: 'freshTired', spent: 'freshSpent' } as const;
+
 export function ArenaStrip({
   ctx,
   hud,
@@ -50,7 +52,7 @@ export function ArenaStrip({
     const down = st ? !st.standing : false;
     const cause = down ? downCause(u.unit) : null;
     const rule = st?.rule?.label ?? null;
-    const fresh = u.fatigueTag && u.freshness !== null ? t(u.fatigueTag === 'tired' ? 'freshTired' : 'freshSpent', { n: u.freshness }) : null;
+    const fresh = u.fatigueTag && u.freshness !== null ? t('freshTag', { label: u.fatigueLabel ?? t(FRESH_TAG_FALLBACK[u.fatigueTag]), n: u.freshness }) : null;
     const label = [
       u.name,
       `${u.className} (${u.roles.map(roleName).join(' / ')})`,

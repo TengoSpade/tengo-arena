@@ -2,18 +2,18 @@
  * Effective rating at a given Freshness (R2-T002): what a tired fighter's displayed rating is worth in the arena.
  *
  * The sim does not change a tired fighter's attributes; it applies the combat.json `freshness` penalty at the start of
- * every round (attack speed, move speed, Power, Support, reaction delay; `severity = clamp((60 - F) / 50, 0, 1) x
- * (1 - fatigueResist)`, full at F 10). The rating is a weighted sum of attributes (`rating = 5 x sum(w_i x attr_i)`,
+ * every round (attack speed, move speed, Power, Support, reaction delay; the stepped tier of F, 0 / 5% / 10% / 15% and
+ * +0 / 10 / 20 / 30% reaction at F 75 / 50 / 25, each x (1 - fatigueResist); KI-21, O36). The rating is a weighted sum of attributes (`rating = 5 x sum(w_i x attr_i)`,
  * classes.json `ratingWeights`), so the penalty is priced the same way: each penalised quantity is converted into
  * "attribute points the fighter would have to lose for the same combat loss", and those points are charged at the
  * fighter's own class weights.
  *
- *   attack speed  -8% x s   <->  AGI points      = 8% x s / derived.attackSpeed.perAgi  (+2.5% attack speed per point)
- *   move speed    -4.8% x s <->  PAC points      = 4.8% x s / derived.moveSpeed.perPac  (+2% per point)
- *   Power         -6.4% x s <->  Power weighted points = 6.4% x s / derived.power.perWeightedPoint (+4% per weighted point);
+ *   attack speed  -p% (tier)  <->  AGI points      = p% / derived.attackSpeed.perAgi  (+2.5% attack speed per point)
+ *   move speed    -p%        <->  PAC points      = p% / derived.moveSpeed.perPac  (+2% per point)
+ *   Power         -p%        <->  Power weighted points = p% / derived.power.perWeightedPoint (+4% per weighted point);
  *                                every attribute in the class's powerAttrs loses that many points (their weights sum to 1)
- *   Support       -6.4% x s <->  the same, over the class's supportAttrs (none for classes without Support)
- *   reaction      +20% x s  <->  AWR points      = 20% x s x (his reaction time, s) / 0.01 (-0.01 s per Awareness point)
+ *   Support       -p%        <->  the same, over the class's supportAttrs (none for classes without Support)
+ *   reaction      +p%        <->  AWR points      = p% x (his reaction time, s) / 0.01 (-0.01 s per Awareness point)
  *
  *   rating loss   = 5 x sum over the lost points of (class rating weight of that attribute x points)
  *   effectiveRating = clamp(round(rating - loss), ratingMin, ratingMax)
@@ -76,18 +76,20 @@ export function fatigueResistOf(fighter: Pick<Fighter, 'perkIds'>, content: Cont
   return sum;
 }
 
-/**
- * The sim's Freshness penalty severity in bp (sim/profile.ts fatigueSeverityBp): clamp((thresholdBelow - F) / (thresholdBelow -
- * fullPenaltyAtOrBelow), 0, 1) x (1 - clamp(fatigueResist)), each step truncated.
- */
+/** The penalty tier of a whole Freshness (combat.json freshness.tiers, as the sim reads it) and its rank among the penalty tiers in bp (0 for the top tier, 10,000 for the last). */
+function tierAt(f: number, content: ContentDB): { tier: ContentDB['combat']['freshness']['tiers'][number]; rankBp: number } {
+  const tiers = [...content.combat.freshness.tiers].sort((a, b) => b.minFreshness - a.minFreshness);
+  const i = Math.max(0, tiers.findIndex((t) => f >= t.minFreshness));
+  return { tier: tiers[i === -1 ? tiers.length - 1 : i]!, rankBp: Math.trunc((i * BP) / Math.max(1, tiers.length - 1)) };
+}
+
+/** The sim's Freshness penalty severity in bp (sim/profile.ts fatigueSeverityBp): the tier's rank among the penalty tiers x (1 - clamp(fatigueResist)). */
 export function freshnessSeverityBp(freshness: number, fatigueResist: number, content: ContentDB): number {
   const fr = content.combat.freshness;
   const f = wholeFreshness(freshness, content);
-  const span = fr.thresholdBelow - fr.fullPenaltyAtOrBelow;
-  const s = Math.min(BP, Math.max(0, Math.trunc(((fr.thresholdBelow - f) * BP) / span)));
   const [lo, hi] = fr.resistClamp;
   const resist = Math.min(Math.round(hi * BP), Math.max(Math.round(lo * BP), Math.round(fatigueResist * BP)));
-  return Math.trunc((s * (BP - resist)) / BP);
+  return Math.trunc((tierAt(f, content).rankBp * (BP - resist)) / BP);
 }
 
 /** The fighter's effective rating at `freshness` (see the file comment for the approximation). */
@@ -98,8 +100,11 @@ export function ratingAtFreshness(fighter: Fighter, freshness: number, content: 
   const zero: FreshnessRatingParts = { attackSpeed: 0, moveSpeed: 0, power: 0, support: 0, reaction: 0 };
   if (severityBp <= 0) return { freshness: f, severityBp: 0, rating, effectiveRating: rating, delta: 0, deltaExact: 0, parts: zero };
 
-  const s = severityBp / BP;
-  const pen = content.combat.freshness.penaltyAtFull;
+  // The tier's penalties scaled by (1 - fatigueResist): the same percentages the sim applies.
+  const keep = severityBp / tierAt(f, content).rankBp;
+  const tierPen = tierAt(f, content).tier;
+  const s = 1;
+  const pen = { attackSpeed: tierPen.attackSpeed * keep, moveSpeed: tierPen.moveSpeed * keep, power: tierPen.power * keep, support: tierPen.support * keep, reactionDelay: tierPen.reactionDelay * keep };
   const d = content.combat.derived;
   const klass = content.classes.require(fighter.classId);
   const w = klass.ratingWeights as Record<string, number>;

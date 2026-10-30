@@ -61,8 +61,8 @@ export function realContext(log: FightLog, content: ContentDB, kind: 'live' | 'r
       isHiredBlade: false,
       entered: false,
       overall: 38 + ((u.index * 7) % 13),
-      freshness: u.index === 2 ? 52 : u.index === 7 ? 28 : u.index === 4 ? 70 : 100,
-      fatigueTag: u.index === 2 ? 'tired' : u.index === 7 ? 'spent' : null,
+      freshness: u.index === 2 ? 42 : u.index === 7 ? 18 : u.index === 4 ? 70 : 100,
+      fatigueTag: u.index === 2 ? 'tired' : u.index === 7 ? 'spent' : u.index === 4 ? 'ready' : null,
       ruleCount: preset.rules.length,
     };
   });

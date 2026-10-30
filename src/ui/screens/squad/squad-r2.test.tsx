@@ -74,8 +74,8 @@ describe('Squad roster: R1 / R2 in the # column (AL-R002-T005)', () => {
 describe('Squad roster: Freshness and the effective rating (AL-R002-T002)', () => {
   it('has a Freshness column in the Attributes view with the Tired and Spent words, and it sorts', async () => {
     const w = world((s, c) => {
-      s.fighters[c.lineup.fighters[0]!.fighterId]!.freshness10 = 520; // Tired
-      s.fighters[c.lineup.fighters[1]!.fighterId]!.freshness10 = 330; // Spent
+      s.fighters[c.lineup.fighters[0]!.fighterId]!.freshness10 = 420; // Tired (25-49)
+      s.fighters[c.lineup.fighters[1]!.fighterId]!.freshness10 = 180; // Spent (below 25)
       s.fighters[c.lineup.fighters[2]!.fighterId]!.freshness10 = 880;
     });
     await act(() => {
@@ -84,8 +84,8 @@ describe('Squad roster: Freshness and the effective rating (AL-R002-T002)', () =
     const table = screen.getByTestId('roster-table');
     const [tired, spent, rested] = [w.club.lineup.fighters[0]!.fighterId, w.club.lineup.fighters[1]!.fighterId, w.club.lineup.fighters[2]!.fighterId];
     const cell = (id: string) => within(table).getByTestId(`fresh-col-${id}`);
-    expect(cell(tired).textContent).toMatch(/52\s*Tired/);
-    expect(cell(spent).textContent).toMatch(/33\s*Spent/);
+    expect(cell(tired).textContent).toMatch(/42\s*Tired/);
+    expect(cell(spent).textContent).toMatch(/18\s*Spent/);
     expect(cell(rested).textContent).toMatch(/88/);
     expect(cell(rested).textContent).not.toMatch(/Fresh|Tired|Spent/);
     expect(cell(tired).querySelector('.meter')).toBeTruthy();
@@ -109,7 +109,7 @@ describe('Squad roster: Freshness and the effective rating (AL-R002-T002)', () =
 
   it('shows the rating as “45 → 41” for a tired fighter (core’s effective rating) with a tooltip that explains the penalty; a rested one shows the plain rating', async () => {
     const w = world((s, c) => {
-      s.fighters[c.lineup.fighters[0]!.fighterId]!.freshness10 = 330;
+      s.fighters[c.lineup.fighters[0]!.fighterId]!.freshness10 = 180;
       s.fighters[c.lineup.fighters[3]!.fighterId]!.freshness10 = 1000;
     });
     const tired = w.club.lineup.fighters[0]!.fighterId;
@@ -123,7 +123,7 @@ describe('Squad roster: Freshness and the effective rating (AL-R002-T002)', () =
     expect(eff.querySelector('.rating')!.textContent).toBe(String(view.effectiveRating));
     const tip = JSON.parse(eff.getAttribute('data-tip-rich')!) as { title: string; body: string; rows: { label: string; value: string }[] };
     expect(tip.title).toBe(`${view.rating} → ${view.effectiveRating}`);
-    expect(tip.body).toMatch(/Freshness 33 \(Spent\)/);
+    expect(tip.body).toMatch(/Freshness 18 \(Spent\)/);
     expect(tip.rows.some((r) => r.label === 'Effective rating now' && r.value === String(view.effectiveRating))).toBe(true);
     // A rested fighter: the plain rating pill, no arrow.
     expect(within(table).queryByTestId(`rating-${rested}`)).toBeNull();

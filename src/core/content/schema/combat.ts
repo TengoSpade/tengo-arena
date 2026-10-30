@@ -10,6 +10,7 @@ import {
   AUTO_SWAP_MODES,
   PAUSE_BETWEEN_ROUNDS,
   ROUND_TIEBREAKS,
+  FRESHNESS_LABELS,
   STAT_GROUPS,
   affinityGroup,
   archetypeId,
@@ -274,11 +275,23 @@ export const CombatFileSchema = z.object({
   freshness: z.object({
     _doc: z.string().optional(),
     appliedAt: z.literal('round_start'),
-    thresholdBelow: z.number(),
-    fullPenaltyAtOrBelow: z.number(),
-    penaltyAtFull: z.object({ attackSpeed: z.number(), moveSpeed: z.number(), power: z.number(), support: z.number(), reactionDelay: z.number() }).strict(),
+    /** Stepped penalty tiers by Freshness at the round start, descending `minFreshness` (KI-21, O36). */
+    tiers: z
+      .array(
+        z
+          .object({
+            id: z.enum(FRESHNESS_LABELS),
+            minFreshness: z.number().min(0).max(100),
+            attackSpeed: z.number().min(-1).max(0),
+            moveSpeed: z.number().min(-1).max(0),
+            power: z.number().min(-1).max(0),
+            support: z.number().min(-1).max(0),
+            reactionDelay: z.number().min(0).max(1),
+          })
+          .strict(),
+      )
+      .min(2),
     labelsFrom: z.string(),
-    thresholdFrom: z.string(),
     resistStat: z.literal('fatigueResist'),
     resistClamp: z.tuple([z.number(), z.number()]),
     default: z.number(),

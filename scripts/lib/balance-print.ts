@@ -68,14 +68,14 @@ export function balanceReportLines(report: BalanceReport, mode: BalanceMode): st
   }
   if (report.squadMatch) {
     const q = report.squadMatch;
-    log(`  squad-match: ${q.matches} matches (${q.matchups} matchups x 5 rows x 2 clubs x 2 sides, one shared off-against-off pair)`);
+    log(`  squad-match: ${q.matches} matches (${q.matchups} matchups: 2 shared off-against-off matches, and 4 for each other row: the policy on either club, home and away)`);
     log('    policy side vs off       matches   win%   95% CI          comeback  (off)   swaps/match  target');
     for (const r of q.rows) {
       const cb = r.comebackRate === null ? '   -' : pct(r.comebackRate);
       const ocb = r.offComebackRate === null ? '   -' : pct(r.offComebackRate);
       log(`    ${r.id.padEnd(22)} ${String(r.matches).padStart(7)} ${pct(r.winRate).padStart(6)}   ${`${pct(r.ci.low)}-${pct(r.ci.high)}`.padEnd(13)} ${cb.padStart(8)} ${ocb.padStart(7)}   ${r.swapsPerMatch.toFixed(2).padStart(10)}  ${r.target ? `${pct(r.target.min)}-${pct(r.target.max)}` : '-'}${r.inTarget ? '' : '  <-- off target'}`);
     }
-    log(`    all: swaps/match ${q.swapsPerMatch.toFixed(2)}, forced ${q.forcedPer100.toFixed(1)} and emergency ${q.emergencyPer100.toFixed(1)} per 100 matches, Tired ${pct(q.tiredShare)} Spent ${pct(q.spentShare)} of fighter-rounds, ${q.roundsPerMatch.toFixed(2)} rounds a match, time cap ${pct(q.timeCapShare)}`);
+    log(`    all: swaps/match ${q.swapsPerMatch.toFixed(2)}, forced ${q.forcedPer100.toFixed(1)} and emergency ${q.emergencyPer100.toFixed(1)} per 100 matches, Winded ${pct(q.windedShare)} Tired ${pct(q.tiredShare)} Spent ${pct(q.spentShare)} of fighter-rounds, ${q.roundsPerMatch.toFixed(2)} rounds a match, time cap ${pct(q.timeCapShare)}`);
     for (const f of q.flags) log(`    FLAG ${f}`);
   }
   if (report.rarelyCastAbilities || report.idleRules) {

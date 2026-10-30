@@ -59,7 +59,7 @@ export type FreshnessTierId = 'fresh' | 'ready' | 'tired' | 'spent';
 
 export interface FreshnessTier {
   id: string;
-  /** The label from content ("Fresh", "Ready" or "Winded", "Tired", "Spent"). */
+  /** The label from content (shipped: "Fresh", "Winded", "Tired", "Spent"; O36). */
   label: string;
 }
 

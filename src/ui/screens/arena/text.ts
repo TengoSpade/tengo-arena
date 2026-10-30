@@ -55,8 +55,12 @@ const T = {
   stripRule: 'Rule {label}',
   stripStance: 'Stance',
   stripForced: 'Forced',
-  freshTired: 'Tired ({n})',
-  freshSpent: 'Spent ({n})',
+  /** A round started with a Freshness penalty: the content label and the value ("Winded (62)"). */
+  freshTag: '{label} ({n})',
+  /** Tag names when the context carries no content label (the shipped labels, O36). */
+  freshWinded: 'Winded',
+  freshTired: 'Tired',
+  freshSpent: 'Spent',
 
   // ---- controls ----
   controlsLabel: 'Playback',

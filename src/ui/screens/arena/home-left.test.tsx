@@ -93,10 +93,42 @@ describe('home left, away right, whoever the player is', () => {
   });
 });
 
+describe('the Freshness tag follows the stepped tiers (O36, KI-21)', () => {
+  it('tags every penalty tier with its content label: Winded 50-74, Tired 25-49, Spent below 25, none from 75', () => {
+    const content = fixtureContent();
+    const w = watchWorld(content);
+    const state = liveWatchState(w);
+    const playback = roundPlaybackOf(state, content, 'live', 1);
+    const lu = playback.lineups!;
+    const values = [100, 75, 74, 50, 49, 25, 24, 0];
+    const freshness = lu.home.freshness.map((_, i) => values[i % values.length]!);
+    const moved = { ...playback, lineups: { ...lu, home: { ...lu.home, freshness } } };
+    const ctx = buildRoundContext({ state, content, playback: moved, match: null, palette: readArenaPalette('dark'), startTick: 0 });
+    const expected: Record<number, [string | null, string | null]> = { 100: [null, null], 75: [null, null], 74: ['ready', 'Winded'], 50: ['ready', 'Winded'], 49: ['tired', 'Tired'], 25: ['tired', 'Tired'], 24: ['spent', 'Spent'], 0: ['spent', 'Spent'] };
+    let checked = 0;
+    for (const u of ctx.units) {
+      const slot = lu.home.fighterIds.indexOf(u.fighterId);
+      if (u.side !== 0 || slot < 0) continue;
+      const [tag, label] = expected[freshness[slot]!]!;
+      expect([u.freshness, u.fatigueTag, u.fatigueLabel]).toEqual([freshness[slot], tag, label]);
+      checked++;
+    }
+    expect(checked).toBeGreaterThanOrEqual(5);
+  });
+
+  it('the strip prints the content label and the value ("Winded (62)")', () => {
+    const { ctx, hud } = setup(0);
+    const units = ctx.units.map((u) => (u.unit === 2 ? { ...u, fatigueTag: 'ready' as const, fatigueLabel: 'Winded', freshness: 62 } : u));
+    render(<ArenaStrip ctx={{ ...ctx, units }} hud={hud} frame={signal(null)} selected={signal(null)} downCause={() => null} onSelect={() => undefined} onToggle={() => undefined} onInspect={() => undefined} roleName={(r) => r} />);
+    expect(screen.getByTestId('strip-fresh-2').textContent).toBe('Winded 62');
+    expect(screen.getByTestId('strip-unit-2').getAttribute('aria-label')).toContain('Winded (62)');
+  });
+});
+
 describe('the Freshness tag replaces the class name on a strip card', () => {
   it('a tired fighter shows the tag and no class text (the class stays in the accessible name); the others show the class', () => {
     const { ctx, hud } = setup(0);
-    const units = ctx.units.map((u) => (u.unit === 2 ? { ...u, fatigueTag: 'tired' as const, freshness: 52 } : u));
+    const units = ctx.units.map((u) => (u.unit === 2 ? { ...u, fatigueTag: 'tired' as const, freshness: 42 } : u));
     render(<ArenaStrip ctx={{ ...ctx, units }} hud={hud} frame={signal(null)} selected={signal(null)} downCause={() => null} onSelect={() => undefined} onToggle={() => undefined} onInspect={() => undefined} roleName={(r) => r} />);
     const tired = screen.getByTestId('strip-unit-2');
     expect(tired.querySelector('[data-testid="strip-fresh-2"]')).toBeTruthy();

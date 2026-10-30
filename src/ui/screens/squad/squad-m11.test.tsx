@@ -72,7 +72,7 @@ describe('Squad: match squad of 5 + 2 and Freshness (M1.1)', () => {
     const club = next.clubs[next.playerClubId!]!;
     const starter = club.lineup.fighters[0]!.fighterId;
     const starters = new Set(club.lineup.fighters.map((e) => e.fighterId as string));
-    next.fighters[starter]!.freshness10 = 250; // Spent
+    next.fighters[starter]!.freshness10 = 150; // Spent (below 25)
     for (const f of Object.values(next.fighters)) if (f.clubId === club.id && !starters.has(f.id)) f.freshness10 = 300; // nobody rested on the bench
     store.replaceWorld(next);
     mount(store);

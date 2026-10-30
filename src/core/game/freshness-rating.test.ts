@@ -33,8 +33,8 @@ describe('FighterView: Freshness and effective rating (R2-T002)', () => {
     expect(v.freshnessRatingDelta).toBeLessThanOrEqual(-3);
     expect(v.effectiveRating).toBe(v.rating + v.freshnessRatingDelta!);
     expect(v.freshnessRating!.severityBp).toBe(10_000);
-    // 59 is the first Tired-by-the-sim step: a sliver of penalty, and 60 none.
-    for (const [fresh, severity] of [[60, 0], [59, 200], [35, 5_000]] as const) {
+    // The stepped tiers (KI-21): 75 is the first Fresh value (no penalty), 74 Winded, 49 Tired, 24 Spent.
+    for (const [fresh, severity] of [[75, 0], [74, 3_333], [49, 6_666], [24, 10_000]] as const) {
       const w = engine.fighterView({ ...s, fighters: { ...s.fighters, [id]: withFreshness(s.fighters[id]!, fresh) } }, id, content);
       expect(w.freshnessRating!.severityBp).toBe(severity);
     }

@@ -386,7 +386,7 @@ export function fakeContext(options: FakeContextOptions = {}): ArenaRoundContext
       isHiredBlade: false,
       entered: false,
       overall: 40 + i,
-      freshness: i === 2 ? 52 : i === 7 ? 28 : null,
+      freshness: i === 2 ? 42 : i === 7 ? 18 : null,
       fatigueTag: i === 2 ? 'tired' : i === 7 ? 'spent' : null,
       ruleCount: 6,
     });

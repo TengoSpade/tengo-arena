@@ -54,9 +54,14 @@ export interface ArenaUnitInfo {
   entered: boolean;
   /** Overall rating (OVR) at the round start: the fight input's kickoff rating (null when unknown). Optional so older builders and fixtures stay valid. */
   overall?: number | null;
-  /** Freshness 0-100 at the round start and its tag (report tags "Tired (52)"). */
+  /**
+   * Freshness 0-100 at the round start and its tag: the label id of a tier that starts the round with a penalty
+   * (O36: Winded 50-74, Tired 25-49, Spent below 25), null when there is none; the tag reads "Winded (62)".
+   */
   freshness: number | null;
-  fatigueTag: 'tired' | 'spent' | null;
+  fatigueTag: 'ready' | 'tired' | 'spent' | null;
+  /** The tag's label from content (levels.json freshness.labels, e.g. "Winded"). Optional: absent, the viewer names the id. */
+  fatigueLabel?: string | null;
   /** Rules in his list (the stance badge is "S"). */
   ruleCount: number;
 }

@@ -1,11 +1,12 @@
 /**
  * npm run freshness-table -- [--rounds 3]
  *
- * KI-21 / O36 proof table: Freshness at each week's first round for a young (22), middle-aged (28) and older (34)
+ * KI-21 / O36 proof table: Freshness at the start of each week's match (its first round) for a young (22), middle-aged (28) and older (34)
  * human-age fighter at low (8), median (13) and high (18) Stamina who starts fully fresh and plays a full match
  * (default 3 rounds, typical load) every week, with the weekly played-week recovery in between. Uses the real
  * drain and recovery functions of core/fighters. "Matches before needing rest" = consecutive matches in which no
- * round starts below the Tired threshold (levels.json freshness.threshold).
+ * round starts in the Tired tier, below levels.json freshness.threshold (50: the first of the three penalty tiers
+ * with a real cost, and where Q48's half drain begins).
  */
 import { freshness10Of, playedWeekRest10, roundDrain10, setFreshness10, staminaOf } from '../src/core/fighters/freshness';
 import { fighterHumanAge100 } from '../src/core/fighters/stats';
@@ -23,7 +24,7 @@ const proto = Object.values(w.value.fighters).find((f) => f.raceId === 'human' &
 const threshold10 = content.levels.freshness.threshold * content.levels.freshness.storageUnitsPerPoint;
 const load = { durationS: 36, damageTaken: 0.6, maxHp: 1, downed: false };
 
-console.log(`Freshness at the start of each match's first round; full ${rounds}-round matches every week, typical load, fresh start`);
+console.log(`Freshness at the start of each week's match (first round); full ${rounds}-round matches every week, typical load, fresh start; "matches before a Tired round" = matches played before a round would start below ${content.levels.freshness.threshold}`);
 for (const [name, age] of [['young', 22], ['middle', 28], ['older', 34]] as const) {
   for (const sta of [8, 13, 18]) {
     const f = JSON.parse(JSON.stringify(proto)) as typeof proto;

@@ -39,6 +39,8 @@ const TAG_TICKS = 60;
 const FRESH_TICKS = 4;
 /** Name chip: at most 11 em wide (arena-notes .alabel); characters at about 0.58 em each. */
 const NAME_MAX_CHARS = 19;
+/** The Freshness tag's name when the context carries no label from content (the shipped labels, O36). */
+const FATIGUE_TAG_FALLBACK: Record<'ready' | 'tired' | 'spent', string> = { ready: 'Winded', tired: 'Tired', spent: 'Spent' };
 
 export interface TokenEnv extends ChipEnv {
   palette: ArenaPalette;
@@ -180,7 +182,7 @@ export class Token {
   ) {
     this.env = env;
     this.colors = colors;
-    this.tagLabel = info.fatigueTag !== null && info.freshness !== null ? `${info.fatigueTag === 'spent' ? 'Spent' : 'Tired'} (${Math.round(info.freshness)})` : '';
+    this.tagLabel = info.fatigueTag !== null && info.freshness !== null ? `${info.fatigueLabel ?? FATIGUE_TAG_FALLBACK[info.fatigueTag]} (${Math.round(info.freshness)})` : '';
     this.nameLabel = info.name.length > NAME_MAX_CHARS ? `${info.name.slice(0, NAME_MAX_CHARS - 1)}…` : info.name;
     this.root.eventMode = 'none';
     this.overlay.eventMode = 'none';
