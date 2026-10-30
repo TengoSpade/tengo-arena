@@ -179,12 +179,12 @@ describe('Shipped AI rotation (spent-drift)', () => {
   // The frozen fixture content keeps the old thresholds for the tests above; this runs the fixture world on the shipped ones.
   const live: ContentDB = { ...content, levels: { ...content.levels, aiRotation: shippedRot } };
 
-  it('the shipped thresholds: floor 40 (the soak Spent cut-off), replacement from 50, steep rating-gap widening', () => {
-    expect([shippedRot.spentFloorAtLock, shippedRot.spentFloorAltMin, shippedRot.extraGapPerPointBelow]).toEqual([40, 50, 1.0]);
-    expect(shippedRot.spentFloorAltMin).toBeGreaterThanOrEqual(shipped.levels.freshness.threshold);
+  it('the shipped thresholds: floor 30, replacement from 45, rating-gap widening unchanged', () => {
+    expect([shippedRot.spentFloorAtLock, shippedRot.spentFloorAltMin, shippedRot.extraGapPerPointBelow]).toEqual([30, 45, 0.45]);
+    expect(shippedRot.spentFloorAltMin).toBeGreaterThan(shippedRot.spentFloorAtLock);
   });
 
-  it('a starter at Freshness 35 (below the floor, above the fixture floor of 15) is rotated out for a rested fighter, whatever the rating gap', () => {
+  it('a starter at Freshness 28 (below the floor, above the fixture floor of 15) is rotated out for a rested fighter, whatever the rating gap', () => {
     const s = world();
     const club = s.playerClubId!;
     const pick = (state: GameState, c: ContentDB): FighterId[] => {
@@ -195,7 +195,7 @@ describe('Shipped AI rotation (spent-drift)', () => {
     const base = pick(s, live);
     for (const id of base) {
       const draft = structuredClone(s);
-      setFreshness(draft, id, 35);
+      setFreshness(draft, id, 28);
       const next = pick(draft, live);
       expect(next, `${id} stays a starter`).not.toContain(id);
       for (const inId of next.filter((x) => !base.includes(x))) expect(freshnessOf(draft.fighters[inId]!)).toBeGreaterThanOrEqual(shippedRot.spentFloorAltMin);

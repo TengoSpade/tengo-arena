@@ -60,7 +60,7 @@ export interface SoakSeasonSummary {
   aiRejections: number;
   checksum: string;
   // ---- M1.1 (additive) ----
-  /** Round starts by AI clubs, and those started Tired (40-59) or Spent (< 40). */
+  /** Round starts by AI clubs, and those started Tired or Spent (the O36 tiers, read from levels.json freshness.labels: Tired 25-49, Spent < 25). */
   roundStarts: number;
   tiredStarts: number;
   spentStarts: number;
@@ -147,9 +147,9 @@ export const SOAK_CHECKS: readonly { id: string; description: string; severity?:
 /**
  * The Spent-share alarm (KI-21, O36; PROVISIONAL): warns when any measured season is over the cap (levels.json
  * soakTargets.aiSpentRoundStartShareMax), or when the mean Spent share of the later half of the seasons is more than
- * SPENT_TREND_MAX_PTS points above the earlier half (4 or more seasons). Pure, for the soak check and its test.
+ * SPENT_TREND_MAX_PTS points above the earlier half (4 or more seasons; 0.5 on the O36 tiers, where the unfixed drift was +0.4 to +0.8 points on a 1-3% share). Pure, for the soak check and its test.
  */
-export const SPENT_TREND_MAX_PTS = 1.5;
+export const SPENT_TREND_MAX_PTS = 0.5;
 export function spentShareAlarm(perSeason: readonly { spent: number; starts: number }[], cap: number): { ok: boolean; detail: string } {
   const shares = perSeason.map((s) => (s.starts > 0 ? (s.spent * 100) / s.starts : 0));
   const over = shares.map((v, i) => ({ v, season: i + 1 })).filter((x) => x.v > cap * 100);
@@ -375,8 +375,11 @@ export function ageStats(state: GameState, ports: GamePorts, content: ContentDB)
 // ---- M1.1 observations ------------------------------------------------------------------------------------------
 
 /** Round starts of non-player clubs by Freshness label (from the recorded round lineups). */
-export function freshnessStarts(state: GameState, results: readonly MatchResult[]): { starts: number; tired: number; spent: number } {
+export function freshnessStarts(state: GameState, results: readonly MatchResult[], content: ContentDB): { starts: number; tired: number; spent: number } {
   const out = { starts: 0, tired: 0, spent: 0 };
+  const minOf = (id: string): number => content.levels.freshness.labels.find((l) => l.id === id)!.min;
+  const tiredFrom = minOf('tired');
+  const windedFrom = minOf('ready');
   for (const r of results) {
     for (const rl of r.roundLineups ?? []) {
       for (const side of ['home', 'away'] as const) {
@@ -384,8 +387,8 @@ export function freshnessStarts(state: GameState, results: readonly MatchResult[
         if (clubId === state.playerClubId) continue;
         for (const f of rl[side].freshness) {
           out.starts++;
-          if (f < 40) out.spent++;
-          else if (f < 60) out.tired++;
+          if (f < tiredFrom) out.spent++;
+          else if (f < windedFrom) out.tired++;
         }
       }
     }
@@ -649,7 +652,7 @@ function runOnceUnsafe(options: SoakOptions, seasons: number, observe: boolean):
         push(obs.ledger, ledgerMismatches(state).map((m) => `S${state.calendar.season} ${r.value.report.weekId}: ${m}`));
         push(obs.lineups, lineupProblems(state, results));
         push(obs.squads, squadRecordProblems(results, content));
-        const fr = freshnessStarts(state, results);
+        const fr = freshnessStarts(state, results, content);
         fresh.starts += fr.starts;
         fresh.tired += fr.tired;
         fresh.spent += fr.spent;
