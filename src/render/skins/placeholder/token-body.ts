@@ -115,7 +115,8 @@ export class TokenBody implements BodyVisual {
   private caption: TokenText | null = null;
   private roleText: TokenText | null = null;
   private classText: TokenText | null = null;
-  private drawnKey = '';
+  private drawnD = -1;
+  private drawnPalette: ArenaPalette | null = null;
   private diameter = 0;
   private fills: number[] = [];
   private arcFrac = 0;
@@ -187,13 +188,14 @@ export class TokenBody implements BodyVisual {
 
   /** The palette changed (theme): force a redraw at the next frame. */
   restyle(): void {
-    this.drawnKey = '';
+    this.drawnPalette = null;
   }
 
   private ensureDrawn(d: number, p: ArenaPalette): void {
-    const key = `${d}|${p.theme}|${p.good}|${p.warn}|${p.bad}|${p.plate}|${p.ink}|${p.metrics.labelSizePx}|${p.metrics.ringWidthPx}`;
-    if (key === this.drawnKey) return;
-    this.drawnKey = key;
+    // Allocation-free: a new palette object (theme, scale) or a new size redraws, nothing else.
+    if (d === this.drawnD && p === this.drawnPalette) return;
+    this.drawnD = d;
+    this.drawnPalette = p;
     this.draw(d, p);
   }
 
