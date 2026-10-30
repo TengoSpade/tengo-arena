@@ -2,7 +2,7 @@
  * npm run spent-drift -- [--seasons 10] [--seed soak-1] [--spent 40]
  *
  * Diagnostic for the `spent-share` soak WARN (KI-21 follow-up, m1.1/spent-drift): runs the AI-managed league
- * headless and, per season, explains who starts rounds Spent (Freshness < --spent, default the soak's 40) and why:
+ * headless and, per season, explains who starts rounds Spent (Freshness < --spent, default the Tired tier's minimum, 25) and why:
  * AI roster age / Stamina / size / injuries, matches per club, how many Spent round-1 starters had a rested
  * alternative (the policy chose) or none (no eligible replacement), later-round Spent starts, and the Spent
  * starters by personality. Not a gate; prints tables only.
@@ -16,8 +16,9 @@ import { loadThemeOrExit } from './lib/cli-content';
 const args = parseArgs(process.argv.slice(2));
 const seasons = intArg(args, 'seasons', 10);
 const seed = stringArg(args, 'seed', 'soak-1');
-const spentBelow = intArg(args, 'spent', 40);
 const content = loadThemeOrExit(stringArg(args, 'theme', 'default'));
+// Spent = below the Tired tier's minimum (O36: 25), read from levels.json freshness.labels; --spent overrides.
+const spentBelow = intArg(args, 'spent', content.levels.freshness.labels.find((l) => l.id === 'tired')!.min);
 const engine = createGameEngine(realGamePorts);
 const humanAge = (f: Fighter): number => realGamePorts.fighters.humanAge100(f, content) / 100;
 const mean = (v: number[]): number => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0);

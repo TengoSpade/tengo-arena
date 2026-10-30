@@ -139,22 +139,24 @@ describe('individual checks', () => {
     expect(dynastyFlags(shields, content).some((f) => f.includes('Shields'))).toBe(true);
   });
 
-  it('spent-share (KI-21, O36) warns on a season over the cap or a rising trend, not on the overall average: the 8.5% to 12.7% run trips it', () => {
+  it('spent-share (KI-21, O36) warns on a season over the cap or a rising trend, not on the overall average: the drifting run trips it', () => {
     const seasons = (pcts: number[]) => pcts.map((p) => ({ spent: p * 10, starts: 1000 }));
-    // The real 10-season soak after the tiers: overall 10.8% (under 12%), last season 12.7%, rising.
-    const real = spentShareAlarm(seasons([8.5, 9.6, 10.1, 10.5, 11.6, 11.7, 11.9, 12.7]), 0.12);
-    expect(real.ok).toBe(false);
-    expect(real.detail).toContain('over the 12% cap in measured season 8');
-    expect(real.detail).toContain('rising');
+    // The unfixed AI rotation on the O36 tiers (Spent below 25, soak-2): 1.7% rising to 2.6%, rise 0.8 points.
+    const drift = spentShareAlarm(seasons([1.7, 1.6, 1.3, 1.9, 2.3, 2.5, 2.6, 2.5]), 0.06);
+    expect(drift.ok).toBe(false);
+    expect(drift.detail).toContain('rising');
     // One season over the cap, no trend.
-    expect(spentShareAlarm(seasons([10, 12.5, 10, 10, 10, 10]), 0.12).ok).toBe(false);
-    // A rise of more than 1.5 points under the cap.
-    expect(spentShareAlarm(seasons([5, 5.5, 6, 6.5, 8, 8.5, 9, 9.5]), 0.12).ok).toBe(false);
-    // Flat and under the cap, or too few seasons to call a trend.
-    expect(spentShareAlarm(seasons([8, 8.5, 8, 8.4, 8.2, 8.3]), 0.12).ok).toBe(true);
-    expect(spentShareAlarm(seasons([4, 9]), 0.12).ok).toBe(true);
+    expect(spentShareAlarm(seasons([2, 6.5, 2, 2, 2, 2]), 0.06).ok).toBe(false);
+    // Flat and under the cap (the fixed rotation, soak-1: 0.1% to 0.8%), or too few seasons to call a trend.
+    expect(spentShareAlarm(seasons([0.1, 0.2, 0.1, 0.3, 0.7, 0.3, 0.8, 0.2]), 0.06).ok).toBe(true);
+    expect(spentShareAlarm(seasons([1, 5]), 0.06).ok).toBe(true);
     expect(checkStatus('spent-share', false)).toBe('warn');
     expect(checkStatus('spent-share', true)).toBe('pass');
+  });
+
+  it('freshnessStarts classes round starts by the O36 tiers read from content (Spent below 25, Tired 25 to 49), not fixed numbers', () => {
+    const min = (id: string): number => content.levels.freshness.labels.find((l) => l.id === id)!.min;
+    expect([min('tired'), min('ready')]).toEqual([25, 50]);
   });
 
   it('competitive-balance is warning-level: a dynasty flag reports WARN, not a failure; every other check stays hard', () => {
@@ -230,7 +232,7 @@ describe('M1.1: a match saved between rounds (sw-009) and the squad checks', () 
     expect(problems.some((p) => p.includes('returned'))).toBe(true);
     expect(problems.some((p) => p.includes('no reserve'))).toBe(true);
     expect(swapCounts([bad]).swaps).toBe(1);
-    expect(freshnessStarts(r.value.state, [bad]).starts).toBe(rl.length * 10);
+    expect(freshnessStarts(r.value.state, [bad], content).starts).toBe(rl.length * 10);
   });
 
   it('parseCohort reads the levels.json cohort keys', () => {
