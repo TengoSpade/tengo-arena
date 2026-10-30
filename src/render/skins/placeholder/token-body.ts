@@ -22,10 +22,33 @@ import { buildGlyph } from '../../viewer/scene/glyphs';
 import type { BodyFrame, BodyVisual } from '../../viewer/skin';
 import type { TokenText, TokenTextFactory } from './token-text';
 
-/** A token is never smaller than this across (CSS px): text and the Freshness ring need room at 27 px/m. */
-export const MIN_TOKEN_DIAMETER_PX = 44;
-/** The role name is printed (instead of the role glyphs) from this diameter up. */
-export const ROLE_LABEL_MIN_DIAMETER_PX = 72;
+/**
+ * Token size (owner, 2026-10-30): about 60 px across at the normal 1920 x 1080 view (46 px per metre with the dock open),
+ * so OVR and the short role label always read. The token is TOKEN_DIAMETER_M metres of arena, never under
+ * MIN_TOKEN_DIAMETER_PX: 60 px at 1920, 48 px at 1440 and 1280 (35 and 27 px per metre). Bunched fighters overlap
+ * (accepted); the selected or hovered token is raised by the viewer.
+ */
+export const TOKEN_DIAMETER_M = 1.3;
+export const MIN_TOKEN_DIAMETER_PX = 48;
+/** The "OVR" caption above the number shows from this diameter up (it is the first thing to go when space is short). */
+export const OVR_CAPTION_MIN_DIAMETER_PX = 56;
+/** The short role label is never printed smaller than this (px); below it, or when it does not fit, the glyphs show. */
+export const ROLE_LABEL_MIN_PX = 6.5;
+
+/** The token's diameter in CSS px at a zoom. */
+export function tokenDiameterPx(pxPerMetre: number): number {
+  return Math.max(MIN_TOKEN_DIAMETER_PX, Math.round(pxPerMetre * TOKEN_DIAMETER_M));
+}
+
+/**
+ * The short role label of a token ("MEL", "MEL/HEA"): each role's `shortName` from combat.json archetypes (one place,
+ * data, translatable with the content); the role id upper-cased only when content has none. Full names stay in the
+ * fighter strip's tooltips and the inspector.
+ */
+export function shortRoleLabel(roles: readonly RoleId[], content: ContentDB | null): string {
+  const list = (content as { combat?: { archetypes?: readonly { id: string; shortName?: string }[] } } | null)?.combat?.archetypes ?? [];
+  return roles.map((r) => list.find((a) => a.id === r)?.shortName ?? r.slice(0, 3).toUpperCase()).join('/');
+}
 /** A downed body is flattened to this fraction of its height (arena-notes §1: 60%). */
 const DOWNED_FLATTEN = 0.6;
 const FALLBACK_DOWN_OPACITY = 0.4;
@@ -90,7 +113,7 @@ export interface TokenBodyShown {
   /** Arc fill 0..1 and its colour. */
   arc: number;
   arcColor: number;
-  /** "glyphs" under 72 px, "label" from there. */
+  /** The short role label when it fits inside the disc, else the glyphs. */
   roleMark: 'glyphs' | 'label';
   roleLabel: string;
   className: string;
@@ -100,7 +123,6 @@ export interface TokenBodyShown {
 export class TokenBody implements BodyVisual {
   readonly view = new Container();
   readonly drawsRole = true;
-  readonly minDiameterPx = MIN_TOKEN_DIAMETER_PX;
   /** Flattened and faded when downed. */
   private readonly token = new Container();
   private readonly band = new Graphics();
@@ -123,8 +145,10 @@ export class TokenBody implements BodyVisual {
   private arcColor = 0;
   private roleMark: 'glyphs' | 'label' = 'glyphs';
   private destroyed = false;
+  private labelBelowAllowed = true;
+  private standingNow = true;
   private readonly roles: readonly RoleId[];
-  private readonly roleLabel: string;
+  private roleLabel = '';
   private readonly ovrText: string;
   private tier: FreshnessTier | null = null;
 
@@ -134,7 +158,6 @@ export class TokenBody implements BodyVisual {
     private readonly env: TokenBodyEnv,
   ) {
     this.roles = info.roles.slice(0, 2);
-    this.roleLabel = this.roles.map((r) => r.toUpperCase()).join(' / ');
     this.ovrText = info.overall === null || info.overall === undefined ? '–' : String(Math.round(info.overall));
     this.view.eventMode = 'none';
     this.token.addChild(this.band, this.fillG, this.arc, this.marks);
@@ -150,7 +173,7 @@ export class TokenBody implements BodyVisual {
       };
       this.ovr = make('ovr', this.ovrText);
       this.caption = make('small', 'OVR');
-      this.roleText = make('small', this.roleLabel);
+      this.roleText = make('small', '');
       this.classText = make('class', info.className);
       this.marks.addChild(this.ovr.view, this.caption.view, this.roleText.view);
       this.classHolder.addChild(this.club, this.classText.view);
@@ -158,32 +181,50 @@ export class TokenBody implements BodyVisual {
     this.classHolder.visible = false;
   }
 
+  /** The disc's diameter at a zoom (skin.ts BodyVisual.diameterPx). */
+  diameterPx(pxPerMetre: number): number {
+    return tokenDiameterPx(pxPerMetre);
+  }
+
+  /** Width of the class name and its club bar (px). */
+  labelBelowWidthPx(): number {
+    return this.classText ? Math.max(this.classText.view.width, this.diameter * 0.5) + 2 : 0;
+  }
+
+  /** The viewer hides the class name where another token's stack would overlap it. */
+  setLabelBelowVisible(on: boolean): void {
+    this.labelBelowAllowed = on;
+    this.classHolder.visible = on && this.standingNow && this.classText !== null;
+  }
+
   /** CSS px the class name takes below the viewer's ring. */
   extentBelowPx(_pxPerMetre: number): number {
     const m = this.env.palette()?.metrics;
-    return this.ringReach(m) + this.labelSize(m) * 1.3 + 5;
+    return this.ringReach(m) + this.classSize(m) * 1.25 + 5;
   }
 
-  private labelSize(m: ArenaMetrics | undefined): number {
-    return m?.labelSizePx ?? 12;
+  /** The class name is a step smaller than the viewer's labels (it is secondary, and it is what crowds a column). */
+  private classSize(m: ArenaMetrics | undefined): number {
+    return Math.max(10, (m?.labelSizePx ?? 12) * 0.9);
   }
 
   /** How far the viewer's side ring reaches past the disc edge (px). */
   private ringReach(m: ArenaMetrics | undefined): number {
     if (!m) return 8;
-    return (this.colors.ringStyle === 'double' ? m.ringGapPx * 2 + m.ringLinePx * 2 : m.ringGapPx + m.ringWidthPx) + 3;
+    return (this.colors.ringStyle === 'double' ? m.ringGapPx * 2 + m.ringLinePx * 2 : m.ringGapPx + m.ringWidthPx) + 2;
   }
 
   update(state: UnitRenderState, frame: BodyFrame): void {
     if (this.destroyed) return;
     const p = this.env.palette();
-    if (p) this.ensureDrawn(Math.max(frame.pxPerMetre, MIN_TOKEN_DIAMETER_PX), p);
+    if (p) this.ensureDrawn(tokenDiameterPx(frame.pxPerMetre), p);
     const flat = state.standing ? 0 : 1;
     const downOpacity = p?.metrics.downOpacity ?? FALLBACK_DOWN_OPACITY;
     this.token.scale.y = 1 - (1 - DOWNED_FLATTEN) * flat;
     this.view.alpha = 1 - (1 - downOpacity) * flat;
     // The class name belongs to a standing fighter (the viewer hides its own labels for a downed one as well).
-    this.classHolder.visible = state.standing && this.classText !== null;
+    this.standingNow = state.standing;
+    this.classHolder.visible = state.standing && this.labelBelowAllowed && this.classText !== null;
   }
 
   /** The palette changed (theme): force a redraw at the next frame. */
@@ -231,39 +272,50 @@ export class TokenBody implements BodyVisual {
     if (frac >= 0.999) this.arc.circle(0, 0, arcR).stroke({ width: arcW, color: this.arcColor });
     else if (frac > 0) this.arc.moveTo(0, -arcR).arc(0, 0, arcR, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2).stroke({ width: arcW, color: this.arcColor, cap: 'butt' });
 
-    // Inside the disc: OVR big, then the role (glyphs on a small plate under 72 px, the role name from there).
-    const label = d >= ROLE_LABEL_MIN_DIAMETER_PX;
-    this.roleMark = label ? 'label' : 'glyphs';
+    // Inside the disc: OVR big, the "OVR" caption from 56 px, and the short role label when it fits the chord at its
+    // height (else the role glyphs on a small plate: the colour-free role cue is never lost).
     for (const gl of this.glyphs) gl.destroy(DESTROY_ALL);
     this.glyphs = [];
     this.marks.children.filter((c) => c instanceof Graphics).forEach((c) => c.destroy(DESTROY_ALL));
+    let label = false;
     if (this.ovr && this.caption && this.roleText) {
-      if (label) {
-        this.caption.view.visible = true;
-        this.caption.setSize(d * 0.12);
-        this.caption.view.position.set(0, -d * 0.25);
-        this.ovr.setSize(d * 0.36);
-        this.ovr.view.position.set(0, -d * 0.03);
-        this.roleText.view.visible = this.roleLabel !== '';
-        this.roleText.setSize(d * (this.roles.length > 1 ? 0.085 : 0.105));
-        this.roleText.view.position.set(0, d * 0.26);
-      } else {
-        this.caption.view.visible = false;
-        this.roleText.view.visible = false;
-        this.ovr.setSize(d * 0.4);
-        this.ovr.view.position.set(0, -d * 0.1);
+      if (this.roleLabel === '' && this.roles.length > 0) {
+        this.roleLabel = shortRoleLabel(this.roles, this.env.content());
+        this.roleText.setText(this.roleLabel);
       }
+      const caption = d >= OVR_CAPTION_MIN_DIAMETER_PX;
+      const roleY = d * (caption ? 0.23 : 0.21);
+      // The width the disc has at the label's centre line (its corners may touch the plate band: the text is stroked).
+      const chord = 2 * Math.sqrt(Math.max(0, discR * discR - roleY * roleY)) - 2;
+      if (this.roleLabel !== '') {
+        for (const k of [0.16, 0.135, 0.12, 0.105]) {
+          const size = Math.max(ROLE_LABEL_MIN_PX, d * k);
+          this.roleText.setSize(size);
+          if (this.roleText.width <= chord) {
+            label = true;
+            break;
+          }
+        }
+      }
+      this.caption.view.visible = caption;
+      this.caption.setSize(Math.max(6, d * 0.11));
+      this.caption.view.position.set(0, -d * 0.26);
+      this.ovr.setSize(d * (caption ? 0.34 : 0.38));
+      this.ovr.view.position.set(0, caption ? -d * 0.04 : -d * 0.08);
+      this.roleText.view.visible = label;
+      this.roleText.view.position.set(0, roleY);
     }
+    this.roleMark = label ? 'label' : 'glyphs';
     if (!label && this.roles.length > 0) this.drawGlyphRow(d, p);
 
     // Class name under the token, past the viewer's ring.
     if (this.classText) {
-      this.classText.setSize(this.labelSize(p.metrics));
+      this.classText.setSize(this.classSize(p.metrics));
       this.classText.setAnchor(0.5, 0);
       this.classText.view.position.set(0, r + this.ringReach(p.metrics));
       // The light team cue (with the viewer's side ring): the club's primary colour as a keylined bar under the class name.
       const w = Math.max(this.classText.view.width, d * 0.5);
-      const lh = this.labelSize(p.metrics) * 1.3;
+      const lh = this.classSize(p.metrics) * 1.25;
       this.club
         .clear()
         .roundRect(-w / 2 - 1, r + this.ringReach(p.metrics) + lh - 1, w + 2, 5, 2)

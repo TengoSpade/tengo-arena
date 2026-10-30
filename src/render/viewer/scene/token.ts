@@ -29,6 +29,8 @@ export const DOWN_FLATTEN = 0.6;
 const MAX_PIPS = 4;
 const STACK_GAP = 2;
 const ROW_GAP = 4;
+/** zIndex added to the selected or hovered token so it sorts above the rest. */
+const RAISE_Z = 1e6;
 /** A stack keeps this far inside the host's edge (px): beyond it the stack moves below the disc, or sideways. */
 const EDGE_MARGIN = 2;
 /** The Freshness tag shows for the first 3 s of the round (20 ticks per second). */
@@ -60,6 +62,8 @@ export interface TokenFrame {
   /** 0..1 of the hit wash, already limited. */
   flash: number;
   selected: boolean;
+  /** Under the pointer (raised like the selection; no other mark). */
+  hovered: boolean;
   reducedMotion: boolean;
   labels: 'off' | 'selected' | 'all';
   /** Pips to draw, hard control first; `pipMore` statuses did not fit. */
@@ -160,6 +164,10 @@ export class Token {
   private readonly tagLabel: string;
   private readonly nameLabel: string;
   private destroyed = false;
+  /** The stack's reach above the disc centre (0 when it is below or hidden), half its width and its sideways nudge (px). */
+  private stackAboveExtent = 0;
+  private stackHalfW = 0;
+  private isRaised = false;
   /** The last hit already considered for a flash, and the flash in progress (wall ms). */
   private lastHitSeen: number | null = null;
   private flashStartMs = Number.NEGATIVE_INFINITY;
@@ -198,9 +206,9 @@ export class Token {
     this.layout(env, colors);
   }
 
-  /** The disc's diameter: a metre of arena, or the body's own minimum when it draws a readable token (skin.ts BodyVisual.minDiameterPx). */
+  /** The disc's diameter: a metre of arena, or the body's own size when it draws a readable token (skin.ts BodyVisual.diameterPx). */
   private discPx(): number {
-    return Math.max(this.env.pxPerMetre, this.body.minDiameterPx ?? 0);
+    return this.body.diameterPx ? this.body.diameterPx(this.env.pxPerMetre) : this.env.pxPerMetre;
   }
 
   /** Disc radius and ring geometry: shared by drawing and stacking. */
@@ -354,8 +362,13 @@ export class Token {
     const dead = !u.standing;
 
     this.root.position.set(f.x, f.y);
-    this.root.zIndex = f.y;
+    // Depth by screen y; the selected or hovered token (and its stack) is drawn above every other (owner, 2026-10-30:
+    // bunched tokens overlap, the one being looked at must not be hidden).
+    this.isRaised = f.selected || f.hovered;
+    const raise = this.isRaised ? RAISE_Z : 0;
+    this.root.zIndex = f.y + raise;
     this.overlay.position.set(f.x, f.y);
+    this.overlay.zIndex = f.y + raise;
     this.body.update(u, f.body);
 
     // The side ring: ours solid, theirs double (the colour-free cue); hard control greys it and keeps the style.
@@ -388,7 +401,10 @@ export class Token {
 
     // Everything above the disc is hidden for a downed fighter.
     this.overlay.visible = !dead;
-    if (dead) return;
+    if (dead) {
+      this.stackAboveExtent = 0;
+      return;
+    }
     this.crown.visible = u.isCaptain;
 
     const barH = m.barHeightPx;
@@ -493,6 +509,8 @@ export class Token {
     if (f.x - halfW < EDGE_MARGIN) dx = EDGE_MARGIN - (f.x - halfW);
     else if (f.x + halfW > f.viewW - EDGE_MARGIN) dx = f.viewW - EDGE_MARGIN - (f.x + halfW);
     this.stack.x = dx;
+    this.stackAboveExtent = below ? 0 : base + total;
+    this.stackHalfW = halfW;
 
     // Outward from the disc: the bars first (focus nearest the disc), then row, cast bar, tag, name. Below the disc the
     // same order runs downwards, and the bars block is mirrored so the focus bar is still the nearest.
@@ -613,6 +631,36 @@ export class Token {
       plateRadius: this.plateG.width / 2,
       stackY: { bars: this.bars.y, row: this.row.y, cast: this.cast.view.y, tag: this.tag.view.y, name: this.name.view.y },
     };
+  }
+
+  // ---- What the scene needs to keep a body's label below the token clear of other tokens' stacks ----
+  get standing(): boolean {
+    return this.overlay.visible;
+  }
+  get raised(): boolean {
+    return this.isRaised;
+  }
+  get stackAbove(): number {
+    return this.stackAboveExtent;
+  }
+  get stackHalfWidth(): number {
+    return this.stackHalfW;
+  }
+  get stackShift(): number {
+    return this.stack.x;
+  }
+  get hasLabelBelow(): boolean {
+    return this.body.setLabelBelowVisible !== undefined;
+  }
+  /** From the disc centre to the bottom of the body's label below it. */
+  get belowReach(): number {
+    return this.discPx() / 2 + (this.body.extentBelowPx?.(this.env.pxPerMetre) ?? 0);
+  }
+  get belowHalfWidth(): number {
+    return (this.body.labelBelowWidthPx?.() ?? 0) / 2;
+  }
+  setLabelBelowVisible(on: boolean): void {
+    this.body.setLabelBelowVisible?.(on);
   }
 
   /** Where the root is (for tests and hit-testing diagnostics). */

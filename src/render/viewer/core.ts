@@ -25,6 +25,8 @@ export interface ScenePort {
   clearRound(): void;
   draw(state: ArenaFrameState, frame: FrameInfo): void;
   select(unit: UnitIndex | null): void;
+  /** Optional: raise the token under the pointer. */
+  setHover?(unit: UnitIndex | null): void;
   setLabels(mode: 'off' | 'selected' | 'all'): void;
   setReducedMotion(on: boolean): void;
   hitTest(px: number, py: number): UnitIndex | null;
@@ -81,6 +83,7 @@ export class ViewerCore {
   private reducedMotion: boolean;
   private speedSetting: Speed = 1;
   private selected: UnitIndex | null = null;
+  private hovered: UnitIndex | null = null;
   private lastState: ArenaFrameState | null = null;
   private lastHudMs = Number.NEGATIVE_INFINITY;
   private loadGen = 0;
@@ -148,6 +151,8 @@ export class ViewerCore {
     this.moments = null;
     this.selected = null;
     this.o.scene.select(null);
+    this.hovered = null;
+    this.o.scene.setHover?.(null);
     this.o.scene.setLabels(this.labels);
     this.o.scene.setReducedMotion(this.reducedMotion);
     this.o.scene.setRound(ctx, index.header.arena, this.kickoffOf(index, ctx));
@@ -294,6 +299,14 @@ export class ViewerCore {
   select(unit: UnitIndex | null): void {
     this.selected = unit;
     this.o.scene.select(unit);
+    this.redraw();
+  }
+
+  /** The pointer is over this unit (or none): raise its token; redraws only on a change (a paused frame too). */
+  hover(unit: UnitIndex | null): void {
+    if (unit === this.hovered) return;
+    this.hovered = unit;
+    this.o.scene.setHover?.(unit);
     this.redraw();
   }
 

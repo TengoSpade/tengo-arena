@@ -91,6 +91,7 @@ export class ArenaScene {
   private reducedMotion: boolean;
   private labels: 'off' | 'selected' | 'all' = 'off';
   private selected: UnitIndex | null = null;
+  private hovered: UnitIndex | null = null;
   private ringRemap = false;
   /** Bumped whenever palette or layout changes, so cached chip drawings refresh. */
   private version = 0;
@@ -138,6 +139,7 @@ export class ArenaScene {
     hardControl: false,
     flash: 0,
     selected: false,
+    hovered: false,
     reducedMotion: false,
     labels: 'off',
     pips: this.pipBuf,
@@ -159,6 +161,7 @@ export class ArenaScene {
     opts.text.configure(opts.palette);
     this.root.eventMode = 'none';
     this.bodies.sortableChildren = true;
+    this.overlays.sortableChildren = true;
     for (const layer of [this.floorLayer, this.markers, this.ground, this.fx.low, this.bodies, this.projectiles.root, this.fx.high, this.overlays, this.fx.top, this.overtimeEdge]) layer.eventMode = 'none';
     this.markers.addChild(this.markerG);
     this.ground.addChild(this.zones.root, this.telegraphs.root, this.groundMask);
@@ -242,6 +245,11 @@ export class ArenaScene {
 
   select(unit: UnitIndex | null): void {
     this.selected = unit;
+  }
+
+  /** The token under the pointer, raised above the others like the selection. */
+  setHover(unit: UnitIndex | null): void {
+    this.hovered = unit;
   }
 
   setFlashLimit(perSecond: number): void {
@@ -361,6 +369,7 @@ export class ArenaScene {
       f.facing = screenAngle(map, u.facing);
       f.ring = this.ringOf(u.side);
       f.selected = this.selected === u.unit;
+      f.hovered = this.hovered === u.unit;
       f.flash = token.flashLevel(u, frame.tick, frame.playing, this.reducedMotion, this.limiter, frame.nowMs);
       this.selectPips(u, f);
       f.hardControl = f.hardControl || u.action === 'stunned' || u.action === 'asleep';
@@ -369,8 +378,35 @@ export class ArenaScene {
       f.castName = casting ? (this.opts.content.abilities.get(u.cast!.ability)?.name ?? '') : '';
       token.update(u, f);
     }
+    this.clearLabelsBelow();
 
     this.updateOvertimeEdge(state.overtime, frame.dtMs, map);
+  }
+
+  /**
+   * A body's label under its token (the token body's class name) gives way to another token's stack above it (bars,
+   * pips, name: meaning first) when the two overlap; a raised (selected or hovered) token always keeps it. Ten tokens:
+   * at most 90 rectangle checks a frame, no allocation.
+   */
+  private clearLabelsBelow(): void {
+    for (const a of this.tokens) {
+      if (!a || !a.hasLabelBelow) continue;
+      let free = true;
+      if (a.standing && !a.raised) {
+        const reach = a.belowReach;
+        const halfA = a.belowHalfWidth;
+        for (const b of this.tokens) {
+          if (!b || b === a || !b.standing || b.stackAbove <= 0) continue;
+          const dy = b.screenY - a.screenY;
+          if (dy <= 0 || dy >= reach + b.stackAbove) continue;
+          if (Math.abs(b.screenX + b.stackShift - a.screenX) < halfA + b.stackHalfWidth) {
+            free = false;
+            break;
+          }
+        }
+      }
+      a.setLabelBelowVisible(free);
+    }
   }
 
   /** The up-to-four highest-priority status pips of a unit (hard control first), the overflow, and the ring grey. */
