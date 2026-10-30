@@ -130,11 +130,11 @@ describe('balance harness', () => {
   });
 
   it('squad-match plays full matches through game.playMatchAuto: policy rows against off, reserve value, swaps and Freshness', { timeout: 120_000 }, () => {
-    const r = runBalance({ seed: 's', fights: 20, content, mode: 'squad-match' });
+    const r = runBalance({ seed: 's', fights: 40, content, mode: 'squad-match' });
     const q = r.squadMatch!;
     expect(q.rows.map((x) => x.id)).toEqual(['off', 'injured_only', 'threshold40', 'threshold60', 'reserves2v0']);
     expect(q.matchups).toBe(2);
-    for (const row of q.rows) expect(row.matches).toBe(4);
+    for (const row of q.rows) expect(row.matches).toBe(8);
     expect(q.matches).toBe(40);
     expect(q.roundsPerMatch).toBeGreaterThanOrEqual(2);
     expect(q.tiredShare + q.spentShare).toBeGreaterThan(0);

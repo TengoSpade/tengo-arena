@@ -71,6 +71,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
 
   // The round checksums pin the fight itself. The event hash also covers the fight header (content hash):
   // re-pinned 2026-10 when the fixture content gained the D-P/D-T keys; checksums unchanged, no engine change.
+  // Re-pinned for KI-21 (O36): the fixture content gained levels.json freshness.playedWeekRestShare, so the content hash in the event header moved; outcomes, durations and round checksums are unchanged, and ENGINE_VERSION stays 2 (no sim code changed).
   // Re-derived at the M1.1 integration: fixture orc injury values (chanceMult 0.75, recoveryMult 0.8, scarMult 0.9), levelEta defaults as data, the six development.json
   // removals (the header's content hash moved); round checksums unchanged.
   it('golden: the pinned fixture match hash (change only with an ENGINE_VERSION bump and architect approval)', () => {
@@ -83,13 +84,13 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
             "away",
             712,
             "b1e30c26523f4bb4e72c3be884d0ad1b",
-            "85d5d9ff74c93ebbeb1534d8a6705a9d",
+            "3c7255f368fa2e6866a607da7b67ec36",
           ],
           [
             "away",
             906,
             "63652b166c526ace2db11b1768ab8d08",
-            "286a84d292a9ec0a450a82d5d4df5bd7",
+            "bfb72fb1d235ff917e61e945d20b851a",
           ],
         ],
         "score": {
@@ -111,7 +112,7 @@ describe('determinism (acc-det-01, acc-det-02)', () => {
         "home",
         896,
         "128648c2c01315596ceda6c8db45ee69",
-        "bc7b91445f9ffe98200c8549c5919000",
+        "f7e84193c8a3a99f2c04fe47d25bca60",
       ]
     `);
   });

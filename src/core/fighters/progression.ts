@@ -40,7 +40,7 @@ import { checkThresholds, gainTrait } from './acquired';
 import { isFitFighter } from './captaincy';
 import { effectSources, multFactorsBp } from './effects';
 import { BP, bp, truncN } from './fixed';
-import { freshness10Of, perkBetweenRoundsGain10, rest10, roundDrain10, setFreshness10, typicalDrain10 } from './freshness';
+import { freshness10Of, perkBetweenRoundsGain10, playedWeekRest10, rest10, roundDrain10, setFreshness10, typicalDrain10 } from './freshness';
 import { PROVISIONAL_TYPICAL_ROUNDS_PER_MATCH_X10, SEVERITY_ORDER, isAtRisk, roundInjuryChanceBp, seriousShareBp, severityWeights, type RoundExposure } from './injury';
 import { freshnessLabel, freshnessOf, levelMentorMult, xpNeededFor } from './levels';
 import { EVENT_TRAIT_IDS, STILL_TENDER, applyInjury, roundXp, type MatchInjury } from './match';
@@ -87,6 +87,11 @@ export function typicalRoundDrain10(fighter: Fighter, content: ContentDB): numbe
 /** Weekly rest gain in tenths for a week with no round started (× squadReserveRestShare for an unused squad reserve). */
 export function weeklyRest10(fighter: Fighter, content: ContentDB, wasSquadReserve: boolean): number {
   return rest10(fighter, content, wasSquadReserve);
+}
+
+/** Weekly recovery in tenths for a week in which the fighter started a round (a smaller, age-banded share of the weekly rest). */
+export function playedWeekRecovery10(fighter: Fighter, content: ContentDB): number {
+  return playedWeekRest10(fighter, content);
 }
 
 /** "Next level in ≈ N matches" (null when no match XP is expected): ceil(remaining ÷ mean match XP this season; 32 starter / 11 bench before his first match). */

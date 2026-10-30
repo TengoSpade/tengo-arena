@@ -130,6 +130,8 @@ export const LevelsFileSchema = z
         squadReserveRestShare: z.number().min(0).max(1),
         preseasonWeekRecovery: z.number(),
         recoveryAgeMult: stepTable,
+        /** Share of the weekly rest (restAt0 + restPerStaminaPoint x STA) a fighter who started a round that week still recovers, by human-age (step table: young / middle / older). */
+        playedWeekRestShare: stepTable,
         seasonEndReset: z.number(),
         threshold: z.number(),
         labels: z.array(z.object({ id: z.enum(FRESHNESS_LABELS), label: z.string(), min: z.number(), icon: z.string() }).strict()).min(1),

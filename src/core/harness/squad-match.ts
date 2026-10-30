@@ -2,7 +2,7 @@
  * Balance mode `squad-match` (combat-skills.md §8 mode 5; wired by the M1.1
  * integrator, WP-C): full matches through core/game's orchestrator
  * (`playMatchAuto`) with the real modules: 7-fighter squads chosen by the AI
- * rule, starting Freshness drawn 50-100, lifecycle drain and immediate
+ * rule, starting Freshness drawn 30-100, lifecycle drain and immediate
  * injuries, auto-swap policies paired against `off` on the same squads,
  * Freshness and seeds (counterfactual pairs, sides mirrored), best-of-3 and
  * every fourth matchup best-of-5. Reserve value: threshold 40 with 2
@@ -55,11 +55,20 @@ export const SQUAD_MATCH_TARGETS = {
   timeCapMax: 0.02,
 } as const;
 
+/**
+ * Scenario: each fighter's starting Freshness is drawn uniformly from this range, in tenths (0-1000). Drawn from 30-100 (it was
+ * 50-100, KI-21): from 50 nobody can reach Spent inside a best-of-3 (a Tired round drains half), so threshold 40 could never fire
+ * and every row but threshold 60 replayed the `off` matches. 30-100 gives Tired about 23% and Spent about 5% of round starts,
+ * the AI shares the 10-season soak measured (03 §8.6).
+ */
+export const START_FRESHNESS10 = { min: 300, max: 1000 } as const;
+
 const POLICIES: readonly SquadPolicy[] = ['off', 'injured_only', 'threshold40', 'threshold60'];
 
 function rulesFor(content: ContentDB, policy: SquadPolicy): AutoSwapRules {
   const d = content.combat.match.autoSwapDefaults;
-  const base: AutoSwapRules = { ...d, lostRoundBonus: 0 };
+  // The shipped lost-round bonus (levels.json aiSubstitution.lostRoundThresholdBonus, +10 in D-V) applies to every policy, as in play.
+  const base: AutoSwapRules = { ...d, lostRoundBonus: content.levels.aiSubstitution.lostRoundThresholdBonus };
   if (policy === 'off') return { ...base, mode: 'off' };
   if (policy === 'injured_only') return { ...base, mode: 'injured_only' };
   return { ...base, mode: 'threshold', freshnessBelow: policy === 'threshold40' ? 40 : 60 };
@@ -95,8 +104,9 @@ interface Tally {
 
 const tally = (): Tally => ({ matches: 0, wins: 0, lostR1: 0, comebacks: 0, swaps: 0 });
 
-export function runSquadMatch(options: { seed: Seed; fights: number; content: ContentDB; ports?: GamePorts }): SquadMatchReport {
+export function runSquadMatch(options: { seed: Seed; fights: number; content: ContentDB; ports?: GamePorts; startFreshness10?: { min: number; max: number } }): SquadMatchReport {
   const { seed, content } = options;
+  const start = options.startFreshness10 ?? START_FRESHNESS10;
   const ports = options.ports ?? realGamePorts;
   const engine = createGameEngine(ports);
   const w = engine.createWorld(content, { rootSeed: seed });
@@ -104,20 +114,23 @@ export function runSquadMatch(options: { seed: Seed; fights: number; content: Co
   const world = w.value;
   const clubs = Object.keys(world.clubs).sort() as ClubId[];
   const rowIds: SquadMatchRow['id'][] = [...POLICIES, 'reserves2v0'];
-  const matchups = Math.max(1, Math.floor(options.fights / (rowIds.length * 2)));
+  const matchups = Math.max(1, Math.floor(options.fights / (rowIds.length * 4)));
   const tallies = new Map<string, Tally>(rowIds.map((id) => [id, tally()]));
   const offTallies = new Map<string, Tally>(rowIds.map((id) => [id, tally()]));
   const all = { matches: 0, swaps: 0, forced: 0, emergency: 0, starts: 0, tired: 0, spent: 0, rounds: 0, capped: 0 };
 
-  const record = (r: MatchResult, policySide: 'home' | 'away', t: Tally): void => {
-    t.matches++;
-    const won = (policySide === 'home' ? r.homeClubId : r.awayClubId) === r.winnerClubId;
-    if (won) t.wins++;
-    if (r.rounds[0]!.winner !== policySide) {
-      t.lostR1++;
-      if (won) t.comebacks++;
+  const record = (r: MatchResult, policySide: 'home' | 'away', targets: Tally[], counted: boolean): void => {
+    for (const t of targets) {
+      t.matches++;
+      const won = (policySide === 'home' ? r.homeClubId : r.awayClubId) === r.winnerClubId;
+      if (won) t.wins++;
+      if (r.rounds[0]!.winner !== policySide) {
+        t.lostR1++;
+        if (won) t.comebacks++;
+      }
+      for (const b of r.betweenRounds ?? []) t.swaps += b[policySide].length;
     }
-    for (const b of r.betweenRounds ?? []) t.swaps += b[policySide].length;
+    if (!counted) return;
     all.matches++;
     all.rounds += r.rounds.length;
     all.capped += r.rounds.filter((x) => x.endReason === 'time-limit').length;
@@ -143,14 +156,16 @@ export function runSquadMatch(options: { seed: Seed; fights: number; content: Co
     let b = clubs[rng.int(0, clubs.length - 2)]!;
     if (b === a) b = clubs[clubs.length - 1]!;
     const fresh = new Map<string, number>();
-    for (const f of Object.values(world.fighters)) if (f.clubId === a || f.clubId === b) fresh.set(f.id, rng.int(500, 1000));
+    for (const f of Object.values(world.fighters)) if (f.clubId === a || f.clubId === b) fresh.set(f.id, rng.int(start.min, start.max));
     const bestOf = j % 4 === 3 ? 5 : 3;
-    for (const id of rowIds) {
+    // Mirrored on both axes: the policy club is `a`, then `b` (the two clubs are rarely equal, and a one-sided pairing would put
+    // their strength gap into every win rate), and it plays home, then away. The counterfactual (`off` against `off`, both with
+    // reserves) is the same match for every row, so it is played once and shared.
+    for (const [policyClub, otherClub] of [[a, b], [b, a]] as const) {
       for (const policySide of ['home', 'away'] as const) {
-        for (const counterfactual of [false, true]) {
-          // The policy club is `a`; mirrored: it plays home, then away. The counterfactual plays `off` on the same matchup.
-          const home = policySide === 'home' ? a : b;
-          const away = policySide === 'home' ? b : a;
+        const play = (policyRules: AutoSwapRules, otherRules: AutoSwapRules, policyReserves: boolean, otherReserves: boolean): MatchResult => {
+          const home = policySide === 'home' ? policyClub : otherClub;
+          const away = policySide === 'home' ? otherClub : policyClub;
           const fixture: Fixture = {
             id: asId<FixtureId>(`sm:${j}`),
             competitionId: asId('sm'),
@@ -169,17 +184,25 @@ export function runSquadMatch(options: { seed: Seed; fights: number; content: Co
           };
           const s = miniState(world, [a, b], fixture);
           for (const [fid, v] of fresh) if (s.fighters[fid as keyof typeof s.fighters]) s.fighters[fid as keyof typeof s.fighters]!.freshness10 = v;
-          const policy: SquadPolicy = counterfactual ? 'off' : id === 'reserves2v0' ? 'threshold40' : id;
-          s.clubs[a]!.autoSwap = rulesFor(content, policy);
-          s.clubs[b]!.autoSwap = rulesFor(content, id === 'reserves2v0' && !counterfactual ? 'threshold40' : 'off');
-          const reservesA = true;
-          const reservesB = id !== 'reserves2v0' || counterfactual;
+          s.clubs[policyClub]!.autoSwap = policyRules;
+          s.clubs[otherClub]!.autoSwap = otherRules;
           const squads: LockedSquads = {
-            home: squadOf(ports, s, home, home === a ? reservesA : reservesB, content),
-            away: squadOf(ports, s, away, away === a ? reservesA : reservesB, content),
+            home: squadOf(ports, s, home, home === policyClub ? policyReserves : otherReserves, content),
+            away: squadOf(ports, s, away, away === policyClub ? policyReserves : otherReserves, content),
           };
-          const result = playMatchAuto(ports, s, fixture, squads, content);
-          record(result, policySide, (counterfactual ? offTallies : tallies).get(id)!);
+          return playMatchAuto(ports, s, fixture, squads, content);
+        };
+        const off = rulesFor(content, 'off');
+        const cf = play(off, off, true, true);
+        const cfTargets = rowIds.map((id) => offTallies.get(id)!);
+        record(cf, policySide, [...cfTargets, tallies.get('off')!], true);
+        for (const id of rowIds) {
+          if (id === 'off') continue;
+          const r =
+            id === 'reserves2v0'
+              ? play(rulesFor(content, 'threshold40'), rulesFor(content, 'threshold40'), true, false)
+              : play(rulesFor(content, id), off, true, true);
+          record(r, policySide, [tallies.get(id)!], true);
         }
       }
     }

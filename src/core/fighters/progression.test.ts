@@ -49,7 +49,7 @@ import {
 } from './index';
 import { benchXpFor, checkLevelUps, clubMatchXp, type MatchProgressionOutcome } from './progression';
 import { generateOffer, optionScore } from './offers';
-import { roundDrain10 } from './freshness';
+import { playedWeekRest10, roundDrain10 } from './freshness';
 import { roundInjuryChanceBp } from './injury';
 import { physicalWeightShare, trainedRating, xpNeededFor } from './levels';
 import { staminaCap100 } from './generation';
@@ -150,13 +150,18 @@ describe('bench XP (T004)', () => {
     // bxp-002: at this week's processing the unused reserve rests 80%, the outside fighter 100%.
     putResult(s, r);
     for (const id of [res, outside.id]) s.fighters[id] = withFreshness(s.fighters[id]!, 50);
+    const starter0 = r.roundLineups![0]!.home.fighterIds[0]!;
+    s.fighters[starter0] = withFreshness(s.fighters[starter0]!, 50);
+    const playedRecovery = playedWeekRest10(s.fighters[starter0]!, content);
     const restReserve = weeklyRest10(s.fighters[res]!, content, true);
     const restOutside = weeklyRest10(s.fighters[outside.id]!, content, false);
     weeklyLifecycle(s, content);
     expect(s.fighters[res]!.freshness10).toBe(500 + restReserve);
     expect(s.fighters[outside.id]!.freshness10).toBe(500 + restOutside);
     const starter = r.roundLineups![0]!.home.fighterIds[0]!;
-    expect(s.fighters[starter]!.season.restWeeks).toBe(0); // started a round: no rest that week
+    expect(s.fighters[starter]!.season.restWeeks).toBe(0); // started a round: no rest week...
+    expect(playedRecovery).toBeGreaterThan(0);
+    expect(s.fighters[starter]!.freshness10).toBe(500 + playedRecovery); // ...but the played-week recovery (KI-21, O36) is applied
   });
 
   it('bxp-004 / bxp-005: a starter swapped out after a lost round 1 keeps 10 XP and no bench XP; the entering reserve earns 15 + 15', () => {
@@ -561,6 +566,37 @@ describe('Freshness', () => {
     expect(weeklyRest10(sixteen(), content, false)).toBe(460);
     expect(weeklyRest10(plain({ stamina: 6 }, { age: 34 }), content, false)).toBe(306);
     expect(weeklyRest10(plain({ stamina: 6 }, { age: 34 }), content, true)).toBe(245);
+  });
+
+  it('frs-012 (KI-21, O36): a week with a round started still recovers: 20% / 10% / 3% of the weekly rest for young (< 25) / middle (25-30) / older (31+) human-age', () => {
+    // Weekly rest base at STA 13 = 30 + 13 = 43 points.
+    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 22 }), content)).toBe(Math.round(43 * 0.2 * 10));
+    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 28 }), content)).toBe(Math.round(43 * 0.1 * 10));
+    expect(playedWeekRest10(plain({ stamina: 13 }, { age: 34 }), content)).toBe(Math.round(43 * 0.03 * 10));
+    // Always positive, never more than a rested week.
+    for (const age of [19, 24, 25, 30, 31, 40]) {
+      const played = playedWeekRest10(plain({ stamina: 13 }, { age }), content);
+      expect(played).toBeGreaterThan(0);
+      expect(played).toBeLessThan(weeklyRest10(plain({ stamina: 13 }, { age }), content, false));
+    }
+  });
+
+  it('frs-013 (KI-21, O36): starting fresh and playing a full 3-round match every week, a Stamina-13 fighter plays 4 (young), 3 (middle) and 2 (older) matches before a round starts Tired', () => {
+    const typicalLoad = { durationS: 36, damageTaken: 600, maxHp: 1000, downed: false };
+    const matchesBeforeTired = (age: number): number => {
+      let f: Fighter = { ...plain({ stamina: 13 }, { age }), freshness10: 1000 };
+      for (let match = 0; match < 12; match++) {
+        for (let r = 0; r < 3; r++) {
+          if (f.freshness10! < 600) return match;
+          f = { ...f, freshness10: Math.max(0, f.freshness10! - roundDrain10(f, typicalLoad, content)) };
+        }
+        f = { ...f, freshness10: Math.min(1000, f.freshness10! + playedWeekRest10(f, content)) };
+      }
+      return 12;
+    };
+    expect(matchesBeforeTired(22)).toBe(4);
+    expect(matchesBeforeTired(28)).toBe(3);
+    expect(matchesBeforeTired(34)).toBe(2);
   });
 
   it('frs-006 / frs-007: Second Breath gives +8 between rounds to active fighters and unused reserves, never to the withdrawn', () => {

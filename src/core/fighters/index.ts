@@ -264,7 +264,7 @@ export {
   xpNeededFor,
 } from './levels';
 export type { XpNeededContext } from './levels';
-export { autoPickChoice, effectiveLevelUpMode, levelEtaMatches, levelOptionLegal, typicalRoundDrain10, weeklyRest10 } from './progression';
+export { autoPickChoice, effectiveLevelUpMode, levelEtaMatches, levelOptionLegal, playedWeekRecovery10, typicalRoundDrain10, weeklyRest10 } from './progression';
 export type { LevelUpChoice, MatchProgressionOutcome } from './progression';
 // M1.1 additive exports (WP-B).
 export { benchXpFor, clubMatchXp, freshnessLabelOf, resolveAllPending } from './progression';

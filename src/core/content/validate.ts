@@ -828,6 +828,7 @@ function validateM11(c: Collector, f: ContentFiles, ctx: M11Ctx): void {
   checkCurveAscending(c, LV, 'xpPerLevel.gapFactor', x.gapFactor);
   checkCurveAscending(c, LV, 'autoPick.staminaBonusByStamina', levels.autoPick.staminaBonusByStamina);
   checkCurveAscending(c, LV, 'freshness.recoveryAgeMult', levels.freshness.recoveryAgeMult);
+  checkCurveAscending(c, LV, 'freshness.playedWeekRestShare', levels.freshness.playedWeekRestShare);
   if (x.min > x.max) c.error(LV, 'xpPerLevel', 'min > max');
   checkClosedList(c, LV, 'autoPick.playerModes', levels.autoPick.playerModes.map((p) => p.id), LEVEL_UP_MODES, 'level-up modes');
   const fr = levels.freshness;

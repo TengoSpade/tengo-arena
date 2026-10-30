@@ -140,7 +140,7 @@
   },
 
   "freshness": {
-    "_doc": "T003 plus the owner's round rule. Per-fighter meter 0-100 (100 = fully rested), stored in tenths (0-1000); the sim and the UI receive floor(value / 10). It never changes during combat. When a round ends, each fighter who started it loses roundDrain (times tiredDrainShare if the round started below the threshold: M1.1 tuning, an unrotated starter now tires at the designed pace but then declines slowly instead of reaching 0 within a few weeks); the new value applies from the start of the next round of the same match (combat reads freshness per round) and carries into later weeks. At each week processing of a matchweek or tournament week in which he started no round: += rest (x squadReserveRestShare if he was a match-squad reserve who never entered). Each preseason week: += preseason. Season-end step: = seasonEndReset. Clamp 0-100.",
+    "_doc": "T003 plus the owner's round rule. Per-fighter meter 0-100 (100 = fully rested), stored in tenths (0-1000); the sim and the UI receive floor(value / 10). It never changes during combat. When a round ends, each fighter who started it loses roundDrain (times tiredDrainShare if the round started below the threshold: M1.1 tuning, an unrotated starter now tires at the designed pace but then declines slowly instead of reaching 0 within a few weeks); the new value applies from the start of the next round of the same match (combat reads freshness per round) and carries into later weeks. At each week processing of a matchweek or tournament week in which he started no round: += rest; in a week in which he started a round: += rest x playedWeekRestShare by human-age (KI-21, O36: 20% under 25, 10% from 25, 3% from 31) (x squadReserveRestShare if he was a match-squad reserve who never entered). Each preseason week: += preseason. Season-end step: = seasonEndReset. Clamp 0-100.",
     "start": 100,
     "storageUnitsPerPoint": 10,
     "drainAt0": 11.88,
@@ -162,6 +162,7 @@
     "squadReserveRestShare": 0.8,
     "preseasonWeekRecovery": 50,
     "recoveryAgeMult": [[0, 1.0], [31, 0.85], [35, 0.7]],
+    "playedWeekRestShare": [[0, 0.2], [25, 0.1], [31, 0.03]],
     "seasonEndReset": 100,
     "threshold": 60,
     "labels": [
@@ -171,7 +172,7 @@
       { "id": "spent", "label": "Spent", "min": 0, "icon": "fresh_spent" }
     ],
     "betweenRounds": "At each between-round step (combat's applyBetweenRound) every squad member who is active or an unused reserve, not withdrawn and not injured, gains his freshnessBetweenRounds total (perk Second Breath +8; none otherwise), after that round's drain and before the next round; clamp 100.",
-    "withdrawn": "A fighter swapped out (withdrawn) cannot return in that match (owner ruling); his freshness reflects only the rounds he played: no drain and no between-round gain after he leaves. He started a round that week, so he gets no weekly rest that week.",
+    "withdrawn": "A fighter swapped out (withdrawn) cannot return in that match (owner ruling); his freshness reflects only the rounds he played: no drain and no between-round gain after he leaves. He started a round that week, so he gets no full weekly rest that week, only the played-week share.",
     "injuryMultPerPointBelow": 0.006,
     "injuryMultMax": 1.4,
     "_formulas": "base = clamp(drainAt0 + drainPerStaminaPoint x stamina, drainMin, drainMax). intensity = clamp(intensityBase + intensityPerDuration x min(2, roundDurationS / intensityDurationRefS) + intensityPerDamage x min(2, damageTaken / maxHp) + intensityDowned x [downed], intensityMin, intensityMax). roundDrain = round(base x intensity x (youngDrainMult if humanAge < youngHumanAgeBelow) x freshnessDrainMult (perk Campaign Legs 0.85) x tiredDrainShare (0.5 when the round starts below threshold, else 1) x 10) tenths. rest = round((restAt0 + restPerStaminaPoint x stamina) x recoveryAgeMult(humanAge) x 10) tenths. preseason = round(preseasonWeekRecovery x recoveryAgeMult x 10) tenths. Injury chance in a round x min(injuryMultMax, 1 + injuryMultPerPointBelow x (threshold - freshness)) when freshness at that round's start < threshold. stamina = effective stamina (1-20) at the time of the step. A typical round (30 s, 60% of max HP taken, downed 55% of the time) has intensity about 1.0."
