@@ -42,9 +42,9 @@ function plainBodySkin(): ArenaSkin {
     load: (ctx) => inner.load(ctx),
     prepare: (units) => inner.prepare(units),
     createBody(info, colors) {
-      const body = inner.createBody(info, colors) as { drawsRole?: boolean; minDiameterPx?: number };
+      const body = inner.createBody(info, colors) as { drawsRole?: boolean; diameterPx?: unknown };
       Object.defineProperty(body, 'drawsRole', { value: false });
-      Object.defineProperty(body, 'minDiameterPx', { value: undefined });
+      Object.defineProperty(body, 'diameterPx', { value: undefined });
       return body as BodyVisual;
     },
     createFloor: (a, p) => inner.createFloor(a, p),

@@ -12,7 +12,7 @@ import type { BodyFrame } from '../../viewer/skin';
 import { assemble } from '../../viewer/testing/headless';
 import { fakeColors, fakeContent, fakeContext, fakeLog, createFakeTimeline } from '../../viewer/testing/fake-timeline';
 import { defaultContent } from '../../viewer/testing/real-fixtures';
-import { createStubTokenText, placeholderSkin, freshnessTier, tierColor, type TokenBody, ROLE_LABEL_MIN_DIAMETER_PX } from './index';
+import { createStubTokenText, placeholderSkin, freshnessTier, shortRoleLabel, tierColor, type TokenBody } from './index';
 
 const FRAME: BodyFrame = { tick: 0, dtMs: 0, speed: 1, reducedMotion: false, pxPerMetre: 52 };
 
@@ -90,7 +90,7 @@ describe('the token body', () => {
     const { shown, body } = await bodyOf({ roles: ['melee', 'healer'] });
     expect(shown().split).toBe(true);
     expect(shown().fills).toEqual([p.roles.melee, p.roles.healer]);
-    expect(shown().roleLabel).toBe('MELEE / HEALER');
+    expect(shown().roleLabel).toBe('MEL/HEA');
     // Two filled halves in the disc layer.
     const bounds = (body.view.children[0]!.children[1] as Graphics).getLocalBounds();
     expect(bounds.width).toBeGreaterThan(30);
@@ -120,15 +120,41 @@ describe('the token body', () => {
     expect(arc.context.instructions.length).toBe(before);
     expect(text.created.map((t) => t.textSets)).toEqual(sets);
     expect(text.created.length).toBe(4); // OVR number, "OVR", role label, class name: once per fighter
+    expect(text.created.every((t) => t.textSets <= 2)).toBe(true); // set at creation (the role label once more when content is known)
     expect(text.created.find((t) => t.kind === 'ovr')!.text).toBe('47');
     expect(text.created.find((t) => t.kind === 'class')!.text).toBe('Warrior');
   });
 
-  it('shows glyphs on a plate at the arena scale and the role name from 72 px up', async () => {
-    expect((await bodyOf({ roles: ['melee', 'healer'] })).shown().roleMark).toBe('glyphs');
-    const big = await bodyOf({ roles: ['melee', 'healer'] }, 'dark', { ...FRAME, pxPerMetre: ROLE_LABEL_MIN_DIAMETER_PX });
-    expect(big.shown().roleMark).toBe('label');
-    expect(big.text.created.some((t) => t.kind === 'small' && t.text === 'MELEE / HEALER')).toBe(true);
+  it('prints the short role label from content at the default size, and glyphs only where it cannot fit', async () => {
+    const c = defaultContent();
+    // One place: combat.json archetypes shortName (translatable with the content).
+    for (const a of c.combat.archetypes) expect(shortRoleLabel([a.id as RoleId], c)).toBe(a.shortName);
+    expect(shortRoleLabel(['melee', 'healer'], c)).toBe('MEL/HEA');
+    expect(shortRoleLabel(['tank'], null)).toBe('TAN'); // no content: the id, never nothing
+    for (const ppm of [27, 35, 46]) {
+      for (const roles of [['melee'], ['melee', 'healer'], ['controller', 'ranged']] as RoleId[][]) {
+        const { shown, text } = await bodyOf({ roles }, 'dark', { ...FRAME, pxPerMetre: ppm });
+        expect(shown().roleMark).toBe('label');
+        const label = text.created.find((t) => t.kind === 'small' && t.text === shortRoleLabel(roles, c))!;
+        expect(label.size).toBeGreaterThanOrEqual(6.5);
+      }
+    }
+    // A label content cannot fit (a long custom short name at the smallest token) falls back to the glyphs.
+    const long = { ...c, combat: { ...c.combat, archetypes: c.combat.archetypes.map((a) => ({ ...a, shortName: 'VERYLONGNAME' })) } } as unknown as ContentDB;
+    const { skin } = await skinWith(long);
+    const body = skin.createBody(info({ roles: ['melee', 'healer'] }), fakeColors(0)) as TokenBody;
+    body.update(state(), { ...FRAME, pxPerMetre: 27 });
+    expect(body.shown().roleMark).toBe('glyphs');
+  });
+
+  it('shows the OVR caption from 56 px (the 1920 view) and keeps the number at every size', async () => {
+    const small = await bodyOf({}, 'dark', { ...FRAME, pxPerMetre: 27 });
+    const caption = (t: typeof small) => t.text.created.find((x) => x.text === 'OVR')!.view.visible;
+    expect(caption(small)).toBe(false);
+    expect(small.text.created.find((x) => x.kind === 'ovr')!.size).toBeGreaterThanOrEqual(17);
+    const normal = await bodyOf({}, 'dark', { ...FRAME, pxPerMetre: 46 });
+    expect(normal.shown().diameter).toBe(60);
+    expect(caption(normal)).toBe(true);
   });
 
   it('redraws for a new theme and re-bakes the text once (palette change, not per frame)', async () => {
@@ -185,6 +211,53 @@ describe('the viewer around the token', () => {
       expect(shown.plateRadius).toBe(0); // the token body draws the roles itself
     }
     expect(new Set(bars).size).toBeGreaterThan(1); // it moved with the fight
+  });
+
+  it('draws the selected and the hovered token (with its bars and pips) above every other', async () => {
+    const h = assemble();
+    await h.core.load(fakeLog(), fakeContext({ kind: 'replay' }));
+    h.core.seek(250);
+    const top = (unit: number, layer: 'root' | 'overlay') => {
+      const z = h.scene.tokenOf(unit)![layer].zIndex;
+      for (let i = 0; i < 10; i++) if (i !== unit) expect(z).toBeGreaterThan(h.scene.tokenOf(i)![layer].zIndex);
+    };
+    h.core.select(4);
+    h.core.seek(251);
+    top(4, 'root');
+    top(4, 'overlay');
+    h.core.select(null);
+    h.core.hover(7);
+    top(7, 'root');
+    top(7, 'overlay');
+    h.core.hover(null);
+    expect(h.scene.tokenOf(7)!.raised).toBe(false);
+  });
+
+  it('hides a class name only where another token\'s stack overlaps it, never the raised token\'s', async () => {
+    const h = assemble();
+    await h.core.load(fakeLog(), fakeContext({ kind: 'replay' }));
+    h.core.setLabels('all');
+    const classShown = (u: number) => (h.skin.bodies[u]!.view.children[1] as { visible: boolean }).visible;
+    for (const tick of [0, 120, 250, 400]) {
+      h.core.seek(tick);
+      for (let a = 0; a < 10; a++) {
+        const A = h.scene.tokenOf(a)!;
+        if (!A.standing) {
+          expect(classShown(a)).toBe(false);
+          continue;
+        }
+        const overlapped = [...Array(10).keys()].some((b) => {
+          const B = h.scene.tokenOf(b)!;
+          if (b === a || !B.standing || B.stackAbove <= 0) return false;
+          const dy = B.screenY - A.screenY;
+          return dy > 0 && dy < A.belowReach + B.stackAbove && Math.abs(B.screenX + B.stackShift - A.screenX) < A.belowHalfWidth + B.stackHalfWidth;
+        });
+        expect(classShown(a)).toBe(A.raised || !overlapped);
+      }
+    }
+    h.core.select(0);
+    h.core.seek(250);
+    if (h.scene.tokenOf(0)!.standing) expect(classShown(0)).toBe(true);
   });
 
   it('sizes the ring and stack to the token at a small zoom (27 px/m -> a 44 px disc)', async () => {

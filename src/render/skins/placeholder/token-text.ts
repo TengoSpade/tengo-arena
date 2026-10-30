@@ -17,6 +17,8 @@ export interface TokenText {
   /** Text height in px (the font is scaled to it). */
   setSize(px: number): void;
   setText(text: string): void;
+  /** Width of the current text at the current size, px. */
+  readonly width: number;
   /** 0..1 anchor. */
   setAnchor(ax: number, ay: number): void;
   destroy(): void;
@@ -79,6 +81,9 @@ export function createPixiTokenText(resolution: number, initial: ArenaPalette): 
     }
     setAnchor(ax: number, ay: number): void {
       this.view.anchor.set(ax, ay);
+    }
+    get width(): number {
+      return this.view.width;
     }
     destroy(): void {
       labels.delete(this);
@@ -147,6 +152,10 @@ export class StubTokenText implements TokenText {
     this.text = text;
   }
   setAnchor(): void {}
+  /** An estimate (no glyphs): 0.62 em per character. */
+  get width(): number {
+    return this.text.length * this.size * 0.62;
+  }
   destroy(): void {
     if (!this.view.destroyed) this.view.destroy();
   }

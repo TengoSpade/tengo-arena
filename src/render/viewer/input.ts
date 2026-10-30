@@ -26,12 +26,17 @@ export function attachInput(o: InputOptions): () => void {
   };
   const onMove = (e: PointerEvent): void => {
     const p = local(e);
-    canvas.style.cursor = core.hit(p.x, p.y) !== null ? 'pointer' : 'default';
+    const unit = core.hit(p.x, p.y);
+    canvas.style.cursor = unit !== null ? 'pointer' : 'default';
+    core.hover(unit);
   };
+  const onLeave = (): void => core.hover(null);
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerleave', onLeave);
   return () => {
     canvas.removeEventListener('pointerdown', onDown);
     canvas.removeEventListener('pointermove', onMove);
+    canvas.removeEventListener('pointerleave', onLeave);
   };
 }

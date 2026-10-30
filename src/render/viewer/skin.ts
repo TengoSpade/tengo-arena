@@ -50,10 +50,13 @@ export interface BodyVisual {
    * The side ring, HP / shield / focus bars, pips, badges, crown and cues stay the viewer's.
    */
   readonly drawsRole?: boolean;
-  /** Optional. The disc is at least this many CSS px across (a token that carries text is larger than a metre of arena at small zoom); the viewer sizes its ring, wedge and stack to it. */
-  readonly minDiameterPx?: number;
+  /** Optional. The disc's diameter in CSS px at a zoom (a token that carries text is larger than a metre of arena); the viewer sizes its ring, wedge, selection and stack to it. Default: one metre. */
+  diameterPx?(pxPerMetre: number): number;
   /** Optional. CSS px the body prints below the viewer's ring (the class name), so a stack drawn below the disc clears it. */
   extentBelowPx?(pxPerMetre: number): number;
+  /** Optional. Width of that label (px), and a switch the viewer uses to hide it where another token's stack (bars, pips, name) would overlap it. */
+  labelBelowWidthPx?(): number;
+  setLabelBelowVisible?(on: boolean): void;
   destroy(): void;
 }
 

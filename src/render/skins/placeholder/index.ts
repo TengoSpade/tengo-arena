@@ -21,7 +21,7 @@ import type { ArenaSkin, BodyVisual, SkinContext } from '../../viewer/skin';
 import { TokenBody } from './token-body';
 import { createPixiTokenText, type TokenTextFactory } from './token-text';
 
-export { MIN_TOKEN_DIAMETER_PX, ROLE_LABEL_MIN_DIAMETER_PX, freshnessTier, tierColor, TokenBody } from './token-body';
+export { MIN_TOKEN_DIAMETER_PX, TOKEN_DIAMETER_M, OVR_CAPTION_MIN_DIAMETER_PX, freshnessTier, shortRoleLabel, tierColor, tokenDiameterPx, TokenBody } from './token-body';
 export { createStubTokenText } from './token-text';
 
 /** The wall band outside the field, metres (components.css .arena-wall: 0.35 m). */

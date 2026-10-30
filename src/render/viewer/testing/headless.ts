@@ -7,7 +7,7 @@ import type { ContentDB } from '../../../core/content';
 import type { UnitIndex } from '../../../core/model';
 import { DEFAULT_AUTO_PAUSE } from '../../index';
 import { DEFAULT_CAMERA } from '../../camera';
-import { placeholderSkin } from '../../skins/placeholder';
+import { createStubTokenText, placeholderSkin } from '../../skins/placeholder';
 import type { Timeline } from '../../timeline';
 import type { ArenaFrameState, ArenaPalette, AutoPauseRules, CameraConfig, CueTable, PlaybackStop, ViewTransformFn } from '../../types';
 import { ViewerCore } from '../core';
@@ -30,7 +30,7 @@ export class TrackingSkin implements ArenaSkin {
   gate: Promise<void> | null = null;
   readonly bodies: BodyVisual[] = [];
 
-  constructor(private readonly inner: ArenaSkin = placeholderSkin()) {}
+  constructor(private readonly inner: ArenaSkin = placeholderSkin({ text: createStubTokenText() })) {}
 
   async load(ctx: SkinContext): Promise<void> {
     this.loaded = true;
