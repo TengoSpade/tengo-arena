@@ -198,10 +198,15 @@ export class Token {
     this.layout(env, colors);
   }
 
+  /** The disc's diameter: a metre of arena, or the body's own minimum when it draws a readable token (skin.ts BodyVisual.minDiameterPx). */
+  private discPx(): number {
+    return Math.max(this.env.pxPerMetre, this.body.minDiameterPx ?? 0);
+  }
+
   /** Disc radius and ring geometry: shared by drawing and stacking. */
   private geometry(): { r: number; gap: number; ringW: number; line: number; double: boolean; outer: number } {
     const m = this.env.palette.metrics;
-    const r = 0.5 * this.env.pxPerMetre;
+    const r = 0.5 * this.discPx();
     const double = this.colors.ringStyle === 'double';
     // solid: keyline, ring, 1 px keyline; double: keyline, line, gap, line, 1 px keyline (components.css §25.3)
     const outer = double ? r + m.ringGapPx * 2 + m.ringLinePx * 2 + 1 : r + m.ringGapPx + m.ringWidthPx + 1;
@@ -215,7 +220,7 @@ export class Token {
     const p = env.palette;
     const m = p.metrics;
     const g = this.geometry();
-    const diameter = env.pxPerMetre;
+    const diameter = this.discPx();
     this.drawnRing = -1;
     this.drawnDown = -1;
     this.drawnShieldPx = -1;
@@ -242,11 +247,13 @@ export class Token {
       }
     }
 
-    // Role-glyph plate: a fixed plate behind the glyph(s), so the role hue never depends on the club colours.
-    this.drawPlate(diameter);
+    // Role-glyph plate: a fixed plate behind the glyph(s), so the role hue never depends on the club colours. A body that
+    // draws the roles itself (the token body: role-coloured disc, OVR, glyphs or label) gets no second plate.
+    if (this.body.drawsRole) this.plateG.clear();
+    else this.drawPlate(diameter);
 
     // Bars: a track with an edge hairline around it; fills are unit rects scaled per frame.
-    this.barW = Math.max(m.barWidthM * diameter, 3 * m.pipSizePx);
+    this.barW = Math.max(m.barWidthM * env.pxPerMetre, 3 * m.pipSizePx);
     const barH = m.barHeightPx;
     const focusH = barH * 0.6;
     this.track
@@ -319,7 +326,7 @@ export class Token {
     }
     ring.circle(0, 0, g.outer - 0.5).stroke({ width: 1, color: p.plate });
     // Wedge: a small point on the ring in the facing direction (pointing east before it is rotated).
-    const m = this.env.pxPerMetre;
+    const m = this.discPx();
     const w = m * 0.2;
     const h = m * 0.26;
     this.wedge
@@ -331,7 +338,7 @@ export class Token {
 
   private drawDown(color: number): void {
     const p = this.env.palette;
-    const d = Math.max(this.env.pxPerMetre * 0.5, p.metrics.pipSizePx * 0.9) / 2;
+    const d = Math.max(this.discPx() * 0.5, p.metrics.pipSizePx * 0.9) / 2;
     this.downMark
       .clear()
       .poly([0, -d * 1.2, d * 1.2, 0, 0, d * 1.2, -d * 1.2, 0])
@@ -473,10 +480,14 @@ export class Token {
     if (castH > 0) total += STACK_GAP + castH;
     if (tagH > 0) total += STACK_GAP + tagH;
     if (nameH > 0) total += STACK_GAP + nameH;
-    const base = -this.bottomY; // from the disc centre to the stack's near edge
-    const fitsAbove = f.y - base - total >= EDGE_MARGIN;
-    const below = !fitsAbove && f.viewH - (f.y + base + total) >= EDGE_MARGIN;
+    // `base` is from the disc centre to the stack's near edge; below the disc it also clears what the body prints under
+    // itself (the token body's class name).
+    const baseAbove = -this.bottomY;
+    const baseBelow = baseAbove + (this.body.extentBelowPx?.(this.env.pxPerMetre) ?? 0);
+    const fitsAbove = f.y - baseAbove - total >= EDGE_MARGIN;
+    const below = !fitsAbove && f.viewH - (f.y + baseBelow + total) >= EDGE_MARGIN;
     this.below = below;
+    const base = below ? baseBelow : baseAbove;
     const halfW = Math.max(this.barW, rowW, castW, tagW, nameW) / 2;
     let dx = 0;
     if (f.x - halfW < EDGE_MARGIN) dx = EDGE_MARGIN - (f.x - halfW);

@@ -11,6 +11,8 @@ import type { StubLabel } from './text';
 import { describe, expect, it } from 'vitest';
 import type { ArenaFrameState, ArenaPalette, UnitRenderState } from '../../types';
 import { defaultArenaPalette } from '../../colors';
+import { placeholderSkin } from '../../skins/placeholder';
+import type { ArenaSkin, BodyVisual } from '../skin';
 import { assemble, type Headless } from '../testing/headless';
 import { fakeContext, fakeLog } from '../testing/fake-timeline';
 
@@ -30,8 +32,29 @@ function loudPalette(): ArenaPalette {
   };
 }
 
-async function shownWith(palette: ArenaPalette, tick = 250): Promise<Headless> {
-  const h = assemble({ palette });
+/** The placeholder skin with its bodies stripped of the token's own role and size, i.e. a plain body under the viewer's glyph plate. */
+function plainBodySkin(): ArenaSkin {
+  const inner = placeholderSkin();
+  return {
+    get id() {
+      return inner.id;
+    },
+    load: (ctx) => inner.load(ctx),
+    prepare: (units) => inner.prepare(units),
+    createBody(info, colors) {
+      const body = inner.createBody(info, colors) as { drawsRole?: boolean; minDiameterPx?: number };
+      Object.defineProperty(body, 'drawsRole', { value: false });
+      Object.defineProperty(body, 'minDiameterPx', { value: undefined });
+      return body as BodyVisual;
+    },
+    createFloor: (a, p) => inner.createFloor(a, p),
+    setPalette: (p) => inner.setPalette(p),
+    destroy: () => inner.destroy(),
+  };
+}
+
+async function shownWith(palette: ArenaPalette, tick = 250, skin?: ArenaSkin): Promise<Headless> {
+  const h = assemble({ palette, skin });
   await h.core.load(fakeLog(), fakeContext({ kind: 'replay' }));
   h.core.seek(tick);
   return h;
@@ -340,8 +363,8 @@ describe('polish from the designer\'s review of the built arena', () => {
   it('reads the bar width, plate radii and glyph sizes from palette.metrics (the designer\'s tokens, in metres of arena)', async () => {
     const base = defaultArenaPalette('dark');
     const m = base.metrics;
-    const plain = await shownWith(base, 320);
-    const custom = await shownWith({ ...base, metrics: { ...m, barWidthM: 1.7, glyphSizeHybridM: 0.4, plateRadiusHybridM: 0.45, glyphSizeM: 0.5, plateRadiusM: 0.4 } }, 320);
+    const plain = await shownWith(base, 320, plainBodySkin());
+    const custom = await shownWith({ ...base, metrics: { ...m, barWidthM: 1.7, glyphSizeHybridM: 0.4, plateRadiusHybridM: 0.45, glyphSizeM: 0.5, plateRadiusM: 0.4 } }, 320, plainBodySkin());
     const ppm = (h: Headless): number => {
       const a = h.scene.tokenPosition(0)!;
       const b = h.scene.tokenPosition(1)!;

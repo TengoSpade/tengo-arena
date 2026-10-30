@@ -99,13 +99,15 @@ export interface HeadlessOptions {
   cues?: CueTable;
   /** The world-to-screen transform (default: the fake's letterbox). */
   viewTransform?: ViewTransformFn;
+  /** The skin the tracking skin wraps (default: the placeholder skin). */
+  skin?: ArenaSkin;
   /** Called after a stop is recorded (a test can call play() inside it, as a UI might). */
   onStop?: (stop: PlaybackStop, h: Headless) => void;
 }
 
 export function assemble(options: HeadlessOptions = {}): Headless {
   const timeline = (options.timeline ?? createFakeTimeline()) as FakeTimeline;
-  const skin = new TrackingSkin();
+  const skin = new TrackingSkin(options.skin);
   const palette = options.palette ?? defaultArenaPalette('dark');
   const content = options.content ?? fakeContent();
   const cues = options.cues ?? fakeCues();
