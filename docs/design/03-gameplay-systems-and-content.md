@@ -1461,7 +1461,7 @@ Every club AI-managed (the player club as `balanced`), in the headless harness (
 | League quality | top-5 mean per club per tier within ±5 of season 1 (vis-008); tier gaps ≥ 6 | not yet scripted |
 | Hired blades; AI starter renewals | ≤ 1% of lineup slots; ≥ 70% re-signed | 0.02% of slots; renewals not yet scripted (36 AI renewals refused by the wage budget in 20 seasons) |
 | Determinism | identical season summary hash for the same seed run twice (vis-009) | identical final checksum; every season-end save round-trips |
-| Freshness rotation, level-ups and match squads (M1.1) | AI Tired ≤ 36% and Spent ≤ 12% of round starts; the cohort bands of §8.6 (a cohort under 20 fighters is reported, not gated; a larger one fails only beyond 2.5 standard errors of its mean); squad records legal, swaps per match 0.1–1.5 (provisional) | Tired 23.0% and Spent 5.1% of 161,080 AI round starts (27.1% and 7.9% by season 20); every cohort in band; 0.59 swaps a match (0.32 forced; 8,100 matches, 73 emergency entrants) |
+| Freshness rotation, level-ups and match squads (M1.1) | AI Tired ≤ 30% and Spent ≤ 6% of round starts (the O36 tiers, KI-32); the cohort bands of §8.6 (a cohort under 20 fighters is reported, not gated; a larger one fails only beyond 2.5 standard errors of its mean); squad records legal, swaps per match 0.1–1.5 (provisional) | Tired 23.0% and Spent 5.1% of 161,080 AI round starts (27.1% and 7.9% by season 20; measured before KI-32 on the pre-O36 tiers, Spent < 40); every cohort in band; 0.59 swaps a match (0.32 forced; 8,100 matches, 73 emergency entrants) |
 
 **Reference situation** (re-derived from the v0.3 values): a par-prestige Banner club with 5 starters at rating 58 (market wage curve(58) = 255, ask 255 at human-age 28 or more) and 6 reserves at rating 50 (ask 160) has a bill of 2,235 ts per week, 75% of its WB of 2,960. A new career opens bills at 80–87% of WB (§7), which leaves room for the trials rookie and a tier-minimum signing. The draft's season-flow estimate (income about 100,300, costs about 84,800) used the old wage curve and is withdrawn; the soak evidence above replaces it until the wage-to-income check is scripted.
 
@@ -1483,7 +1483,7 @@ Every club AI-managed (the player club as `balanced`), in the headless harness (
 | Starter levels a season by human-age: 18–20 (P ≥ 70) / 21–23 / 24–26 (P 50–65) / 27–30 / 31–34 / 35+ | 4.0–6.5 / 3.0–4.5 / 2.2–3.5 / 1.6–2.8 / 0.9–2.0 / 0.4–1.3 | 4.8–5.3 / 3.7–3.8 / 2.6–2.7 / 2.3–2.4 / 1.5 / 0.8–0.9 | 5.5 (n 23) / 3.7 (n 228) / 2.6 (n 104) / 2.5 (n 602) / 1.6 (n 467) / 0.95 (n 387) [5.2 / 3.6 / 2.7 / 2.4 / 1.6 / 1.0] |
 | Matches per level, mid cohort | 4.0–6.0 | 4.3–4.7 | 4.46 [4.46] |
 | Bench levels ÷ starter levels (age-matched: bench levels over what same-age starters gain, regular starters of 10 or more matches against bench fighters of 2 or fewer) | 0.25–0.45 | 0.40–0.43 | 0.39 (0.51 pooled) [0.41 (0.58 pooled)] |
-| AI Tired round-starts / Spent | ≤ 36% / ≤ 12% | 34.2–34.4% / 10.4–10.7% | 20.5% / 4.1% [23.0% / 5.1%] |
+| AI Tired round-starts / Spent | ≤ 30% / ≤ 6% (KI-32; the measured columns are on the pre-O36 tiers, Spent < 40) | 34.2–34.4% / 10.4–10.7% | 20.5% / 4.1% [23.0% / 5.1%] |
 | Starter Stamina median | 10–14 | 11–12 | 13 [12] |
 | Swaps per match (both sides) | 0.1–1.5 (provisional) | about 0.48: injury-forced 0.36, Freshness and lost-round 0.12 | 0.60: forced 0.30 [0.59: forced 0.32] |
 

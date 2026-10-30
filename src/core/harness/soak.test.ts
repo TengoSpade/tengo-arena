@@ -235,6 +235,19 @@ describe('M1.1: a match saved between rounds (sw-009) and the squad checks', () 
     expect(freshnessStarts(r.value.state, [bad], content).starts).toBe(rl.length * 10);
   });
 
+  it('freshnessStarts boundaries: 24 is Spent, 25 and 49 Tired, 50 not Tired (the O36 tiers from content)', { timeout: 60_000 }, () => {
+    const s = atMw1('fresh-bounds');
+    const r = engine.advanceWeek(s, content);
+    if (!r.ok) throw new Error(r.error.message);
+    const state = r.value.state;
+    const res = cloneJson(r.value.report.fixtureIds.map((id) => state.results[id]!).find((m) => m.homeClubId !== state.playerClubId && m.awayClubId !== state.playerClubId)!);
+    const one = res.roundLineups![0]!;
+    one.home.freshness = [24, 25, 49, 50, 100];
+    one.away.freshness = [0, 100, 100, 100, 100];
+    res.roundLineups = [one];
+    expect(freshnessStarts(state, [res], content)).toEqual({ starts: 10, spent: 2, tired: 2 });
+  });
+
   it('parseCohort reads the levels.json cohort keys', () => {
     expect(parseCohort('18-20 potential>=70')).toMatchObject({ minAge: 18, maxAge: 20, potMin: 70, potMax: 999 });
     expect(parseCohort('24-26 potential 50-65')).toMatchObject({ minAge: 24, maxAge: 26, potMin: 50, potMax: 65 });

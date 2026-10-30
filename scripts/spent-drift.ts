@@ -1,5 +1,5 @@
 /**
- * npm run spent-drift -- [--seasons 10] [--seed soak-1] [--spent 40]
+ * npm run spent-drift -- [--seasons 10] [--seed soak-1] [--spent 25]
  *
  * Diagnostic for the `spent-share` soak WARN (KI-21 follow-up, m1.1/spent-drift): runs the AI-managed league
  * headless and, per season, explains who starts rounds Spent (Freshness < --spent, default the Tired tier's minimum, 25) and why:
