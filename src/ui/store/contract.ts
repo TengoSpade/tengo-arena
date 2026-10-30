@@ -97,6 +97,8 @@ export interface StorePlatform {
   engine?: GameEngine;
   /** Optional (additive): user agent for state dumps. */
   userAgent?: string;
+  /** Optional (additive): run `fn` when the browser is idle (requestIdleCallback, else a short timer). Tests inject an immediate one; the default skips under test. */
+  idle?: (fn: () => void) => void;
 }
 
 export const StoreContext = createContext<GameStore | null>(null);

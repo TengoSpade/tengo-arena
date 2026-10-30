@@ -7,7 +7,9 @@ export type IconName =
   | 'level-up' | 'load' | 'mail' | 'market' | 'minus' | 'moon' | 'more' | 'pin' | 'play' | 'plus'
   | 'question' | 'refresh' | 'save' | 'scroll' | 'search' | 'settings' | 'shield' | 'sort'
   | 'sort-down' | 'sort-up' | 'squad' | 'star' | 'star-outline' | 'sun' | 'swords' | 'tactics'
-  | 'target' | 'trend' | 'tri-down' | 'tri-up' | 'undo' | 'user-minus' | 'user-plus' | 'warning';
+  | 'target' | 'trend' | 'tri-down' | 'tri-up' | 'undo' | 'user-minus' | 'user-plus' | 'warning'
+  // M2 arena icons (components.css §25, outside the generated block)
+  | 'pause' | 'step-back' | 'step-fwd' | 'skip-end' | 'dock';
 
 export interface IconProps {
   name: IconName;

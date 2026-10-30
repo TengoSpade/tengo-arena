@@ -34,7 +34,7 @@ describe('Continue state machine (04 §6.1)', () => {
     const squad = continueModel(input(mw, { routeId: 'squad' }));
     expect(squad.main).toBe('Play match');
     expect(squad.sub).toMatch(/locks lineup$/);
-    expect(squad.action).toEqual({ kind: 'advance', playsMatch: true });
+    expect(squad.action).toEqual({ kind: 'advance', playsMatch: true, mode: 'watch', offer: true });
   });
 
   it('plays straight from Home under the Streamlined preset (no lineup stop)', () => {

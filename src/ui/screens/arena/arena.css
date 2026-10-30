@@ -1,0 +1,42 @@
+/* ==========================================================================
+   Arena screens (M2, WP-M2E): glue only. The screen, HUD, strip, transport, dock, feed, inspector and the round-end
+   card are the UI designer's (src/ui/styles/components.css §25, mockups/arena.html); colours, sizes and motion come
+   from tokens.css. The canvas host fills the stage (the stage's own 1 rem padding is the wall's margin, A18).
+   ========================================================================== */
+.arena-host {
+  position: absolute;
+  inset: 0;
+  outline: none;
+}
+.arena-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Keyboard focus on the canvas: a ring on the host's edge, outside the arena's wall (the viewer draws the wall inside). */
+.arena-host:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--c-focus);
+}
+.arena-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--c-text-muted);
+  pointer-events: none;
+}
+.arena-note--failed {
+  pointer-events: auto;
+  background: var(--c-overlay);
+}
+/* Long values in the inspector's key-value rows (cooldown and status lists, rule counts) wrap under their label instead of
+   running over it: the designer's .kv dd is nowrap and styles/ is read-only, so the row opts in here. */
+.ainspect .kv > div.is-long {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+}
+.ainspect .kv > div.is-long dd {
+  white-space: normal;
+  text-align: left;
+}

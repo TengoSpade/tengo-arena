@@ -47,6 +47,7 @@ import {
   type MatchSideState,
   type MatchSquad,
   type MatchState,
+  type RoundCalls,
   type RoundInput,
   type RoundLineups,
   type RoundOutcome,
@@ -62,7 +63,7 @@ import { deriveSeed, type Seed } from '../rng';
 import { mergeStats, mvpScore } from '../sim';
 import { InvariantError } from '../util';
 import { buildMatchInput, fightInputOf, matchTypeOf } from './match';
-import { sideFrom } from './rounds';
+import { copyCalls, sideFrom } from './rounds';
 import type { GamePorts } from './ports';
 import { compareIds, onRoster } from './shared';
 
@@ -259,9 +260,26 @@ export interface PreparedRound {
 }
 
 /**
+ * The call plans of the pending round (RESERVED for the calls package, P-01; 05-technical-m2 §A6): the player's calls
+ * made so far in his live round (`liveMatch.watch.calls`), none for the other side. Undefined (no calls: the M1.1
+ * input, bit-identical) while there are none, which is always the case before the calls package ('match.call' is
+ * refused). The calls package also gives AI sides and a simulating player the call policy here.
+ */
+function pendingCalls(state: GameState, ms: MatchState): RoundCalls | undefined {
+  const calls = ms.watch?.calls ?? [];
+  const side = playerSideOf(state, ms);
+  if (calls.length === 0 || side === null) return undefined;
+  const plans: RoundCalls = { home: { mode: 'none' }, away: { mode: 'none' } };
+  plans[side] = { mode: 'explicit', calls: calls.map((c) => ({ ...c })) };
+  return plans;
+}
+
+/**
  * The next round's input, lineup record and seed, read-only (state and match are not touched). The ONE builder
  * of a round's input: playRound plays exactly this, and the M2 watch path (05-technical-m2 §A3, liveRoundPlayback)
- * shows exactly this, so the round the player watches cannot differ from the round that is committed.
+ * shows exactly this, so the round the player watches cannot differ from the round that is committed. The round's
+ * call plans (RESERVED; none before the calls package) are part of the input and of the lineup record, so a replay
+ * (roundInputOf) re-simulates them.
  */
 export function prepareRound(ports: GamePorts, state: GameState, ms: MatchState, content: ContentDB): PreparedRound {
   if (ms.phase !== 'round_pending') throw new InvariantError(`prepareRound: ${ms.fixtureId} is ${ms.phase}`);
@@ -273,17 +291,57 @@ export function prepareRound(ports: GamePorts, state: GameState, ms: MatchState,
     home: sideFrom(ms.input.home, pool, lineups.home, `playRound ${ms.fixtureId}`),
     away: sideFrom(ms.input.away, pool, lineups.away, `playRound ${ms.fixtureId}`),
   };
+  const calls = pendingCalls(state, ms);
+  if (calls) {
+    input.calls = calls;
+    lineups.calls = copyCalls(calls);
+  }
   return { round: n, input, lineups, seed: deriveSeed(ms.seed, 'round', n) };
 }
 
+/**
+ * A watched round's commit was refused: the log the viewer showed is not the log of the round that would be committed
+ * (05-technical-m2 §A3, review B2). Week processing turns it into 'watch.mismatch' and returns no state.
+ */
+export class WatchMismatchError extends Error {
+  constructor(
+    readonly fixtureId: Fixture['id'],
+    readonly round: number,
+    readonly shown: string,
+  ) {
+    // The round's own log hash is never part of the refusal: a caller cannot commit a round without loading its log.
+    super(`The log shown for round ${round} of ${fixtureId} (${shown}) is not that round's log`);
+  }
+}
+
+/** playRound options (M2). */
+export interface PlayRoundOptions {
+  /**
+   * Commit of a watched round: the hash of the log the viewer showed (RoundPlayback.log.hash). The round is then
+   * simulated at 'full' from prepareRound's input (the call liveRoundPlayback makes) and its log hash is compared before
+   * anything is written; a difference throws WatchMismatchError. In every build. The committed RoundResult keeps
+   * `eventHash` null like every committed round, so a watched round and a simulated round commit identical results.
+   */
+  shownLogHash?: string;
+}
+
 /** Play the next round: prepareRound, simulateRound(deriveSeed(seed, 'round', n)), the lifecycle hooks, the score; phase moves on. */
-export function playRound(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB): RoundOutcome {
+export function playRound(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB, options: PlayRoundOptions = {}): RoundOutcome {
   if (ms.phase !== 'round_pending') throw new InvariantError(`playRound: ${ms.fixtureId} is ${ms.phase}`);
   const { round: n, input, lineups, seed } = prepareRound(ports, draft, ms, content);
-  const out = ports.sim.simulateRound(input, seed, content, { record: 'none' });
-  const result: RoundResult = { round: n, seed, ...out.result };
+  const shown = options.shownLogHash;
+  const out = ports.sim.simulateRound(input, seed, content, { record: shown === undefined ? 'none' : 'full' });
+  if (shown !== undefined) {
+    const hash = out.log?.hash ?? '';
+    if (hash !== shown) throw new WatchMismatchError(ms.fixtureId, n, shown);
+  }
+  // The outcome is identical at every record level (T4); only the 'full' level's own field differs, and committed rounds never store it.
+  const result: RoundResult = { round: n, seed, ...out.result, eventHash: null };
   ms.rounds.push(result);
   ms.roundLineups.push(lineups);
+  // The call plans belonged to this round (RESERVED; recorded in its lineups): none carries into the next round, in
+  // either mode ("Simulate the rest" keeps the pending round's calls for that round only).
+  if (ms.watch && ms.watch.calls.length > 0) ms.watch = { ...ms.watch, calls: [] };
   ms.score[result.winner]++;
   for (const id of [...ms.home.active, ...ms.away.active]) {
     const add = out.fighterStats[id];
@@ -706,6 +764,7 @@ export function finishMatch(ports: GamePorts, draft: GameState, ms: MatchState, 
     awayClubId: fixture.awayClubId,
     engineVersion: ports.sim.engineVersion,
     contentHash: content.ref.hash,
+    ...simHashOf(ports, content),
     input: ms.input,
     rounds: ms.rounds,
     score: { ...ms.score },
@@ -719,6 +778,12 @@ export function finishMatch(ports: GamePorts, draft: GameState, ms: MatchState, 
     betweenRounds: ms.betweenRounds,
     emergencyEntrants: [...ms.home.emergencyEntrants, ...ms.away.emergencyEntrants],
   };
+}
+
+/** `MatchResult.simHash` (M2, save v5) when this sim can name it; absent otherwise (replays then fall back to the content hash). */
+function simHashOf(ports: GamePorts, content: ContentDB): { simHash?: string } {
+  const h = ports.sim.simContentHash?.(content) ?? null;
+  return h === null ? {} : { simHash: h };
 }
 
 /** Both sides' auto decisions for the pending step, computed from the same state before either is applied (blind). */

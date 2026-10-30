@@ -91,7 +91,7 @@ export function staticValues(input: FightFighterInput, cls: CClass, tb: SimTable
   const a = clampAttrs(input);
   const d = tb.derived;
   const dd = (i: number): number => a[i]! - 10;
-  const base = cls.def.base;
+  const base = cls.base;
   const def = tb.combatModsDefaults;
   const cmods = input.combatMods ?? {};
   const hpMult = cmods.hpMult === undefined ? def.hpMultBp : Math.round(cmods.hpMult * BP);
@@ -144,7 +144,7 @@ export function staticValues(input: FightFighterInput, cls: CClass, tb: SimTable
   }
   // M1.1 perks: extra passive blocks (stat mods, aura, triggers) and combat-owned trait effects.
   const perkIds = input.perkIds ?? [];
-  if (perkIds.length > tb.content.perkRules.perkCap) throw new InvariantError(`sim: fighter ${input.fighterId} holds ${perkIds.length} perks`);
+  if (perkIds.length > tb.perkCap) throw new InvariantError(`sim: fighter ${input.fighterId} holds ${perkIds.length} perks`);
   for (const id of perkIds) {
     const pk = tb.perks.get(id);
     if (!pk) throw new InvariantError(`sim: unknown perk "${id}"`);

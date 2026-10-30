@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 import { stripDocKeysPlugin } from './scripts/vite/strip-doc-keys.ts';
@@ -12,6 +13,14 @@ import { ticketsPlugin } from './scripts/tickets/plugin.ts';
 export default defineConfig({
   base: './',
   plugins: [preact(), ticketsPlugin(), stripDocKeysPlugin()],
+  resolve: {
+    alias: {
+      // PixiJS's WebGL renderer is a lazy chunk of PixiJS itself (Application.init imports it), and its package does not export the
+      // file. This alias lets src/render/viewer name the SAME module in its idle prefetch (prefetchViewerChunks), so the browser has the
+      // chunk before the first open asks for it. Same module, same chunk: nothing is added to any bundle.
+      'pixi-webgl-renderer': fileURLToPath(new URL('./node_modules/pixi.js/lib/rendering/renderers/gl/WebGLRenderer.mjs', import.meta.url)),
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,

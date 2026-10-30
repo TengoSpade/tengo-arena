@@ -7,8 +7,9 @@
  * import type (tests/architecture rule ui-render-viewer-static; tests/build/bundle.test.ts keeps PixiJS out
  * of the startup JS).
  *
- * CONTRACT: signatures are fixed (architect); additions are additive. Stubs throw NotImplementedError until
- * WP-M2C lands.
+ * CONTRACT: signatures are fixed (architect); additions are additive (the latest: §A19, the viewer extras and
+ * KeyMoment's unit convention). Implemented by WP-M2C (this pure half) and WP-M2D (the viewer); what the model
+ * guarantees is in src/render/timeline/README.md.
  */
 import type { AutoPauseRules } from './types';
 

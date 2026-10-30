@@ -3,12 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildFixtureWorld, fixtureContent } from '../../../core/testkit';
 import type { FixtureId, GameState, MatchReport } from '../../../core/model';
 import { engineError, err, ok } from '../../../core/util';
-import { buildMatchReport } from '../league/testing/fake-core';
+import { buildMatchReport, fakeEngine } from '../league/testing/fake-core';
 import { createFakeStore } from '../league/testing/fake-store';
 import { Providers } from '../league/testing/providers';
 import { makeSampleWorld } from '../league/testing/worlds';
 import { fillLabel, ruleText } from './rule-sentence';
 import { perspective, roundList, selectTraces, fighterInfos } from './analysis';
+import { EngineContext, StoreContext } from '../../store';
 import MatchReportScreen from './index';
 
 afterEach(cleanup);
@@ -44,6 +45,27 @@ function renderReport(fixtureId: FixtureId, mutate?: (r: MatchReport) => MatchRe
     </Providers>,
   );
   return world;
+}
+
+/** A report whose match can be replayed (core's replayAvailability says so), so the key moments offer their links. */
+function renderReplayable(fixtureId: FixtureId, mutate?: (r: MatchReport) => MatchReport) {
+  const world = makeSampleWorld(kit, 'mid');
+  const store = createFakeStore({
+    game: world.state,
+    content: world.content,
+    matchReport: (id) => {
+      const r = buildMatchReport(world.state, id, world.content);
+      return r.ok && mutate ? ok(mutate(r.value)) : r;
+    },
+  });
+  const engine = { ...fakeEngine(), replayAvailability: () => ({ available: true as const, rounds: 3 }) };
+  render(
+    <StoreContext.Provider value={store}>
+      <EngineContext.Provider value={engine as never}>
+        <MatchReportScreen params={{ fixtureId }} />
+      </EngineContext.Provider>
+    </StoreContext.Provider>,
+  );
 }
 
 describe('Match report screen', () => {
@@ -128,6 +150,37 @@ describe('Match report screen', () => {
     expect(screen.getByRole('tab', { name: /Round 1/ }).getAttribute('aria-selected')).toBe('true');
   });
 
+  it('each key-moment replay link appears once, named by its moment; moments at the same instant share one link', () => {
+    const world = makeSampleWorld(kit, 'mid');
+    const id = lastPlayed(world.state);
+    cleanup();
+    // A down and another event at the very same tick (a captain's down comes with the down): two moments, one instant.
+    renderReplayable(id, (r) => ({
+      ...r,
+      rounds: r.rounds.map((round, i) => (i === 0 && round.keyEvents[0] ? { ...round, keyEvents: [round.keyEvents[0], { ...round.keyEvents[0] }, ...round.keyEvents.slice(1)] } : round)),
+    }));
+    const links = screen.getAllByTestId('moment-replay');
+    expect(links.length).toBeGreaterThan(0);
+    // Each link is a link, inside exactly one moment, and no two share a destination or a name.
+    const hrefs = links.map((a) => a.getAttribute('href'));
+    expect(new Set(hrefs).size).toBe(links.length);
+    const names = links.map((a) => a.getAttribute('aria-label') ?? '');
+    for (const n of names) expect(n).toMatch(/^Replay from \d+:\d\d: .+/);
+    expect(new Set(names).size).toBe(links.length);
+    for (const a of links) {
+      expect(a.tagName).toBe('A');
+      expect(a.closest('[data-testid="moment"]')!.querySelectorAll('[data-testid="moment-replay"]')).toHaveLength(1);
+      // The visible label stays inside the accessible name (label in name).
+      expect(a.getAttribute('aria-label')!.startsWith(a.textContent!.trim())).toBe(true);
+    }
+    // The cloned same-tick moment is the second row of round 1: the first has the link, the second shares it.
+    const rows = [...screen.getByTestId('panel-moments').querySelectorAll('[data-testid="moment"]')];
+    expect(rows[0]!.querySelector('.timeline__time')!.textContent).toBe(rows[1]!.querySelector('.timeline__time')!.textContent);
+    expect(rows[0]!.querySelectorAll('[data-testid="moment-replay"]')).toHaveLength(1);
+    expect(rows[1]!.querySelectorAll('[data-testid="moment-replay"]')).toHaveLength(0);
+    expect(rows.length).toBeGreaterThan(links.length);
+  });
+
   it('highlights a fighter in the box score when a key moment is clicked', () => {
     const world = makeSampleWorld(kit, 'mid');
     const id = lastPlayed(world.state);
@@ -170,7 +223,10 @@ describe('Match report screen', () => {
       </Providers>,
     );
     expect(screen.getByText('This report could not be built')).toBeTruthy();
-    expect(screen.getByText(/report.version/)).toBeTruthy();
+    // Player words, never the code or the engine's own sentence.
+    expect(screen.getByText('That match report was made by another version of the game.')).toBeTruthy();
+    expect(screen.getByTestId('screen-match-report').textContent).not.toContain('report.version');
+    expect(screen.getByTestId('screen-match-report').textContent).not.toContain('Engine changed');
   });
 
   it('tells an AI-vs-AI result from the home side', () => {

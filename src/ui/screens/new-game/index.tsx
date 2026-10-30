@@ -13,6 +13,8 @@ import { installShortcuts } from '../../app/shortcuts';
 import { Icon, showToast, tipAttrs } from '../../components';
 import { formatDateTime, formatPlaytime } from '../../format';
 import { useStore } from '../../store';
+import { watchingMatch } from '../../store/arena';
+import { prefetchViewerAfterLoad } from '../arena/viewer-factory';
 import { t } from '../../text';
 
 const T = {
@@ -70,7 +72,9 @@ export default function NewGameScreen(_props: ScreenProps) {
     const res = await store.load(latest.slotId);
     if (res.ok) {
       showToast({ title: t('save.loaded', { label: latest.label }), kind: 'good' });
-      navigate('#/home');
+      prefetchViewerAfterLoad(store.game.value);
+      // A save with a round waiting to be watched resumes in the arena (A3, A7); anything else on Home.
+      navigate(watchingMatch(store.game.value) ? '#/arena' : '#/home');
     }
   };
 

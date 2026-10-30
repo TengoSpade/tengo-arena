@@ -31,7 +31,20 @@ import {
 import { NotImplementedError, engineError, err, ok, type EngineError, type Result } from '../util';
 import { applyToDraft } from './commands';
 import { addMatchNews, eligibleEntries } from './match';
-import { applyBetweenRound, autoDecisions, betweenRounds, finishMatch, playMatchAuto, playRound, playerSideOf, startMatch, type BetweenRoundView, type LockedSquads } from './orchestrator';
+import {
+  WatchMismatchError,
+  applyBetweenRound,
+  autoDecisions,
+  betweenRounds,
+  finishMatch,
+  playMatchAuto,
+  playRound,
+  playerSideOf,
+  startMatch,
+  type BetweenRoundView,
+  type LockedSquads,
+} from './orchestrator';
+import type { AdvanceOptions, WatchPause } from './playback';
 import type { GamePorts } from './ports';
 import { GAME_NEWS_KEYS, addNews, clubsInOrder, compareIds, defaultTactics, newsSince, onRoster, rosterOf, tidyAll } from './shared';
 import { getBlockers } from './views';
@@ -196,11 +209,16 @@ export interface WeekOutcome {
   log: PhaseLog;
 }
 
-/** advance(): the week's report once it is processed, or the between-round screen of the player's match (state.liveMatch set). */
+/**
+ * advance(): the week's report once it is processed, or the between-round screen of the player's match, or (M2) the
+ * player's next round waiting to be watched (state.liveMatch set for both).
+ */
 export interface LiveWeekOutcome {
   state: GameState;
   report: WeekReport | null;
   pause: BetweenRoundView | null;
+  /** M2 (additive): the player's round that waits to be watched (liveMatch phase round_pending, watch.round set). */
+  watch?: WatchPause | null;
   log: PhaseLog;
 }
 
@@ -224,21 +242,46 @@ function pauseHere(draft: GameState, ms: MatchState, view: BetweenRoundView): bo
   }
 }
 
+/** Where the player's match stopped: its between-round screen, or (M2, Watch) its next round waiting for the viewer. */
+type PlayerMatchStop = { kind: 'pause'; view: BetweenRoundView } | { kind: 'watch' } | null;
+
+/** M2: the player watches this match (liveMatch.watch.mode 'watch'); absent or 'simulate' is the M1.1 flow. */
+function watching(ms: MatchState): boolean {
+  return ms.watch?.mode === 'watch';
+}
+
 /**
  * Play the player's started match on: each between-round step either pauses
  * (`canPause` and the club's pacing) and returns the screen, or takes the
  * decisions (the player's match.swap decisions at the first step if he made
  * them, else the auto-swap suggestions; the other side always decides by its
  * own auto rules, blind) and plays the next round.
+ *
+ * M2, Watch (05-technical-m2 §A3; owner answer to Q60, option A): a round of a watched match is never played
+ * here unless the viewer showed it. The pending round is played (committed) only with `shownLogHash`, the hash
+ * of the log the viewer showed, which playRound compares in every build; otherwise the match stops with that round
+ * waiting to be watched (`watch.round` set, cursor 0), its inputs already fixed by the lock and the steps before it,
+ * and the caller autosaves before the viewer opens.
  */
-function runPlayerMatch(ports: GamePorts, draft: GameState, ms: MatchState, content: ContentDB, canPause: boolean, resuming: boolean): BetweenRoundView | null {
-  // Resuming: the pending step was on screen and the player pressed Continue (his match.swap decisions, else the suggestions).
-  let shown = resuming;
+function runPlayerMatch(
+  ports: GamePorts,
+  draft: GameState,
+  ms: MatchState,
+  content: ContentDB,
+  canPause: boolean,
+  resuming: boolean,
+  shownLogHash?: string,
+): PlayerMatchStop {
+  // Resuming at a between-round step: that step was on screen and the player pressed Continue (his match.swap
+  // decisions, else the suggestions). Resuming at a pending round (M2: a watched round, or the round "Simulate the
+  // rest" commits) shows the next step as usual.
+  let shown = resuming && ms.phase === 'between_rounds';
+  let hash = shownLogHash;
   while (ms.phase !== 'done') {
     if (ms.phase === 'between_rounds') {
       if (canPause && !shown) {
         const view = betweenRounds(ports, draft, ms, content);
-        if (pauseHere(draft, ms, view)) return view;
+        if (pauseHere(draft, ms, view)) return { kind: 'pause', view };
       }
       const auto = autoDecisions(ports, draft, ms, content);
       const side = playerSideOf(draft, ms);
@@ -246,9 +289,31 @@ function runPlayerMatch(ports: GamePorts, draft: GameState, ms: MatchState, cont
       applyBetweenRound(ports, draft, ms, auto, content);
       shown = false;
     }
+    if (watching(ms)) {
+      if (hash === undefined) {
+        // The round waits for the viewer: its inputs are fixed now (prepareRound reads nothing that can still change).
+        ms.watch = { mode: 'watch', round: ms.rounds.length + 1, cursorTick: 0, calls: [] };
+        return { kind: 'watch' };
+      }
+      playRound(ports, draft, ms, content, { shownLogHash: hash });
+      hash = undefined;
+      ms.watch = { mode: 'watch', round: null, cursorTick: 0, calls: [] };
+      continue;
+    }
     playRound(ports, draft, ms, content);
   }
   return null;
+}
+
+/** AdvanceOutcome.watch of a match that waits for the viewer. */
+function watchPauseOf(ms: MatchState): WatchPause {
+  return { fixtureId: ms.fixtureId, round: ms.watch!.round!, cursorTick: ms.watch!.cursorTick };
+}
+
+/** The outcome of a player's match that stopped (between rounds or waiting for the viewer): state.liveMatch is set. */
+function stopped(draft: GameState, ms: MatchState, stop: Exclude<PlayerMatchStop, null>, log: PhaseLog): LiveWeekOutcome {
+  draft.liveMatch = ms;
+  return stop.kind === 'pause' ? { state: draft, report: null, pause: stop.view, watch: null, log } : { state: draft, report: null, pause: null, watch: watchPauseOf(ms), log };
 }
 
 /** Round XP of the rounds started, the bench XP of the fighters who started none, and the injuries the round hooks set, for one match's news items. */
@@ -364,6 +429,7 @@ function guarded(run: () => LiveWeekOutcome): Result<LiveWeekOutcome, EngineErro
   } catch (e) {
     if (e instanceof NotImplementedError) throw e; // a stubbed module: callers (UI dev fallback, soak) handle it
     if (e instanceof LineupError) return err(engineError('lineup.unfillable', e.message, { clubId: e.clubId, have: e.have }));
+    if (e instanceof WatchMismatchError) return err(engineError('watch.mismatch', e.message, { fixtureId: e.fixtureId, round: e.round, reason: 'log' }));
     return err(engineError('engine.failure', `Week processing failed: ${e instanceof Error ? e.message : String(e)}`, { name: e instanceof Error ? e.name : 'unknown' }));
   }
 }
@@ -376,6 +442,37 @@ function newsFromOnResume(draft: GameState): number {
 }
 
 /**
+ * M2: may this advance commit the live match's next round? A watched match (liveMatch.watch.mode 'watch') commits a
+ * round only with the hash of the log the viewer showed for exactly that round (AdvanceOptions.watched, 05-technical-m2
+ * §A3). Refusals, before anything is copied or written:
+ * - 'watch.not-shown' (details fixtureId, round): no shown log while a round waits to be watched, or a caller that
+ *   cannot stop at the next round (advanceWeek: it would play the next round unshown). The UI routes it to #/arena.
+ * - 'watch.mismatch' (details reason 'round'): `watched` names another round, or no round waits to be watched (a
+ *   stale or repeated finishRound must never play on, let alone start the next week). A wrong hash for the right
+ *   round is refused by playRound ('watch.mismatch', reason 'log').
+ */
+function watchRefusal(state: GameState, canPause: boolean, options: AdvanceOptions): EngineError | null {
+  const ms = state.liveMatch;
+  const pending = ms !== null && ms.watch?.mode === 'watch' && ms.phase === 'round_pending' ? ms.watch.round : null;
+  if (options.watched !== undefined) {
+    if (pending !== null && options.watched.round === pending) return null;
+    return engineError('watch.mismatch', pending === null ? 'No watched round is waiting to be committed' : `Round ${pending} is being watched, not round ${options.watched.round}`, {
+      fixtureId: ms?.fixtureId ?? null,
+      round: pending,
+      watchedRound: options.watched.round,
+      reason: 'round',
+    });
+  }
+  if (ms !== null && ms.watch?.mode === 'watch' && (pending !== null || !canPause)) {
+    return engineError('watch.not-shown', `Round ${pending ?? ms.rounds.length + 1} of the match in progress is being watched: finish it in the arena`, {
+      fixtureId: ms.fixtureId,
+      round: pending ?? ms.rounds.length + 1,
+    });
+  }
+  return null;
+}
+
+/**
  * Week processing with the player's match played round by round (05 M1.1
  * addendum). `canPause` false (advanceWeek, the soak) plays the whole week
  * at once with the auto rules for the player's between-round steps; true
@@ -383,18 +480,29 @@ function newsFromOnResume(draft: GameState): number {
  * GameState.liveMatch set: every completed round is committed (P-05), and the
  * next call resumes from there. The rest of the week runs when the player's
  * match is over. The input state is never mutated.
+ *
+ * M2 (05-technical-m2 §A3, Q60 option A): with `options.playerMatch` 'watch' (advance only) the lock stops before
+ * round 1 with the round waiting to be watched (liveMatch.watch, `watch` outcome): the squads, rows, presets and seed
+ * are fixed and the caller autosaves before the viewer opens. Each watched round is committed by an advance with
+ * `options.watched` (see watchRefusal); between rounds the M1.1 pause rules apply, and the other fixtures of the week
+ * are played after the player's match, as before. AI matches never watch.
  */
-export function processWeekLive(ports: GamePorts, state: GameState, content: ContentDB, canPause: boolean): Result<LiveWeekOutcome, EngineError> {
+export function processWeekLive(ports: GamePorts, state: GameState, content: ContentDB, canPause: boolean, options: AdvanceOptions = {}): Result<LiveWeekOutcome, EngineError> {
+  const refused = watchRefusal(state, canPause, options);
+  if (refused) return err(refused);
+  // Every result of the week records the sim content hash (MatchResult.simHash): computed once per ContentDB, here at
+  // the start of the transition rather than in the middle of a match (the first call costs 55-130 ms, then it is cached).
+  ports.sim.simContentHash?.(content);
   if (state.liveMatch !== null) {
     const draft = beginTransition(state);
     const run: WeekRun = { draft, newsFrom: newsFromOnResume(draft), ledgerFrom: draft.ledger.nextSeq, log: { rejections: [] } };
     return guarded(() => {
       const ms = draft.liveMatch!;
-      const pause = runPlayerMatch(ports, draft, ms, content, canPause, true);
-      if (pause) return { state: draft, report: null, pause, log: run.log };
+      const stop = runPlayerMatch(ports, draft, ms, content, canPause, true, options.watched?.logHash);
+      if (stop) return stopped(draft, ms, stop, run.log);
       draft.liveMatch = null;
       const result = finishMatch(ports, draft, ms, content);
-      return { state: draft, report: finishWeek(ports, run, result, content), pause: null, log: run.log };
+      return { state: draft, report: finishWeek(ports, run, result, content), pause: null, watch: null, log: run.log };
     });
   }
   const cal = state.calendar;
@@ -420,15 +528,14 @@ export function processWeekLive(ports: GamePorts, state: GameState, content: Con
     let result: MatchResult | null = null;
     if (mine) {
       const ms = startMatch(ports, draft, mine, squadsOf(draft, mine, content), content);
-      playRound(ports, draft, ms, content);
-      const pause = runPlayerMatch(ports, draft, ms, content, canPause, false);
-      if (pause) {
-        draft.liveMatch = ms;
-        return { state: draft, report: null, pause, log: run.log };
-      }
+      // M2: Watch is fixed with the lock; round 1 then waits for the viewer (runPlayerMatch stops before it).
+      if (canPause && options.playerMatch === 'watch') ms.watch = { mode: 'watch', round: null, cursorTick: 0, calls: [] };
+      else playRound(ports, draft, ms, content);
+      const stop = runPlayerMatch(ports, draft, ms, content, canPause, false);
+      if (stop) return stopped(draft, ms, stop, run.log);
       result = finishMatch(ports, draft, ms, content);
     }
-    return { state: draft, report: finishWeek(ports, run, result, content), pause: null, log: run.log };
+    return { state: draft, report: finishWeek(ports, run, result, content), pause: null, watch: null, log: run.log };
   });
 }
 

@@ -8,7 +8,7 @@
  */
 import type { ContentDB } from '../content';
 import type { FightHeader, FightFighterInput, RecordLevel, RoundTiebreakStep, SideInput, UnitSpawn } from '../model';
-import { FIGHT_LOG_FORMAT } from '../model';
+import { FIGHT_LOG_FORMAT, FIGHT_LOG_FORMAT_VERSION } from '../model';
 import { Rng, type Seed } from '../rng';
 import { compileTactics, resolveTactics, type CompiledTactics } from '../tactics';
 import { InvariantError, StreamHasher, stableStringify } from '../util';
@@ -147,8 +147,9 @@ export class Fight {
       contentHash: content.ref.hash,
       seed: setup.seed,
       round: setup.round,
-      tickMs: content.combat.tick.tickMs,
+      tickMs: this.tb.tickMs,
       frameEvery: this.tb.frameEvery,
+      logFormat: FIGHT_LOG_FORMAT_VERSION,
       arena: { width: cm(this.tb.arena.widthMm), height: cm(this.tb.arena.heightMm) },
       units: this.units.map((u) => ({
         index: u.index,
@@ -193,7 +194,7 @@ export class Fight {
       u.evadeAcc = phase.int(0, BP - 1);
       u.stagger = u.rngReact.int(0, this.tb.timing.staggerMax);
       u.hp = u.maxHp;
-      u.focus = this.content.combat.derived.focus.startFull ? this.tb.derived.focusMaxMilli : 0;
+      u.focus = this.tb.focusStartFull ? this.tb.derived.focusMaxMilli : 0;
       u.cdA1 = cls.a1.startCooldownTicks * BP;
       u.cdA2 = cls.a2.startCooldownTicks * BP;
       u.triggerReadyAt = u.triggers.map(() => 0);
@@ -622,6 +623,12 @@ export class Fight {
 
   // ---- The tick loop --------------------------------------------------------------------------------
   run(): void {
+    this.start();
+    while (!this.ended) this.step();
+  }
+
+  /** Everything before tick 0: the recorder's header and fight.start, and the round_start triggers. */
+  start(): void {
     if (this.rec) {
       this.rec.begin(this.header);
       this.emitStart();
@@ -630,7 +637,15 @@ export class Fight {
     for (const u of this.units) {
       for (let k = 0; k < u.triggers.length; k++) if (u.triggers[k]!.on === 'round_start') fireTrigger(this, u, k, u.index, u.index, 0);
     }
-    while (!this.ended) this.step();
+  }
+
+  /**
+   * M2 probe (inspectRoundAt): start the round and play it through the END of tick `lastTick` (or to its end, if that
+   * comes first). Afterwards `tick` is lastTick + 1 unless the round ended. The same steps run() takes.
+   */
+  runThrough(lastTick: number): void {
+    this.start();
+    while (!this.ended && this.tick <= lastTick) this.step();
   }
 
   /** Set order(t) and each unit's rank in it. */
@@ -652,7 +667,9 @@ export class Fight {
     resolution(this);
     this.commit();
     this.endCheck();
-    if (this.rec && this.rec.full && !this.ended && t % this.tb.frameEvery === 0) this.emitFrame();
+    // Log format 2: a frame every frameEvery ticks, plus a closing frame at the end tick (after fight.end), so the
+    // final state (the downs and the last HP) is a frame like any other.
+    if (this.rec && this.rec.full && (this.ended || t % this.tb.frameEvery === 0)) this.emitFrame();
     this.tick++;
   }
 
@@ -661,17 +678,28 @@ export class Fight {
   }
 
   private emitFrame(): void {
-    this.rec!.emit('frame', this.tick, undefined, undefined, {
-      u: this.units.map((u) => {
-        let bits = 0;
-        if (u.act === 2 || u.act === 3) bits |= 1;
-        if (has(u, SC_STUN) || has(u, SC_SLEEP)) bits |= 2;
-        if (has(u, SC_ROOT)) bits |= 4;
-        if (has(u, SC_SILENCE)) bits |= 8;
-        if (!u.standing) bits |= 16;
-        return [cm(u.x), cm(u.y), u.hp, bits] as [number, number, number, number];
-      }),
-    });
+    this.rec!.emit('frame', this.tick, undefined, undefined, { u: this.units.map((u) => this.frameUnit(u)) });
+  }
+
+  /** One unit of a frame (log format 2): [x cm, y cm, hp, stateBits, shield points, focus points], read-only. */
+  frameUnit(u: Unit, tick: number = this.tick): [number, number, number, number, number, number] {
+    let bits = 0;
+    if (u.act === 2 || u.act === 3) bits |= 1;
+    if (has(u, SC_STUN) || has(u, SC_SLEEP)) bits |= 2;
+    if (has(u, SC_ROOT)) bits |= 4;
+    if (has(u, SC_SILENCE)) bits |= 8;
+    if (!u.standing) bits |= 16;
+    return [cm(u.x), cm(u.y), u.hp, bits, this.shieldPoints(u, tick), Math.trunc(u.focus / 1000)];
+  }
+
+  /**
+   * Total shield points the unit holds at the end of `tick` (the frame's shield, the probe's shield): shields with points
+   * left that have not run out (a shield with end <= tick is dropped by the next tick's timers, so it no longer counts).
+   */
+  shieldPoints(u: Unit, tick: number = this.tick): number {
+    let total = 0;
+    for (const s of u.shields) if (s.amount > 0 && s.end > tick) total += s.amount;
+    return total;
   }
 
   /** Phase 1: timers, status expiry, over-time ticks, zones, auras, modifier blocks, accumulators, regeneration. */

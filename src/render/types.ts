@@ -190,7 +190,11 @@ export interface EffectRenderState {
   amount: number | null;
   crit: boolean;
   tone: 'physical' | 'arcane' | 'true' | 'heal' | 'shield' | 'neutral';
-  /** 0..1 of the effect's lifetime. */
+  /**
+   * 0..1 of the effect's lifetime. Under reduced motion (sampleAt's reducedMotion), age 1 means "drawn static at its
+   * end state", not "faded out": a viewer must not fade non-number effects by 1 − age in that mode (numbers fade in
+   * place, 04 §9; §A19).
+   */
   age: number;
 }
 
@@ -222,6 +226,11 @@ export type EffectKind =
   | 'captain-down'
   | 'call';
 
+/**
+ * One sampled moment of the arena (sampleAt). For a LIVE round the caller must pass sampleAt's `knownUntilTick` =
+ * the live head: without it, interpolated positions, effect anchors and projectile starts may look one frame past the
+ * head, and the no-look-ahead guarantee is gone (§A19). A replay passes none.
+ */
 export interface ArenaFrameState {
   /** The sampled tick (fractional while playing). */
   tick: number;
@@ -271,7 +280,20 @@ export type PlaybackStop =
   /** Live only: the playback reached the live head after a rewind. */
   | { kind: 'head'; tick: number };
 
-/** A key moment of the round (live feed, scrubber marks; same selection rules as the report timeline, 04 ui-report). */
+/**
+ * A key moment of the round (live feed, scrubber marks; same selection rules as the report timeline, 04 ui-report).
+ *
+ * Unit convention (as the report's key events, core/game, and WP-M2C's keyMoments; §A19): `unit` is the ACTING
+ * fighter and `target` the fighter it happened to.
+ * - down: `unit` = the credited fighter who downed him (null for damage over time without a source), `target` =
+ *   the fallen. A down "belongs" to the fallen's side (target), as the auto-pause reason ownDowned does.
+ * - interrupt: `unit` = the interrupter, `target` = the one interrupted. deathward: `unit` = the warder,
+ *   `target` = the one saved.
+ * - rally, captain-down, handover: `unit` = the captain concerned (handover: the new acting captain), `target` null.
+ * - overtime, end: both null. call: `unit` = the relaying captain.
+ * This differs on purpose from EffectRenderState markers (down, deathward, rally, captain-down), where `unit` is the
+ * unit the marker is drawn on.
+ */
 export interface KeyMoment {
   tick: number;
   seq: number;
@@ -312,6 +334,14 @@ export interface CameraConfig {
   /** Zoom ease (04 §4: 220 ms; 0 under reduced motion). Speed changes never move the camera. */
   easeMs: number;
 }
+
+/** The signature of src/render/camera viewTransform (injectable into the viewer, §A19). */
+export type ViewTransformFn = (
+  camera: CameraConfig,
+  viewport: { width: number; height: number },
+  arenaCm: { width: number; height: number },
+  focusCm?: { x: number; y: number } | null,
+) => ViewTransform;
 
 /** World (cm) to screen (CSS px) for one viewport: pure, so hit-testing and tests share it with the scene. */
 export interface ViewTransform {
@@ -425,6 +455,17 @@ export interface ArenaMetrics {
   labelSizePx: number;
   pipSizePx: number;
   barHeightPx: number;
+  // ---- Token proportions in metres of arena (1 m = a fighter's diameter), unitless tokens (UI polish, 2c20953) ----
+  /** --arena-bar-w: HP, shield and focus bar width, and the cast bar's minimum. */
+  barWidthM: number;
+  /** --arena-plate-r: the role-glyph plate radius. */
+  plateRadiusM: number;
+  /** --arena-glyph: one role glyph. */
+  glyphSizeM: number;
+  /** --arena-plate-r-hybrid: the plate radius for a hybrid (two glyphs and their gap fit inside it). */
+  plateRadiusHybridM: number;
+  /** --arena-glyph-hybrid: each of a hybrid's two glyphs. */
+  glyphSizeHybridM: number;
 }
 
 /** A club's two colours from clubs.json (`colors.primary`, `colors.secondary`) as 0xRRGGBB. */
@@ -472,6 +513,34 @@ export interface StatusCue {
 export interface CueTable {
   ability(id: AbilityId): AbilityCue;
   status(id: string): StatusCue;
+}
+
+// ---- Viewer additions (contract amendment for integration, 05-technical-m2 §A19) ---------------------------------
+// Implemented by WP-M2D. src/render/viewer's ArenaViewerOptions and ArenaViewer carry them (extending these at
+// integration), so src/ui needs no cast.
+
+/** Optional ArenaViewerOptions fields; every default is the real module. */
+export interface ArenaViewerOptionExtras {
+  /** The cue table (default: buildCueTable(content)); a caller may cache one per content hash and pass it. */
+  cues?: CueTable;
+  /** The world-to-screen transform (default: src/render/camera viewTransform); tests and the dev harness inject one. */
+  viewTransform?: ViewTransformFn;
+  /**
+   * Make the canvas one tab stop (default true: tabindex 0, role img, a label rewritten at each pause). Keyboard
+   * selection belongs to the fighter strip (§A18 decision 3), never to the canvas; pass false when the host element
+   * is the tab stop instead.
+   */
+  tabStop?: boolean;
+}
+
+/** An optional ArenaViewer method; the UI uses it when present ("Rules fired so far" in the inspector). */
+export interface ArenaViewerDecisionHistory {
+  /**
+   * The unit's committed decisions from round start, oldest first, up to and including `tick` (default: the current
+   * tick), never past headTick: a live round reveals nothing beyond what has been shown. Each entry is the shape
+   * decisionAt returns (the recorded `unit.decide`), so a count by `rule` gives the fires so far.
+   */
+  decisionsUpTo?(unit: UnitIndex, tick?: number): readonly DecisionSnapshot[];
 }
 
 // ---- Diagnostics -----------------------------------------------------------------------------------------

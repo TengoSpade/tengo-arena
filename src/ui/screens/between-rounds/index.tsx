@@ -9,17 +9,22 @@
  * A restores the suggestions, N clears them, Enter / Space plays on. Swaps ask once before playing
  * ("a fighter swapped out cannot return").
  */
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { BetweenRoundSideView } from '../../../core/game';
 import type { FighterId, StartingRow, SwapDecision } from '../../../core/model';
 import { afterMatch } from '../../app/after-match';
+import { retryNextRound, showLockFailedToast } from '../../app/lock-failed';
+import { useMounted } from '../../app/mounted';
 import type { ScreenProps } from '../../app/routes';
 import { navigate } from '../../app/router';
 import { useShortcuts } from '../../app/shortcuts';
 import { Callout, ConfirmButton, Empty, Icon, Kbd, PageHeader, Panel, Pips, RoleGlyph, Segmented, Tag, tipAttrs } from '../../components';
 import { freshInfo, ratingNow } from '../../m11/model';
 import { FreshMeter, RatingEff } from '../../m11/parts';
-import { MATCH_PAUSED, useStore, type AppStore } from '../../store';
+import { MATCH_PAUSED, MATCH_WATCHING, SAVE_ROUND_FAILED, useStore, type AppStore } from '../../store';
+import { useArena } from '../../store/arena';
+import { usePrefetchViewer } from '../arena/viewer-factory';
+import { errorText } from '../../store/messages';
 import { useEngine } from '../../store/engine';
 import { useMatchDay } from '../../store/match-day';
 import { Crest, clubName } from '../league/lib/club';
@@ -33,10 +38,13 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   const store = useStore() as AppStore;
   const engine = useEngine();
   const md = useMatchDay(store);
+  const arena = useArena(store);
   const state = store.game.value;
   const content = store.content.value;
   const view = state ? md.betweenRoundView(state) : null;
   const ms = state?.liveMatch ?? null;
+  // The next round of a watched match opens the arena: warm its chunks at idle while the player decides his swaps.
+  usePrefetchViewer(ms?.watch?.mode === 'watch');
   const sideKey = view?.playerSide ?? null;
   const mine: BetweenRoundSideView | null = view && sideKey ? view[sideKey] : null;
   const theirs: BetweenRoundSideView | null = view && sideKey ? view[sideKey === 'home' ? 'away' : 'home'] : null;
@@ -45,8 +53,12 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   const [plan, setPlan] = useState<SwapDecision[]>(() => [...(mine?.suggestions ?? [])]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A new step (the next round played): start again from its suggestions.
+  // A new step (the next round played): start again from its suggestions. The step key is empty for a moment while the next
+  // round's lock is written; coming back to the SAME step (a failed write) is not a new step and keeps the plan.
+  const lastStep = useRef(stepKey);
   useEffect(() => {
+    if (!stepKey || stepKey === lastStep.current) return;
+    lastStep.current = stepKey;
     setPlan([...(mine?.suggestions ?? [])]);
     setError(null);
   }, [stepKey]);
@@ -57,6 +69,7 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
     return matchXpSoFar(content, ms, sideKey, tournament);
   }, [content, ms, sideKey]);
 
+  const mounted = useMounted();
   const playOn = async () => {
     if (!state || !mine || busy) return;
     setBusy(true);
@@ -70,8 +83,18 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
         return;
       }
       const res = await store.advance();
+      // The lock could not be saved (nothing started): a toast with Retry, the Squad path's, said even when the screen is gone. The
+      // lock was in memory while the write ran, so this screen showed nothing; its state is not where the message can live.
+      if (!res.ok && res.error.code === SAVE_ROUND_FAILED) {
+        showLockFailedToast(() => void retryNextRound(store));
+        return;
+      }
+      // Gone while the round was played (Back, another screen): the state has moved on; Continue reads where the match stands.
+      if (!mounted.current) return;
       if (res.ok) afterMatch(store.game.value, res.value);
-      else if (res.error.code !== MATCH_PAUSED) setError(res.error.message);
+      // M2: a watched match opens the next round in the arena (after its lock was saved).
+      else if (res.error.code === MATCH_WATCHING) navigate('#/arena');
+      else if (res.error.code !== MATCH_PAUSED) setError(errorText(res.error));
     } finally {
       setBusy(false);
     }
@@ -105,6 +128,17 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   });
 
   if (!state || !content || !view || !mine || !theirs || !ms || !sideKey) {
+    // The next round's lock is in memory while its write runs, so the between-round view is gone for that moment: say so, not
+    // "No match is waiting" (a failed write puts the view back, and the toast has the Retry).
+    if (busy) {
+      return (
+        <section class="page" data-testid="screen-between-rounds" aria-busy="true">
+          <p class="u-muted" role="status" data-testid="br-locking">
+            {t('locking')}
+          </p>
+        </section>
+      );
+    }
     return (
       <section class="page" data-testid="screen-between-rounds">
         <Empty icon="swords" title={t('noMatch')} text={t('noMatchText')} actions={<a class="btn" href="#/home">{t('home')}</a>} />
@@ -123,6 +157,11 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
   const roleName = (id: string) => content.vocabulary.roles.find((r) => r.id === id)?.name ?? id;
   const nameOf = (id: FighterId) => state.fighters[id]?.name.full ?? id;
   const swapsAfter = mine.swapsLeft - plan.length;
+  // M2: the rounds already played replay in the arena (the match view lists them; null while core's view is a stub).
+  const replayable = (() => {
+    const mp = arena.matchPlayback(state, ms.fixtureId);
+    return !!mp && mp.ok && mp.value.rounds.some((r) => r.round === view.afterRound && r.winner !== null);
+  })();
 
   const continueLabel = (
     <>
@@ -184,6 +223,12 @@ export default function BetweenRoundsScreen(_props: ScreenProps) {
           {myScore}–{theirScore}
         </span>
         <Crest club={otherClub} size="sm" />
+        {replayable && (
+          <a class="btn btn--sm btn--ghost" href={`#/replay/${encodeURIComponent(ms.fixtureId)}?round=${view.afterRound}`} data-testid="br-replay">
+            <Icon name="play" />
+            {t('replayRound', { n: view.afterRound })}
+          </a>
+        )}
       </div>
 
       {error && (

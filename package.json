@@ -20,7 +20,9 @@
     "soak": "tsx scripts/soak.ts",
     "bench": "tsx scripts/bench-season.ts",
     "validate-content": "tsx scripts/validate-content.ts",
-    "fixture:content": "tsx scripts/make-fixture-content.ts"
+    "fixture:content": "tsx scripts/make-fixture-content.ts",
+    "smoke:arena": "tsx scripts/smoke/run.ts",
+    "smoke:vis003": "tsx scripts/smoke/vis003/cli.ts"
   },
   "dependencies": {
     "@preact/signals": "^2.11.3",

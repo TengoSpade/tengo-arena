@@ -146,6 +146,9 @@ export function collectMeta(s: TicketSnapshot): Record<string, unknown> {
     theme: effectiveTheme(s.settings),
     pacing: s.settings.pacing,
     userAgent: navigator.userAgent,
+    // M2 (05-technical-m2 §A7): the arena's fixture, round, tick, speed and kind when F8 was pressed there. The
+    // screenshot above includes the canvas (the viewer keeps its drawing buffer).
+    ...(s.arena ? { arena: s.arena } : {}),
     recentCommands: s.recentCommands.slice(-20),
     console: s.console,
     toasts: s.toasts,

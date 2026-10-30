@@ -1498,6 +1498,12 @@ a.card:hover {
   width: 1%;
 }
 
+/* A tight column is as wide as its content on one line: a button and an icon button side by side
+   (Fixtures: Report + Replay) must not wrap, or the row grows. */
+.data-table .cell-tight .l-cluster {
+  flex-wrap: nowrap;
+}
+
 .data-table .cell-muted {
   color: var(--c-text-muted);
 }
@@ -4485,9 +4491,11 @@ dialog.modal::backdrop {
   --i-pause: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Crect x='6' y='4.5' width='4.2' height='15' rx='1'/%3E%3Crect x='13.8' y='4.5' width='4.2' height='15' rx='1'/%3E%3C/svg%3E");
   --i-step-back: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Crect x='4.5' y='5' width='2.6' height='14' rx='1'/%3E%3Cpath d='M19.5 5v14L8.5 12z'/%3E%3C/svg%3E");
   --i-step-fwd: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Crect x='16.9' y='5' width='2.6' height='14' rx='1'/%3E%3Cpath d='M4.5 5v14l11-7z'/%3E%3C/svg%3E");
+  --i-dock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='4.5' width='17' height='15' rx='2'/%3E%3Cpath d='M15 4.5v15'/%3E%3C/svg%3E");
   --i-skip-end: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M3.5 5v14l9-7zM11.5 5v14l9-7z'/%3E%3C/svg%3E");
 }
 [data-icon="pause"] { --icon: var(--i-pause); }
+[data-icon="dock"] { --icon: var(--i-dock); }
 [data-icon="step-back"] { --icon: var(--i-step-back); }
 [data-icon="step-fwd"] { --icon: var(--i-step-fwd); }
 [data-icon="skip-end"] { --icon: var(--i-skip-end); }
@@ -4783,7 +4791,7 @@ dialog.modal::backdrop {
 /* Role glyph plate: a fixed background for the glyph, so the role hue never depends on the club colours. */
 .atoken__plate {
   position: absolute;
-  inset: 17%;
+  inset: calc((0.5 - var(--arena-plate-r)) * 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4792,17 +4800,18 @@ dialog.modal::backdrop {
 }
 
 .atoken__plate .role-glyph {
-  --glyph-size: calc(var(--m) * 0.44);
+  --glyph-size: calc(var(--m) * var(--arena-glyph));
 }
 
-/* Hybrids: two glyphs side by side, narrower so both fit the plate. */
-.atoken__plate--hybrid .role-glyph {
-  --glyph-size: calc(var(--m) * 0.3);
-  margin-left: 0;
-}
-
+/* Hybrids: two glyphs side by side on a slightly larger plate (0.34 m each, 0.03 m apart, inside a 0.72 m plate). */
 .atoken__plate--hybrid {
+  inset: calc((0.5 - var(--arena-plate-r-hybrid)) * 100%);
   gap: calc(var(--m) * 0.03);
+}
+
+.atoken__plate--hybrid .role-glyph {
+  --glyph-size: calc(var(--m) * var(--arena-glyph-hybrid));
+  margin-left: 0;
 }
 
 /* Facing wedge: a small point on the ring in the facing direction; the skin does not rotate. */
@@ -4872,8 +4881,8 @@ dialog.modal::backdrop {
 .abars {
   display: grid;
   gap: 1px;
-  width: calc(var(--m) * 1.7);
-  min-width: 3rem;
+  width: calc(var(--m) * var(--arena-bar-w));
+  min-width: calc(var(--arena-pip-size) * 3);
 }
 
 .abar {
@@ -5001,7 +5010,7 @@ dialog.modal::backdrop {
 /* Cast bar (casts of 0.3 s or more): ability name and progress. */
 .acast {
   position: relative;
-  min-width: calc(var(--m) * 1.7);
+  min-width: calc(var(--m) * var(--arena-bar-w));
   padding: 0 0.35rem;
   overflow: hidden;
   border-radius: 3px;
@@ -5263,10 +5272,10 @@ dialog.modal::backdrop {
 /* ---- 25.5 Transport: scrubber with key-moment marks (live: 0 to the head; replay: whole round) ---- */
 .atransport {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(16rem, 1fr) auto;
   align-items: center;
   gap: var(--sp-3);
-  min-height: 3rem;
+  min-height: 3.5rem; /* a two-line status (tag, then the note) fits, so the bar never changes height on a pause and the arena never rescales */
   padding: var(--sp-1) var(--sp-3);
   background: var(--c-surface-0);
   border-top: 1px solid var(--c-border);
@@ -5274,8 +5283,9 @@ dialog.modal::backdrop {
 
 .atransport__status {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 2px var(--sp-2);
   min-width: 0;
   font-size: var(--fs-sm);
   color: var(--c-text-muted);
@@ -5283,6 +5293,14 @@ dialog.modal::backdrop {
 
 .atransport__status strong {
   color: var(--c-text);
+}
+
+/* The note beside the tag ("Fenek Tallworth was downed") keeps at least 8 rem; where the status column
+   is narrower than tag + note it drops under the tag instead of wrapping to a few characters a line. */
+.atransport__status > :not(.tag) {
+  flex: 1 1 8rem;
+  min-width: 8rem;
+  overflow-wrap: anywhere;
 }
 
 .atransport__right {
@@ -5295,7 +5313,7 @@ dialog.modal::backdrop {
   --at: 1;
   position: relative;
   height: 2.2rem;
-  min-width: 0;
+  min-width: 16rem; /* marks and the thumb stay readable; the rest of the transport gives way (below) */
   border-radius: var(--r-sm);
 }
 
@@ -5333,7 +5351,8 @@ dialog.modal::backdrop {
 /* Key-moment marks: our events above the track, theirs below (place carries the side), and the
    shape carries the kind: diamond = down, ring = rule or save, bar = overtime or round end. */
 .amark {
-  --side-c: var(--c-text-muted);
+  --full-c: var(--c-text-muted);
+  --side-c: var(--full-c);
   position: absolute;
   left: calc(var(--at) * 100%);
   width: 0.7rem;
@@ -5342,8 +5361,8 @@ dialog.modal::backdrop {
   background: var(--side-c);
 }
 
-.amark[data-side="us"] { --side-c: var(--c-side-us); top: calc(50% - 1.05rem); }
-.amark[data-side="them"] { --side-c: var(--c-side-them); top: calc(50% + 0.4rem); }
+.amark[data-side="us"] { --full-c: var(--c-side-us); top: calc(50% - 1.05rem); }
+.amark[data-side="them"] { --full-c: var(--c-side-them); top: calc(50% + 0.4rem); }
 .amark[data-kind="down"] { transform: rotate(45deg) scale(0.82); border-radius: 1px; }
 .amark[data-kind="interrupt"],
 .amark[data-kind="deathward"],
@@ -5356,7 +5375,7 @@ dialog.modal::backdrop {
 .amark[data-kind="captain-down"] { transform: rotate(45deg) scale(0.82); border-radius: 1px; box-shadow: 0 0 0 2px var(--c-surface-0), 0 0 0 3.5px var(--side-c); }
 .amark[data-kind="overtime"],
 .amark[data-kind="end"] {
-  --side-c: var(--c-text);
+  --full-c: var(--c-text);
   top: calc(50% - 0.65rem);
   width: 0.28rem;
   height: 1.3rem;
@@ -5364,8 +5383,23 @@ dialog.modal::backdrop {
   border-radius: 1px;
 }
 
-/* Replay marks the whole round, so a mark after the playhead is dimmed, never hidden. */
-.amark.is-future { opacity: 0.55; }
+/* Replay marks the whole round, so a mark after the playhead is dimmed, never hidden. Dimmed = an
+   outline in a slightly mixed colour (shape, not opacity): 3:1 against the track in both themes. */
+.amark.is-future {
+  --side-c: color-mix(in srgb, var(--full-c) 85%, var(--c-surface-4));
+}
+
+.amark.is-future[data-kind="down"],
+.amark.is-future[data-kind="overtime"],
+.amark.is-future[data-kind="end"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--side-c);
+}
+
+.amark.is-future[data-kind="captain-down"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--side-c), 0 0 0 2px var(--c-surface-0), 0 0 0 3.5px var(--side-c);
+}
 
 /* Time readout beside the scrubber: "0:27" at the head (live), "0:27 / 0:52" in a replay. */
 .ascrub__end {
@@ -5440,8 +5474,24 @@ dialog.modal::backdrop {
   box-shadow: inset 2px 0 0 var(--c-accent);
 }
 
-.afeed .timeline__item.is-future {
-  opacity: 0.55;
+/* Later moments in a replay: a step down in colour, never opacity (4.5:1 on the panel and on hover,
+   both themes: muted 6.6:1 and faint 4.5:1 or more on --c-surface-2 in dark, more in light). */
+.afeed .timeline__item.is-future .timeline__title {
+  color: var(--c-text-muted);
+  font-weight: var(--fw-medium);
+}
+
+.afeed .timeline__item.is-future .timeline__text,
+.afeed .timeline__item.is-future .timeline__time {
+  color: var(--c-text-faint);
+}
+
+.afeed .timeline__item.is-future[data-side="us"] {
+  --side-c: color-mix(in srgb, var(--c-side-us) 85%, var(--c-surface-1));
+}
+
+.afeed .timeline__item.is-future[data-side="them"] {
+  --side-c: color-mix(in srgb, var(--c-side-them) 85%, var(--c-surface-1));
 }
 
 .afeed .timeline__item {
@@ -5892,4 +5942,58 @@ dialog.modal::backdrop {
 
 .playmatch .continue .icon {
   --icon-size: 1.25rem;
+}
+
+/* ---- 25.10 Toasts on the arena screen -------------------------------------------------------
+   The default bottom-right region would sit on the transport, the fighter strip and the newest
+   feed line (the feed opens scrolled to its bottom). On the arena the region moves to the top
+   of the dock, under the HUD, and the toasts narrow to the dock's width. */
+body:has(.arena-screen) .toast-region {
+  top: calc(56px * var(--ui-scale) + var(--sp-3));
+  right: var(--sp-3);
+  bottom: auto;
+}
+
+body:has(.arena-screen) .toast {
+  min-width: 0;
+  max-width: 18rem;
+}
+
+/* ---- 25.11 Transport below 1600 px: icon-only buttons ----------------------------------------
+   Markup contract for WP-M2E: a transport button that may collapse is
+   <button class="btn btn--sm btn--ghost btn--collapse"><span class="icon" data-icon="..."></span>
+   <span class="btn__label">Skip to end of round</span> <kbd>Shift S</kbd></button>
+   with an aria-label and the usual tooltip. Below 1600 px (the dock breakpoint; at 1440 the labelled buttons leave the scrubber only its 16 rem minimum) the label and the kbd stay in the tree
+   for assistive tech but are not drawn; the button is a square icon. Icons: Live = eye, Skip =
+   skip-end, Simulate the rest = bolt, Dock = dock. The status text wraps in at most 14 rem. */
+@media (max-width: 1599px) {
+  .atransport {
+    gap: var(--sp-2);
+  }
+
+  .atransport__status {
+    max-width: 14rem;
+    font-size: var(--fs-xs);
+    line-height: 1.25;
+  }
+
+  .atransport__right {
+    gap: var(--sp-1);
+  }
+
+  .btn--collapse {
+    width: var(--control-h-sm);
+    padding: 0;
+  }
+
+  .btn--collapse .btn__label,
+  .btn--collapse kbd {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 }

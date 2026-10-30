@@ -13,10 +13,12 @@ import type { FighterId, FixtureId, MatchReport } from '../../../core/model';
 import { weekTitle } from '../league/lib/calendar';
 import { clubShort } from '../league/lib/club';
 import { href, go, useCareer, type Career } from '../league/lib/store';
+import { errorText } from '../../store/messages';
 import { showToast } from '../../components';
 import { Callout, Empty, NoCareer, Tabs } from '../league/lib/ui';
 import { adjacentReports, eventLogText, fighterInfos, moments, perspective } from './analysis';
 import { BoxScore } from './BoxScore';
+import { ReplayButton } from '../arena/ReplayLink';
 import { Aftermath, Downs, Moments } from './Moments';
 import { MatchDayPanel } from './MatchDay';
 import { Recaps } from './Recaps';
@@ -40,7 +42,7 @@ function Report({ career, fixtureId }: { career: Career; fixtureId: FixtureId })
     const notPlayed = fixture && fixture.status !== 'played';
     return (
       <section class="page" data-testid="screen-match-report">
-        <Empty icon="warning" title={t('error.title')} text={notPlayed ? t('error.notPlayed') : `${built.error.message} (${built.error.code})`}>
+        <Empty icon="warning" title={t('error.title')} text={notPlayed ? t('error.notPlayed') : errorText(built.error)}>
           <a class="btn" href={href('fixtures')}>
             {t('error.back')}
           </a>
@@ -127,10 +129,7 @@ function ReportBody({ career, fixtureId, report }: { career: Career; fixtureId: 
             {t('action.next')}
             <span class="icon" data-icon="chevron-right" aria-hidden="true" />
           </a>
-          <button class="btn btn--sm btn--ghost" type="button" aria-disabled="true" data-tip={t('action.replayTip')}>
-            <span class="icon" data-icon="play" aria-hidden="true" />
-            {t('action.replay')}
-          </button>
+          <ReplayButton fixtureId={fixtureId} label={t('action.replay')} fallbackTip={t('action.replayTip')} testId="report-replay" />
           <button class="btn btn--sm btn--ghost" type="button" data-tip={t('action.logTip')} onClick={copyLog} disabled={!report.timelineAvailable}>
             <span class="icon" data-icon="scroll" aria-hidden="true" />
             {t('action.log')}

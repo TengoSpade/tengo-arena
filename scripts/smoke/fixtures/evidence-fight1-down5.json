@@ -1,0 +1,13 @@
+{
+  "//": "Recorded from the evidence of smoke run 20261028-072400, vis-003 fight 1 (seed arena-smoke-4, build 03c8a41), down 5 at tick 913 (45.7 s): Gorund Torvett's-kin downed by Osek of The Low Fens with Muting Needle, captured at tick 944. The feed printed an interrupt by the same fighter just before it and the ability on its own line after the down. The first scorer stopped at the interrupt line and said the ability was missing. Names, lines and order are as captured; the strip rows are shortened.",
+  "tick": 944,
+  "down": { "tick": 913, "victim": "Gorund Torvett's-kin", "victimClass": "Druid", "killer": "Osek of The Low Fens", "killerClass": "Hushweaver", "ability": "Muting Needle" },
+  "evidence": {
+    "text": "0:12\nYenen of the Bright Hour downed by Solae Sootstep\nBrine Bolt\n0:12\nCaptain Yenen of the Bright Hour is down\n0:15\nTorrok Stoneeye downed by Perwen Dunmere\nPike Jab\n0:16\nYorisa Ashwood takes over as captain\n0:23\nMoketh Redmane downed by Belon Colelow\nBough Swing\n0:23\nCaptain Moketh Redmane is down\n0:26\nPerwen Dunmere downed by Borda Deepmark\nGust\n0:27\nOsek of The Low Fens takes over as captain\n0:33\nGorund Torvett's-kin interrupted by Osek of The Low Fens\n0:45\nOvertime begins\n0:45\nGorund Torvett's-kin downed by Osek of The Low Fens\nMuting Needle\nPaused: overtime starts\nMoketh Redmane\nDowned · Belon Colelow\nLeechblade\nTorrok Stoneeye\nDowned · Perwen Dunmere\nBladeturner\nOsek of The Low Fens\nCaptain\nS\n67%\nHushweaver\nBorda Deepmark\nS\n45%\nGaleshaper\nSolae Sootstep",
+    "live": [
+      "0:12 Yenen of the Bright Hour downed by Solae Sootstep Brine Bolt 0:12 Captain Yenen of the Bright Hour is down 0:15 Torrok Stoneeye downed by Perwen Dunmere Pike Jab 0:16 Yorisa Ashwood takes over as captain 0:23 Moketh Redmane downed by Belon Colelow Bough Swing 0:23 Captain Moketh Redmane is down 0:26 Perwen Dunmere downed by Borda Deepmark Gust 0:27 Osek of The Low Fens takes over as captain 0:33 Gorund Torvett's-kin interrupted by Osek of The Low Fens 0:45 Overtime begins 0:45 Gorund Torvett's-kin downed by Osek of The Low Fens Muting Needle",
+      "Paused: overtime starts",
+      ""
+    ]
+  }
+}

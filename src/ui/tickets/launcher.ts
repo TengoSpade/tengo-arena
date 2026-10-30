@@ -10,6 +10,7 @@ import { signal } from '@preact/signals';
 import { toastHistory } from '../components/Toast';
 import type { AppStore } from '../store';
 import { settings } from '../store/settings';
+import { arenaTicketInfo } from './arena-info';
 import { consoleEntries } from './console-capture';
 
 /** A ticket is being captured, written or submitted: F8 does nothing meanwhile. */
@@ -35,6 +36,8 @@ export function snapshot(store: AppStore) {
     settings: settings.value,
     viewport: { width: window.innerWidth, height: window.innerHeight },
     devicePixelRatio: window.devicePixelRatio || 1,
+    // M2: what the arena was showing (fixture, round, tick, speed, kind), read at the key press; null elsewhere.
+    arena: arenaTicketInfo(),
   };
 }
 export type TicketSnapshot = ReturnType<typeof snapshot>;

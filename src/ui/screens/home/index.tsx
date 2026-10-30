@@ -40,6 +40,8 @@ import { matchweeksLeft, weekCode, weekName } from '../../format/calendar';
 import { contractEnds, injuryLabel, injuryTip, isCareerEnding, rolesOf, weeksOutText } from '../../format/fighter';
 import { TRIALS, trialsRookiesOf } from '../league/lib/trials';
 import { useStore, type AppStore } from '../../store';
+import { ReplayButton } from '../arena/ReplayLink';
+import { usePrefetchViewer } from '../arena/viewer-factory';
 import { freshInfo } from '../../m11/model';
 import { FreshMeter, freshTip } from '../../m11/parts';
 import { settings } from '../../store/settings';
@@ -57,6 +59,7 @@ export default function HomeScreen(_props: ScreenProps) {
   const store = useStore() as AppStore;
   const engine = useEngine();
   const ctx = usePlayerClub();
+  usePrefetchViewer(!!ctx?.fixture);
 
   useShortcuts({
     l: () => navigate('#/squad'),
@@ -94,10 +97,13 @@ export default function HomeScreen(_props: ScreenProps) {
         actions={
           <>
             {lastReport && (
-              <a class="btn btn--ghost" href={`#/match/${encodeURIComponent(lastReport.fixtureId)}`}>
-                <Icon name="scroll" />
-                {T.lastReport}
-              </a>
+              <>
+                <a class="btn btn--ghost" href={`#/match/${encodeURIComponent(lastReport.fixtureId)}`}>
+                  <Icon name="scroll" />
+                  {T.lastReport}
+                </a>
+                <ReplayButton fixtureId={lastReport.fixtureId} icon label={T.lastReplay} testId="home-replay" />
+              </>
             )}
             <button
               class="btn btn--ghost"

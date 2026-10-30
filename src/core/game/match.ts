@@ -39,7 +39,7 @@ import type {
 import { STREAM, deriveSeed } from '../rng';
 import { clamp, ok, type EngineError, type Result } from '../util';
 import type { GamePorts } from './ports';
-import { roundInputOf } from './rounds';
+import { replayBlocker, roundInputOf } from './rounds';
 import { GAME_NEWS_KEYS, addNews, compareIds, defaultTactics, fail, onRoster } from './shared';
 
 export function matchSeed(state: GameState, fixtureId: FixtureId): string {
@@ -572,7 +572,8 @@ export function buildMatchReport(ports: GamePorts, state: GameState, fixtureId: 
   let logs: FightLog[] | null = null;
   // Per-round counters of every fighter, index = round - 1: the re-simulated rounds' stats (null when the rounds were not re-simulated).
   let roundStats: Map<number, Record<FighterId, FighterMatchStats>> | null = null;
-  if (result.engineVersion === ports.sim.engineVersion && result.contentHash === content.ref.hash && !compacted) {
+  // One rule with replays (05-technical-m2 §A4): engine version, then the sim content (simHash, else the content hash), not compacted.
+  if (replayBlocker(ports, result, content) === null) {
     try {
       if (result.roundLineups) {
         const out = result.rounds.map((r) => ({ r, o: ports.sim.simulateRound(roundInputOf(result, r.round), r.seed, content, { record: 'summary' }) }));

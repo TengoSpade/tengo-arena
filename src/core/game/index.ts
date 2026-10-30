@@ -187,6 +187,15 @@ export function replayAvailability(state: GameState, fixtureId: FixtureId, conte
   return engine.replayAvailability(state, fixtureId, content);
 }
 
+/**
+ * M2: compute and cache core/sim simContentHash for this ContentDB (55-130 ms the first time, then free). Week
+ * processing warms it at its start; the UI may call it at an idle point after loading content or a save, so the first
+ * Replay button or report does not pay for it.
+ */
+export function warmReplayHash(content: ContentDB): void {
+  realGamePorts.sim.simContentHash?.(content);
+}
+
 /** The pause inspector at a tick of a live or replayed round (sim inspectRoundAt on the round's exact input). */
 export function inspectPlayback(state: GameState, fixtureId: FixtureId, round: number, tick: number, content: ContentDB): Result<RoundProbe, EngineError> {
   return engine.inspectPlayback(state, fixtureId, round, tick, content);
