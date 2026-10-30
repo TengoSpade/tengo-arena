@@ -138,6 +138,8 @@ export class TokenBody implements BodyVisual {
   private roleText: TokenText | null = null;
   private classText: TokenText | null = null;
   private drawnD = -1;
+  /** Width of the class name and its club bar, measured when drawn (the viewer asks every frame: no text measuring there). */
+  private labelW = 0;
   private drawnPalette: ArenaPalette | null = null;
   private diameter = 0;
   private fills: number[] = [];
@@ -188,7 +190,7 @@ export class TokenBody implements BodyVisual {
 
   /** Width of the class name and its club bar (px). */
   labelBelowWidthPx(): number {
-    return this.classText ? Math.max(this.classText.view.width, this.diameter * 0.5) + 2 : 0;
+    return this.labelW;
   }
 
   /** The viewer hides the class name where another token's stack would overlap it. */
@@ -315,6 +317,7 @@ export class TokenBody implements BodyVisual {
       this.classText.view.position.set(0, r + this.ringReach(p.metrics));
       // The light team cue (with the viewer's side ring): the club's primary colour as a keylined bar under the class name.
       const w = Math.max(this.classText.view.width, d * 0.5);
+      this.labelW = w + 2;
       const lh = this.classSize(p.metrics) * 1.25;
       this.club
         .clear()
